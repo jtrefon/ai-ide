@@ -16,7 +16,7 @@ public partial class MainPage : ContentPage
     private string? _currentFile;
 
     // Persistent terminal state
-    private ITerminalBackend? _terminal;
+    private readonly ITerminalBackend _terminal;
     private bool _updatingTerminal; // guard to avoid recursive TextChanged
     private int _termLockLen; // text length beyond which user can edit
     private readonly StringBuilder _termInput = new(); // current input line buffer
@@ -24,12 +24,15 @@ public partial class MainPage : ContentPage
     private readonly IBrowseService _browseService;
     private readonly IFileService _fileService;
 
-    public MainPage(IBrowseService browseService, IFileService fileService)
+    public MainPage(IBrowseService browseService, IFileService fileService, ITerminalBackend terminal)
     {
         InitializeComponent();
         FileList.ItemsSource = _files;
         _browseService = browseService;
         _fileService = fileService;
+        _terminal = terminal;
+        _terminal.Output += AppendTerminal;
+        _terminal.Error += AppendTerminal;
     }
 
     public static MainPage Create() => App.Current.Services.GetRequiredService<MainPage>();
@@ -169,12 +172,6 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            if (_terminal is null)
-            {
-                _terminal = new ScriptTerminalBackend();
-                _terminal.Output += AppendTerminal;
-                _terminal.Error += AppendTerminal;
-            }
             if (!_terminal.IsRunning)
             {
                 _terminal.Start();
@@ -190,10 +187,10 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            if (_terminal is null) return;
-            _terminal.Stop();
-            _terminal.Dispose();
-            _terminal = null;
+            if (_terminal.IsRunning)
+            {
+                _terminal.Stop();
+            }
         }
         catch (Exception ex)
         {
@@ -256,7 +253,7 @@ public partial class MainPage : ContentPage
             {
                 try
                 {
-                    if (_terminal is null || !_terminal.IsRunning)
+                    if (!_terminal.IsRunning)
                     {
                         AppendTerminal("[terminal] not started\n");
                         continue;
