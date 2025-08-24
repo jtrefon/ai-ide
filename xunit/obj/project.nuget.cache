@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "dgSpecHash": "SYvVhak0xAw=",
+  "success": false,
+  "projectFilePath": "/Users/jack/Projects/ide/ide/xunit/xunit.csproj",
+  "expectedPackageFiles": [
+    "/Users/jack/.nuget/packages/coverlet.collector/6.0.2/coverlet.collector.6.0.2.nupkg.sha512",
+    "/Users/jack/.nuget/packages/microsoft.codecoverage/17.12.0/microsoft.codecoverage.17.12.0.nupkg.sha512",
+    "/Users/jack/.nuget/packages/microsoft.net.test.sdk/17.12.0/microsoft.net.test.sdk.17.12.0.nupkg.sha512",
+    "/Users/jack/.nuget/packages/microsoft.testplatform.objectmodel/17.12.0/microsoft.testplatform.objectmodel.17.12.0.nupkg.sha512",
+    "/Users/jack/.nuget/packages/microsoft.testplatform.testhost/17.12.0/microsoft.testplatform.testhost.17.12.0.nupkg.sha512",
+    "/Users/jack/.nuget/packages/newtonsoft.json/13.0.1/newtonsoft.json.13.0.1.nupkg.sha512",
+    "/Users/jack/.nuget/packages/system.reflection.metadata/1.6.0/system.reflection.metadata.1.6.0.nupkg.sha512",
+    "/Users/jack/.nuget/packages/xunit.runner.visualstudio/2.8.2/xunit.runner.visualstudio.2.8.2.nupkg.sha512"
+  ],
+  "logs": [
+    {
+      "code": "NU1108",
+      "level": "Error",
+      "message": "Cycle detected. \n  xunit -> xunit (>= 2.9.2).",
+      "projectPath": "/Users/jack/Projects/ide/ide/xunit/xunit.csproj",
+      "filePath": "/Users/jack/Projects/ide/ide/xunit/xunit.csproj",
+      "libraryId": "xunit",
+      "targetGraphs": [
+        "net9.0"
+      ]
+    },
+    {
+      "code": "NU1201",
+      "level": "Error",
+      "message": "Project ide is not compatible with net9.0 (.NETCoreApp,Version=v9.0). Project ide supports:\n  - net9.0-android35.0 (.NETCoreApp,Version=v9.0)\n  - net9.0-ios18.5 (.NETCoreApp,Version=v9.0)\n  - net9.0-maccatalyst18.5 (.NETCoreApp,Version=v9.0)",
+      "projectPath": "/Users/jack/Projects/ide/ide/xunit/xunit.csproj",
+      "filePath": "/Users/jack/Projects/ide/ide/xunit/xunit.csproj",
+      "libraryId": "ide",
+      "targetGraphs": [
+        "net9.0"
+      ]
+    }
+  ]
+}
