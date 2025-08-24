@@ -1,4 +1,4 @@
-# Agentic IDE (MAUI/.NET 9)
+# Agentic IDE
 
 [![CI](https://github.com/jtrefon/ai-ide/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jtrefon/ai-ide/actions/workflows/ci.yml)
 [![Release](https://github.com/jtrefon/ai-ide/actions/workflows/release.yml/badge.svg)](https://github.com/jtrefon/ai-ide/actions/workflows/release.yml)
@@ -7,7 +7,7 @@
 [![Issues](https://img.shields.io/github/issues/jtrefon/ai-ide)](https://github.com/jtrefon/ai-ide/issues)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/jtrefon/ai-ide/pulls)
 
-A native, cross‑platform IDE (macOS via MacCatalyst; Windows optional) with a first‑class agentic coding workflow. It ships a VS Code–inspired UI, an auditable tool "+ agent" system, and a testable, modular core.
+A native (no JS Electron), fully compiled, multi-threaded, hardware accelerated, cross‑platform IDE (macOS via MacCatalyst; Windows optional) with a first‑class agentic coding workflow. It ships a VS Code–inspired UI, an auditable tool "+ agent" system, and a testable, modular core.
 
 - Fast MAUI UI with tabs, terminal, and an Agent panel
 - EventBus + structured telemetry (initial implementation)
