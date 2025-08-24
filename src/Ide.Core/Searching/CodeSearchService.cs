@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
+using Ide.Core.Utils;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 
@@ -12,13 +13,6 @@ public sealed class CodeSearchService : ICodeSearchService
     {
         "**/bin/**", "**/obj/**", "**/.git/**", "**/.vs/**", "**/.idea/**", "**/.vscode/**",
         "**/TestResults/**", "**/artifacts/**", "**/node_modules/**"
-    };
-
-    private static readonly HashSet<string> BinaryExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".dll", ".exe", ".so", ".dylib", ".a", ".zip", ".7z", ".rar", ".gz", ".tar",
-        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".pdf", ".nupkg", ".snupkg",
-        ".apk", ".aab", ".ipa"
     };
 
     public async Task<IReadOnlyList<SearchMatch>> SearchAsync(
@@ -60,7 +54,7 @@ public sealed class CodeSearchService : ICodeSearchService
     internal static async Task<bool> ShouldSkipFileAsync(string path, CancellationToken ct)
     {
         var ext = Path.GetExtension(path);
-        if (BinaryExtensions.Contains(ext)) return true;
+        if (BinaryExtensions.Set.Contains(ext)) return true;
         FileInfo fi; try { fi = new FileInfo(path); } catch { return true; }
         if (!fi.Exists || fi.Length <= 0 || fi.Length > 5 * 1024 * 1024) return true;
         var probe = new byte[Math.Min(4096, (int)Math.Min(fi.Length, int.MaxValue))];

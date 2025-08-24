@@ -7,18 +7,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Ide.Core.Utils;
 
 namespace Ide.Core.Files;
 
 public sealed class FileService : IFileService
 {
-    private static readonly HashSet<string> BinaryExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".png",".jpg",".jpeg",".gif",".bmp",".webp",".svg",".tiff",".ico",".heic",".heif",
-        ".dll",".exe",".so",".dylib",".a",".lib",".pdf",".zip",".gz",".tar",".7z",".rar",
-        ".mp3",".mp4",".mov",".avi",".mkv",".class",".jar",".wasm"
-    };
-
     private const int DefaultMaxBytes = 1_000_000; // 1 MB per file for read
 
     public async Task<IReadOnlyList<ReadResult>> ReadFilesAsync(
@@ -129,7 +123,7 @@ public sealed class FileService : IFileService
     internal static async Task<bool> IsBinaryAsync(string path, int sniffBytes, CancellationToken ct)
     {
         var ext = Path.GetExtension(path);
-        if (!string.IsNullOrEmpty(ext) && BinaryExtensions.Contains(ext)) return true;
+        if (!string.IsNullOrEmpty(ext) && BinaryExtensions.Set.Contains(ext)) return true;
         if (sniffBytes <= 0) return false;
         var buf = ArrayPool<byte>.Shared.Rent(sniffBytes);
         try
