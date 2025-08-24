@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test-ubuntu:
+    name: Build core + run tests (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore core + tests
+        run: |
+          dotnet restore src/Ide.Core/Ide.Core.csproj
+          dotnet restore xunit/xunit.csproj
+
+      - name: Build core
+        run: dotnet build src/Ide.Core/Ide.Core.csproj -c Release --no-restore
+
+      - name: Test
+        run: dotnet test xunit/xunit.csproj -c Release --no-build --logger "trx;LogFileName=test_results.trx"
+
+      - name: Upload test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-ubuntu
+          path: '**/TestResults/*.trx'
+          if-no-files-found: ignore
+
+  test-windows:
+    name: Build core + run tests (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\NuGet\v3-cache
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore core + tests
+        run: |
+          dotnet restore src/Ide.Core/Ide.Core.csproj
+          dotnet restore xunit/xunit.csproj
+
+      - name: Build core
+        run: dotnet build src/Ide.Core/Ide.Core.csproj -c Release --no-restore
+
+      - name: Test
+        run: dotnet test xunit/xunit.csproj -c Release --no-build --logger "trx;LogFileName=test_results.trx"
+
+      - name: Upload test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-windows
+          path: '**/TestResults/*.trx'
+          if-no-files-found: ignore
+
+  build-macos-maui:
+    name: Build MAUI app (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Install MAUI workload
+        run: |
+          dotnet workload install maui --source https://api.nuget.org/v3/index.json
+          dotnet workload list
+
+      - name: Restore app
+        run: dotnet restore ide/ide.csproj
+
+      - name: Build MacCatalyst
+        run: dotnet build ide/ide.csproj -c Release -f net9.0-maccatalyst --no-restore
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ide-maccatalyst
+          path: |
+            ide/bin/Release/net9.0-maccatalyst/**/*.app
+          if-no-files-found: warn

@@ -31,7 +31,7 @@ This Code of Conduct applies within all community spaces and also applies when a
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project team at: opensource@yourdomain.example
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project team at: <jack@trefon.com> with subject "Code of Conduct Complaint: Agentic IDE".
 
 All complaints will be reviewed and investigated promptly and fairly.
 

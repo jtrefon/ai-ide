@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v1.0.0)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos-maui:
+    name: Build MacCatalyst app
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Install MAUI workload
+        run: |
+          dotnet workload install maui --source https://api.nuget.org/v3/index.json
+
+      - name: Restore app
+        run: dotnet restore ide/ide.csproj
+
+      - name: Build (Release, MacCatalyst)
+        run: dotnet build ide/ide.csproj -c Release -f net9.0-maccatalyst --no-restore
+
+      - name: Locate .app bundle
+        id: findapp
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find ide/bin/Release/net9.0-maccatalyst -type d -name "*.app" | head -n1)
+          if [[ -z "$APP_PATH" ]]; then
+            echo "No .app bundle found" >&2
+            exit 1
+          fi
+          echo "app=$APP_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found app: $APP_PATH"
+
+      - name: Zip app
+        id: zipapp
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH='${{ steps.findapp.outputs.app }}'
+          ZIP_NAME="agentic-ide-maccatalyst-${{ github.ref_name }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_NAME"
+          echo "zip=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentic-ide-maccatalyst-${{ github.ref_name }}
+          path: ${{ steps.zipapp.outputs.zip }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Agentic IDE ${{ github.event.inputs.tag || github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            ${{ steps.zipapp.outputs.zip }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
