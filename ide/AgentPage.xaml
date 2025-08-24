@@ -17,5 +17,29 @@
                 </DataTemplate>
             </CollectionView.ItemTemplate>
         </CollectionView>
+
+        <Border StrokeThickness="1" Stroke="Gray" Padding="8" Margin="0,8,0,0">
+            <VerticalStackLayout Spacing="8">
+                <Label Text="Quick Code Search" FontAttributes="Bold" />
+                <HorizontalStackLayout Spacing="8">
+                    <Entry x:Name="RootEntry" Placeholder="Root path (e.g. /Users/me/project)" HorizontalOptions="FillAndExpand" />
+                </HorizontalStackLayout>
+                <HorizontalStackLayout Spacing="8">
+                    <Entry x:Name="QueryEntry" Placeholder="Search query" HorizontalOptions="FillAndExpand" />
+                    <Button Text="Search" Clicked="OnSearchClicked" />
+                </HorizontalStackLayout>
+                <CollectionView x:Name="SearchResultsView" HeightRequest="300">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <VerticalStackLayout>
+                                <Label Text="{Binding File}" FontAttributes="Bold" LineBreakMode="TailTruncation" />
+                                <Label Text="{Binding Line}" />
+                                <Label Text="{Binding Preview}" LineBreakMode="WordWrap" MaxLines="3" />
+                            </VerticalStackLayout>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </VerticalStackLayout>
+        </Border>
     </VerticalStackLayout>
 </ContentPage>

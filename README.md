@@ -57,6 +57,34 @@ xunit/
   (xUnit tests)
 ```
 
+## UI layout
+
+- __Explorer (left)__: Project/file tree (wired via `IBrowseService`).
+- __Center__: Split view
+  - __Editor (top)__: File editor surface (wired via `IFileService`).
+  - __Terminal (bottom)__: Persistent shell session. Prefers zsh on macOS; uses `script(1)` for PTY-like behavior when available; falls back to bash/sh.
+- __AI Chat (right)__: Reserved panel for the conversational agent and actions.
+- __No top bars__: Shell flyout (hamburger) and navigation bar are disabled for a clean IDE surface.
+
+### Terminal behavior
+
+- Prefers `/bin/zsh`, then `/bin/bash`, then `/bin/sh`.
+- On macOS, tries `/usr/bin/script -q /dev/null <shell> -i` to gain PTY-like behavior so interactive tools act like they are attached to a TTY.
+- Sets `TERM=xterm-256color` for better color support.
+- Falls back to a redirected-stdio session if `script` is unavailable.
+
+### Interactions
+
+- No buttons in the UI. All file operations are through the native File menu.
+- File menu:
+  - Open File…
+  - Open Project…
+  - Save File
+  - Save Project (All)
+- Terminal auto-starts when the page appears; no manual start/stop buttons.
+
+Shortcuts: Cmd+O and Cmd+S planned for Mac; wired through native menu/shortcuts.
+
 ## Features (in progress)
 
 - Agent pane with logs and actions

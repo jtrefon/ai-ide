@@ -1,32 +1,287 @@
-using Ide.Core.Events;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Text;
+using System.IO;
+using Ide.Core.Files;
+using Microsoft.Maui.Storage;
+
 namespace ide;
 
 public partial class MainPage : ContentPage
 {
-	int count = 0;
+    // Explorer/Editor state
+    private readonly ObservableCollection<string> _files = new();
+    private string? _currentRoot;
+    private string? _currentFile;
 
-	public MainPage()
-	{
-		InitializeComponent();
-	}
+    // Persistent terminal state
+    private ITerminalBackend? _terminal;
+    private bool _updatingTerminal; // guard to avoid recursive TextChanged
+    private int _termLockLen; // text length beyond which user can edit
+    private readonly StringBuilder _termInput = new(); // current input line buffer
 
-	private void OnCounterClicked(object? sender, EventArgs e)
-	{
-		count++;
+    public MainPage()
+    {
+        InitializeComponent();
+        FileList.ItemsSource = _files;
+    }
 
-		if (count == 1)
-			CounterBtn.Text = $"Clicked {count} time";
-		else
-			CounterBtn.Text = $"Clicked {count} times";
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+        EnsureTerminalStarted();
+    }
 
-		SemanticScreenReader.Announce(CounterBtn.Text);
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+        StopTerminal();
+    }
 
-		// Publish event to the in-process event bus
-		var bus = ServiceLocator.GetRequiredService<IEventBus>();
-		bus.Publish("ui.click", nameof(MainPage), new Dictionary<string, object?>
-		{
-			["control"] = "CounterBtn",
-			["count"] = count
-		});
-	}
+    private async Task BrowseRootAsync(string root)
+    {
+        try
+        {
+            _currentRoot = root;
+            var browse = await ServiceLocator.GetRequiredService<IBrowseService>()
+                .BrowseAsync(root, maxDepth: 2, maxEntries: 500);
+            _files.Clear();
+            foreach (var e1 in browse)
+            {
+                if (!e1.IsDirectory) _files.Add(e1.Path);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendTerminal($"[explorer error] {ex.Message}\n");
+        }
+    }
+
+    private async void OnFileSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        try
+        {
+            var path = e.CurrentSelection?.FirstOrDefault() as string;
+            if (string.IsNullOrEmpty(path)) return;
+            _currentFile = path;
+            var fs = ServiceLocator.GetRequiredService<IFileService>();
+            var rr = await fs.ReadFilesAsync(new[] { path }, maxBytes: 1024 * 1024);
+            var r = rr.FirstOrDefault();
+            if (r is not null && r.Ok)
+            {
+                EditorView.Text = r.Content ?? string.Empty;
+            }
+            else
+            {
+                AppendTerminal($"[open error] {r?.Error ?? "unknown"}\n");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendTerminal($"[open error] {ex.Message}\n");
+        }
+    }
+
+    // File menu handlers
+    private async void OnOpenFileMenuClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            var result = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Open File"
+            });
+            if (result == null) return;
+            var path = result.FullPath;
+            _currentFile = path;
+            await BrowseRootAsync(Path.GetDirectoryName(path)!);
+            var fs = ServiceLocator.GetRequiredService<IFileService>();
+            var rr = await fs.ReadFilesAsync(new[] { path }, maxBytes: 1024 * 1024);
+            var r = rr.FirstOrDefault();
+            if (r is not null && r.Ok)
+            {
+                EditorView.Text = r.Content ?? string.Empty;
+            }
+            else
+            {
+                AppendTerminal($"[open error] {r?.Error ?? "unknown"}\n");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendTerminal($"[open error] {ex.Message}\n");
+        }
+    }
+
+    private async void OnOpenProjectMenuClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            // Pick any file within the desired project folder to establish root (MacCatalyst-friendly)
+            var result = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Open Project (pick any file in the folder)"
+            });
+            if (result == null) return;
+            var root = Path.GetDirectoryName(result.FullPath)!;
+            await BrowseRootAsync(root);
+        }
+        catch (Exception ex)
+        {
+            AppendTerminal($"[explorer error] {ex.Message}\n");
+        }
+    }
+
+    private async void OnSaveFileMenuClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(_currentFile)) return;
+            var fs = ServiceLocator.GetRequiredService<IFileService>();
+            var wr = await fs.WriteFilesAsync(new[] { new FileWrite(_currentFile!, EditorView.Text ?? string.Empty) });
+            var r = wr.FirstOrDefault();
+            if (r is not null && r.Ok)
+            {
+                AppendTerminal($"[saved] {_currentFile}\n");
+            }
+            else
+            {
+                AppendTerminal($"[save error] {r?.Error ?? "unknown"}\n");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendTerminal($"[save error] {ex.Message}\n");
+        }
+    }
+
+    private async void OnSaveProjectMenuClicked(object? sender, EventArgs e)
+    {
+        // For now, save the active file. Later, iterate open editors/tabs.
+        await Task.Run(() => OnSaveFileMenuClicked(sender!, e));
+    }
+
+    private void EnsureTerminalStarted()
+    {
+        try
+        {
+            if (_terminal is null)
+            {
+                _terminal = new ScriptTerminalBackend();
+                _terminal.Output += AppendTerminal;
+                _terminal.Error += AppendTerminal;
+            }
+            if (!_terminal.IsRunning)
+            {
+                _terminal.Start();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendTerminal($"[terminal error] {ex.Message}\n");
+        }
+    }
+
+    private void StopTerminal()
+    {
+        try
+        {
+            if (_terminal is null) return;
+            _terminal.Stop();
+            _terminal.Dispose();
+            _terminal = null;
+        }
+        catch (Exception ex)
+        {
+            AppendTerminal($"[terminal error] {ex.Message}\n");
+        }
+    }
+
+    // Shell output/error are handled via ITerminalBackend events
+
+    private void AppendTerminal(string text)
+    {
+        Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(() =>
+        {
+            _updatingTerminal = true;
+            var cur = TerminalView.Text ?? string.Empty;
+            // Insert output at the lock position so that process output appears before any user-typed input.
+            var head = _termLockLen <= cur.Length ? cur.Substring(0, _termLockLen) : cur;
+            var tail = _termLockLen <= cur.Length ? cur.Substring(_termLockLen) : string.Empty;
+            TerminalView.Text = head + text + tail;
+            // Advance lock by inserted text length; keep cursor at end to continue typing.
+            _termLockLen = head.Length + text.Length;
+            TerminalView.CursorPosition = TerminalView.Text.Length;
+            _updatingTerminal = false;
+        });
+    }
+
+    // TerminalView TextChanged: accept only appends after _termLockLen; send lines on Enter
+    private void OnTerminalTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (_updatingTerminal) return;
+        var oldText = e.OldTextValue ?? string.Empty;
+        var newText = e.NewTextValue ?? string.Empty;
+        if (newText.Length < _termLockLen)
+        {
+            // Disallow editing before the lock
+            _updatingTerminal = true;
+            TerminalView.Text = oldText;
+            TerminalView.CursorPosition = _termLockLen;
+            _updatingTerminal = false;
+            return;
+        }
+        // Compute tail after lock and handle complete lines
+        var tail = newText.Substring(_termLockLen);
+        if (tail.Length == 0)
+        {
+            // Nothing after lock; clear buffer
+            _termInput.Clear();
+            return;
+        }
+
+        // Normalize CRLF to LF in processing, but do not mutate editor text here
+        var normalized = tail.Replace("\r\n", "\n").Replace('\r', '\n');
+        int lastNL = normalized.LastIndexOf('\n');
+        if (lastNL >= 0)
+        {
+            // There are complete lines to send (everything up to lastNL)
+            var toProcess = normalized.Substring(0, lastNL);
+            var lines = toProcess.Split('\n');
+            foreach (var line in lines)
+            {
+                try
+                {
+                    if (_terminal is null || !_terminal.IsRunning)
+                    {
+                        AppendTerminal("[terminal] not started\n");
+                        continue;
+                    }
+                    _terminal.WriteLine(line);
+                }
+                catch (Exception ex)
+                {
+                    AppendTerminal($"[terminal error] {ex.Message}\n");
+                }
+            }
+            // Remove the submitted portion from the editor to avoid double-echo (shell will echo it)
+            var submittedLenInTail = tail.Substring(0, Math.Min(lastNL + 1, tail.Length)).Length;
+            var head = (TerminalView.Text ?? string.Empty).Substring(0, _termLockLen);
+            var remainder = tail.Substring(Math.Min(lastNL + 1, tail.Length));
+            _updatingTerminal = true;
+            TerminalView.Text = head + remainder;
+            TerminalView.CursorPosition = (TerminalView.Text?.Length ?? 0);
+            _updatingTerminal = false;
+            // Lock remains unchanged since we removed text after the lock
+            _termInput.Clear();
+            _termInput.Append(remainder);
+        }
+        else
+        {
+            // No complete line yet: update buffer to match editor tail (handle arbitrary edits)
+            _termInput.Clear();
+            _termInput.Append(tail);
+        }
+    }
 }
+
