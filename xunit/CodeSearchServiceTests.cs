@@ -1,5 +1,8 @@
+using System.Collections.Concurrent;
 using System.Text;
 using Ide.Core.Searching;
+using Microsoft.Extensions.FileSystemGlobbing;
+using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 
 namespace Ide.Tests;
 
@@ -95,6 +98,28 @@ public class CodeSearchServiceTests
         finally
         {
             try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Helpers_BuildMatcher_Skip_SearchFile()
+    {
+        var root = CreateTempDir();
+        try
+        {
+            var file = Path.Combine(root, "a.cs");
+            await File.WriteAllTextAsync(file, "needle line\n");
+            var matcher = CodeSearchService.BuildMatcher(new[] { "**/*.cs" }, null);
+            var res = matcher.Execute(new DirectoryInfoWrapper(new DirectoryInfo(root)));
+            Assert.Single(res.Files);
+            Assert.False(await CodeSearchService.ShouldSkipFileAsync(file, default));
+            var bag = new ConcurrentBag<SearchMatch>();
+            await CodeSearchService.SearchFileAsync(file, root, "needle", SearchKind.Literal, 5, bag, default);
+            Assert.Single(bag);
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
         }
     }
 }

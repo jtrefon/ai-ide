@@ -29,79 +29,73 @@ public sealed class LexicalIndexer : IIndexer
         _entries.Clear();
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return;
         var fullRoot = Path.GetFullPath(root);
-
-        var includeMatcher = new Matcher(StringComparison.OrdinalIgnoreCase);
-        bool hasIncludes = false;
-        if (includeGlobs != null)
-        {
-            foreach (var g in includeGlobs)
-            {
-                if (string.IsNullOrWhiteSpace(g)) continue;
-                includeMatcher.AddInclude(g);
-                hasIncludes = true;
-            }
-        }
-
-        var excludeMatcher = new Matcher(StringComparison.OrdinalIgnoreCase);
-        bool hasExcludes = false;
-        if (excludeGlobs != null)
-        {
-            foreach (var g in excludeGlobs)
-            {
-                if (string.IsNullOrWhiteSpace(g)) continue;
-                excludeMatcher.AddInclude(g);
-                hasExcludes = true;
-            }
-        }
-
-        bool IsIncluded(string rel)
-        {
-            if (hasExcludes && excludeMatcher.Match(rel).HasMatches) return false;
-            if (!hasIncludes) return true;
-            return includeMatcher.Match(rel).HasMatches;
-        }
-
+        var include = BuildMatcher(includeGlobs);
+        var exclude = BuildMatcher(excludeGlobs);
         foreach (var file in Directory.EnumerateFiles(fullRoot, "*", SearchOption.AllDirectories))
         {
             if (ct.IsCancellationRequested) break;
             var rel = Path.GetRelativePath(fullRoot, file).Replace('\\', '/');
-            if (!IsIncluded(rel)) continue;
+            if (!IsIncluded(rel, include, exclude)) continue;
+            if (await ShouldSkipFileAsync(file, ct).ConfigureAwait(false)) continue;
+            await IndexFileAsync(file, ct).ConfigureAwait(false);
+        }
+    }
 
-            var ext = Path.GetExtension(file);
-            if (!string.IsNullOrEmpty(ext) && _binaryExt.Contains(ext)) continue;
-            FileInfo fi;
-            try { fi = new FileInfo(file); } catch { continue; }
-            if (fi.Length > MaxFileBytes) continue;
+    internal static Matcher? BuildMatcher(IEnumerable<string>? globs)
+    {
+        if (globs == null) return null;
+        var m = new Matcher(StringComparison.OrdinalIgnoreCase);
+        foreach (var g in globs)
+        {
+            if (!string.IsNullOrWhiteSpace(g)) m.AddInclude(g);
+        }
+        return m;
+    }
 
-            // NUL sniff first 8KB
-            int sniff = (int)Math.Min(8192, fi.Length);
-            if (sniff > 0)
-            {
-                var buf = ArrayPool<byte>.Shared.Rent(sniff);
-                try
-                {
-                    using var fs = File.OpenRead(file);
-                    int read = await fs.ReadAsync(buf.AsMemory(0, sniff), ct).ConfigureAwait(false);
-                    for (int i = 0; i < read; i++) if (buf[i] == 0) goto SkipFile;
-                }
-                catch { goto SkipFile; }
-                finally { ArrayPool<byte>.Shared.Return(buf); }
-            }
+    internal static bool IsIncluded(string rel, Matcher? include, Matcher? exclude)
+    {
+        if (exclude != null && exclude.Match(rel).HasMatches) return false;
+        if (include == null) return true;
+        return include.Match(rel).HasMatches;
+    }
 
+    internal async Task<bool> ShouldSkipFileAsync(string file, CancellationToken ct)
+    {
+        var ext = Path.GetExtension(file);
+        if (!string.IsNullOrEmpty(ext) && _binaryExt.Contains(ext)) return true;
+        FileInfo fi; try { fi = new FileInfo(file); } catch { return true; }
+        if (fi.Length > MaxFileBytes) return true;
+        int sniff = (int)Math.Min(8192, fi.Length);
+        if (sniff > 0)
+        {
+            var buf = ArrayPool<byte>.Shared.Rent(sniff);
             try
             {
-                var lines = await File.ReadAllLinesAsync(file, Encoding.UTF8, ct).ConfigureAwait(false);
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    if (ct.IsCancellationRequested) break;
-                    var preview = lines[i];
-                    _entries.Add(new LineEntry(file, i + 1, preview, preview.ToLowerInvariant()));
-                }
+                using var fs = File.OpenRead(file);
+                int read = await fs.ReadAsync(buf.AsMemory(0, sniff), ct).ConfigureAwait(false);
+                for (int i = 0; i < read; i++) if (buf[i] == 0) return true;
             }
-            catch { /* skip unreadable */ }
-
-        SkipFile:;
+            catch { return true; }
+            finally { ArrayPool<byte>.Shared.Return(buf); }
         }
+        return false;
+    }
+
+    internal async Task<int> IndexFileAsync(string file, CancellationToken ct)
+    {
+        try
+        {
+            var lines = await File.ReadAllLinesAsync(file, Encoding.UTF8, ct).ConfigureAwait(false);
+            int count = 0;
+            for (int i = 0; i < lines.Length && !ct.IsCancellationRequested; i++)
+            {
+                var preview = lines[i];
+                _entries.Add(new LineEntry(file, i + 1, preview, preview.ToLowerInvariant()));
+                count++;
+            }
+            return count;
+        }
+        catch { return 0; }
     }
 
     public Task<IReadOnlyList<IndexedMatch>> QueryAsync(string token, int limit = 100, CancellationToken ct = default)
