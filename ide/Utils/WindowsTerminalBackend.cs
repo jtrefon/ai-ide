@@ -8,7 +8,7 @@ using Ide.Core.Utils;
 
 namespace ide;
 
-public sealed class ScriptTerminalBackend : ITerminalBackend
+public sealed class WindowsTerminalBackend : ITerminalBackend
 {
     public event Action<string>? Output;
     public event Action<string>? Error;
@@ -18,7 +18,7 @@ public sealed class ScriptTerminalBackend : ITerminalBackend
     private StreamWriter? _stdin;
     private CancellationTokenSource? _cts;
 
-    public ScriptTerminalBackend(IShellDiscovery shellDiscovery)
+    public WindowsTerminalBackend(IShellDiscovery shellDiscovery)
     {
         _shellDiscovery = shellDiscovery;
     }
@@ -28,7 +28,6 @@ public sealed class ScriptTerminalBackend : ITerminalBackend
     public void Start()
     {
         if (IsRunning) return;
-
         var shell = _shellDiscovery.GetShell();
         var psi = new ProcessStartInfo
         {
@@ -40,26 +39,20 @@ public sealed class ScriptTerminalBackend : ITerminalBackend
             CreateNoWindow = true,
             WorkingDirectory = Environment.CurrentDirectory,
         };
-        psi.Environment["TERM"] = "xterm-256color";
-        psi.Environment["CLICOLOR"] = "0";
-        psi.Environment["NO_COLOR"] = "1";
-        psi.Environment["PS1"] = "$ ";
+        psi.Environment["TERM"] = "xterm";
         psi.Environment["PROMPT"] = "$ ";
-        psi.Environment["PATH"] = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+        psi.Environment["NO_COLOR"] = "1";
         foreach (var arg in shell.Arguments)
         {
             psi.ArgumentList.Add(arg);
         }
-
         _proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
         _proc.Exited += (_, __) => Output?.Invoke("[terminal exited]\n");
-
         if (!_proc.Start())
         {
             Error?.Invoke("[terminal error] failed to start\n");
             return;
         }
-
         _stdin = _proc.StandardInput;
         _cts = new CancellationTokenSource();
         _ = StartReadLoop(_proc.StandardOutput.BaseStream, chunk => Output?.Invoke(Sanitize(chunk)), _cts.Token);
@@ -87,8 +80,8 @@ public sealed class ScriptTerminalBackend : ITerminalBackend
         }
     }
 
-    private static readonly Regex AnsiCsi = new Regex("\u001B\\[[0-9;?]*[ -/]*[@-~]", RegexOptions.Compiled);
-    private static readonly Regex AnsiOsc = new Regex("\u001B\u005D[^\u0007]*\u0007", RegexOptions.Compiled);
+    private static readonly Regex AnsiCsi = new("\u001B\\[[0-9;?]*[ -/]*[@-~]", RegexOptions.Compiled);
+    private static readonly Regex AnsiOsc = new("\u001B\u005D[^\u0007]*\u0007", RegexOptions.Compiled);
     private static string Sanitize(string chunk)
     {
         if (string.IsNullOrEmpty(chunk)) return chunk;
@@ -118,7 +111,6 @@ public sealed class ScriptTerminalBackend : ITerminalBackend
 
     private static async Task StartReadLoop(Stream stream, Action<string> emit, CancellationToken ct)
     {
-        // Use StreamReader to decode UTF-8 incrementally and emit as chunks
         using var reader = new StreamReader(stream, new UTF8Encoding(false, false), detectEncodingFromByteOrderMarks: true, bufferSize: 4096, leaveOpen: true);
         var buffer = new char[4096];
         try

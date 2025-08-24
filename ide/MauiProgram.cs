@@ -30,6 +30,14 @@ public static class MauiProgram
         builder.Services.AddSingleton<IBrowseService, BrowseService>();
         builder.Services.AddSingleton<IGitService, GitService>();
         builder.Services.AddSingleton<IIndexer, LexicalIndexer>();
+        builder.Services.AddSingleton<IShellDiscovery, ShellDiscovery>();
+        builder.Services.AddSingleton<ITerminalBackend>(sp =>
+        {
+                var sd = sp.GetRequiredService<IShellDiscovery>();
+                return sd.IsWindows
+                        ? new WindowsTerminalBackend(sd)
+                        : new ScriptTerminalBackend(sd);
+        });
 
         // Pages
         builder.Services.AddSingleton<AppShell>();
