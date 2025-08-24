@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Ide.Core.Utils;
 using Microsoft.Extensions.FileSystemGlobbing;
 
 namespace Ide.Core.Indexing;
@@ -13,12 +14,6 @@ namespace Ide.Core.Indexing;
 public sealed class LexicalIndexer : IIndexer
 {
     private readonly List<LineEntry> _entries = new();
-    private readonly HashSet<string> _binaryExt = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".png",".jpg",".jpeg",".gif",".bmp",".webp",".svg",".tiff",".ico",".heic",".heif",
-        ".dll",".exe",".so",".dylib",".a",".lib",".pdf",".zip",".gz",".tar",".7z",".rar",
-        ".mp3",".mp4",".mov",".avi",".mkv",".class",".jar",".wasm"
-    };
 
     private const int MaxFileBytes = 2_000_000; // 2MB per file
 
@@ -62,7 +57,7 @@ public sealed class LexicalIndexer : IIndexer
     internal async Task<bool> ShouldSkipFileAsync(string file, CancellationToken ct)
     {
         var ext = Path.GetExtension(file);
-        if (!string.IsNullOrEmpty(ext) && _binaryExt.Contains(ext)) return true;
+        if (!string.IsNullOrEmpty(ext) && BinaryExtensions.Set.Contains(ext)) return true;
         FileInfo fi; try { fi = new FileInfo(file); } catch { return true; }
         if (fi.Length > MaxFileBytes) return true;
         int sniff = (int)Math.Min(8192, fi.Length);
