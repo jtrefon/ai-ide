@@ -63,4 +63,17 @@ public class IndexerTests
         // Only a.cs lines should appear; not b.txt
         Assert.All(resAlpha, r => Assert.EndsWith("a.cs", Path.GetFileName(r.File)));
     }
+
+    [Fact]
+    public async Task Helpers_Build_IsIncluded_Skip_Index()
+    {
+        var root = CreateTempTree();
+        using var idx = new LexicalIndexer();
+        var include = LexicalIndexer.BuildMatcher(new[] { "src/**/*.cs" });
+        var exclude = LexicalIndexer.BuildMatcher(new[] { "bin/**" });
+        Assert.True(LexicalIndexer.IsIncluded("src/a.cs", include, exclude));
+        Assert.False(await idx.ShouldSkipFileAsync(Path.Combine(root, "src", "a.cs"), default));
+        int count = await idx.IndexFileAsync(Path.Combine(root, "src", "a.cs"), default);
+        Assert.True(count > 0);
+    }
 }

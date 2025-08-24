@@ -80,4 +80,28 @@ public class FileServiceTests
         Assert.False(w.Single().Ok);
         Assert.Contains("NUL", w.Single().Error ?? string.Empty);
     }
+
+    [Fact]
+    public async Task Helpers_IsBinary_ReadFile_WriteAtomic_ParseDiff()
+    {
+        var root = CreateTempDir();
+        var txt = Path.Combine(root, "a.txt");
+        await File.WriteAllTextAsync(txt, "hello", new UTF8Encoding(false));
+        Assert.False(await FileService.IsBinaryAsync(txt, 5, default));
+        var rr = await FileService.ReadFileAsync(txt, 1000, default);
+        Assert.True(rr.Ok);
+
+        var bPath = Path.Combine(root, "b.txt");
+        var w = await FileService.WriteFileAsync(new FileWrite(bPath, "hi"), true, default);
+        Assert.True(w.Ok);
+        Assert.Equal("hi", await File.ReadAllTextAsync(bPath, new UTF8Encoding(false)));
+        var cPath = Path.Combine(root, "c.txt");
+        await FileService.WriteFileAtomicAsync(cPath, "z", default);
+        Assert.Equal("z", await File.ReadAllTextAsync(cPath, new UTF8Encoding(false)));
+
+        var diff = "+++ b/d.txt\n@@ -0,0 +1 @@\n+line\n";
+        var patches = FileService.ParseDiffLines(root, diff).ToList();
+        Assert.Single(patches);
+        Assert.Equal(1, patches[0].Hunks.Count);
+    }
 }

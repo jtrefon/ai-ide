@@ -31,56 +31,7 @@ public sealed class FileService : IFileService
         foreach (var path in files)
         {
             if (ct.IsCancellationRequested) break;
-            try
-            {
-                if (!File.Exists(path))
-                {
-                    results.Add(new ReadResult(path, false, null, "Not found"));
-                    continue;
-                }
-                var ext = Path.GetExtension(path);
-                if (!string.IsNullOrEmpty(ext) && BinaryExtensions.Contains(ext))
-                {
-                    results.Add(new ReadResult(path, false, null, "Binary extension"));
-                    continue;
-                }
-                var info = new FileInfo(path);
-                if (info.Length > cap)
-                {
-                    results.Add(new ReadResult(path, false, null, $"File exceeds cap {cap} bytes"));
-                    continue;
-                }
-                // sniff first 8KB for NUL
-                var bufSize = (int)Math.Min(8192, info.Length);
-                if (bufSize > 0)
-                {
-                    var tmp = ArrayPool<byte>.Shared.Rent(bufSize);
-                    try
-                    {
-                        using var fs = File.OpenRead(path);
-                        int read = await fs.ReadAsync(tmp.AsMemory(0, bufSize), ct).ConfigureAwait(false);
-                        for (int i = 0; i < read; i++)
-                        {
-                            if (tmp[i] == 0)
-                            {
-                                results.Add(new ReadResult(path, false, null, "Binary (NUL detected)"));
-                                goto Next;
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        ArrayPool<byte>.Shared.Return(tmp);
-                    }
-                }
-                var text = await File.ReadAllTextAsync(path, Encoding.UTF8, ct).ConfigureAwait(false);
-                results.Add(new ReadResult(path, true, text, null));
-            }
-            catch (Exception ex)
-            {
-                results.Add(new ReadResult(path, false, null, ex.Message));
-            }
-        Next:;
+            results.Add(await ReadFileAsync(path, cap, ct).ConfigureAwait(false));
         }
         return results;
     }
@@ -94,41 +45,7 @@ public sealed class FileService : IFileService
         foreach (var w in writes)
         {
             if (ct.IsCancellationRequested) break;
-            try
-            {
-                if (w.Content.IndexOf('\0') >= 0)
-                {
-                    results.Add(new WriteResult(w.Path, false, "Binary content (NUL) not allowed"));
-                    continue;
-                }
-                var dir = Path.GetDirectoryName(w.Path);
-                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-
-                if (atomic)
-                {
-                    var tmpPath = w.Path + ".tmp-" + Guid.NewGuid().ToString("N");
-                    await File.WriteAllTextAsync(tmpPath, w.Content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), ct).ConfigureAwait(false);
-                    // Use replace to be atomic on most platforms
-                    if (File.Exists(w.Path))
-                    {
-                        File.Replace(tmpPath, w.Path, null, ignoreMetadataErrors: true);
-                    }
-                    else
-                    {
-                        File.Move(tmpPath, w.Path);
-                    }
-                }
-                else
-                {
-                    await File.WriteAllTextAsync(w.Path, w.Content, new UTF8Encoding(false), ct).ConfigureAwait(false);
-                }
-
-                results.Add(new WriteResult(w.Path, true, null));
-            }
-            catch (Exception ex)
-            {
-                results.Add(new WriteResult(w.Path, false, ex.Message));
-            }
+            results.Add(await WriteFileAsync(w, atomic, ct).ConfigureAwait(false));
         }
         return results;
     }
@@ -137,77 +54,23 @@ public sealed class FileService : IFileService
     {
         try
         {
-            // Normalize newlines
-            var lines = diff.Replace("\r\n", "\n").Split('\n');
-            var filePatches = new List<FilePatch>();
-
-            string? currentFile = null;
-            var hunks = new List<Hunk>();
-            for (int i = 0; i < lines.Length; i++)
-            {
-                var line = lines[i];
-                if (line.StartsWith("+++ "))
-                {
-                    // +++ b/path
-                    var path = line.Substring(4).Trim();
-                    if (path.StartsWith("b/")) path = path.Substring(2);
-                    if (currentFile != null)
-                    {
-                        filePatches.Add(new FilePatch(currentFile, hunks.ToArray()));
-                        hunks.Clear();
-                    }
-                    currentFile = Path.Combine(repoRoot, path);
-                }
-                else if (line.StartsWith("@@ "))
-                {
-                    // @@ -l,s +l2,s2 @@ optional_text
-                    var m = Regex.Match(line, @"@@ -(?<ol>\d+)(,(?<oc>\d+))? \+(?<nl>\d+)(,(?<nc>\d+))? @@");
-                    if (!m.Success) throw new InvalidOperationException($"Invalid hunk header: {line}");
-                    int newStart = int.Parse(m.Groups["nl"].Value);
-                    var hunkLines = new List<string>();
-                    // collect until next hunk/file or end
-                    int j = i + 1;
-                    for (; j < lines.Length; j++)
-                    {
-                        var l2 = lines[j];
-                        if (l2.StartsWith("@@ ") || l2.StartsWith("+++ ") || l2.StartsWith("diff ") || l2.StartsWith("--- ")) break;
-                        hunkLines.Add(l2);
-                    }
-                    hunks.Add(new Hunk(newStart, hunkLines.ToArray()));
-                    i = j - 1;
-                }
-            }
-            if (currentFile != null)
-            {
-                filePatches.Add(new FilePatch(currentFile, hunks.ToArray()));
-            }
-
+            var patches = ParseDiffLines(repoRoot, diff).ToList();
             int changed = 0;
-            foreach (var fp in filePatches)
+            foreach (var fp in patches)
             {
                 if (ct.IsCancellationRequested) break;
-                var original = File.Exists(fp.File) ? await File.ReadAllTextAsync(fp.File, Encoding.UTF8, ct).ConfigureAwait(false) : string.Empty;
-                var newContent = ApplyHunks(original, fp.Hunks);
+                var original = File.Exists(fp.File)
+                    ? await File.ReadAllTextAsync(fp.File, Encoding.UTF8, ct).ConfigureAwait(false)
+                    : string.Empty;
+                var newContent = DiffHelper.ApplyHunks(original, fp.Hunks);
                 if (newContent == null)
-                {
                     return new PatchResult(false, changed, $"Failed to apply hunks for {fp.File}");
-                }
-
                 if (atomic)
-                {
-                    var dir = Path.GetDirectoryName(fp.File);
-                    if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                    var tmp = fp.File + ".tmp-" + Guid.NewGuid().ToString("N");
-                    await File.WriteAllTextAsync(tmp, newContent, new UTF8Encoding(false), ct).ConfigureAwait(false);
-                    if (File.Exists(fp.File)) File.Replace(tmp, fp.File, null, true); else File.Move(tmp, fp.File);
-                }
+                    await WriteFileAtomicAsync(fp.File, newContent, ct).ConfigureAwait(false);
                 else
-                {
                     await File.WriteAllTextAsync(fp.File, newContent, new UTF8Encoding(false), ct).ConfigureAwait(false);
-                }
                 changed++;
             }
-
             return new PatchResult(true, changed, null);
         }
         catch (Exception ex)
@@ -216,60 +79,119 @@ public sealed class FileService : IFileService
         }
     }
 
-    private static string? ApplyHunks(string original, IReadOnlyList<Hunk> hunks)
+    internal static async Task<ReadResult> ReadFileAsync(string path, int cap, CancellationToken ct)
     {
-        // Use \n internally
-        var orig = original.Replace("\r\n", "\n");
-        var lines = orig.Split('\n');
-        var result = new List<string>();
-        int currentLine = 1; // 1-based
-
-        foreach (var h in hunks)
+        try
         {
-            // copy unchanged until new start - 1
-            while (currentLine < h.NewStart && currentLine <= lines.Length)
+            if (!File.Exists(path)) return new ReadResult(path, false, null, "Not found");
+            var info = new FileInfo(path);
+            if (info.Length > cap) return new ReadResult(path, false, null, $"File exceeds cap {cap} bytes");
+            if (await IsBinaryAsync(path, (int)Math.Min(8192, info.Length), ct).ConfigureAwait(false))
+                return new ReadResult(path, false, null, "Binary detected");
+            var text = await File.ReadAllTextAsync(path, Encoding.UTF8, ct).ConfigureAwait(false);
+            return new ReadResult(path, true, text, null);
+        }
+        catch (Exception ex)
+        {
+            return new ReadResult(path, false, null, ex.Message);
+        }
+    }
+
+    internal static async Task<WriteResult> WriteFileAsync(FileWrite w, bool atomic, CancellationToken ct)
+    {
+        try
+        {
+            if (w.Content.IndexOf('\0') >= 0)
+                return new WriteResult(w.Path, false, "Binary content (NUL) not allowed");
+            var dir = Path.GetDirectoryName(w.Path);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            if (atomic)
+                await WriteFileAtomicAsync(w.Path, w.Content, ct).ConfigureAwait(false);
+            else
+                await File.WriteAllTextAsync(w.Path, w.Content, new UTF8Encoding(false), ct).ConfigureAwait(false);
+            return new WriteResult(w.Path, true, null);
+        }
+        catch (Exception ex)
+        {
+            return new WriteResult(w.Path, false, ex.Message);
+        }
+    }
+
+    internal static async Task WriteFileAtomicAsync(string path, string content, CancellationToken ct)
+    {
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        var tmp = path + ".tmp-" + Guid.NewGuid().ToString("N");
+        await File.WriteAllTextAsync(tmp, content, new UTF8Encoding(false), ct).ConfigureAwait(false);
+        if (File.Exists(path)) File.Replace(tmp, path, null, true); else File.Move(tmp, path);
+    }
+
+    internal static async Task<bool> IsBinaryAsync(string path, int sniffBytes, CancellationToken ct)
+    {
+        var ext = Path.GetExtension(path);
+        if (!string.IsNullOrEmpty(ext) && BinaryExtensions.Contains(ext)) return true;
+        if (sniffBytes <= 0) return false;
+        var buf = ArrayPool<byte>.Shared.Rent(sniffBytes);
+        try
+        {
+            using var fs = File.OpenRead(path);
+            int read = await fs.ReadAsync(buf.AsMemory(0, sniffBytes), ct).ConfigureAwait(false);
+            for (int i = 0; i < read; i++) if (buf[i] == 0) return true;
+        }
+        catch { return true; }
+        finally { ArrayPool<byte>.Shared.Return(buf); }
+        return false;
+    }
+
+    internal static IEnumerable<DiffHelper.FilePatch> ParseDiffLines(string repoRoot, string diff)
+    {
+        var lines = diff.Replace("\r\n", "\n").Split('\n');
+        string? file = null;
+        var hunks = new List<DiffHelper.Hunk>();
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (line.StartsWith("+++ "))
             {
-                result.Add(lines[currentLine - 1]);
-                currentLine++;
+                if (file != null) { yield return new DiffHelper.FilePatch(file, hunks.ToArray()); hunks.Clear(); }
+                var path = line[4..].Trim();
+                if (path.StartsWith("b/")) path = path[2..];
+                file = Path.Combine(repoRoot, path);
             }
-            // apply hunk lines
-            foreach (var hl in h.Lines)
+            else if (line.StartsWith("@@ "))
             {
-                // Ignore untagged empty lines (can occur from trailing newline in diff text)
-                if (hl.Length == 0) { continue; }
-                char tag = hl[0];
-                var content = hl.Length > 1 ? hl.Substring(1) : string.Empty;
-                switch (tag)
-                {
-                    case ' ': // context: ensure original matches at this position if available
-                        if (currentLine <= lines.Length)
-                        {
-                            // best-effort; ignore mismatch
-                            result.Add(lines[currentLine - 1]);
-                            currentLine++;
-                        }
-                        else
-                        {
-                            result.Add(content);
-                        }
-                        break;
-                    case '+':
-                        result.Add(content);
-                        break;
-                    case '-':
-                        if (currentLine <= lines.Length) currentLine++; // skip a line in original
-                        break;
-                    case '\\': // "\\ No newline at end of file" marker; ignore
-                        break;
-                    default:
-                        // treat as context
-                        result.Add(hl);
-                        currentLine++;
-                        break;
-                }
+                var (h, idx) = ParseHunk(lines, i);
+                hunks.Add(h);
+                i = idx;
             }
         }
-        // append any remaining original lines
+        if (file != null) yield return new DiffHelper.FilePatch(file, hunks.ToArray());
+    }
+
+    private static (DiffHelper.Hunk h, int idx) ParseHunk(string[] lines, int start)
+    {
+        var m = Regex.Match(lines[start], @"@@ -\d+(,\d+)? \+(?<nl>\d+)(,\d+)? @@");
+        int newStart = int.Parse(m.Groups["nl"].Value);
+        var hLines = new List<string>();
+        int i = start + 1;
+        for (; i < lines.Length; i++)
+        {
+            var l = lines[i];
+            if (l.StartsWith("@@ ") || l.StartsWith("+++ ") || l.StartsWith("diff ") || l.StartsWith("--- ")) break;
+            hLines.Add(l);
+        }
+        return (new DiffHelper.Hunk(newStart, hLines.ToArray()), i - 1);
+    }
+}
+
+internal static class DiffHelper
+{
+    internal static string? ApplyHunks(string original, IReadOnlyList<Hunk> hunks)
+    {
+        var lines = original.Replace("\r\n", "\n").Split('\n');
+        var result = new List<string>();
+        int currentLine = 1;
+        foreach (var h in hunks) ApplyHunk(h, lines, ref currentLine, result);
         while (currentLine <= lines.Length)
         {
             result.Add(lines[currentLine - 1]);
@@ -278,6 +200,36 @@ public sealed class FileService : IFileService
         return string.Join('\n', result);
     }
 
-    private readonly record struct FilePatch(string File, IReadOnlyList<Hunk> Hunks);
-    private readonly record struct Hunk(int NewStart, IReadOnlyList<string> Lines);
+    private static void ApplyHunk(Hunk h, string[] lines, ref int currentLine, List<string> result)
+    {
+        while (currentLine < h.NewStart && currentLine <= lines.Length)
+        {
+            result.Add(lines[currentLine - 1]);
+            currentLine++;
+        }
+        foreach (var hl in h.Lines) ApplyLine(hl, lines, ref currentLine, result);
+    }
+
+    private static void ApplyLine(string hl, string[] lines, ref int currentLine, List<string> result)
+    {
+        if (hl.Length == 0) return;
+        char tag = hl[0];
+        var content = hl.Length > 1 ? hl.Substring(1) : string.Empty;
+        switch (tag)
+        {
+            case ' ':
+                if (currentLine <= lines.Length) result.Add(lines[currentLine - 1]); else result.Add(content);
+                currentLine++;
+                break;
+            case '+':
+                result.Add(content);
+                break;
+            case '-':
+                if (currentLine <= lines.Length) currentLine++;
+                break;
+        }
+    }
+
+    internal readonly record struct FilePatch(string File, IReadOnlyList<Hunk> Hunks);
+    internal readonly record struct Hunk(int NewStart, IReadOnlyList<string> Lines);
 }
