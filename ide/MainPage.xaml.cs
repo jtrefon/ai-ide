@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text;
 using System.IO;
 using Ide.Core.Files;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Storage;
 
 namespace ide;
@@ -20,11 +21,18 @@ public partial class MainPage : ContentPage
     private int _termLockLen; // text length beyond which user can edit
     private readonly StringBuilder _termInput = new(); // current input line buffer
 
-    public MainPage()
+    private readonly IBrowseService _browseService;
+    private readonly IFileService _fileService;
+
+    public MainPage(IBrowseService browseService, IFileService fileService)
     {
         InitializeComponent();
         FileList.ItemsSource = _files;
+        _browseService = browseService;
+        _fileService = fileService;
     }
+
+    public static MainPage Create() => App.Current.Services.GetRequiredService<MainPage>();
 
     protected override void OnAppearing()
     {
@@ -43,8 +51,7 @@ public partial class MainPage : ContentPage
         try
         {
             _currentRoot = root;
-            var browse = await ServiceLocator.GetRequiredService<IBrowseService>()
-                .BrowseAsync(root, maxDepth: 2, maxEntries: 500);
+            var browse = await _browseService.BrowseAsync(root, maxDepth: 2, maxEntries: 500);
             _files.Clear();
             foreach (var e1 in browse)
             {
@@ -64,8 +71,7 @@ public partial class MainPage : ContentPage
             var path = e.CurrentSelection?.FirstOrDefault() as string;
             if (string.IsNullOrEmpty(path)) return;
             _currentFile = path;
-            var fs = ServiceLocator.GetRequiredService<IFileService>();
-            var rr = await fs.ReadFilesAsync(new[] { path }, maxBytes: 1024 * 1024);
+            var rr = await _fileService.ReadFilesAsync(new[] { path }, maxBytes: 1024 * 1024);
             var r = rr.FirstOrDefault();
             if (r is not null && r.Ok)
             {
@@ -95,8 +101,7 @@ public partial class MainPage : ContentPage
             var path = result.FullPath;
             _currentFile = path;
             await BrowseRootAsync(Path.GetDirectoryName(path)!);
-            var fs = ServiceLocator.GetRequiredService<IFileService>();
-            var rr = await fs.ReadFilesAsync(new[] { path }, maxBytes: 1024 * 1024);
+            var rr = await _fileService.ReadFilesAsync(new[] { path }, maxBytes: 1024 * 1024);
             var r = rr.FirstOrDefault();
             if (r is not null && r.Ok)
             {
@@ -137,8 +142,7 @@ public partial class MainPage : ContentPage
         try
         {
             if (string.IsNullOrEmpty(_currentFile)) return;
-            var fs = ServiceLocator.GetRequiredService<IFileService>();
-            var wr = await fs.WriteFilesAsync(new[] { new FileWrite(_currentFile!, EditorView.Text ?? string.Empty) });
+            var wr = await _fileService.WriteFilesAsync(new[] { new FileWrite(_currentFile!, EditorView.Text ?? string.Empty) });
             var r = wr.FirstOrDefault();
             if (r is not null && r.Ok)
             {
