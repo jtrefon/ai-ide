@@ -88,7 +88,7 @@ jobs:
 
   build-macos-maui:
     name: Build MAUI app (macOS)
-    runs-on: macos-latest
+    runs-on: macos-ventura-xcode:14.x
     steps:
       - uses: actions/checkout@v4
 
@@ -106,7 +106,7 @@ jobs:
 
       - name: Install MAUI workload
         run: |
-          dotnet workload install maui --source https://api.nuget.org/v3/index.json
+          dotnet workload install maui --version 8.0.0 --source https://api.nuget.org/v3/index.json
           dotnet workload list
 
       - name: Restore app
