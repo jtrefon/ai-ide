@@ -102,6 +102,6 @@ public class FileServiceTests
         var diff = "+++ b/d.txt\n@@ -0,0 +1 @@\n+line\n";
         var patches = FileService.ParseDiffLines(root, diff).ToList();
         Assert.Single(patches);
-        Assert.Equal(1, patches[0].Hunks.Count);
+        Assert.Single(patches[0].Hunks);
     }
 }
