@@ -1,0 +1,77 @@
+# .NET / Visual Studio / MAUI
+# Build outputs
+bin/
+obj/
+[Bb]uild/
+[Bb]uilds/
+artifacts/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# Rider / JetBrains
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+.history/
+
+# Test results & coverage
+TestResults/
+**/TestResults/
+*.coverage
+*.coveragexml
+*.opencover.xml
+coverage/
+coverage-results/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/packages/
+
+# Logs
+*.log
+
+# OS junk
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+Icon?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Secrets / env (keep out of repo)
+.env
+.env.*
+
+# Resharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# Tool caches
+**/.sonarqube/
+.sass-cache
+
+# Other common
+node_modules/
+*.local
+*.orig
+# Maui/Xcode generated (already under bin/obj but keep explicit here)
+*.ipa
+*.app.dSYM
+*.aab
+*.apk
+
+# IDE misc
+*.code-workspace
