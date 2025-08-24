@@ -31,15 +31,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<IGitService, GitService>();
         builder.Services.AddSingleton<IIndexer, LexicalIndexer>();
 
+        // Pages
+        builder.Services.AddSingleton<AppShell>();
+        builder.Services.AddTransient<MainPage>();
+        builder.Services.AddTransient<AgentPage>();
+
 #if DEBUG
 		builder.Logging.AddDebug();
 #endif
 
-		var app = builder.Build();
-
-        // Expose service provider to XAML pages
-        ServiceLocator.Services = app.Services;
-
-		return app;
-	}
+                return builder.Build();
+        }
 }
