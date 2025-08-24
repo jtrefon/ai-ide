@@ -2,6 +2,7 @@ using Ide.Core.Events;
 using Ide.Core.Files;
 using Ide.Core.Searching;
 using Microsoft.Extensions.DependencyInjection;
+using Ide.Core.State;
 
 namespace Ide.Tests;
 
@@ -14,6 +15,7 @@ public class DependencyInjectionTests
         services.AddSingleton<IFileService, FileService>();
         services.AddSingleton<IBrowseService, BrowseService>();
         services.AddSingleton<ICodeSearchService, CodeSearchService>();
+        services.AddSingleton<IStateStore, StateStore>();
         return services.BuildServiceProvider();
     }
 
@@ -25,5 +27,6 @@ public class DependencyInjectionTests
         Assert.NotNull(sp.GetService<IFileService>());
         Assert.NotNull(sp.GetService<IBrowseService>());
         Assert.NotNull(sp.GetService<ICodeSearchService>());
+        Assert.NotNull(sp.GetService<IStateStore>());
     }
 }

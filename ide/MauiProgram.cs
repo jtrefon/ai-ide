@@ -6,6 +6,7 @@ using Ide.Core.Files;
 using Ide.Core.Searching;
 using Ide.Core.Vcs;
 using Ide.Core.Indexing;
+using Ide.Core.State;
 
 namespace ide;
 
@@ -30,6 +31,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IBrowseService, BrowseService>();
         builder.Services.AddSingleton<IGitService, GitService>();
         builder.Services.AddSingleton<IIndexer, LexicalIndexer>();
+        builder.Services.AddSingleton<IStateStore, StateStore>();
         builder.Services.AddSingleton<IShellDiscovery, ShellDiscovery>();
         builder.Services.AddSingleton<ITerminalBackend>(sp =>
         {

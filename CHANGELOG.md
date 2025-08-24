@@ -10,4 +10,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial OSS docs: README, LICENSE, Code of Conduct, Contributing, Governance, Security, Support, Changelog, Dev Guide, Roadmap, GitHub templates
 - Core EventBus implementation and tests
+- In-memory StateStore with snapshot/restore and DI wiring
 
