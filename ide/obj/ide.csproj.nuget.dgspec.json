@@ -18,8 +18,6 @@
           "/Users/jack/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
-          "net9.0-android",
-          "net9.0-ios",
           "net9.0-maccatalyst"
         ],
         "sources": {
@@ -27,17 +25,13 @@
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
-          "net9.0-android35.0": {
-            "targetAlias": "net9.0-android",
-            "projectReferences": {}
-          },
-          "net9.0-ios18.5": {
-            "targetAlias": "net9.0-ios",
-            "projectReferences": {}
-          },
           "net9.0-maccatalyst18.5": {
             "targetAlias": "net9.0-maccatalyst",
-            "projectReferences": {}
+            "projectReferences": {
+              "/Users/jack/Projects/ide/ide/src/Ide.Core/Ide.Core.csproj": {
+                "projectPath": "/Users/jack/Projects/ide/ide/src/Ide.Core/Ide.Core.csproj"
+              }
+            }
           }
         },
         "warningProperties": {
@@ -53,84 +47,6 @@
         "SdkAnalysisLevel": "9.0.300"
       },
       "frameworks": {
-        "net9.0-android35.0": {
-          "targetAlias": "net9.0-android",
-          "dependencies": {
-            "Microsoft.Extensions.Logging.Debug": {
-              "target": "Package",
-              "version": "[9.0.5, )"
-            },
-            "Microsoft.Maui.Controls": {
-              "target": "Package",
-              "version": "[9.0.82, )"
-            },
-            "Microsoft.NET.ILLink.Tasks": {
-              "suppressParent": "All",
-              "target": "Package",
-              "version": "[9.0.8, )",
-              "autoReferenced": true
-            }
-          },
-          "imports": [
-            "net461",
-            "net462",
-            "net47",
-            "net471",
-            "net472",
-            "net48",
-            "net481"
-          ],
-          "assetTargetFallback": true,
-          "warn": true,
-          "frameworkReferences": {
-            "Microsoft.Android": {
-              "privateAssets": "all"
-            },
-            "Microsoft.NETCore.App": {
-              "privateAssets": "all"
-            }
-          },
-          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.304/PortableRuntimeIdentifierGraph.json"
-        },
-        "net9.0-ios18.5": {
-          "targetAlias": "net9.0-ios",
-          "dependencies": {
-            "Microsoft.Extensions.Logging.Debug": {
-              "target": "Package",
-              "version": "[9.0.5, )"
-            },
-            "Microsoft.Maui.Controls": {
-              "target": "Package",
-              "version": "[9.0.82, )"
-            },
-            "Microsoft.NET.ILLink.Tasks": {
-              "suppressParent": "All",
-              "target": "Package",
-              "version": "[9.0.8, )",
-              "autoReferenced": true
-            }
-          },
-          "imports": [
-            "net461",
-            "net462",
-            "net47",
-            "net471",
-            "net472",
-            "net48",
-            "net481"
-          ],
-          "assetTargetFallback": true,
-          "warn": true,
-          "frameworkReferences": {
-            "Microsoft.iOS": {
-              "privateAssets": "all"
-            },
-            "Microsoft.NETCore.App": {
-              "privateAssets": "all"
-            }
-          },
-          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.304/PortableRuntimeIdentifierGraph.json"
-        },
         "net9.0-maccatalyst18.5": {
           "targetAlias": "net9.0-maccatalyst",
           "dependencies": {
@@ -173,17 +89,68 @@
         }
       },
       "runtimes": {
-        "android-arm64": {
-          "#import": []
-        },
-        "android-x64": {
-          "#import": []
-        },
-        "iossimulator-arm64": {
-          "#import": []
-        },
         "maccatalyst-arm64": {
           "#import": []
+        }
+      }
+    },
+    "/Users/jack/Projects/ide/ide/src/Ide.Core/Ide.Core.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/jack/Projects/ide/ide/src/Ide.Core/Ide.Core.csproj",
+        "projectName": "Ide.Core",
+        "projectPath": "/Users/jack/Projects/ide/ide/src/Ide.Core/Ide.Core.csproj",
+        "packagesPath": "/Users/jack/.nuget/packages/",
+        "outputPath": "/Users/jack/Projects/ide/ide/src/Ide.Core/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/jack/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "/usr/local/share/dotnet/library-packs": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.304/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

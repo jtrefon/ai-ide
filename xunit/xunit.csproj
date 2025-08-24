@@ -5,6 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <AssemblyName>Ide.Tests</AssemblyName>
+    <RootNamespace>Ide.Tests</RootNamespace>
+    <PackageId>Ide.Tests</PackageId>
   </PropertyGroup>
 
   <ItemGroup>

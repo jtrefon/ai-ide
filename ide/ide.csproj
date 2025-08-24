@@ -59,7 +59,7 @@
 	<ItemGroup>
 		<!-- Exclude app-local CounterService in favor of shared library -->
 		<Compile Remove="Utils/CounterService.cs" />
-		<ProjectReference Include="../../src/Ide.Core/Ide.Core.csproj" />
+		<ProjectReference Include="../src/Ide.Core/Ide.Core.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

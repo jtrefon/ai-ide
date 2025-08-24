@@ -1,4 +1,5 @@
-﻿namespace ide;
+using Ide.Core.Events;
+namespace ide;
 
 public partial class MainPage : ContentPage
 {
@@ -19,5 +20,13 @@ public partial class MainPage : ContentPage
 			CounterBtn.Text = $"Clicked {count} times";
 
 		SemanticScreenReader.Announce(CounterBtn.Text);
+
+		// Publish event to the in-process event bus
+		var bus = ServiceLocator.GetRequiredService<IEventBus>();
+		bus.Publish("ui.click", nameof(MainPage), new Dictionary<string, object?>
+		{
+			["control"] = "CounterBtn",
+			["count"] = count
+		});
 	}
 }

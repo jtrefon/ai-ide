@@ -11,4 +11,9 @@
         ContentTemplate="{DataTemplate local:MainPage}"
         Route="MainPage" />
 
+    <ShellContent
+        Title="Agent"
+        ContentTemplate="{DataTemplate local:AgentPage}"
+        Route="AgentPage" />
+
 </Shell>

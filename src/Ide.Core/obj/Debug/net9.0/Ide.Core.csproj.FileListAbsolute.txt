@@ -1,0 +1,12 @@
+/Users/jack/Projects/ide/ide/src/Ide.Core/bin/Debug/net9.0/Ide.Core.deps.json
+/Users/jack/Projects/ide/ide/src/Ide.Core/bin/Debug/net9.0/Ide.Core.dll
+/Users/jack/Projects/ide/ide/src/Ide.Core/bin/Debug/net9.0/Ide.Core.pdb
+/Users/jack/Projects/ide/ide/src/Ide.Core/obj/Debug/net9.0/Ide.Core.GeneratedMSBuildEditorConfig.editorconfig
+/Users/jack/Projects/ide/ide/src/Ide.Core/obj/Debug/net9.0/Ide.Core.AssemblyInfoInputs.cache
+/Users/jack/Projects/ide/ide/src/Ide.Core/obj/Debug/net9.0/Ide.Core.AssemblyInfo.cs
+/Users/jack/Projects/ide/ide/src/Ide.Core/obj/Debug/net9.0/Ide.Core.csproj.CoreCompileInputs.cache
+/Users/jack/Projects/ide/ide/src/Ide.Core/obj/Debug/net9.0/Ide.Core.sourcelink.json
+/Users/jack/Projects/ide/ide/src/Ide.Core/obj/Debug/net9.0/Ide.Core.dll
+/Users/jack/Projects/ide/ide/src/Ide.Core/obj/Debug/net9.0/refint/Ide.Core.dll
+/Users/jack/Projects/ide/ide/src/Ide.Core/obj/Debug/net9.0/Ide.Core.pdb
+/Users/jack/Projects/ide/ide/src/Ide.Core/obj/Debug/net9.0/ref/Ide.Core.dll

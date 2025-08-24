@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="ide.AgentPage"
+             Title="Agent">
+    <VerticalStackLayout Padding="16" Spacing="12">
+        <Button Text="Publish Test Event" Clicked="OnPublishClicked" />
+        <CollectionView x:Name="EventsView" HeightRequest="400">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <HorizontalStackLayout Spacing="8">
+                        <Label Text="{Binding Timestamp}" FontAttributes="Bold" />
+                        <Label Text="{Binding Type}" />
+                        <Label Text="-" />
+                        <Label Text="{Binding Source}" />
+                    </HorizontalStackLayout>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </VerticalStackLayout>
+</ContentPage>

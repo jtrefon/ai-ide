@@ -1,0 +1,1 @@
+-v --force --timestamp=none --sign - --entitlements /Users/jack/Projects/ide/ide/ide/obj/Debug/net9.0-maccatalyst/maccatalyst-arm64/Entitlements.xcent /Users/jack/Projects/ide/ide/ide/bin/Debug/net9.0-maccatalyst/maccatalyst-arm64/ide.app

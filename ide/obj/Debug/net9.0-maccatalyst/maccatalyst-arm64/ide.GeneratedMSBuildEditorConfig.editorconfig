@@ -12,37 +12,43 @@ build_property.PlatformNeutralAssembly =
 build_property.EnforceExtendedAnalyzerRules = 
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = ide
-build_property.ProjectDir = /Users/jack/Projects/ide/ide/
+build_property.ProjectDir = /Users/jack/Projects/ide/ide/ide/
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
 build_property.EffectiveAnalysisLevelStyle = 9.0
 build_property.EnableCodeStyleSeverity = 
 
-[/Users/jack/Projects/ide/ide/App.xaml]
+[/Users/jack/Projects/ide/ide/ide/AgentPage.xaml]
+build_metadata.AdditionalFiles.GenKind = Xaml
+build_metadata.AdditionalFiles.ManifestResourceName = ide.AgentPage.xaml
+build_metadata.AdditionalFiles.TargetPath = AgentPage.xaml
+build_metadata.AdditionalFiles.RelativePath = AgentPage.xaml
+
+[/Users/jack/Projects/ide/ide/ide/App.xaml]
 build_metadata.AdditionalFiles.GenKind = Xaml
 build_metadata.AdditionalFiles.ManifestResourceName = ide.App.xaml
 build_metadata.AdditionalFiles.TargetPath = App.xaml
 build_metadata.AdditionalFiles.RelativePath = App.xaml
 
-[/Users/jack/Projects/ide/ide/AppShell.xaml]
+[/Users/jack/Projects/ide/ide/ide/AppShell.xaml]
 build_metadata.AdditionalFiles.GenKind = Xaml
 build_metadata.AdditionalFiles.ManifestResourceName = ide.AppShell.xaml
 build_metadata.AdditionalFiles.TargetPath = AppShell.xaml
 build_metadata.AdditionalFiles.RelativePath = AppShell.xaml
 
-[/Users/jack/Projects/ide/ide/MainPage.xaml]
+[/Users/jack/Projects/ide/ide/ide/MainPage.xaml]
 build_metadata.AdditionalFiles.GenKind = Xaml
 build_metadata.AdditionalFiles.ManifestResourceName = ide.MainPage.xaml
 build_metadata.AdditionalFiles.TargetPath = MainPage.xaml
 build_metadata.AdditionalFiles.RelativePath = MainPage.xaml
 
-[/Users/jack/Projects/ide/ide/Resources/Styles/Colors.xaml]
+[/Users/jack/Projects/ide/ide/ide/Resources/Styles/Colors.xaml]
 build_metadata.AdditionalFiles.GenKind = Xaml
 build_metadata.AdditionalFiles.ManifestResourceName = ide.Resources.Styles.Colors.xaml
 build_metadata.AdditionalFiles.TargetPath = Resources/Styles/Colors.xaml
 build_metadata.AdditionalFiles.RelativePath = Resources/Styles/Colors.xaml
 
-[/Users/jack/Projects/ide/ide/Resources/Styles/Styles.xaml]
+[/Users/jack/Projects/ide/ide/ide/Resources/Styles/Styles.xaml]
 build_metadata.AdditionalFiles.GenKind = Xaml
 build_metadata.AdditionalFiles.ManifestResourceName = ide.Resources.Styles.Styles.xaml
 build_metadata.AdditionalFiles.TargetPath = Resources/Styles/Styles.xaml

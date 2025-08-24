@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
+using Ide.Core.Events;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ide;
 
@@ -15,10 +17,18 @@ public static class MauiProgram
 				fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
 			});
 
+        // Core services
+        builder.Services.AddSingleton<IEventBus, EventBus>();
+
 #if DEBUG
 		builder.Logging.AddDebug();
 #endif
 
-		return builder.Build();
+		var app = builder.Build();
+
+        // Expose service provider to XAML pages
+        ServiceLocator.Services = app.Services;
+
+		return app;
 	}
 }
