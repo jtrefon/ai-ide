@@ -84,7 +84,7 @@ xunit/
   xunit.csproj
 ```
 
-* **Platform targets:** Desktop only. `net9.0-maccatalyst` always; `net9.0-windows10.0.19041.0` conditionally on Windows. Mobile (Android/iOS/Tizen) removed from targets and source tree.
+* **Platform targets:** Desktop only. `net9.0-maccatalyst` always; `net9.0-windows10.0.19041.0` conditionally on Windows. Mobile (Android/iOS) removed from targets and source tree.
 * **Modularity:** Shared logic lives in `src/*` libraries (e.g., `Ide.Core`). The MAUI app references these libraries; test projects reference libraries directly.
 * **Solutions:** Root `ide.sln` contains the MAUI app, core libraries, and tests. The nested `ide/ide.sln` is deprecated and slated for removal.
 
