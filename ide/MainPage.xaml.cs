@@ -4,6 +4,7 @@ using System.IO;
 using Ide.Core.Files;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Storage;
+using CommunityToolkit.Maui.Views;
 
 namespace ide;
 
