@@ -40,10 +40,14 @@
         <Border Grid.Row="0" Grid.Column="1" StrokeThickness="1" Stroke="LightGray" Padding="8">
             <VerticalStackLayout Spacing="8">
                 <Label Text="Explorer" FontAttributes="Bold" />
-                <TreeView x:Name="FileTree" SelectionChanged="OnFileSelected">
+                <TreeView x:Name="FileTree">
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                            <Label Text="{Binding Name}" />
+                            <Label Text="{Binding Name}">
+                                <Label.GestureRecognizers>
+                                    <TapGestureRecognizer NumberOfTapsRequired="2" Tapped="OnFileDoubleTapped" />
+                                </Label.GestureRecognizers>
+                            </Label>
                         </HierarchicalDataTemplate>
                     </TreeView.ItemTemplate>
                 </TreeView>
