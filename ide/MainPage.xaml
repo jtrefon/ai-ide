@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              x:Class="ide.MainPage"
              x:FactoryMethod="Create">
     <ContentPage.MenuBarItems>
@@ -40,8 +41,8 @@
         <Border Grid.Row="0" Grid.Column="1" StrokeThickness="1" Stroke="LightGray" Padding="8">
             <VerticalStackLayout Spacing="8">
                 <Label Text="Explorer" FontAttributes="Bold" />
-                <TreeView x:Name="FileTree">
-                    <TreeView.ItemTemplate>
+                <toolkit:TreeView x:Name="FileTree">
+                    <toolkit:TreeView.ItemTemplate>
                         <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                             <Label Text="{Binding Name}">
                                 <Label.GestureRecognizers>
@@ -49,8 +50,8 @@
                                 </Label.GestureRecognizers>
                             </Label>
                         </HierarchicalDataTemplate>
-                    </TreeView.ItemTemplate>
-                </TreeView>
+                    </toolkit:TreeView.ItemTemplate>
+                </toolkit:TreeView>
             </VerticalStackLayout>
         </Border>
 

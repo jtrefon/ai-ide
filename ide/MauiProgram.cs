@@ -7,6 +7,7 @@ using Ide.Core.Searching;
 using Ide.Core.Vcs;
 using Ide.Core.Indexing;
 using Ide.Core.State;
+using CommunityToolkit.Maui;
 
 namespace ide;
 
@@ -15,13 +16,14 @@ public static class MauiProgram
 	public static MauiApp CreateMauiApp()
 	{
 		var builder = MauiApp.CreateBuilder();
-		builder
-			.UseMauiApp<App>()
-			.ConfigureFonts(fonts =>
-			{
-				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-				fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
-			});
+                builder
+                        .UseMauiApp<App>()
+                        .UseMauiCommunityToolkit()
+                        .ConfigureFonts(fonts =>
+                        {
+                                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+                                fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
+                        });
 
         // Core services
         builder.Services.AddSingleton<IEventBus, EventBus>();
