@@ -33,9 +33,15 @@ public partial class MainPage : ContentPage
         _terminal = terminal;
         _terminal.Output += AppendTerminal;
         _terminal.Error += AppendTerminal;
+        SetStatus("Ready");
     }
 
     public static MainPage Create() => App.Current.Services.GetRequiredService<MainPage>();
+
+    private void SetStatus(string text)
+    {
+        StatusLabel.Text = text;
+    }
 
     protected override void OnAppearing()
     {
