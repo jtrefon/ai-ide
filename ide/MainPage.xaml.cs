@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Text;
 using System.IO;
 using Ide.Core.Files;
@@ -71,14 +70,12 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private async void OnFileSelected(object? sender, SelectionChangedEventArgs e)
+    private async Task OpenFileAsync(string path)
     {
         try
         {
-            var node = e.CurrentSelection?.FirstOrDefault() as FileTreeNode;
-            if (node == null || node.IsDirectory) return;
-            _currentFile = node.Path;
-            var rr = await _fileService.ReadFilesAsync(new[] { node.Path }, maxBytes: 1024 * 1024);
+            _currentFile = path;
+            var rr = await _fileService.ReadFilesAsync(new[] { path }, maxBytes: 1024 * 1024);
             var r = rr.FirstOrDefault();
             if (r is not null && r.Ok)
             {
@@ -86,7 +83,7 @@ public partial class MainPage : ContentPage
             }
             else
             {
-                AppendTerminal($"[open error] {r?.Error ?? "unknown"}\n");
+                AppendTerminal($"[open error] {r?.Error ?? \"unknown\"}\n");
             }
         }
         catch (Exception ex)
@@ -102,26 +99,23 @@ public partial class MainPage : ContentPage
         {
             var result = await FilePicker.Default.PickAsync(new PickOptions
             {
-                PickerTitle = "Open File"
+                PickerTitle = "Open File",
             });
             if (result == null) return;
-            var path = result.FullPath;
-            _currentFile = path;
-            await BrowseRootAsync(Path.GetDirectoryName(path)!);
-            var rr = await _fileService.ReadFilesAsync(new[] { path }, maxBytes: 1024 * 1024);
-            var r = rr.FirstOrDefault();
-            if (r is not null && r.Ok)
-            {
-                EditorView.Text = r.Content ?? string.Empty;
-            }
-            else
-            {
-                AppendTerminal($"[open error] {r?.Error ?? "unknown"}\n");
-            }
+            await BrowseRootAsync(Path.GetDirectoryName(result.FullPath)!);
+            await OpenFileAsync(result.FullPath);
         }
         catch (Exception ex)
         {
             AppendTerminal($"[open error] {ex.Message}\n");
+        }
+    }
+
+    private async void OnFileDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is Label label && label.BindingContext is FileTreeNode node && !node.IsDirectory)
+        {
+            await OpenFileAsync(node.Path);
         }
     }
 
