@@ -83,7 +83,7 @@ public partial class MainPage : ContentPage
             }
             else
             {
-                AppendTerminal($"[open error] {r?.Error ?? \"unknown\"}\n");
+                AppendTerminal($"[open error] {r?.Error ?? "unknown"}\n");
             }
         }
         catch (Exception ex)
