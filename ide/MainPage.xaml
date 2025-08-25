@@ -10,7 +10,12 @@
                     <KeyboardAccelerator Key="O" Modifiers="Windows" />
                 </MenuFlyoutItem.KeyboardAccelerators>
             </MenuFlyoutItem>
-            <MenuFlyoutItem Text="Open Project…" Clicked="OnOpenProjectMenuClicked" />
+            <MenuFlyoutItem Text="Open Project…" Clicked="OnOpenProjectMenuClicked">
+                <MenuFlyoutItem.KeyboardAccelerators>
+                    <KeyboardAccelerator Key="O" Modifiers="Command" />
+                    <KeyboardAccelerator Key="O" Modifiers="Control" />
+                </MenuFlyoutItem.KeyboardAccelerators>
+            </MenuFlyoutItem>
             <MenuFlyoutSeparator />
             <MenuFlyoutItem Text="Save File" Clicked="OnSaveFileMenuClicked">
                 <MenuFlyoutItem.KeyboardAccelerators>
@@ -35,13 +40,13 @@
         <Border Grid.Row="0" Grid.Column="1" StrokeThickness="1" Stroke="LightGray" Padding="8">
             <VerticalStackLayout Spacing="8">
                 <Label Text="Explorer" FontAttributes="Bold" />
-                <CollectionView x:Name="FileList" SelectionMode="Single" SelectionChanged="OnFileSelected">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate>
-                            <Label Text="{Binding}" />
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
+                <TreeView x:Name="FileTree" SelectionChanged="OnFileSelected">
+                    <TreeView.ItemTemplate>
+                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                            <Label Text="{Binding Name}" />
+                        </HierarchicalDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
             </VerticalStackLayout>
         </Border>
 

@@ -11,7 +11,7 @@ namespace ide;
 public partial class MainPage : ContentPage
 {
     // Explorer/Editor state
-    private readonly ObservableCollection<string> _files = new();
+    private readonly ObservableCollection<FileTreeNode> _nodes = new();
     private string? _currentRoot;
     private string? _currentFile;
 
@@ -27,7 +27,7 @@ public partial class MainPage : ContentPage
     public MainPage(IBrowseService browseService, IFileService fileService, ITerminalBackend terminal)
     {
         InitializeComponent();
-        FileList.ItemsSource = _files;
+        FileTree.ItemsSource = _nodes;
         _browseService = browseService;
         _fileService = fileService;
         _terminal = terminal;
@@ -60,12 +60,10 @@ public partial class MainPage : ContentPage
         try
         {
             _currentRoot = root;
-            var browse = await _browseService.BrowseAsync(root, maxDepth: 2, maxEntries: 500);
-            _files.Clear();
-            foreach (var e1 in browse)
-            {
-                if (!e1.IsDirectory) _files.Add(e1.Path);
-            }
+            var browse = await _browseService.BrowseAsync(root, maxDepth: 20, maxEntries: 5000);
+            var tree = FileTreeBuilder.Build(root, browse);
+            _nodes.Clear();
+            _nodes.Add(tree);
         }
         catch (Exception ex)
         {
@@ -77,10 +75,10 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            var path = e.CurrentSelection?.FirstOrDefault() as string;
-            if (string.IsNullOrEmpty(path)) return;
-            _currentFile = path;
-            var rr = await _fileService.ReadFilesAsync(new[] { path }, maxBytes: 1024 * 1024);
+            var node = e.CurrentSelection?.FirstOrDefault() as FileTreeNode;
+            if (node == null || node.IsDirectory) return;
+            _currentFile = node.Path;
+            var rr = await _fileService.ReadFilesAsync(new[] { node.Path }, maxBytes: 1024 * 1024);
             var r = rr.FirstOrDefault();
             if (r is not null && r.Ok)
             {
@@ -131,13 +129,10 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            // Pick any file within the desired project folder to establish root (MacCatalyst-friendly)
-            var result = await FilePicker.Default.PickAsync(new PickOptions
-            {
-                PickerTitle = "Open Project (pick any file in the folder)"
-            });
+            var result = await FolderPicker.Default.PickAsync();
             if (result == null) return;
-            var root = Path.GetDirectoryName(result.FullPath)!;
+            var root = result.Folder?.Path;
+            if (string.IsNullOrEmpty(root)) return;
             await BrowseRootAsync(root);
         }
         catch (Exception ex)
