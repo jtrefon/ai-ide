@@ -23,10 +23,12 @@ public partial class MainPage : ContentPage
     private readonly IBrowseService _browseService;
     private readonly IFileService _fileService;
 
+    private TreeView FileTreeView => this.FindByName<TreeView>("FileTree");
+
     public MainPage(IBrowseService browseService, IFileService fileService, ITerminalBackend terminal)
     {
         InitializeComponent();
-        FileTree.ItemsSource = _nodes;
+        FileTreeView.ItemsSource = _nodes;
         _browseService = browseService;
         _fileService = fileService;
         _terminal = terminal;
