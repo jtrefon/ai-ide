@@ -30,7 +30,7 @@ xunit/
 ```
 
 Notes:
-- Mobile folders (Android/iOS/Tizen) are removed from the tree and not targeted by the app.
+- Mobile folders (Android/iOS) are removed from the tree and not targeted by the app.
 - The MAUI app (`ide/`) references core libraries (e.g., `src/Ide.Core`).
 - Tests reference the libraries directly.
 
@@ -40,7 +40,7 @@ Notes:
 
 - App: `net9.0-maccatalyst`
 - Conditional on Windows hosts: `net9.0-windows10.0.19041.0`
-- No Android/iOS/Tizen TFMs or SDK workloads required.
+- No Android/iOS TFMs or SDK workloads required.
 
 ---
 
