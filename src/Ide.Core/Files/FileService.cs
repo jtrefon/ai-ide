@@ -117,7 +117,34 @@ public sealed class FileService : IFileService
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var tmp = path + ".tmp-" + Guid.NewGuid().ToString("N");
         await File.WriteAllTextAsync(tmp, content, new UTF8Encoding(false), ct).ConfigureAwait(false);
-        if (File.Exists(path)) File.Replace(tmp, path, null, true); else File.Move(tmp, path);
+        try
+        {
+            if (File.Exists(path))
+            {
+                try
+                {
+                    File.Replace(tmp, path, null, true);
+                    return;
+                }
+                catch
+                {
+                    // Fallback: attempt to delete and move, then ensure temp cleanup
+                    try { File.Delete(path); } catch { /* ignore */ }
+                    File.Move(tmp, path);
+                    return;
+                }
+            }
+            else
+            {
+                File.Move(tmp, path);
+                return;
+            }
+        }
+        finally
+        {
+            // Best-effort cleanup if temp remains
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* ignore */ }
+        }
     }
 
     internal static async Task<bool> IsBinaryAsync(string path, int sniffBytes, CancellationToken ct)
