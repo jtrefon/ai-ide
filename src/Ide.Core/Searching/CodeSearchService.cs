@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Ide.Core.Utils;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
+using System.Threading; // added
 
 namespace Ide.Core.Searching;
 
@@ -31,12 +32,27 @@ public sealed class CodeSearchService : ICodeSearchService
         var matcher = BuildMatcher(includeGlobs, excludeGlobs);
         var result = matcher.Execute(new DirectoryInfoWrapper(new DirectoryInfo(root)));
         var matches = new ConcurrentBag<SearchMatch>();
-        foreach (var file in result.Files)
+        // Parallelize search across files with early cancellation when limit is reached
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var files = result.Files.Select(f => Path.Combine(root, f.Path)).ToArray();
+        int maxDegree = Math.Max(1, Environment.ProcessorCount);
+        try
         {
-            if (matches.Count >= limit || ct.IsCancellationRequested) break;
-            var fullPath = Path.Combine(root, file.Path);
-            if (await ShouldSkipFileAsync(fullPath, ct).ConfigureAwait(false)) continue;
-            await SearchFileAsync(fullPath, root, query, kind, limit, matches, ct).ConfigureAwait(false);
+            await Parallel.ForEachAsync(files, new ParallelOptions { MaxDegreeOfParallelism = maxDegree, CancellationToken = linkedCts.Token }, async (fullPath, token) =>
+            {
+                if (token.IsCancellationRequested) return;
+                if (await ShouldSkipFileAsync(fullPath, token).ConfigureAwait(false)) return;
+                await SearchFileAsync(fullPath, root, query, kind, limit, matches, token).ConfigureAwait(false);
+                if (matches.Count >= limit)
+                {
+                    // signal early stop to other workers
+                    linkedCts.Cancel();
+                }
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when we hit the limit or external cancellation; swallow
         }
         return matches.Take(limit).ToList();
     }
