@@ -24,7 +24,7 @@ public partial class AgentPage : ContentPage
         try { RootEntry.Text = Environment.CurrentDirectory; } catch { }
     }
 
-    public static AgentPage Create() => App.Current.Services.GetRequiredService<AgentPage>();
+    public static AgentPage Create() => ServiceLocator.Services.GetRequiredService<AgentPage>();
 
     protected override void OnAppearing()
     {

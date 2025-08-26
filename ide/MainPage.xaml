@@ -6,23 +6,10 @@
              x:FactoryMethod="Create">
     <ContentPage.MenuBarItems>
         <MenuBarItem Text="File">
-            <MenuFlyoutItem Text="Open File…" Clicked="OnOpenFileMenuClicked">
-                <MenuFlyoutItem.KeyboardAccelerators>
-                    <KeyboardAccelerator Key="O" Modifiers="Windows" />
-                </MenuFlyoutItem.KeyboardAccelerators>
-            </MenuFlyoutItem>
-            <MenuFlyoutItem Text="Open Project…" Clicked="OnOpenProjectMenuClicked">
-                <MenuFlyoutItem.KeyboardAccelerators>
-                    <KeyboardAccelerator Key="O" Modifiers="Command" />
-                    <KeyboardAccelerator Key="O" Modifiers="Control" />
-                </MenuFlyoutItem.KeyboardAccelerators>
-            </MenuFlyoutItem>
+            <MenuFlyoutItem Text="Open File…" Clicked="OnOpenFileMenuClicked" />
+            <MenuFlyoutItem Text="Open Project…" Clicked="OnOpenProjectMenuClicked" />
             <MenuFlyoutSeparator />
-            <MenuFlyoutItem Text="Save File" Clicked="OnSaveFileMenuClicked">
-                <MenuFlyoutItem.KeyboardAccelerators>
-                    <KeyboardAccelerator Key="S" Modifiers="Windows" />
-                </MenuFlyoutItem.KeyboardAccelerators>
-            </MenuFlyoutItem>
+            <MenuFlyoutItem Text="Save File" Clicked="OnSaveFileMenuClicked" />
             <MenuFlyoutItem Text="Save Project (All)" Clicked="OnSaveProjectMenuClicked" />
         </MenuBarItem>
     </ContentPage.MenuBarItems>
@@ -41,17 +28,17 @@
         <Border Grid.Row="0" Grid.Column="1" StrokeThickness="1" Stroke="LightGray" Padding="8">
             <VerticalStackLayout Spacing="8">
                 <Label Text="Explorer" FontAttributes="Bold" />
-                <toolkit:TreeView x:Name="FileTree">
-                    <toolkit:TreeView.ItemTemplate>
-                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                <CollectionView ItemsSource="{Binding Nodes}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
                             <Label Text="{Binding Name}">
                                 <Label.GestureRecognizers>
                                     <TapGestureRecognizer NumberOfTapsRequired="2" Tapped="OnFileDoubleTapped" />
                                 </Label.GestureRecognizers>
                             </Label>
-                        </HierarchicalDataTemplate>
-                    </toolkit:TreeView.ItemTemplate>
-                </toolkit:TreeView>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
             </VerticalStackLayout>
         </Border>
 

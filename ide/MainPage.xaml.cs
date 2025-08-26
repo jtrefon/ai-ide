@@ -11,7 +11,7 @@ namespace ide;
 public partial class MainPage : ContentPage
 {
     // Explorer/Editor state
-    private readonly ObservableCollection<FileTreeNode> _nodes = new();
+    public ObservableCollection<FileTreeNode> Nodes { get; } = new();
     private string? _currentRoot;
     private string? _currentFile;
 
@@ -24,12 +24,12 @@ public partial class MainPage : ContentPage
     private readonly IBrowseService _browseService;
     private readonly IFileService _fileService;
 
-    private TreeView FileTreeView => this.FindByName<TreeView>("FileTree");
+    // Bind via XAML; avoid direct TreeView reference to keep TFM-agnostic compile
 
     public MainPage(IBrowseService browseService, IFileService fileService, ITerminalBackend terminal)
     {
         InitializeComponent();
-        FileTreeView.ItemsSource = _nodes;
+        BindingContext = this;
         _browseService = browseService;
         _fileService = fileService;
         _terminal = terminal;
@@ -38,7 +38,7 @@ public partial class MainPage : ContentPage
         SetStatus("Ready");
     }
 
-    public static MainPage Create() => App.Current.Services.GetRequiredService<MainPage>();
+    public static MainPage Create() => ServiceLocator.Services.GetRequiredService<MainPage>();
 
     private void SetStatus(string text)
     {
@@ -64,8 +64,8 @@ public partial class MainPage : ContentPage
             _currentRoot = root;
             var browse = await _browseService.BrowseAsync(root, maxDepth: 20, maxEntries: 5000);
             var tree = FileTreeBuilder.Build(root, browse);
-            _nodes.Clear();
-            _nodes.Add(tree);
+            Nodes.Clear();
+            Nodes.Add(tree);
         }
         catch (Exception ex)
         {
@@ -126,9 +126,10 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            var result = await FolderPicker.Default.PickAsync();
+            // FolderPicker not available on Mac Catalyst; use FilePicker to select any file and infer folder
+            var result = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = "Select any file in the project" });
             if (result == null) return;
-            var root = result.Folder?.Path;
+            var root = Path.GetDirectoryName(result.FullPath);
             if (string.IsNullOrEmpty(root)) return;
             await BrowseRootAsync(root);
         }

@@ -1,0 +1,74 @@
+name: macOS MAUI Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-macos:
+    name: Build (macOS Catalyst)
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+      DOTNET_NOLOGO: 1
+      CI: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9.x
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Print dotnet info
+        run: |
+          dotnet --info
+
+      - name: Install MAUI workloads (non-interactive)
+        run: |
+          dotnet workload install maui --skip-manifest-update --source https://api.nuget.org/v3/index.json --verbosity minimal
+
+      - name: Restore
+        run: |
+          dotnet restore ./ide.sln --verbosity minimal
+        timeout-minutes: 5
+
+      - name: Build tests
+        run: |
+          dotnet build ./xunit/xunit.csproj -c Release --nologo --verbosity minimal
+        timeout-minutes: 5
+
+      - name: Run tests
+        run: |
+          dotnet test ./xunit/xunit.csproj -c Release --no-build --logger "trx;LogFileName=test_results.trx" --verbosity minimal
+        timeout-minutes: 10
+
+      - name: Build MAUI app (Mac Catalyst)
+        env:
+          _TeamCodeSign: false
+        run: |
+          # Build only maccatalyst to avoid iOS/Android provisioning prompts
+          dotnet build ./ide/ide.csproj -c Release -f net9.0-maccatalyst -p:CodesignKey= -p:CodesignProvision= -p:RuntimeIdentifier=maccatalyst-arm64 --nologo --verbosity minimal
+        timeout-minutes: 10
+
+      - name: Archive build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            **/msbuild.binlog
+            **/*.trx
+            ide/bin/**
+            src/**/bin/**
+            xunit/TestResults/**
+
+

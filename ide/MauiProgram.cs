@@ -52,6 +52,8 @@ public static class MauiProgram
 		builder.Logging.AddDebug();
 #endif
 
-                return builder.Build();
+                var app = builder.Build();
+                ServiceLocator.Init(app.Services);
+                return app;
         }
 }
