@@ -52,6 +52,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B9F6F7A22F0A1C7B00A1B2C3 /* TreeSitterSwift in Frameworks */,
+				B9F6F7A52F0A1C9A00A1B2C3 /* SwiftTreeSitter in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,6 +72,11 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXBuildFile section */
+		B9F6F7A22F0A1C7B00A1B2C3 /* TreeSitterSwift in Frameworks */ = {isa = PBXBuildFile; productRef = B9F6F7A32F0A1C7B00A1B2C3 /* TreeSitterSwift */; };
+		B9F6F7A52F0A1C9A00A1B2C3 /* SwiftTreeSitter in Frameworks */ = {isa = PBXBuildFile; productRef = B9F6F7A62F0A1C9A00A1B2C3 /* SwiftTreeSitter */; };
+/* End PBXBuildFile section */
 
 /* Begin PBXGroup section */
 		04C2CE002E5C8E9D007A5EF7 = {
@@ -112,6 +119,8 @@
 			);
 			name = "osx-ide";
 			packageProductDependencies = (
+				B9F6F7A32F0A1C7B00A1B2C3 /* TreeSitterSwift */,
+				B9F6F7A62F0A1C9A00A1B2C3 /* SwiftTreeSitter */,
 			);
 			productName = "osx-ide";
 			productReference = 04C2CE092E5C8E9D007A5EF7 /* osx-ide.app */;
@@ -195,6 +204,10 @@
 			);
 			mainGroup = 04C2CE002E5C8E9D007A5EF7;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				048553DD2EF5B40600195B94 /* XCRemoteSwiftPackageReference "SwiftTreeSitter" */,
+				B9F6F7A42F0A1C7B00A1B2C3 /* XCLocalSwiftPackageReference "TreeSitterSwift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 04C2CE0A2E5C8E9D007A5EF7 /* Products */;
 			projectDirPath = "";
@@ -206,6 +219,19 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B9F6F7A32F0A1C7B00A1B2C3 /* TreeSitterSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B9F6F7A42F0A1C7B00A1B2C3 /* XCLocalSwiftPackageReference "TreeSitterSwift" */;
+			productName = TreeSitterSwift;
+		};
+		B9F6F7A62F0A1C9A00A1B2C3 /* SwiftTreeSitter */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 048553DD2EF5B40600195B94 /* XCRemoteSwiftPackageReference "SwiftTreeSitter" */;
+			productName = SwiftTreeSitter;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		04C2CE072E5C8E9D007A5EF7 /* Resources */ = {
@@ -541,6 +567,24 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		048553DD2EF5B40600195B94 /* XCRemoteSwiftPackageReference "SwiftTreeSitter" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ChimeHQ/SwiftTreeSitter";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.25.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		B9F6F7A42F0A1C7B00A1B2C3 /* XCLocalSwiftPackageReference "TreeSitterSwift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/TreeSitterSwift;
+		};
+/* End XCLocalSwiftPackageReference section */
 	};
 	rootObject = 04C2CE012E5C8E9D007A5EF7 /* Project object */;
 }
