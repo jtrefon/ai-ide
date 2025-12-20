@@ -60,7 +60,9 @@ class ConversationManager: ObservableObject {
         saveConversationHistory()
         
         // Get AI response using the AI service
-        Task {
+        Task { [weak self] in
+            guard let self = self else { return }
+            
             do {
                 let response = try await aiService.sendMessage(userInput, context: context)
                 await MainActor.run {
@@ -94,7 +96,9 @@ class ConversationManager: ObservableObject {
         isSending = true
         error = nil
         
-        Task {
+        Task { [weak self] in
+            guard let self = self else { return }
+            
             do {
                 let response = try await aiService.explainCode(code)
                 await MainActor.run {
@@ -120,7 +124,9 @@ class ConversationManager: ObservableObject {
         isSending = true
         error = nil
         
-        Task {
+        Task { [weak self] in
+            guard let self = self else { return }
+            
             do {
                 let response = try await aiService.refactorCode(code, instructions: instructions)
                 await MainActor.run {

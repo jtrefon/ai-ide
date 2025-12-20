@@ -150,23 +150,17 @@ struct FileExplorerView: View {
         defer { isShowingNewFileSheet = false }
         let trimmedName = newFileName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        let directory = appState.currentDirectory ?? FileManager.default.homeDirectoryForCurrentUser
-        let newFileURL = directory.appendingPathComponent(trimmedName)
-
-        appState.workspaceService.createFile(named: trimmedName, in: directory)
-        refreshToken += 1
         
-        // Load the newly created file
-        appState.loadFile(from: newFileURL)
+        appState.createFile(name: trimmedName)
+        refreshToken += 1
     }
 
     private func createNewFolder() {
         defer { isShowingNewFolderSheet = false }
         let trimmedName = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        let directory = appState.currentDirectory ?? FileManager.default.homeDirectoryForCurrentUser
-
-        appState.workspaceService.createFolder(named: trimmedName, in: directory)
+        
+        appState.createFolder(name: trimmedName)
         refreshToken += 1
     }
 }
@@ -347,7 +341,7 @@ struct FileItemRow: View {
 }
 
 #Preview {
-    FileExplorerView(appState: AppState())
+    FileExplorerView(appState: DependencyContainer.shared.makeAppState())
         .frame(width: 250, height: 400)
 }
 

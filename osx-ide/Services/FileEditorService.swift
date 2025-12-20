@@ -29,6 +29,11 @@ class FileEditorService: ObservableObject {
         self.errorManager = errorManager
     }
     
+    /// Handle error through the service's error manager
+    func handleError(_ error: AppError) {
+        errorManager.handle(error)
+    }
+    
     /// Load file content into editor
     func loadFile(from url: URL) {
         let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
@@ -39,13 +44,15 @@ class FileEditorService: ObservableObject {
         isLoadingFile = true
         defer { isLoadingFile = false }
         
-        errorManager.handleError({
+        do {
             let content = try String(contentsOf: url, encoding: .utf8)
             self.selectedFile = url.path
             self.editorContent = content
             self.editorLanguage = Self.languageForFileExtension(url.pathExtension)
             self.isDirty = false
-        }, context: "Loading file: \(url.path)")
+        } catch {
+            errorManager.handle(.fileOperationFailed("load file", underlying: error))
+        }
     }
     
     /// Save current content to selected file
@@ -55,10 +62,12 @@ class FileEditorService: ObservableObject {
             return
         }
         
-        errorManager.handleError({
-            try self.editorContent.write(toFile: filePath, atomically: true, encoding: .utf8)
-            self.isDirty = false
-        }, context: "Saving file: \(filePath)")
+        do {
+            try editorContent.write(toFile: filePath, atomically: true, encoding: .utf8)
+            isDirty = false
+        } catch {
+            errorManager.handle(.fileOperationFailed("save file", underlying: error))
+        }
     }
     
     /// Save file to new location
@@ -69,12 +78,14 @@ class FileEditorService: ObservableObject {
             URL(fileURLWithPath: selectedFile!).lastPathComponent : "Untitled.swift"
         
         if panel.runModal() == .OK, let url = panel.url {
-            errorManager.handleError({
-                try self.editorContent.write(to: url, atomically: true, encoding: .utf8)
-                self.selectedFile = url.path
-                self.editorLanguage = Self.languageForFileExtension(url.pathExtension)
-                self.isDirty = false
-            }, context: "Saving file as: \(url.path)")
+            do {
+                try editorContent.write(to: url, atomically: true, encoding: .utf8)
+                selectedFile = url.path
+                editorLanguage = Self.languageForFileExtension(url.pathExtension)
+                isDirty = false
+            } catch {
+                errorManager.handle(.fileOperationFailed("save file as", underlying: error))
+            }
         }
     }
     
