@@ -149,8 +149,8 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         // Use simpler TERM to reduce escape sequence complexity
         var environment = ProcessInfo.processInfo.environment
         environment["TERM"] = "xterm" // Simpler than xterm-256color
-        environment["COLUMNS"] = "80"
-        environment["LINES"] = "24"
+        environment["COLUMNS"] = "\(AppConstants.Terminal.defaultColumns)"
+        environment["LINES"] = "\(AppConstants.Terminal.defaultRows)"
         // Disable fancy prompts that generate escape sequences
         environment["PROMPT"] = "$ "
         // For zsh, disable oh-my-zsh or other prompt themes
@@ -589,7 +589,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             // Give it a moment to terminate gracefully
             let group = DispatchGroup()
             group.enter()
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            DispatchQueue.global().asyncAfter(deadline: .now() + AppConstants.Time.processTerminationTimeout) {
                 if process.isRunning {
                     process.terminate()
                 }

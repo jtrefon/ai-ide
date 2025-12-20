@@ -3,102 +3,113 @@
 //  osx-ide
 //
 //  Created by AI Assistant on 25/08/2025.
+//  Refactored to be a simple coordinator between specialized state managers
 //
 
 import SwiftUI
 import Combine
 
-/// Main application state coordinator that manages service interactions
+/// Main application state coordinator that manages interaction between specialized state managers
 @MainActor
 class AppState: ObservableObject {
-    // MARK: - Services
-    private let _errorManager: ErrorManager
-    private let _uiService: UIService
-    private let _workspaceService: WorkspaceService
-    private let _fileEditorService: FileEditorService
-    private let _conversationManager: ConversationManager
     
-    // MARK: - Service Access
+    // MARK: - State Managers (Dependency Inversion)
     
-    /// Direct access to file editor service for complex operations
-    var fileEditorService: FileEditorService {
-        return _fileEditorService
-    }
+    private let fileEditorStateManager: FileEditorStateManager
+    private let workspaceStateManager: WorkspaceStateManager
+    private let uiStateManager: UIStateManager
+    private let errorManager: ErrorManager
     
-    /// Direct access to workspace service for complex operations  
-    var workspaceService: WorkspaceService {
-        return _workspaceService
-    }
-    
-    /// Direct access to UI service for settings
-    var uiService: UIService {
-        return _uiService
-    }
-    
-    /// Direct access to error manager for error reporting
-    var errorManager: ErrorManager {
-        return _errorManager
-    }
-    
-    // MARK: - Published Properties (delegated to services)
-    
-    // UI State
-    var isSidebarVisible: Bool {
-        get { _uiService.isSidebarVisible }
-        set { _uiService.setSidebarVisible(newValue) }
-    }
+    // MARK: - Published Properties (Delegated to State Managers)
     
     // File Editor State
     var selectedFile: String? {
-        get { _fileEditorService.selectedFile }
-        set { 
-            if let filePath = newValue {
-                _fileEditorService.loadFile(from: URL(fileURLWithPath: filePath))
-            }
-        }
+        return fileEditorStateManager.selectedFile
     }
     
     var editorContent: String {
-        get { _fileEditorService.editorContent }
-        set { _fileEditorService.editorContent = newValue }
+        get { fileEditorStateManager.editorContent }
+        set { fileEditorStateManager.updateEditorContent(newValue) }
     }
     
     var editorLanguage: String {
-        get { _fileEditorService.editorLanguage }
-        set { _fileEditorService.editorLanguage = newValue }
+        get { fileEditorStateManager.editorLanguage }
+        set { fileEditorStateManager.setEditorLanguage(newValue) }
     }
     
     var isDirty: Bool {
-        get { _fileEditorService.isDirty }
-        set { /* Controlled by FileEditorService */ }
+        return fileEditorStateManager.isDirty
+    }
+    
+    var canSave: Bool {
+        return fileEditorStateManager.canSave
+    }
+    
+    var displayName: String {
+        return fileEditorStateManager.displayName
     }
     
     // Workspace State
     var currentDirectory: URL? {
-        get { _workspaceService.currentDirectory }
-        set { 
-            if let newDir = newValue {
-                _workspaceService.currentDirectory = newDir
-            }
-        }
+        return workspaceStateManager.currentDirectory
+    }
+    
+    var openFiles: [URL] {
+        return workspaceStateManager.getOpenFiles()
+    }
+    
+    var workspaceDisplayName: String {
+        return workspaceStateManager.workspaceDisplayName
+    }
+    
+    var isWorkspaceEmpty: Bool {
+        return workspaceStateManager.isWorkspaceEmpty
+    }
+    
+    // UI State
+    var isSidebarVisible: Bool {
+        get { uiStateManager.isSidebarVisible }
+        set { uiStateManager.setSidebarVisible(newValue) }
+    }
+    
+    var showLineNumbers: Bool {
+        get { uiStateManager.showLineNumbers }
+        set { uiStateManager.setShowLineNumbers(newValue) }
+    }
+    
+    var wordWrap: Bool {
+        get { uiStateManager.wordWrap }
+        set { uiStateManager.setWordWrap(newValue) }
+    }
+    
+    var fontSize: Double {
+        get { uiStateManager.fontSize }
+        set { uiStateManager.updateFontSize(newValue) }
+    }
+    
+    var selectedTheme: AppTheme {
+        get { uiStateManager.selectedTheme }
+        set { uiStateManager.setTheme(newValue) }
     }
     
     // Conversation State
     var conversationManager: ConversationManager {
-        get { _conversationManager }
+        return _conversationManager
     }
     
     // Error State
     var lastError: String? {
-        get { _errorManager.currentError?.localizedDescription }
+        get { errorManager.currentError?.localizedDescription }
         set { 
-            if newValue != nil {
-                _errorManager.handle(.unknown(newValue!))
+            if let error = newValue {
+                errorManager.handle(.unknown(error))
             } else {
-                _errorManager.dismissError()
+                errorManager.dismissError()
             }
         }
     }
+    
+    private let _conversationManager: ConversationManager
     
     // MARK: - Initialization
     
@@ -109,77 +120,68 @@ class AppState: ObservableObject {
         fileEditorService: FileEditorService,
         conversationManager: ConversationManager
     ) {
-        self._errorManager = errorManager
-        self._uiService = uiService
-        self._workspaceService = workspaceService
-        self._fileEditorService = fileEditorService
+        self.errorManager = errorManager
         self._conversationManager = conversationManager
         
-        // Set up error observation
-        setupErrorObservation()
+        // Initialize specialized state managers
+        self.fileEditorStateManager = FileEditorStateManager(fileEditorService: fileEditorService)
+        self.workspaceStateManager = WorkspaceStateManager(workspaceService: workspaceService)
+        self.uiStateManager = UIStateManager(uiService: uiService)
+        
+        // Set up state observation
+        setupStateObservation()
     }
     
-    // Convenience initializer for legacy compatibility
-    convenience init() {
-        let container = DependencyContainer.shared
-        self.init(
-            errorManager: container.errorManager,
-            uiService: container.uiService,
-            workspaceService: container.workspaceService,
-            fileEditorService: container.fileEditorService,
-            conversationManager: container.conversationManager
-        )
-    }
-    
-    // MARK: - Delegated Methods
+    // MARK: - State Coordination Methods
     
     // File Operations
     func newFile() {
-        _fileEditorService.newFile()
+        fileEditorStateManager.newFile()
     }
     
     func loadFile(from url: URL) {
-        _fileEditorService.loadFile(from: url)
+        fileEditorStateManager.loadFile(from: url)
+        workspaceStateManager.addOpenFile(url)
     }
     
     func saveFile() {
-        _fileEditorService.saveFile()
+        fileEditorStateManager.saveFile()
     }
     
     func saveFileAs() {
-        _fileEditorService.saveFileAs()
+        fileEditorStateManager.saveFileAs()
     }
     
     // Workspace Operations
     func openFile() {
-        _workspaceService.openFileOrFolder { [weak self] url in
-            self?._fileEditorService.loadFile(from: url)
+        workspaceStateManager.openFileOrFolder { [weak self] url in
+            self?.loadFile(from: url)
         }
     }
     
     func openFolder() {
-        _workspaceService.openFolder()
+        workspaceStateManager.openFolder()
     }
     
     func createFile(name: String) {
-        if let currentDir = _workspaceService.currentDirectory {
-            _workspaceService.createFile(named: name, in: currentDir)
-        }
+        workspaceStateManager.createFile(named: name)
     }
     
     func createFolder(name: String) {
-        if let currentDir = _workspaceService.currentDirectory {
-            _workspaceService.createFolder(named: name, in: currentDir)
-        }
+        workspaceStateManager.createFolder(named: name)
+    }
+    
+    func navigateToParent() {
+        workspaceStateManager.navigateToParent()
     }
     
     // UI Operations
     func toggleSidebar() {
-        _uiService.toggleSidebar()
+        uiStateManager.toggleSidebar()
     }
     
     func setSidebarVisible(_ visible: Bool) {
-        _uiService.setSidebarVisible(visible)
+        uiStateManager.setSidebarVisible(visible)
     }
     
     // Conversation Operations
@@ -191,45 +193,48 @@ class AppState: ObservableObject {
         _conversationManager.clearConversation()
     }
     
-    // MARK: - Helper Methods
-    
-    /// Returns the language identifier for a given file extension
-    public static func languageForFileExtension(_ fileExtension: String) -> String {
-        return FileEditorService.languageForFileExtension(fileExtension)
+    // Helper Methods
+    static func languageForFileExtension(_ fileExtension: String) -> String {
+        return FileEditorStateManager.languageForFileExtension(fileExtension)
     }
     
     // MARK: - Private Methods
     
-    private func setupErrorObservation() {
-        _errorManager.$currentError
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] error in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-        
-        _fileEditorService.objectWillChange
+    private func setupStateObservation() {
+        // Observe file editor changes
+        fileEditorStateManager.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
         
-        _workspaceService.objectWillChange
+        // Observe workspace changes
+        workspaceStateManager.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
         
-        _uiService.objectWillChange
+        // Observe UI changes
+        uiStateManager.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
         
+        // Observe conversation changes
         _conversationManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        
+        // Observe error changes
+        errorManager.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()

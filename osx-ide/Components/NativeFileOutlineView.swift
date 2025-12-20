@@ -320,7 +320,7 @@ struct NativeFileOutlineView: NSViewRepresentable {
             }
 
             searchWorkItem = work
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.25, execute: work)
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + AppConstants.Time.searchDebounceDelay, execute: work)
         }
 
         private func displayName(for url: URL) -> String {

@@ -38,9 +38,9 @@ struct ContentView: View {
                             // Editor header
                             HStack {
                                 HStack {
-                                    let fileName = appState.fileEditorService.displayName
+                                    let fileName = appState.displayName
                                     let fileExtension = (fileName as NSString).pathExtension
-                                    let language = AppState.languageForFileExtension(fileExtension)
+                                    let _ = AppState.languageForFileExtension(fileExtension)
                                     Text(fileName + (appState.isDirty ? " •" : ""))
                                         .font(.headline)
                                         .padding(.horizontal)

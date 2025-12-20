@@ -14,6 +14,11 @@ final class WorkspaceService: ObservableObject {
         self.currentDirectory = FileManager.default.homeDirectoryForCurrentUser
     }
     
+    /// Handle error through the service's error manager
+    func handleError(_ error: AppError) {
+        errorManager.handle(error)
+    }
+    
     enum WorkspaceError: Error {
         case alreadyExists(String)
         case invalidPath(String)
@@ -22,7 +27,7 @@ final class WorkspaceService: ObservableObject {
     
     /// Create a new file in the specified directory
     func createFile(named name: String, in directory: URL) {
-        errorManager.handleError({
+        do {
             let newFileURL = directory.appendingPathComponent(name)
             let fileManager = FileManager.default
             
@@ -31,12 +36,14 @@ final class WorkspaceService: ObservableObject {
             }
             
             try "".write(to: newFileURL, atomically: true, encoding: .utf8)
-        }, context: "Creating file: \(name)")
+        } catch {
+            handleError(.fileOperationFailed("create file", underlying: error))
+        }
     }
     
     /// Create a new folder in the specified directory
     func createFolder(named name: String, in directory: URL) {
-        errorManager.handleError({
+        do {
             let newFolderURL = directory.appendingPathComponent(name)
             let fileManager = FileManager.default
             
@@ -45,7 +52,9 @@ final class WorkspaceService: ObservableObject {
             }
             
             try fileManager.createDirectory(at: newFolderURL, withIntermediateDirectories: false, attributes: nil)
-        }, context: "Creating folder: \(name)")
+        } catch {
+            handleError(.fileOperationFailed("create folder", underlying: error))
+        }
     }
     
     /// Open file dialog for selecting files or directories
@@ -102,13 +111,13 @@ final class WorkspaceService: ObservableObject {
         if FileManager.default.fileExists(atPath: newURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
             currentDirectory = newURL
         } else {
-            errorManager.handle(.invalidFilePath(subdirectory))
+            handleError(.invalidFilePath("Directory not found: \(subdirectory)"))
         }
     }
     
     /// Check if path is valid and accessible
     func isValidPath(_ path: String) -> Bool {
-        let url = URL(fileURLWithPath: path)
+        let _ = URL(fileURLWithPath: path)
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
     }

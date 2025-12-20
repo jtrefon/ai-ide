@@ -15,7 +15,7 @@ class ErrorManager: ObservableObject {
     @Published var showErrorAlert: Bool = false
     @Published var errorHistory: [AppError] = []
     
-    private let maxHistoryCount = 50
+    private let maxHistoryCount = AppConstants.FileSystem.maxHistoryCount
     
     /// Handle an error with appropriate UI feedback
     func handle(_ error: AppError) {
@@ -33,7 +33,7 @@ class ErrorManager: ObservableObject {
         
         // Auto-dismiss info and warning errors after delay
         if error.severity == .info || error.severity == .warning {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + AppConstants.Time.errorAutoDismissDelay) { [weak self] in
                 if self?.currentError?.severity == error.severity {
                     self?.dismissError()
                 }
