@@ -27,15 +27,15 @@ struct ContentView: View {
             }
             .frame(width: 0, height: 0)
 
-            AutosavingHSplitView(autosaveName: "MainSplit", orientation: .horizontal) {
+            HSplitView {
                 // Left sidebar
                 FileExplorerView(appState: appState)
                     .frame(minWidth: 200, maxWidth: 300)
-            } secondary: {
+                
                 // Main content area
-                AutosavingHSplitView(autosaveName: "EditorChatSplit", orientation: .horizontal) {
+                HSplitView {
                     // Editor and terminal area
-                    AutosavingVSplitView(autosaveName: "EditorTerminalSplit", orientation: .vertical) {
+                    VSplitView {
                         // Main editor area
                         VStack(spacing: 0) {
                             // Editor header
@@ -65,13 +65,13 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         .frame(minHeight: 100)
-                    } secondary: {
+                        
                         // Terminal panel
                         NativeTerminalView(currentDirectory: appState.currentDirectory)
                             .frame(minHeight: 100)
                     }
                     .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
-                } secondary: {
+                    
                     // AI Chat Panel
                     AIChatPanel(
                         selectionContext: selectionContext,
