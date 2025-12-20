@@ -29,7 +29,8 @@ jobs:
           build
           CODE_SIGNING_ALLOWED=NO
 
-      - name: Test
+      - name: Test (self-hosted macOS 26 only)
+        if: false
         run: >
           xcodebuild
           -project osx-ide.xcodeproj
