@@ -8,182 +8,234 @@
 import SwiftUI
 import Combine
 
+/// Main application state coordinator that manages service interactions
 @MainActor
 class AppState: ObservableObject {
-    @Published var conversationManager: ConversationManager
-    @Published var isSidebarVisible = true
-    @Published var selectedFile: String? = nil
+    // MARK: - Services
+    private let _errorManager: ErrorManager
+    private let _uiService: UIService
+    private let _workspaceService: WorkspaceService
+    private let _fileEditorService: FileEditorService
+    private let _conversationManager: ConversationManager
     
-    /// The content currently shown in the editor.
-    /// Setting this marks the document as dirty, unless loading a file.
-    @Published var editorContent = "" {
-        didSet {
-            if !isLoadingFile {
-                isDirty = true
+    // MARK: - Service Access
+    
+    /// Direct access to file editor service for complex operations
+    var fileEditorService: FileEditorService {
+        return _fileEditorService
+    }
+    
+    /// Direct access to workspace service for complex operations  
+    var workspaceService: WorkspaceService {
+        return _workspaceService
+    }
+    
+    /// Direct access to UI service for settings
+    var uiService: UIService {
+        return _uiService
+    }
+    
+    /// Direct access to error manager for error reporting
+    var errorManager: ErrorManager {
+        return _errorManager
+    }
+    
+    // MARK: - Published Properties (delegated to services)
+    
+    // UI State
+    var isSidebarVisible: Bool {
+        get { _uiService.isSidebarVisible }
+        set { _uiService.setSidebarVisible(newValue) }
+    }
+    
+    // File Editor State
+    var selectedFile: String? {
+        get { _fileEditorService.selectedFile }
+        set { 
+            if let filePath = newValue {
+                _fileEditorService.loadFile(from: URL(fileURLWithPath: filePath))
             }
         }
     }
-    @Published var editorLanguage = "swift"
     
-    /// The directory currently being browsed (used for open dialogs etc).
-    @Published var currentDirectory: URL?
-    
-    /// Whether there are unsaved changes in the editor content.
-    @Published var isDirty = false
-    
-    /// Last error message encountered during file operations, if any.
-    @Published var lastError: String? = nil
-    
-    /// Internal flag to suppress isDirty when loading a file
-    private var isLoadingFile = false
-    
-    init() {
-        self.conversationManager = ConversationManager()
-        // Set default directory to user's home directory
-        self.currentDirectory = FileManager.default.homeDirectoryForCurrentUser
+    var editorContent: String {
+        get { _fileEditorService.editorContent }
+        set { _fileEditorService.editorContent = newValue }
     }
     
-    // MARK: - Editor Operations
+    var editorLanguage: String {
+        get { _fileEditorService.editorLanguage }
+        set { _fileEditorService.editorLanguage = newValue }
+    }
     
-    /// Presents an open file dialog. If a file is selected, loads its content and updates editor state.
-    func openFile() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.swiftSource, .plainText, .sourceCode]
+    var isDirty: Bool {
+        get { _fileEditorService.isDirty }
+        set { /* Controlled by FileEditorService */ }
+    }
+    
+    // Workspace State
+    var currentDirectory: URL? {
+        get { _workspaceService.currentDirectory }
+        set { 
+            if let newDir = newValue {
+                _workspaceService.currentDirectory = newDir
+            }
+        }
+    }
+    
+    // Conversation State
+    var conversationManager: ConversationManager {
+        get { _conversationManager }
+    }
+    
+    // Error State
+    var lastError: String? {
+        get { _errorManager.currentError?.localizedDescription }
+        set { 
+            if newValue != nil {
+                _errorManager.handle(.unknown(newValue!))
+            } else {
+                _errorManager.dismissError()
+            }
+        }
+    }
+    
+    // MARK: - Initialization
+    
+    init(
+        errorManager: ErrorManager,
+        uiService: UIService,
+        workspaceService: WorkspaceService,
+        fileEditorService: FileEditorService,
+        conversationManager: ConversationManager
+    ) {
+        self._errorManager = errorManager
+        self._uiService = uiService
+        self._workspaceService = workspaceService
+        self._fileEditorService = fileEditorService
+        self._conversationManager = conversationManager
         
-        if panel.runModal() == .OK {
-            if let url = panel.url {
-                let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-                
-                if isDirectory {
-                    // Set the current directory
-                    self.currentDirectory = url
-                } else {
-                    self.loadFile(from: url)
-                }
-            }
-        }
+        // Set up error observation
+        setupErrorObservation()
     }
     
-    /// Presents an open folder dialog. Updates the file explorer with the selected directory.
-    func openFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Open Folder"
-        
-        if panel.runModal() == .OK {
-            if let url = panel.url {
-                self.currentDirectory = url
-            }
-        }
+    // Convenience initializer for legacy compatibility
+    convenience init() {
+        let container = DependencyContainer.shared
+        self.init(
+            errorManager: container.errorManager,
+            uiService: container.uiService,
+            workspaceService: container.workspaceService,
+            fileEditorService: container.fileEditorService,
+            conversationManager: container.conversationManager
+        )
     }
     
-    /// Saves the current editor content to the selected file. If no file is selected, triggers save as dialog.
-    func saveFile() {
-        if let filePath = selectedFile {
-            // Save to existing file
-            do {
-                try editorContent.write(toFile: filePath, atomically: true, encoding: .utf8)
-                isDirty = false
-                lastError = nil
-            } catch {
-                let errorDescription = "Error saving file: \(error)"
-                print(errorDescription)
-                lastError = errorDescription
-            }
-        } else {
-            // Save as new file
-            saveFileAs()
-        }
-    }
+    // MARK: - Delegated Methods
     
-    /// Presents a save panel and saves the current editor content to the selected location.
-    func saveFileAs() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.swiftSource, .plainText]
-        panel.nameFieldStringValue = "Untitled.swift"
-        
-        if panel.runModal() == .OK {
-            if let url = panel.url {
-                do {
-                    try editorContent.write(to: url, atomically: true, encoding: .utf8)
-                    self.selectedFile = url.path
-                    self.editorLanguage = AppState.languageForFileExtension(url.pathExtension)
-                    isDirty = false
-                    lastError = nil
-                } catch {
-                    let errorDescription = "Error saving file: \(error)"
-                    print(errorDescription)
-                    lastError = errorDescription
-                }
-            }
-        }
-    }
-    
-    /// Resets the editor content to a new empty file.
+    // File Operations
     func newFile() {
-        self.selectedFile = nil
-        self.editorContent = ""
-        isDirty = false
+        _fileEditorService.newFile()
     }
     
-    /// Loads the file at the given URL into the editor without marking it dirty.
-    public func loadFile(from url: URL) {
-        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-        if isDirectory {
-            self.currentDirectory = url
-            return
-        }
-        isLoadingFile = true
-        defer { isLoadingFile = false }
-        do {
-            let content = try String(contentsOf: url, encoding: .utf8)
-            self.selectedFile = url.path
-            self.editorContent = content
-            self.editorLanguage = AppState.languageForFileExtension(url.pathExtension)
-            self.isDirty = false
-            self.lastError = nil
-        } catch {
-            let errorDescription = "Error reading file: \(error)"
-            print(errorDescription)
-            self.lastError = errorDescription
+    func loadFile(from url: URL) {
+        _fileEditorService.loadFile(from: url)
+    }
+    
+    func saveFile() {
+        _fileEditorService.saveFile()
+    }
+    
+    func saveFileAs() {
+        _fileEditorService.saveFileAs()
+    }
+    
+    // Workspace Operations
+    func openFile() {
+        _workspaceService.openFileOrFolder { [weak self] url in
+            self?._fileEditorService.loadFile(from: url)
         }
     }
     
-    // MARK: - UI State
+    func openFolder() {
+        _workspaceService.openFolder()
+    }
     
-    /// Toggles the visibility of the sidebar.
+    func createFile(name: String) {
+        if let currentDir = _workspaceService.currentDirectory {
+            _workspaceService.createFile(named: name, in: currentDir)
+        }
+    }
+    
+    func createFolder(name: String) {
+        if let currentDir = _workspaceService.currentDirectory {
+            _workspaceService.createFolder(named: name, in: currentDir)
+        }
+    }
+    
+    // UI Operations
     func toggleSidebar() {
-        isSidebarVisible.toggle()
+        _uiService.toggleSidebar()
+    }
+    
+    func setSidebarVisible(_ visible: Bool) {
+        _uiService.setSidebarVisible(visible)
+    }
+    
+    // Conversation Operations
+    func sendMessage() {
+        _conversationManager.sendMessage()
+    }
+    
+    func clearConversation() {
+        _conversationManager.clearConversation()
     }
     
     // MARK: - Helper Methods
     
-    /// Returns the language identifier for a given file extension.
-    /// - Parameter extension: The file extension string.
-    /// - Returns: A string representing the language mode.
-    public static func languageForFileExtension(_ extension: String) -> String {
-        switch `extension`.lowercased() {
-        case "swift":
-            return "swift"
-        case "js", "jsx":
-            return "javascript"
-        case "ts", "tsx":
-            return "typescript"
-        case "py":
-            return "python"
-        case "html":
-            return "html"
-        case "css":
-            return "css"
-        case "json":
-            return "json"
-        default:
-            return "text"
-        }
+    /// Returns the language identifier for a given file extension
+    public static func languageForFileExtension(_ fileExtension: String) -> String {
+        return FileEditorService.languageForFileExtension(fileExtension)
     }
+    
+    // MARK: - Private Methods
+    
+    private func setupErrorObservation() {
+        _errorManager.$currentError
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] error in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        
+        _fileEditorService.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        
+        _workspaceService.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        
+        _uiService.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        
+        _conversationManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+    }
+    
+    private var cancellables = Set<AnyCancellable>()
 }

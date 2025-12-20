@@ -27,7 +27,7 @@ struct CodeEditorView: View {
                 LineNumbersView(text: text)
                     .frame(width: 45)
                     .frame(maxHeight: .infinity)
-                    .background(Color(NSColor.controlBackgroundColor))
+                    .nativeGlassBackground(.sidebar)
                 
                 // Text editor (use AppKit's own NSScrollView; avoid nesting in SwiftUI ScrollView)
                 TextViewRepresentable(
@@ -108,6 +108,8 @@ struct TextViewRepresentable: NSViewRepresentable {
         DispatchQueue.main.async {
             let attributedString = SyntaxHighlighter.shared.highlight(text, language: language)
             textView.textStorage?.setAttributedString(attributedString)
+            // Ensure text color is set so content is visible
+            textView.textColor = NSColor.labelColor
         }
         
         return scrollView

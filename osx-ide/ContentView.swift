@@ -15,6 +15,15 @@ struct ContentView: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            WindowAccessor { window in
+                window.titleVisibility = .hidden
+                window.titlebarAppearsTransparent = true
+                window.isMovableByWindowBackground = true
+                window.isOpaque = false
+                window.backgroundColor = .clear
+            }
+            .frame(width: 0, height: 0)
+
             HSplitView {
                 // Left sidebar
                 FileExplorerView(appState: appState)
@@ -28,16 +37,19 @@ struct ContentView: View {
                         VStack(spacing: 0) {
                             // Editor header
                             HStack {
-                                let fileName = appState.selectedFile ?? "Untitled"
-                                let fileExtension = (fileName as NSString).pathExtension
-                                let language = AppState.languageForFileExtension(fileExtension)
-                                Text(fileName + (appState.isDirty ? " •" : ""))
-                                    .font(.headline)
-                                    .padding(.horizontal)
+                                HStack {
+                                    let fileName = appState.fileEditorService.displayName
+                                    let fileExtension = (fileName as NSString).pathExtension
+                                    let language = AppState.languageForFileExtension(fileExtension)
+                                    Text(fileName + (appState.isDirty ? " •" : ""))
+                                        .font(.headline)
+                                        .padding(.horizontal)
+                                    Spacer()
+                                }
                                 Spacer()
                             }
                             .frame(height: 30)
-                            .background(Color(NSColor.controlBackgroundColor))
+                            .nativeGlassBackground(.header)
                             
                             // Code editor
                             CodeEditorView(
@@ -51,41 +63,24 @@ struct ContentView: View {
                         .frame(minHeight: 100)
                         
                         // Terminal panel
-                        TerminalView()
+                        NativeTerminalView(currentDirectory: appState.currentDirectory)
                             .frame(minHeight: 100)
                     }
                     .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
                     
                     // AI Chat Panel
                     AIChatPanel(
-                        selectionContext: selectionContext
+                        selectionContext: selectionContext,
+                        conversationManager: appState.conversationManager
                     )
                     .frame(minWidth: 300)
                 }
             }
-            
-            if let error = appState.lastError {
-                HStack {
-                    Text("Error: \(error)")
-                        .foregroundColor(.white)
-                        .padding(.leading)
-                    Spacer()
-                    Button("Dismiss") {
-                        appState.lastError = nil
-                    }
-                    .padding(.trailing)
-                    .keyboardShortcut(.defaultAction)
-                }
-                .frame(height: 30)
-                .background(Color.red)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .animation(.default, value: appState.lastError)
-            }
         }
+        .nativeGlassBackground(.panel)
     }
 }
 
 #Preview {
-    ContentView(appState: AppState())
+    ContentView(appState: DependencyContainer.shared.makeAppState())
 }
-

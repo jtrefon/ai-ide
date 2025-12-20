@@ -7,7 +7,7 @@
 
 import Foundation
 
-protocol AIService {
+protocol AIService: Sendable {
     func sendMessage(_ message: String, context: String?) async throws -> String
     func explainCode(_ code: String) async throws -> String
     func refactorCode(_ code: String, instructions: String) async throws -> String
@@ -16,7 +16,7 @@ protocol AIService {
 }
 
 // MARK: - Sample AI Service Implementation
-class SampleAIService: AIService {
+final class SampleAIService: AIService, @unchecked Sendable {
     func sendMessage(_ message: String, context: String?) async throws -> String {
         // Simulate network delay
         try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second

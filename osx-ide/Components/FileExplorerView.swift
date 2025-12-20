@@ -9,9 +9,10 @@ import SwiftUI
 
 struct FileExplorerView: View {
     @ObservedObject var appState: AppState
-    @State private var rootItems: [FileItem] = []
-    @State private var expandedItems: Set<URL> = []
-    @State private var selectedFileItem: FileItem?
+    @State private var searchQuery: String = ""
+    @State private var expandedRelativePaths: Set<String> = []
+    @State private var selectedRelativePath: String? = nil
+    @State private var refreshToken: Int = 0
 
     // State for new file/folder creation
     @State private var isShowingNewFileSheet = false
@@ -28,8 +29,7 @@ struct FileExplorerView: View {
                     .padding(.horizontal)
                 Spacer()
                 Button(action: {
-                    // Refresh file list
-                    loadFiles()
+                    refreshToken += 1
                 }) {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -37,19 +37,20 @@ struct FileExplorerView: View {
                 .padding(.horizontal)
             }
             .frame(height: 30)
-            .background(Color(NSColor.controlBackgroundColor))
+            .nativeGlassBackground(.header)
 
-            // File list
-            List(selection: $selectedFileItem) {
-                ForEach(rootItems, id: \.url) { item in
-                    FileItemRow(item: item,
-                               appState: appState,
-                               expandedItems: $expandedItems,
-                               selectedFileItem: $selectedFileItem,
-                               level: 0)
+            // Native file tree (NSOutlineView)
+            NativeFileOutlineView(
+                rootURL: appState.currentDirectory ?? FileManager.default.homeDirectoryForCurrentUser,
+                searchQuery: $searchQuery,
+                expandedRelativePaths: $expandedRelativePaths,
+                selectedRelativePath: $selectedRelativePath,
+                refreshToken: refreshToken,
+                onOpenFile: { url in
+                    appState.loadFile(from: url)
                 }
-            }
-            .accessibilityIdentifier("Explorer")
+            )
+            .nativeGlassBackground(.sidebar)
             .contextMenu {
                 Button("New File") {
                     newFileName = ""
@@ -113,41 +114,36 @@ struct FileExplorerView: View {
         }
         .frame(minWidth: 200)
         .onAppear {
-            loadFiles()
+            syncSelectionFromAppState()
         }
         .onChange(of: appState.currentDirectory) { _ in
-            loadFiles()
+            refreshToken += 1
+            syncSelectionFromAppState()
+        }
+        .onChange(of: appState.selectedFile) { _ in
+            syncSelectionFromAppState()
         }
     }
 
-    private func loadFiles() {
-        // Load files from the current directory or home directory
-        let directory = appState.currentDirectory ?? FileManager.default.homeDirectoryForCurrentUser
-        rootItems = loadDirectoryContents(directory, level: 0)
-    }
-
-    private func loadDirectoryContents(_ url: URL, level: Int) -> [FileItem] {
-        let fileManager = FileManager.default
-        guard let contents = try? fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey]) else {
-            return []
+    private func syncSelectionFromAppState() {
+        guard let rootURL = appState.currentDirectory?.standardizedFileURL ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL as URL? else {
+            selectedRelativePath = nil
+            return
         }
-
-        let items = contents.map { url in
-            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            return FileItem(url: url, isDirectory: isDirectory, level: level)
-        }.sorted { item1, item2 in
-            // Directories first, then files
-            if item1.isDirectory && !item2.isDirectory {
-                return true
-            } else if !item1.isDirectory && item2.isDirectory {
-                return false
-            } else {
-                // Both are directories or both are files, sort alphabetically
-                return item1.name.localizedCaseInsensitiveCompare(item2.name) == .orderedAscending
-            }
+        guard let selectedFilePath = appState.selectedFile else {
+            selectedRelativePath = nil
+            return
         }
-
-        return items
+        let selectedURL = URL(fileURLWithPath: selectedFilePath).standardizedFileURL
+        let rootPath = rootURL.path
+        let selectedPath = selectedURL.path
+        guard selectedPath.hasPrefix(rootPath) else {
+            selectedRelativePath = nil
+            return
+        }
+        var relative = String(selectedPath.dropFirst(rootPath.count))
+        if relative.hasPrefix("/") { relative.removeFirst() }
+        selectedRelativePath = relative.isEmpty ? nil : relative
     }
 
     private func createNewFile() {
@@ -157,21 +153,11 @@ struct FileExplorerView: View {
         let directory = appState.currentDirectory ?? FileManager.default.homeDirectoryForCurrentUser
         let newFileURL = directory.appendingPathComponent(trimmedName)
 
-        do {
-            let fileManager = FileManager.default
-            if fileManager.fileExists(atPath: newFileURL.path) {
-                appState.lastError = "File \"\(trimmedName)\" already exists."
-                return
-            }
-            try "".write(to: newFileURL, atomically: true, encoding: .utf8)
-            loadFiles()
-            // Select the new file
-            if let newFileItem = rootItems.first(where: { $0.url == newFileURL }) {
-                selectedFileItem = newFileItem
-            }
-        } catch {
-            appState.lastError = "Failed to create file: \(error.localizedDescription)"
-        }
+        appState.workspaceService.createFile(named: trimmedName, in: directory)
+        refreshToken += 1
+        
+        // Load the newly created file
+        appState.loadFile(from: newFileURL)
     }
 
     private func createNewFolder() {
@@ -179,23 +165,9 @@ struct FileExplorerView: View {
         let trimmedName = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
         let directory = appState.currentDirectory ?? FileManager.default.homeDirectoryForCurrentUser
-        let newFolderURL = directory.appendingPathComponent(trimmedName)
 
-        do {
-            let fileManager = FileManager.default
-            if fileManager.fileExists(atPath: newFolderURL.path) {
-                appState.lastError = "Folder \"\(trimmedName)\" already exists."
-                return
-            }
-            try fileManager.createDirectory(at: newFolderURL, withIntermediateDirectories: false, attributes: nil)
-            loadFiles()
-            // Select the new folder
-            if let newFolderItem = rootItems.first(where: { $0.url == newFolderURL }) {
-                selectedFileItem = newFolderItem
-            }
-        } catch {
-            appState.lastError = "Failed to create folder: \(error.localizedDescription)"
-        }
+        appState.workspaceService.createFolder(named: trimmedName, in: directory)
+        refreshToken += 1
     }
 }
 

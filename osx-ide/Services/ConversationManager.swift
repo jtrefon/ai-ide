@@ -15,12 +15,14 @@ class ConversationManager: ObservableObject {
     @Published var isSending: Bool = false
     @Published var error: String? = nil
     
-    private let aiService: AIService
+    private var aiService: AIService
+    private let errorManager: ErrorManager
     private let historyKey = "AIChatHistory"
     private var cancellables = Set<AnyCancellable>()
     
-    init(aiService: AIService = SampleAIService()) {
+    init(aiService: AIService = SampleAIService(), errorManager: ErrorManager) {
         self.aiService = aiService
+        self.errorManager = errorManager
         loadConversationHistory()
         
         // If no messages, initialize with a welcome message
@@ -32,11 +34,20 @@ class ConversationManager: ObservableObject {
         }
     }
     
-    func sendMessage() {
+    /// Update the AI service (used by dependency container)
+    func updateAIService(_ newService: AIService) {
+        self.aiService = newService
+    }
+    
+    func sendMessage(context: String? = nil) {
         guard !currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
         // Add user message to conversation
-        let userMessage = ChatMessage(role: .user, content: currentInput)
+        let userMessage = ChatMessage(
+            role: .user,
+            content: currentInput,
+            codeContext: context
+        )
         messages.append(userMessage)
         
         // Clear input and set sending state
@@ -51,7 +62,7 @@ class ConversationManager: ObservableObject {
         // Get AI response using the AI service
         Task {
             do {
-                let response = try await aiService.sendMessage(userInput, context: nil)
+                let response = try await aiService.sendMessage(userInput, context: context)
                 await MainActor.run {
                     self.messages.append(ChatMessage(role: .assistant, content: response))
                     self.isSending = false
@@ -60,6 +71,7 @@ class ConversationManager: ObservableObject {
                 }
             } catch {
                 await MainActor.run {
+                    self.errorManager.handle(.aiServiceError(error.localizedDescription))
                     self.error = "Failed to get AI response: \(error.localizedDescription)"
                     self.isSending = false
                 }

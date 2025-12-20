@@ -3,75 +3,78 @@ import SwiftUI
 /// An AI chat panel that uses the user's code selection as context for AI queries and displays responses.
 struct AIChatPanel: View {
     @ObservedObject var selectionContext: CodeSelectionContext
-    @State private var message: String = ""
-    @State private var aiResponse: String = ""
-    @State private var isLoading: Bool = false
-    @State private var errorMessage: String? = nil
+    @ObservedObject var conversationManager: ConversationManager
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("AI Assistant")
-                .font(.headline)
-            if let selected = currentSelection, !selected.isEmpty {
-                Text("Context: \"\(selected)\"")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
             HStack {
-                TextField("Ask a question (AI will use selected code as context)", text: $message)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                Button(action: sendToAI) {
-                    if isLoading {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                    } else {
-                        Text("Send")
-                    }
+                Text("AI Assistant")
+                    .font(.headline)
+                    .padding(.horizontal)
+                Spacer()
+                if let selected = currentSelection, !selected.isEmpty {
+                    Text("Context: \"\(selected.prefix(30))\(selected.count > 30 ? "..." : "")\"")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
                 }
-                .disabled(message.isEmpty || isLoading)
+                Button(action: {
+                    conversationManager.clearConversation()
+                }) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .padding(.horizontal)
             }
-            if let error = errorMessage {
+            .frame(height: 30)
+            .nativeGlassBackground(.header)
+            
+            // Messages list
+            MessageListView(messages: conversationManager.messages)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+            // Error display
+            if let error = conversationManager.error {
                 Text(error)
                     .foregroundColor(.red)
                     .font(.caption)
+                    .padding(.horizontal)
+                    .padding(.vertical, 4)
             }
-            if !aiResponse.isEmpty {
-                Text("AI Response:")
-                    .font(.subheadline)
-                Text(aiResponse)
-                    .padding(8)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(4)
-                    .font(.system(.body, design: .monospaced))
-            }
-            Spacer()
+            
+            // Input area
+            ChatInputView(
+                text: $conversationManager.currentInput,
+                isSending: conversationManager.isSending,
+                onSend: {
+                    sendMessage()
+                }
+            )
         }
-        .padding()
         .accessibilityIdentifier("AIChatPanel")
+        .nativeGlassBackground(.panel)
     }
 
-    var currentSelection: String? { selectionContext.selectedText }
+    var currentSelection: String? { 
+        selectionContext.selectedText.isEmpty ? nil : selectionContext.selectedText
+    }
 
-    func sendToAI() {
-        isLoading = true
-        errorMessage = nil
-        aiResponse = ""
-        Task {
-            do {
-                // This should be replaced by a real AIService implementation
-                let response = try await SampleAIService().sendMessage(message, context: selectionContext.selectedText)
-                aiResponse = response
-            } catch {
-                errorMessage = "AI request failed: \(error.localizedDescription)"
-            }
-            isLoading = false
-        }
+    private func sendMessage() {
+        // Use selected code as context if available
+        let context = currentSelection
+        conversationManager.currentInput = conversationManager.currentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        conversationManager.sendMessage(context: context)
     }
 }
 
 #Preview {
     let ctx = CodeSelectionContext()
     ctx.selectedText = "func helloWorld() { print(\"Hello\") }"
-    return AIChatPanel(selectionContext: ctx)
+    let container = DependencyContainer.shared
+    return AIChatPanel(
+        selectionContext: ctx,
+        conversationManager: container.conversationManager
+    )
 }
 
