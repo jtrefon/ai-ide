@@ -134,6 +134,8 @@ struct TextViewRepresentable: NSViewRepresentable {
         if let range = selectedRange,
            range.location != NSNotFound,
            range.location + range.length <= (textView.string as NSString).length {
+            context.coordinator.isProgrammaticSelectionUpdate = true
+            defer { context.coordinator.isProgrammaticSelectionUpdate = false }
             textView.setSelectedRange(range)
         }
         
@@ -147,6 +149,7 @@ struct TextViewRepresentable: NSViewRepresentable {
     class Coordinator: NSObject, NSTextViewDelegate {
         let parent: TextViewRepresentable
         var isProgrammaticUpdate = false
+        var isProgrammaticSelectionUpdate = false
         
         init(_ parent: TextViewRepresentable) {
             self.parent = parent
@@ -161,6 +164,17 @@ struct TextViewRepresentable: NSViewRepresentable {
             parent.selectedRange = textView.selectedRange
             
             // Update the selection context with current selected text and range
+            updateSelectionContext(from: textView)
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            if isProgrammaticUpdate || isProgrammaticSelectionUpdate { return }
+            guard let textView = notification.object as? NSTextView else { return }
+            parent.selectedRange = textView.selectedRange
+            updateSelectionContext(from: textView)
+        }
+
+        private func updateSelectionContext(from textView: NSTextView) {
             let range = textView.selectedRange
             if range.location != NSNotFound,
                range.length > 0,
@@ -185,4 +199,3 @@ struct TextViewRepresentable: NSViewRepresentable {
     )
     .frame(height: 300)
 }
-

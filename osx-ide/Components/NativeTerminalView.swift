@@ -52,7 +52,14 @@ struct NativeTerminalView: View {
             TerminalContentView(embedder: embedder, currentDirectory: currentDirectory)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .alert("Terminal Error", isPresented: .constant(embedder.errorMessage != nil)) {
+        .alert("Terminal Error", isPresented: Binding(
+            get: { embedder.errorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    embedder.errorMessage = nil
+                }
+            }
+        )) {
             Button("OK") {
                 embedder.errorMessage = nil
             }

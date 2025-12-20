@@ -583,19 +583,14 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         // Stop reading
         readHandle?.readabilityHandler = nil
         
-        // Terminate process
+        // Terminate process without blocking the main actor
         if let process = shellProcess, process.isRunning {
             process.terminate()
-            // Give it a moment to terminate gracefully
-            let group = DispatchGroup()
-            group.enter()
             DispatchQueue.global().asyncAfter(deadline: .now() + AppConstants.Time.processTerminationTimeout) {
                 if process.isRunning {
                     process.terminate()
                 }
-                group.leave()
             }
-            group.wait()
         }
         
         // Close file handles

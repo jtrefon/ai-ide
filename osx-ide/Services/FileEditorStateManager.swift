@@ -50,20 +50,22 @@ class FileEditorStateManager: ObservableObject {
         fileEditorService.loadFile(from: url)
         
         // Update state based on service
-        selectedFile = url.path
+        selectedFile = fileEditorService.selectedFile
         editorContent = fileEditorService.editorContent
-        editorLanguage = Self.languageForFileExtension(url.pathExtension)
+        editorLanguage = fileEditorService.editorLanguage
         isDirty = false
     }
     
     /// Save current content to selected file
     func saveFile() {
+        syncServiceState()
         fileEditorService.saveFile()
         isDirty = false
     }
     
     /// Save file to new location
     func saveFileAs() {
+        syncServiceState()
         fileEditorService.saveFileAs()
         if let filePath = fileEditorService.selectedFile {
             selectedFile = filePath
@@ -111,10 +113,18 @@ class FileEditorStateManager: ObservableObject {
     
     func updateEditorContent(_ newContent: String) {
         editorContent = newContent
+        fileEditorService.editorContent = newContent
     }
     
     func setEditorLanguage(_ language: String) {
         editorLanguage = language
+        fileEditorService.editorLanguage = language
+    }
+
+    private func syncServiceState() {
+        fileEditorService.selectedFile = selectedFile
+        fileEditorService.editorContent = editorContent
+        fileEditorService.editorLanguage = editorLanguage
     }
     
     // MARK: - Computed Properties
