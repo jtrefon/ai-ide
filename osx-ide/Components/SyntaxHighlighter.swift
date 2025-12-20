@@ -36,6 +36,23 @@ final class SyntaxHighlighter {
             .foregroundColor: NSColor.labelColor
         ], range: fullRange)
 
+        switch lang {
+        case "javascript", "js":
+            applyJavaScriptHighlighting(in: attributed, code: code)
+        case "typescript", "ts":
+            applyTypeScriptHighlighting(in: attributed, code: code)
+        case "python", "py":
+            applyPythonHighlighting(in: attributed, code: code)
+        case "html":
+            applyHTMLHighlighting(in: attributed, code: code)
+        case "css":
+            applyCSSHighlighting(in: attributed, code: code)
+        case "json":
+            applyJSONHighlighting(in: attributed, code: code)
+        default:
+            break
+        }
+
         return attributed
     }
 

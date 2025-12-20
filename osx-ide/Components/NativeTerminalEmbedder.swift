@@ -12,8 +12,6 @@ import Foundation
 /// Reliable terminal implementation with native zsh shell process
 @MainActor
 class NativeTerminalEmbedder: NSObject, ObservableObject {
-    @Published var outputText: String = ""
-    @Published var isEmbedded = false
     @Published var currentDirectory: URL?
     @Published var errorMessage: String?
     
@@ -43,11 +41,9 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         setupTerminalView(in: parentView)
         startShellProcess()
         
-        // Defer @Published updates to avoid "publishing changes from within view updates" warning
+        // Defer error updates to avoid "publishing changes from within view updates" warning
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.isEmbedded = true
-            self.errorMessage = nil
+            self?.errorMessage = nil
         }
     }
     
@@ -73,12 +69,15 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         let terminalView = NSTextView()
         terminalView.isEditable = true
         terminalView.isSelectable = true
+        terminalView.isRichText = false
+        terminalView.usesRuler = false
         terminalView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         terminalView.backgroundColor = NSColor.black
         terminalView.textColor = NSColor.green
         terminalView.insertionPointColor = NSColor.white
+        terminalView.alignment = .left
         terminalView.isVerticallyResizable = true
-        terminalView.isHorizontallyResizable = false
+        terminalView.isHorizontallyResizable = true
         terminalView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         terminalView.textContainer?.widthTracksTextView = true
         terminalView.textContainer?.heightTracksTextView = false
@@ -89,6 +88,14 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView.isAutomaticSpellingCorrectionEnabled = false
         // Ensure cursor is visible
         terminalView.insertionPointColor = NSColor.white
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .left
+        terminalView.typingAttributes = [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+            .foregroundColor: NSColor.green,
+            .paragraphStyle: paragraphStyle
+        ]
         
         // Setup delegate for input handling
         terminalView.delegate = self
@@ -268,13 +275,6 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     private func appendOutput(_ text: String) {
         guard !isCleaningUp, let terminalView = terminalView else { return }
         
-        // Defer @Published property updates to avoid "publishing changes from within view updates" warning
-        // Use async dispatch instead of Task to avoid potential issues
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.outputText += text
-        }
-        
         // Parse and render ANSI escape sequences
         let processedText = processANSIEscapeSequences(text)
         
@@ -316,9 +316,12 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     /// Process ANSI escape sequences and return attributed string
     private func processANSIEscapeSequences(_ text: String) -> NSAttributedString {
         let result = NSMutableAttributedString()
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .left
         var currentAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-            .foregroundColor: NSColor.green
+            .foregroundColor: NSColor.green,
+            .paragraphStyle: paragraphStyle
         ]
         
         var i = text.startIndex
@@ -480,13 +483,16 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     /// Apply SGR (Select Graphic Rendition) parameters to attributes
     private func applySGRParameters(_ parameters: [Int], to baseAttributes: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
         var attributes = baseAttributes
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .left
         
         for param in parameters.isEmpty ? [0] : parameters {
             switch param {
             case 0: // Reset
                 attributes = [
                     .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-                    .foregroundColor: NSColor.green
+                    .foregroundColor: NSColor.green,
+                    .paragraphStyle: paragraphStyle
                 ]
             case 1: // Bold
                 if let font = attributes[.font] as? NSFont {
@@ -561,10 +567,6 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     func clearTerminal() {
         guard !isCleaningUp else { return }
         terminalView?.string = ""
-        // Defer @Published update
-        DispatchQueue.main.async { [weak self] in
-            self?.outputText = ""
-        }
     }
     
     /// Remove terminal and cleanup resources
@@ -609,10 +611,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView = nil
         
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.isEmbedded = false
-            self.errorMessage = nil
-            self.outputText = ""
+            self?.errorMessage = nil
         }
     }
     
@@ -659,16 +658,14 @@ extension NativeTerminalEmbedder: NSTextViewDelegate {
     func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
         guard !isCleaningUp else { return false }
         
-        // Allow text view to display input for immediate visual feedback
-        // Also send input to shell - the shell will handle echoing in interactive mode
+        // Send input to shell and rely on shell echo to display characters.
         if let replacementString = replacementString {
             // Send to shell
             if let data = replacementString.data(using: .utf8) {
                 sendInput(data)
             }
-            
-            // Allow text view to display it (local echo)
-            // This provides immediate feedback while shell processes
+
+            // Allow local echo for immediate feedback.
             return true
         }
         
