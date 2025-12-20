@@ -19,18 +19,23 @@ struct ModernFileTreeView: NSViewRepresentable {
     let onOpenFile: (URL) -> Void
 
     func makeNSView(context: Context) -> NSView {
-        let containerView = NSView()
+        let containerView = NSVisualEffectView()
+        containerView.material = .sidebar
+        containerView.blendingMode = .behindWindow
+        containerView.state = .active
         containerView.wantsLayer = true
         containerView.layer?.cornerRadius = 8
-        
-        // Create modern outline view-based file tree with enhanced styling
+
+        // Finder-style outline view with sidebar appearance
         let outlineView = NSOutlineView(frame: .zero)
         outlineView.setAccessibilityIdentifier("Modern Explorer")
         outlineView.headerView = nil
-        outlineView.rowSizeStyle = .default
-        outlineView.usesAlternatingRowBackgroundColors = false
+        outlineView.rowSizeStyle = .medium
+        outlineView.usesAlternatingRowBackgroundColors = true
         outlineView.focusRingType = .none
         outlineView.allowsMultipleSelection = false
+        outlineView.selectionHighlightStyle = .sourceList
+        outlineView.style = .sourceList
         outlineView.wantsLayer = true
         outlineView.layer?.cornerRadius = 6
         outlineView.layer?.backgroundColor = NSColor.clear.cgColor
@@ -52,6 +57,7 @@ struct ModernFileTreeView: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.documentView = outlineView
         scrollView.wantsLayer = true
+        scrollView.drawsBackground = false
         scrollView.layer?.backgroundColor = NSColor.clear.cgColor
 
         context.coordinator.attach(outlineView: outlineView)
@@ -298,12 +304,11 @@ final class ModernCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         }
 
         cell.textField?.stringValue = displayName(for: url)
-        
-        // Modern macOS v26 icon styling
-        let iconName = getModernIconName(for: url)
-        if let image = NSImage(systemSymbolName: iconName, accessibilityDescription: url.lastPathComponent) {
-            cell.imageView?.image = image
-        }
+
+        // Use Finder-style file icons and colors.
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        icon.size = NSSize(width: 16, height: 16)
+        cell.imageView?.image = icon
         
         // Enhanced selection styling
         if let relativePath = relativePath(for: url), relativePath == selectedRelativePath.wrappedValue {
@@ -311,7 +316,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             cell.textField?.textColor = .systemBlue
         } else {
             cell.layer?.backgroundColor = NSColor.clear.cgColor
-            cell.textField?.textColor = .controlTextColor
+            cell.textField?.textColor = fileLabelColor(for: url) ?? .controlTextColor
         }
         
         return cell
@@ -459,27 +464,11 @@ final class ModernCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         return rootURL.appendingPathComponent(relative)
     }
     
-    private func getModernIconName(for url: URL) -> String {
-        let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-        if isDir {
-            return "folder.fill"
-        } else {
-            return getFileIconName(for: url.lastPathComponent)
+    private func fileLabelColor(for url: URL) -> NSColor? {
+        guard let labelNumber = try? url.resourceValues(forKeys: [.labelNumberKey]).labelNumber,
+              labelNumber > 0 else {
+            return nil
         }
-    }
-    
-    private func getFileIconName(for fileName: String) -> String {
-        let ext = (fileName as NSString).pathExtension.lowercased()
-        switch ext {
-        case "swift": return "swift"
-        case "js", "jsx": return "square.and.arrow.up"
-        case "ts", "tsx": return "square.and.arrow.up"
-        case "py": return "square.and.arrow.up"
-        case "html": return "square.and.arrow.up"
-        case "css": return "square.and.arrow.up"
-        case "json": return "curlybraces"
-        case "md": return "doc.plaintext"
-        default: return "doc"
-        }
+        return NSWorkspace.shared.fileLabelColors[labelNumber - 1]
     }
 }

@@ -160,6 +160,8 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         environment["LINES"] = "\(AppConstants.Terminal.defaultRows)"
         // Disable fancy prompts that generate escape sequences
         environment["PROMPT"] = "$ "
+        // Suppress zsh's end-of-line marker (% when output lacks newline).
+        environment["PROMPT_EOL_MARK"] = ""
         // For zsh, disable oh-my-zsh or other prompt themes
         environment["ZSH_THEME"] = ""
         environment["DISABLE_AUTO_TITLE"] = "true"
