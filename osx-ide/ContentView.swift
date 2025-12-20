@@ -10,7 +10,6 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var appState: AppState
     @State private var selectedRange: NSRange? = nil
-    @State private var showErrorAlert: Bool = false
     @StateObject private var selectionContext = CodeSelectionContext()
     
     var body: some View {

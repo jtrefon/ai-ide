@@ -121,21 +121,8 @@ struct NativeFileOutlineView: NSViewRepresentable {
             searchResults.removeAll()
             childrenCache.removeAll()
             isDirectoryCache.removeAll()
-
-            // Defer property updates that might affect SwiftUI state
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                if let selectedRelative = self.selectedRelativePath.wrappedValue {
-                    let ancestors = Self.ancestorRelativePaths(for: selectedRelative)
-                    if !ancestors.isEmpty {
-                        self.expandedRelativePaths.wrappedValue.formUnion(ancestors)
-                    }
-                }
-                
-                // Only reload if we are still active
-                self.outlineView?.reloadData()
-                self.loadChildren(for: url)
-            }
+            outlineView?.reloadData()
+            loadChildren(for: url)
         }
 
         func setSearchQuery(_ value: String) {

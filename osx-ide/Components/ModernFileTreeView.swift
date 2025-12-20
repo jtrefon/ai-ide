@@ -148,19 +148,8 @@ final class ModernCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         searchResults.removeAll()
         childrenCache.removeAll()
         isDirectoryCache.removeAll()
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            if let selectedRelative = self.selectedRelativePath.wrappedValue {
-                let ancestors = Self.ancestorRelativePaths(for: selectedRelative)
-                if !ancestors.isEmpty {
-                    self.expandedRelativePaths.wrappedValue.formUnion(ancestors)
-                }
-            }
-            
-            self.outlineView?.reloadData()
-            self.loadChildren(for: url)
-        }
+        outlineView?.reloadData()
+        loadChildren(for: url)
     }
 
     func setSearchQuery(_ value: String) {
