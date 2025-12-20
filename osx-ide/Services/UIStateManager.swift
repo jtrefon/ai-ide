@@ -63,12 +63,10 @@ class UIStateManager: ObservableObject {
     
     func toggleSidebar() {
         isSidebarVisible.toggle()
-        uiService.setSidebarVisible(isSidebarVisible)
     }
     
     func setSidebarVisible(_ visible: Bool) {
         isSidebarVisible = visible
-        uiService.setSidebarVisible(visible)
     }
     
     func updateSidebarWidth(_ width: Double) {
@@ -180,13 +178,13 @@ class UIStateManager: ObservableObject {
     // MARK: - Settings Persistence
     
     private func loadSettings() {
-        // Load from UIService
-        selectedTheme = uiService.selectedTheme
-        fontSize = uiService.fontSize
-        fontFamily = uiService.fontFamily
-        showLineNumbers = uiService.showLineNumbers
-        wordWrap = uiService.wordWrap
-        minimapVisible = uiService.minimapVisible
+        let settings = uiService.loadSettings()
+        selectedTheme = settings.selectedTheme
+        fontSize = settings.fontSize
+        fontFamily = settings.fontFamily
+        showLineNumbers = settings.showLineNumbers
+        wordWrap = settings.wordWrap
+        minimapVisible = settings.minimapVisible
         
         // Load layout settings
         sidebarWidth = userDefaults.double(forKey: sidebarWidthKey)

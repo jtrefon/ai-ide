@@ -19,53 +19,20 @@ struct CodeEditorView: View {
     var language: String
     @Binding var selectedRange: NSRange?
     @ObservedObject var selectionContext: CodeSelectionContext
+    var showLineNumbers: Bool = true
     
     var body: some View {
         GeometryReader { geometry in
-            HSplitView {
-                // Line numbers
-                LineNumbersView(text: text)
-                    .frame(width: 45)
-                    .frame(maxHeight: .infinity)
-                    .background(Color(NSColor.controlBackgroundColor))
-                
-                // Text editor (use AppKit's own NSScrollView; avoid nesting in SwiftUI ScrollView)
-                TextViewRepresentable(
-                    text: $text,
-                    language: language,
-                    selectedRange: $selectedRange,
-                    selectionContext: selectionContext
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(NSColor.textBackgroundColor))
-            }
+            // Text editor (use AppKit's own NSScrollView; avoid nesting in SwiftUI ScrollView)
+            TextViewRepresentable(
+                text: $text,
+                language: language,
+                selectedRange: $selectedRange,
+                selectionContext: selectionContext,
+                showLineNumbers: showLineNumbers
+            )
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-    }
-}
-
-struct LineNumbersView: View {
-    let text: String
-    
-    var body: some View {
-        let lines = text.components(separatedBy: .newlines).count
-        let lineCount = max(1, lines)
-        
-        // Use a ScrollView with LazyVStack to prevent rendering all line numbers at once
-        // This stops the UI from "exploding" with large files.
-        ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(alignment: .trailing, spacing: 0) {
-                ForEach(0..<lineCount, id: \.self) { lineIndex in
-                    Text("\(lineIndex + 1)")
-                        .font(.system(size: 12, weight: .regular, design: .monospaced))
-                        .foregroundColor(.secondary.opacity(0.8))
-                        .frame(maxWidth: .infinity, minHeight: 15, alignment: .trailing)
-                        .padding(.trailing, 4)
-                }
-            }
-            .padding(.vertical, 4)
-        }
-        .background(Color(NSColor.controlBackgroundColor))
     }
 }
 
@@ -74,6 +41,7 @@ struct TextViewRepresentable: NSViewRepresentable {
     var language: String
     @Binding var selectedRange: NSRange?
     @ObservedObject var selectionContext: CodeSelectionContext
+    var showLineNumbers: Bool
     
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -103,6 +71,12 @@ struct TextViewRepresentable: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
+
+        if showLineNumbers {
+            scrollView.hasVerticalRuler = true
+            scrollView.rulersVisible = true
+            scrollView.verticalRulerView = ModernLineNumberRulerView(scrollView: scrollView, textView: textView)
+        }
         
         // Apply syntax highlighting after the view is set up
         DispatchQueue.main.async {
@@ -137,6 +111,15 @@ struct TextViewRepresentable: NSViewRepresentable {
             context.coordinator.isProgrammaticSelectionUpdate = true
             defer { context.coordinator.isProgrammaticSelectionUpdate = false }
             textView.setSelectedRange(range)
+        }
+
+        let shouldShowRuler = showLineNumbers
+        if scrollView.hasVerticalRuler != shouldShowRuler || scrollView.rulersVisible != shouldShowRuler {
+            scrollView.hasVerticalRuler = shouldShowRuler
+            scrollView.rulersVisible = shouldShowRuler
+            if shouldShowRuler && scrollView.verticalRulerView == nil {
+                scrollView.verticalRulerView = ModernLineNumberRulerView(scrollView: scrollView, textView: textView)
+            }
         }
         
         // The selection context is now available for the AI chat panel or other consumers.
@@ -195,7 +178,8 @@ struct TextViewRepresentable: NSViewRepresentable {
         text: .constant("func helloWorld() {\n    print(\"Hello, World!\")\n}"),
         language: "swift",
         selectedRange: .constant(nil),
-        selectionContext: CodeSelectionContext()
+        selectionContext: CodeSelectionContext(),
+        showLineNumbers: true
     )
     .frame(height: 300)
 }

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import UniformTypeIdentifiers
 
 /// Manages file editor state and operations
 @MainActor
@@ -24,9 +25,11 @@ class FileEditorStateManager: ObservableObject {
     
     private var isLoadingFile = false
     private let fileEditorService: FileEditorService
+    private let fileDialogService: FileDialogService
     
-    init(fileEditorService: FileEditorService) {
+    init(fileEditorService: FileEditorService, fileDialogService: FileDialogService) {
         self.fileEditorService = fileEditorService
+        self.fileDialogService = fileDialogService
     }
     
     // MARK: - File Operations
@@ -58,6 +61,10 @@ class FileEditorStateManager: ObservableObject {
     
     /// Save current content to selected file
     func saveFile() {
+        guard selectedFile != nil else {
+            saveFileAs()
+            return
+        }
         syncServiceState()
         fileEditorService.saveFile()
         isDirty = false
@@ -66,11 +73,15 @@ class FileEditorStateManager: ObservableObject {
     /// Save file to new location
     func saveFileAs() {
         syncServiceState()
-        fileEditorService.saveFileAs()
-        if let filePath = fileEditorService.selectedFile {
-            selectedFile = filePath
-            isDirty = false
+        let defaultName = selectedFile != nil ?
+            URL(fileURLWithPath: selectedFile!).lastPathComponent : "Untitled.swift"
+        guard let url = fileDialogService.saveFile(defaultFileName: defaultName, allowedContentTypes: [.swiftSource, .plainText]) else {
+            return
         }
+        fileEditorService.saveFileAs(to: url)
+        selectedFile = fileEditorService.selectedFile
+        editorLanguage = fileEditorService.editorLanguage
+        isDirty = false
     }
     
     /// Create new empty file with validation

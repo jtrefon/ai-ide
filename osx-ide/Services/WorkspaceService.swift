@@ -57,40 +57,6 @@ final class WorkspaceService: ObservableObject {
         }
     }
     
-    /// Open file dialog for selecting files or directories
-    /// - Parameter onFileSelected: Callback invoked when a file (not directory) is selected
-    func openFileOrFolder(onFileSelected: ((URL) -> Void)? = nil) {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.swiftSource, .plainText, .sourceCode, .folder]
-        
-        if panel.runModal() == .OK, let url = panel.url {
-            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            
-            if isDirectory {
-                self.currentDirectory = url
-            } else {
-                self.currentDirectory = url.deletingLastPathComponent()
-                onFileSelected?(url)
-            }
-        }
-    }
-    
-    /// Open folder dialog specifically for directories
-    func openFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Open Folder"
-        
-        if panel.runModal() == .OK, let url = panel.url {
-            self.currentDirectory = url
-        }
-    }
-    
     /// Navigate to parent directory
     func navigateToParent() {
         guard let current = currentDirectory else { return }

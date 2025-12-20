@@ -27,15 +27,15 @@ struct ContentView: View {
             }
             .frame(width: 0, height: 0)
 
-            HSplitView {
+            AutosavingHSplitView(autosaveName: "MainSplit", orientation: .horizontal) {
                 // Left sidebar
                 FileExplorerView(appState: appState)
                     .frame(minWidth: 200, maxWidth: 300)
-                
+            } secondary: {
                 // Main content area
-                HSplitView {
+                AutosavingHSplitView(autosaveName: "EditorChatSplit", orientation: .horizontal) {
                     // Editor and terminal area
-                    VSplitView {
+                    AutosavingVSplitView(autosaveName: "EditorTerminalSplit", orientation: .vertical) {
                         // Main editor area
                         VStack(spacing: 0) {
                             // Editor header
@@ -59,18 +59,19 @@ struct ContentView: View {
                                 text: $appState.editorContent,
                                 language: appState.editorLanguage,
                                 selectedRange: $selectedRange,
-                                selectionContext: selectionContext
+                                selectionContext: selectionContext,
+                                showLineNumbers: appState.showLineNumbers
                             )
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         .frame(minHeight: 100)
-                        
+                    } secondary: {
                         // Terminal panel
                         NativeTerminalView(currentDirectory: appState.currentDirectory)
                             .frame(minHeight: 100)
                     }
                     .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
-                    
+                } secondary: {
                     // AI Chat Panel
                     AIChatPanel(
                         selectionContext: selectionContext,

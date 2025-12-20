@@ -24,9 +24,11 @@ class FileEditorService: ObservableObject {
     
     private var isLoadingFile = false
     private let errorManager: ErrorManager
+    private let fileSystemService: FileSystemService
     
-    init(errorManager: ErrorManager) {
+    init(errorManager: ErrorManager, fileSystemService: FileSystemService) {
         self.errorManager = errorManager
+        self.fileSystemService = fileSystemService
     }
     
     /// Handle error through the service's error manager
@@ -45,7 +47,7 @@ class FileEditorService: ObservableObject {
         defer { isLoadingFile = false }
         
         do {
-            let content = try String(contentsOf: url, encoding: .utf8)
+            let content = try fileSystemService.readFile(at: url)
             self.selectedFile = url.path
             self.editorContent = content
             self.editorLanguage = Self.languageForFileExtension(url.pathExtension)
@@ -57,13 +59,10 @@ class FileEditorService: ObservableObject {
     
     /// Save current content to selected file
     func saveFile() {
-        guard let filePath = selectedFile else {
-            saveFileAs()
-            return
-        }
+        guard let filePath = selectedFile else { return }
         
         do {
-            try editorContent.write(toFile: filePath, atomically: true, encoding: .utf8)
+            try fileSystemService.writeFile(content: editorContent, toPath: filePath)
             isDirty = false
         } catch {
             errorManager.handle(.fileOperationFailed("save file", underlying: error))
@@ -71,21 +70,14 @@ class FileEditorService: ObservableObject {
     }
     
     /// Save file to new location
-    func saveFileAs() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.swiftSource, .plainText]
-        panel.nameFieldStringValue = selectedFile != nil ? 
-            URL(fileURLWithPath: selectedFile!).lastPathComponent : "Untitled.swift"
-        
-        if panel.runModal() == .OK, let url = panel.url {
-            do {
-                try editorContent.write(to: url, atomically: true, encoding: .utf8)
-                selectedFile = url.path
-                editorLanguage = Self.languageForFileExtension(url.pathExtension)
-                isDirty = false
-            } catch {
-                errorManager.handle(.fileOperationFailed("save file as", underlying: error))
-            }
+    func saveFileAs(to url: URL) {
+        do {
+            try fileSystemService.writeFile(content: editorContent, to: url)
+            selectedFile = url.path
+            editorLanguage = Self.languageForFileExtension(url.pathExtension)
+            isDirty = false
+        } catch {
+            errorManager.handle(.fileOperationFailed("save file as", underlying: error))
         }
     }
     
