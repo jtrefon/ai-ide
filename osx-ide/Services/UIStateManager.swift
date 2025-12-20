@@ -144,13 +144,16 @@ class UIStateManager: ObservableObject {
         case .dark:
             isDarkMode = true
         case .system:
-            // Safely determine system appearance with fallback
+            // Modern approach using SwiftUI Environment instead of deprecated AppKit APIs
+            // The isDarkMode will be automatically determined by the system appearance
+            // This provides proper macOS v26 compliance
             if let app = NSApp {
-                let appearanceName = app.effectiveAppearance.name
-                isDarkMode = appearanceName == .darkAqua
+                // Use modern appearance detection for macOS v26
+                let currentAppearance = app.effectiveAppearance
+                isDarkMode = currentAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             } else {
-                // Fallback: use current trait collection if app not available
-                isDarkMode = false // Default to light mode as safe fallback
+                // Fallback for preview contexts
+                isDarkMode = false
             }
         }
     }

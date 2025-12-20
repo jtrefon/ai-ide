@@ -44,7 +44,7 @@ struct osx_ideApp: App {
                     }
                 }
         }
-        .windowToolbarStyle(.unified)
+        .windowToolbarStyle(.unifiedCompact)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New") {

@@ -27,7 +27,7 @@ struct CodeEditorView: View {
                 LineNumbersView(text: text)
                     .frame(width: 45)
                     .frame(maxHeight: .infinity)
-                    .nativeGlassBackground(.sidebar)
+                    .background(Color(NSColor.controlBackgroundColor))
                 
                 // Text editor (use AppKit's own NSScrollView; avoid nesting in SwiftUI ScrollView)
                 TextViewRepresentable(

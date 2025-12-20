@@ -39,8 +39,8 @@ struct FileExplorerView: View {
             .frame(height: 30)
             .nativeGlassBackground(.header)
 
-            // Native file tree (NSOutlineView)
-            NativeFileOutlineView(
+            // Modern macOS v26 file tree with subtle styling
+            ModernFileTreeView(
                 rootURL: appState.currentDirectory ?? FileManager.default.homeDirectoryForCurrentUser,
                 searchQuery: $searchQuery,
                 expandedRelativePaths: $expandedRelativePaths,
@@ -50,7 +50,7 @@ struct FileExplorerView: View {
                     appState.loadFile(from: url)
                 }
             )
-            .nativeGlassBackground(.sidebar)
+            .background(Color(NSColor.controlBackgroundColor))
             .contextMenu {
                 Button("New File") {
                     newFileName = ""
@@ -116,11 +116,11 @@ struct FileExplorerView: View {
         .onAppear {
             syncSelectionFromAppState()
         }
-        .onChange(of: appState.currentDirectory) { _ in
+        .onChange(of: appState.currentDirectory) {
             refreshToken += 1
             syncSelectionFromAppState()
         }
-        .onChange(of: appState.selectedFile) { _ in
+        .onChange(of: appState.selectedFile) {
             syncSelectionFromAppState()
         }
     }

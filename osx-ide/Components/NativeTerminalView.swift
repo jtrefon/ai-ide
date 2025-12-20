@@ -46,7 +46,7 @@ struct NativeTerminalView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .frame(height: 30)
-            .nativeGlassBackground(.header)
+            .background(Color(NSColor.controlBackgroundColor))
             
             // Terminal content area using proper NSViewRepresentable
             TerminalContentView(embedder: embedder, currentDirectory: currentDirectory)

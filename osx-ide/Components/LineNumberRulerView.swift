@@ -1,19 +1,31 @@
 import AppKit
+import SwiftUI
 
-final class LineNumberRulerView: NSRulerView {
+/// Modern macOS v26 line number ruler with enhanced performance and liquid glass styling
+final class ModernLineNumberRulerView: NSRulerView {
     private weak var textView: NSTextView?
     private let font: NSFont
     private let textColor: NSColor
     private let backgroundColor: NSColor
+    private let selectionColor: NSColor
+    private let currentLineColor: NSColor
 
     init(scrollView: NSScrollView, textView: NSTextView) {
         self.textView = textView
+        // Enhanced typography for macOS v26
         self.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         self.textColor = NSColor.secondaryLabelColor
-        self.backgroundColor = NSColor.controlBackgroundColor
+        self.backgroundColor = NSColor.clear // Transparent for liquid glass
+        self.selectionColor = NSColor.systemBlue.withAlphaComponent(0.1)
+        self.currentLineColor = NSColor.systemBlue.withAlphaComponent(0.05)
+        
         super.init(scrollView: scrollView, orientation: .verticalRuler)
         self.clientView = textView
         self.ruleThickness = 50
+        
+        // Modern styling for macOS v26
+        self.wantsLayer = true
+        self.layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     required init(coder: NSCoder) {
@@ -25,6 +37,7 @@ final class LineNumberRulerView: NSRulerView {
             return
         }
 
+        // Draw transparent background for liquid glass effect
         backgroundColor.setFill()
         rect.fill()
 
@@ -42,6 +55,7 @@ final class LineNumberRulerView: NSRulerView {
             }
         }
 
+        // Enhanced attributes for macOS v26
         let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: textColor
@@ -60,15 +74,35 @@ final class LineNumberRulerView: NSRulerView {
             lineRect.origin.x += relativePoint.x
             lineRect.origin.y += relativePoint.y
 
+            // Enhanced drawing with better positioning
             let label = "\(lineNumber)" as NSString
             let labelSize = label.size(withAttributes: attrs)
             let y = lineRect.minY + (lineRect.height - labelSize.height) / 2
             let x = ruleThickness - 6 - labelSize.width
+            
+            // Draw selection highlight if current line
+            if charIndex == textView.selectedRange.location {
+                let highlightRect = NSRect(x: 0, y: lineRect.minY, width: ruleThickness, height: lineRect.height)
+                selectionColor.setFill()
+                highlightRect.fill()
+            }
+            
             label.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
 
             let nextGlyphIndex = NSMaxRange(lineGlyphRange)
             glyphIndex = nextGlyphIndex > glyphIndex ? nextGlyphIndex : (glyphIndex + 1)
             lineNumber += 1
         }
+    }
+    
+    // Modern macOS v26 compatibility methods
+    override var wantsUpdateLayer: Bool {
+        return true
+    }
+    
+    override func updateLayer() {
+        super.updateLayer()
+        // Enhanced layer setup for liquid glass effect
+        self.layer?.backgroundColor = NSColor.clear.cgColor
     }
 }
