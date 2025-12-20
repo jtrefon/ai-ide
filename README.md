@@ -1,5 +1,8 @@
 # osx-ide
 
+![CI](https://github.com/jtrefon/ai-ide/actions/workflows/ci.yml/badge.svg)
+![Release](https://github.com/jtrefon/ai-ide/actions/workflows/release.yml/badge.svg)
+
 A native macOS IDE experiment built with SwiftUI and AppKit.
 
 ## Requirements

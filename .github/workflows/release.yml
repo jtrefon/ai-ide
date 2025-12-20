@@ -35,9 +35,13 @@ jobs:
         run: |
           APP_PATH="build/Build/Products/Release/osx-ide.app"
           ZIP_NAME="osx-ide.app.zip"
+          DMG_NAME="osx-ide.dmg"
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_NAME"
+          hdiutil create -volname "osx-ide" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_NAME"
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: osx-ide.app.zip
+          files: |
+            osx-ide.app.zip
+            osx-ide.dmg
