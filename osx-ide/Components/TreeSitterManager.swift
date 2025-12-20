@@ -12,6 +12,7 @@ import TreeSitterSwift
 // Forward declaration of the C function from the grammar if not automatically imported
 // Removed, as tree_sitter_swift is already imported from TreeSitterSwift
 
+@MainActor
 final class TreeSitterManager {
     static let shared = TreeSitterManager()
 

@@ -9,6 +9,7 @@
 import Foundation
 import AppKit
 
+@MainActor
 final class SyntaxHighlighter {
     static let shared = SyntaxHighlighter()
     private init() {}
