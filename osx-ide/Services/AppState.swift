@@ -118,14 +118,21 @@ class AppState: ObservableObject {
         uiService: UIService,
         workspaceService: WorkspaceService,
         fileEditorService: FileEditorService,
-        conversationManager: ConversationManager
+        conversationManager: ConversationManager,
+        fileDialogService: FileDialogService
     ) {
         self.errorManager = errorManager
         self._conversationManager = conversationManager
         
         // Initialize specialized state managers
-        self.fileEditorStateManager = FileEditorStateManager(fileEditorService: fileEditorService)
-        self.workspaceStateManager = WorkspaceStateManager(workspaceService: workspaceService)
+        self.fileEditorStateManager = FileEditorStateManager(
+            fileEditorService: fileEditorService,
+            fileDialogService: fileDialogService
+        )
+        self.workspaceStateManager = WorkspaceStateManager(
+            workspaceService: workspaceService,
+            fileDialogService: fileDialogService
+        )
         self.uiStateManager = UIStateManager(uiService: uiService)
         
         // Set up state observation

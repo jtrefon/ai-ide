@@ -36,6 +36,16 @@ class DependencyContainer {
     var fileEditorService: FileEditorService {
         return _fileEditorService
     }
+
+    /// File system service instance
+    var fileSystemService: FileSystemService {
+        return _fileSystemService
+    }
+
+    /// File dialog service instance
+    var fileDialogService: FileDialogService {
+        return _fileDialogService
+    }
     
     /// AI service instance
     var aiService: AIService {
@@ -54,7 +64,12 @@ class DependencyContainer {
         _errorManager = errorManager
         _uiService = UIService(errorManager: errorManager)
         _workspaceService = WorkspaceService(errorManager: errorManager)
-        _fileEditorService = FileEditorService(errorManager: errorManager)
+        _fileSystemService = FileSystemService()
+        _fileDialogService = FileDialogService()
+        _fileEditorService = FileEditorService(
+            errorManager: errorManager,
+            fileSystemService: _fileSystemService
+        )
         _aiService = ConfigurableAIService()
         _conversationManager = ConversationManager(aiService: _aiService, errorManager: errorManager)
     }
@@ -68,7 +83,8 @@ class DependencyContainer {
             uiService: uiService,
             workspaceService: workspaceService,
             fileEditorService: fileEditorService,
-            conversationManager: conversationManager
+            conversationManager: conversationManager,
+            fileDialogService: fileDialogService
         )
     }
     
@@ -84,6 +100,8 @@ class DependencyContainer {
     private let _uiService: UIService
     private let _workspaceService: WorkspaceService
     private let _fileEditorService: FileEditorService
+    private let _fileSystemService: FileSystemService
+    private let _fileDialogService: FileDialogService
     private var _aiService: AIService
     private var _conversationManager: ConversationManager
 }

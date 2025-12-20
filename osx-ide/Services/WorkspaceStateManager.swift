@@ -16,10 +16,12 @@ class WorkspaceStateManager: ObservableObject {
     @Published var recentlyOpenedFiles: [URL] = []
     
     private let workspaceService: WorkspaceService
+    private let fileDialogService: FileDialogService
     private let maxRecentFiles = 10
     
-    init(workspaceService: WorkspaceService) {
+    init(workspaceService: WorkspaceService, fileDialogService: FileDialogService) {
         self.workspaceService = workspaceService
+        self.fileDialogService = fileDialogService
         self.currentDirectory = workspaceService.currentDirectory
     }
     
@@ -28,19 +30,24 @@ class WorkspaceStateManager: ObservableObject {
     /// Open file dialog for selecting files or directories
     /// - Parameter onFileSelected: Callback invoked when a file (not directory) is selected
     func openFileOrFolder(onFileSelected: ((URL) -> Void)? = nil) {
-        workspaceService.openFileOrFolder { [weak self] url in
-            self?.addToRecentlyOpened(url)
+        guard let url = fileDialogService.openFileOrFolder() else { return }
+        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        if isDirectory {
+            workspaceService.currentDirectory = url
+            currentDirectory = url
+        } else {
+            workspaceService.currentDirectory = url.deletingLastPathComponent()
+            currentDirectory = workspaceService.currentDirectory
+            addToRecentlyOpened(url)
             onFileSelected?(url)
         }
-        
-        // Update current directory from service
-        currentDirectory = workspaceService.currentDirectory
     }
     
     /// Open folder dialog specifically for directories
     func openFolder() {
-        workspaceService.openFolder()
-        currentDirectory = workspaceService.currentDirectory
+        guard let url = fileDialogService.openFolder() else { return }
+        workspaceService.currentDirectory = url
+        currentDirectory = url
     }
     
     /// Navigate to parent directory
