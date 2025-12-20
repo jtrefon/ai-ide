@@ -53,7 +53,7 @@ struct AIChatPanel: View {
             )
         }
         .accessibilityIdentifier("AIChatPanel")
-        .nativeGlassBackground(.panel)
+        .background(Color(NSColor.controlBackgroundColor))
     }
 
     var currentSelection: String? { 

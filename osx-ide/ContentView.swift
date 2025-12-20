@@ -16,11 +16,15 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             WindowAccessor { window in
+                // Modern macOS v26 window styling
                 window.titleVisibility = .hidden
                 window.titlebarAppearsTransparent = true
                 window.isMovableByWindowBackground = true
                 window.isOpaque = false
                 window.backgroundColor = .clear
+                window.hasShadow = true
+                window.styleMask.insert(.fullSizeContentView)
+                window.styleMask.insert(.unifiedTitleAndToolbar)
             }
             .frame(width: 0, height: 0)
 
@@ -77,7 +81,7 @@ struct ContentView: View {
                 }
             }
         }
-        .nativeGlassBackground(.panel)
+        .background(Color.clear)
     }
 }
 

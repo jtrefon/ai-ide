@@ -388,13 +388,10 @@ struct NativeFileOutlineView: NSViewRepresentable {
             if childrenCache[url] != nil { return }
             childrenCache[url] = []
 
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self else { return }
+            Task { @MainActor in
                 guard let contents = try? self.fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else {
-                    DispatchQueue.main.async { [weak self] in
-                        self?.childrenCache[url] = []
-                        self?.outlineView?.reloadItem(url, reloadChildren: true)
-                    }
+                    self.childrenCache[url] = []
+                    self.outlineView?.reloadItem(url, reloadChildren: true)
                     return
                 }
 
@@ -407,21 +404,18 @@ struct NativeFileOutlineView: NSViewRepresentable {
                     return a.lastPathComponent.localizedCaseInsensitiveCompare(b.lastPathComponent) == .orderedAscending
                 }
 
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    self.childrenCache[url] = items
-                    for item in items {
-                        let isDir = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-                        self.isDirectoryCache[item] = isDir
-                    }
-                    if url == self.rootURL {
-                        self.outlineView?.reloadData()
-                    } else {
-                        self.outlineView?.reloadItem(url, reloadChildren: true)
-                    }
-
-                    self.restoreExpandedChildrenIfNeeded(parentURL: url)
+                self.childrenCache[url] = items
+                for item in items {
+                    let isDir = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                    self.isDirectoryCache[item] = isDir
                 }
+                if url == self.rootURL {
+                    self.outlineView?.reloadData()
+                } else {
+                    self.outlineView?.reloadItem(url, reloadChildren: true)
+                }
+
+                self.restoreExpandedChildrenIfNeeded(parentURL: url)
             }
         }
     }
