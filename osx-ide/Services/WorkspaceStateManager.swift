@@ -15,13 +15,14 @@ class WorkspaceStateManager: ObservableObject {
     @Published var openFiles: [String: URL] = [:]
     @Published var recentlyOpenedFiles: [URL] = []
     
-    private let workspaceService: WorkspaceService
-    private let fileDialogService: FileDialogService
+    private let workspaceService: WorkspaceServiceProtocol
+    private let fileDialogService: FileDialogServiceProtocol
     private let maxRecentFiles = 10
     
-    init(workspaceService: WorkspaceService, fileDialogService: FileDialogService) {
+    init(workspaceService: WorkspaceServiceProtocol, fileDialogService: FileDialogServiceProtocol) {
         self.workspaceService = workspaceService
         self.fileDialogService = fileDialogService
+        self.currentDirectory = workspaceService.currentDirectory
         
         // Restore previous session state
         if let savedPath = UserDefaults.standard.string(forKey: "LastOpenDirectory") {

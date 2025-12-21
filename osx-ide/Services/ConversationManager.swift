@@ -9,7 +9,7 @@ import SwiftUI
 import Combine
 
 @MainActor
-class ConversationManager: ObservableObject {
+class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published var messages: [ChatMessage] = []
     @Published var currentInput: String = ""
     @Published var isSending: Bool = false
@@ -17,7 +17,7 @@ class ConversationManager: ObservableObject {
     @Published var currentMode: AIMode = .chat
     
     private var aiService: AIService
-    private let errorManager: ErrorManager
+    private let errorManager: ErrorManagerProtocol
     private let fileSystemService: FileSystemService
     private let historyKey = "AIChatHistory"
     private var cancellables = Set<AnyCancellable>()
@@ -56,7 +56,7 @@ class ConversationManager: ObservableObject {
         return currentMode.allowedTools(from: allTools)
     }
     
-    init(aiService: AIService = SampleAIService(), errorManager: ErrorManager, fileSystemService: FileSystemService = FileSystemService(), projectRoot: URL? = nil) {
+    init(aiService: AIService = SampleAIService(), errorManager: ErrorManagerProtocol, fileSystemService: FileSystemService = FileSystemService(), projectRoot: URL? = nil) {
         self.aiService = aiService
         self.errorManager = errorManager
         self.fileSystemService = fileSystemService
@@ -81,6 +81,10 @@ class ConversationManager: ObservableObject {
         projectRoot = newRoot
     }
     
+    func sendMessage() {
+        sendMessage(context: nil)
+    }
+
     func sendMessage(context: String? = nil) {
         guard !currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         

@@ -14,11 +14,14 @@ struct osx_ideApp: App {
     
     init() {
         let container = DependencyContainer.shared
-        let errorMgr = container.errorManager
+        let errorMgr = container.errorManager as! ErrorManager
         let appSt = container.makeAppState()
         
         self._errorManager = StateObject(wrappedValue: errorMgr)
         self._appState = StateObject(wrappedValue: appSt)
+        
+        // Bootstrap Plugin UI
+        CorePlugin.initialize(registry: UIRegistry.shared, appState: appSt)
     }
     
     var body: some Scene {

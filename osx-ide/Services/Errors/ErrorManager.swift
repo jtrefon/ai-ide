@@ -10,7 +10,7 @@ import Combine
 
 /// Centralized error management for the application
 @MainActor
-class ErrorManager: ObservableObject {
+class ErrorManager: ObservableObject, ErrorManagerProtocol {
     @Published var currentError: AppError?
     @Published var showErrorAlert: Bool = false
     @Published var errorHistory: [AppError] = []
