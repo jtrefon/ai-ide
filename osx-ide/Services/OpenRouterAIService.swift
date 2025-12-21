@@ -19,31 +19,77 @@ actor OpenRouterAIService: AIService {
         self.client = client
     }
     
-    func sendMessage(_ message: String, context: String?) async throws -> String {
-        try await performChat(prompt: message, context: context)
+    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws -> AIServiceResponse {
+        try await performChat(prompt: message, context: context, tools: tools, mode: mode, projectRoot: nil)
+    }
+    
+    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        try await performChat(prompt: message, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
+    }
+    
+    func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        // Convert [ChatMessage] to [OpenRouterChatMessage]
+        var openRouterMessages = messages.compactMap { msg -> OpenRouterChatMessage? in
+            switch msg.role {
+            case .user:
+                return OpenRouterChatMessage(role: "user", content: msg.content)
+            case .assistant:
+                if let toolCalls = msg.toolCalls {
+                    // Map tool calls
+                    return OpenRouterChatMessage(role: "assistant", content: msg.content.isEmpty ? nil : msg.content, tool_calls: toolCalls)
+                }
+                return OpenRouterChatMessage(role: "assistant", content: msg.content)
+            case .system:
+                return OpenRouterChatMessage(role: "system", content: msg.content)
+            case .tool:
+                // For tool outputs
+                if let toolCallId = msg.toolCallId {
+                    return OpenRouterChatMessage(role: "tool", content: msg.content, tool_call_id: toolCallId)
+                } else {
+                    // Fallback if ID missing (shouldn't happen with new logic)
+                    return OpenRouterChatMessage(role: "user", content: "Tool Output: \(msg.content)")
+                }
+            }
+        }
+        
+        return try await performChatWithHistory(messages: openRouterMessages, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
     }
     
     func explainCode(_ code: String) async throws -> String {
         let prompt = "Explain the following code in clear, concise terms:\n\n\(code)"
-        return try await performChat(prompt: prompt, context: nil)
+        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
+        return response.content ?? ""
     }
     
     func refactorCode(_ code: String, instructions: String) async throws -> String {
         let prompt = "Refactor this code using the following instructions:\n\(instructions)\n\nCode:\n\(code)"
-        return try await performChat(prompt: prompt, context: nil)
+        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
+        return response.content ?? ""
     }
     
     func generateCode(_ prompt: String) async throws -> String {
         let message = "Generate code for the following request:\n\(prompt)"
-        return try await performChat(prompt: message, context: nil)
+        let response = try await performChat(prompt: message, context: nil, tools: nil, mode: nil, projectRoot: nil)
+        return response.content ?? ""
     }
     
     func fixCode(_ code: String, error: String) async throws -> String {
         let prompt = "Fix this code. Error message:\n\(error)\n\nCode:\n\(code)"
-        return try await performChat(prompt: prompt, context: nil)
+        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
+        return response.content ?? ""
     }
     
-    private func performChat(prompt: String, context: String?) async throws -> String {
+    private func performChat(prompt: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        return try await performChatWithHistory(
+            messages: [OpenRouterChatMessage(role: "user", content: prompt)],
+            context: context,
+            tools: tools,
+            mode: mode,
+            projectRoot: projectRoot
+        )
+    }
+
+    private func performChatWithHistory(messages: [OpenRouterChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
         let settings = settingsStore.load()
         let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -56,25 +102,48 @@ actor OpenRouterAIService: AIService {
             throw AppError.aiServiceError("OpenRouter model is not set.")
         }
         
-        let systemContent = systemPrompt.isEmpty
-            ? "You are a helpful, concise coding assistant."
+        var systemContent = systemPrompt.isEmpty
+            ? (tools != nil ? ToolAwarenessPrompt.systemPrompt : "You are a helpful, concise coding assistant.")
             : systemPrompt
-        var messages = [OpenRouterChatMessage(role: "system", content: systemContent)]
+        
+        // Add mode information to system prompt
+        if let mode = mode {
+            systemContent += mode.systemPromptAddition
+        }
+        
+        // Add project root context to prevent hallucinations
+        if let projectRoot = projectRoot {
+            systemContent += "\n\n**IMPORTANT CONTEXT:**\nProject Root: `\(projectRoot.path)`\nPlatform: macOS\nAll file paths must be relative to the project root or validated absolute paths within it. Never use Linux-style paths like /home."
+        }
+        
+        var finalMessages = [OpenRouterChatMessage(role: "system", content: systemContent)]
         
         if let context, !context.isEmpty {
-            messages.append(OpenRouterChatMessage(
+            finalMessages.append(OpenRouterChatMessage(
                 role: "user",
                 content: "Context:\n\(context)"
             ))
         }
         
-        messages.append(OpenRouterChatMessage(role: "user", content: prompt))
+        finalMessages.append(contentsOf: messages)
+        
+        let toolDefinitions = tools?.map { tool in
+            [
+                "type": "function",
+                "function": [
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters
+                ]
+            ]
+        }
         
         let request = OpenRouterChatRequest(
             model: model,
-            messages: messages,
-            maxTokens: 1024,
-            temperature: 0.2
+            messages: finalMessages,
+            maxTokens: 2048,
+            temperature: 0.2,
+            tools: toolDefinitions
         )
         
         let body = try JSONEncoder().encode(request)
@@ -87,10 +156,14 @@ actor OpenRouterAIService: AIService {
         )
         
         let response = try JSONDecoder().decode(OpenRouterChatResponse.self, from: data)
-        guard let content = response.choices.first?.message.content else {
+        guard let choice = response.choices.first else {
             throw AppError.aiServiceError("OpenRouter response was empty.")
         }
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        return AIServiceResponse(
+            content: choice.message.content,
+            toolCalls: choice.message.toolCalls
+        )
     }
 }
 
@@ -99,24 +172,89 @@ private struct OpenRouterChatRequest: Encodable {
     let messages: [OpenRouterChatMessage]
     let maxTokens: Int
     let temperature: Double
+    let tools: [[String: Any]]?
     
     enum CodingKeys: String, CodingKey {
         case model
         case messages
         case maxTokens = "max_tokens"
         case temperature
+        case tools
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(model, forKey: .model)
+        try container.encode(messages, forKey: .messages)
+        try container.encode(maxTokens, forKey: .maxTokens)
+        try container.encode(temperature, forKey: .temperature)
+        if let tools = tools {
+            // Need to wrap nested dictionaries for encoding since [String: Any] is not Encodable
+            let data = try JSONSerialization.data(withJSONObject: tools)
+            let json = try JSONSerialization.jsonObject(with: data)
+            try container.encode(AnyCodable(json), forKey: .tools)
+        }
+    }
+}
+
+// Helper for encoding heterogeneous types
+struct AnyCodable: Encodable {
+    let value: Any
+    init(_ value: Any) { self.value = value }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        if let val = value as? String { try container.encode(val) }
+        else if let val = value as? Int { try container.encode(val) }
+        else if let val = value as? Double { try container.encode(val) }
+        else if let val = value as? Bool { try container.encode(val) }
+        else if let val = value as? [String: Any] {
+            var mapContainer = encoder.container(keyedBy: DynamicKey.self)
+            for (key, v) in val {
+                try mapContainer.encode(AnyCodable(v), forKey: DynamicKey(stringValue: key)!)
+            }
+        }
+        else if let val = value as? [Any] {
+            var arrContainer = encoder.unkeyedContainer()
+            for v in val { try arrContainer.encode(AnyCodable(v)) }
+        }
+    }
+    
+    struct DynamicKey: CodingKey {
+        var stringValue: String
+        var intValue: Int?
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { return nil }
     }
 }
 
 private struct OpenRouterChatMessage: Encodable {
     let role: String
-    let content: String
+    let content: String?
+    let tool_call_id: String?
+    let tool_calls: [AIToolCall]?
+    
+    // Custom coding keys to handle optional encoding cleaner (although default works too if nil)
+    // But content is required by some APIs unless it's a tool call assistant msg.
+    // For now, let's keep it simple.
+    
+    init(role: String, content: String? = nil, tool_call_id: String? = nil, tool_calls: [AIToolCall]? = nil) {
+        self.role = role
+        self.content = content
+        self.tool_call_id = tool_call_id
+        self.tool_calls = tool_calls
+    }
 }
 
 private struct OpenRouterChatResponse: Decodable {
     struct Choice: Decodable {
         struct Message: Decodable {
-            let content: String
+            let content: String?
+            let toolCalls: [AIToolCall]?
+            
+            enum CodingKeys: String, CodingKey {
+                case content
+                case toolCalls = "tool_calls"
+            }
         }
         let message: Message
     }

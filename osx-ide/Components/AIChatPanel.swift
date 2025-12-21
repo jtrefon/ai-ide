@@ -51,6 +51,31 @@ struct AIChatPanel: View {
                     sendMessage()
                 }
             )
+            
+            // Mode selector
+            HStack(spacing: 8) {
+                Image(systemName: conversationManager.currentMode.icon)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Picker("Mode", selection: $conversationManager.currentMode) {
+                    ForEach(AIMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 100)
+                
+                Text(conversationManager.currentMode.description)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.gray.opacity(0.1))
         }
         .accessibilityIdentifier("AIChatPanel")
         .background(Color(NSColor.controlBackgroundColor))

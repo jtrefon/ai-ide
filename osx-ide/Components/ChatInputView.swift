@@ -14,15 +14,44 @@ struct ChatInputView: View {
     
     var body: some View {
         HStack {
-            TextEditor(text: $text)
-                .frame(height: 60)
-                .padding(4)
-                .background(Color(NSColor.textBackgroundColor))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                )
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $text)
+                    .frame(height: 60)
+                    .padding(4)
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
+                    .onAppear {
+                        // Register for key events
+                        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                            if event.keyCode == 36 { // Enter key
+                                if event.modifierFlags.contains(.shift) {
+                                    // Shift+Enter: insert newline (let it through)
+                                    return event
+                                } else {
+                                    // Plain Enter: send message
+                                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending {
+                                        onSend()
+                                    }
+                                    return nil // Consume the event
+                                }
+                            }
+                            return event
+                        }
+                    }
+                
+                // Placeholder text
+                if text.isEmpty {
+                    Text("Type a message... (Shift+Enter for newline)")
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 12)
+                        .allowsHitTesting(false)
+                }
+            }
             
             Button(action: onSend) {
                 Image(systemName: "paperplane.fill")

@@ -71,7 +71,11 @@ class DependencyContainer {
             fileSystemService: _fileSystemService
         )
         _aiService = OpenRouterAIService()
-        _conversationManager = ConversationManager(aiService: _aiService, errorManager: errorManager)
+        _conversationManager = ConversationManager(
+            aiService: _aiService,
+            errorManager: errorManager,
+            fileSystemService: _fileSystemService
+        )
     }
     
     // MARK: - Factory Methods
@@ -91,7 +95,11 @@ class DependencyContainer {
     /// Updates the AI service used by the application
     func updateAIService(_ newService: AIService) {
         _aiService = newService
-        _conversationManager = ConversationManager(aiService: newService, errorManager: _errorManager)
+        _conversationManager = ConversationManager(
+            aiService: newService,
+            errorManager: _errorManager,
+            fileSystemService: _fileSystemService
+        )
     }
 
     // MARK: - Stored Services

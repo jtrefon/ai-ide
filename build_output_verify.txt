@@ -1,0 +1,615 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -workspace osx-ide.xcodeproj/project.xcworkspace -scheme osx-ide -configuration Debug build
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  TreeSitterSwift: /Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift @ local
+  TreeSitter: https://github.com/tree-sitter/tree-sitter @ 0.25.10
+  SwiftTreeSitter: https://github.com/ChimeHQ/SwiftTreeSitter @ 0.25.0
+
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:macOS, arch:arm64, id:00008132-000C704002B9001C, name:My Mac }
+{ platform:macOS, arch:x86_64, id:00008132-000C704002B9001C, name:My Mac }
+{ platform:macOS, name:Any Mac }
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (9 targets)
+    Target 'osx-ide' in project 'osx-ide'
+        ➜ Explicit dependency on target 'TreeSitterSwift' in project 'TreeSitterSwift'
+        ➜ Explicit dependency on target 'SwiftTreeSitter' in project 'SwiftTreeSitter'
+    Target 'SwiftTreeSitter' in project 'SwiftTreeSitter'
+        ➜ Explicit dependency on target 'SwiftTreeSitter' in project 'SwiftTreeSitter'
+        ➜ Explicit dependency on target 'TreeSitter' in project 'TreeSitter'
+    Target 'SwiftTreeSitter' in project 'SwiftTreeSitter'
+        ➜ Explicit dependency on target 'TreeSitter' in project 'TreeSitter'
+    Target 'TreeSitterSwift' in project 'TreeSitterSwift'
+        ➜ Explicit dependency on target 'TreeSitterSwift' in project 'TreeSitterSwift'
+        ➜ Explicit dependency on target 'TreeSitterSwift_TreeSitterSwift' in project 'TreeSitterSwift'
+        ➜ Explicit dependency on target 'TreeSitterSwiftC' in project 'TreeSitterSwift'
+        ➜ Explicit dependency on target 'TreeSitter' in project 'TreeSitter'
+    Target 'TreeSitterSwift' in project 'TreeSitterSwift'
+        ➜ Explicit dependency on target 'TreeSitterSwift_TreeSitterSwift' in project 'TreeSitterSwift'
+        ➜ Explicit dependency on target 'TreeSitterSwiftC' in project 'TreeSitterSwift'
+        ➜ Explicit dependency on target 'TreeSitter' in project 'TreeSitter'
+    Target 'TreeSitterSwiftC' in project 'TreeSitterSwift'
+        ➜ Explicit dependency on target 'TreeSitter' in project 'TreeSitter'
+    Target 'TreeSitter' in project 'TreeSitter'
+        ➜ Explicit dependency on target 'TreeSitter' in project 'TreeSitter'
+    Target 'TreeSitter' in project 'TreeSitter' (no dependencies)
+    Target 'TreeSitterSwift_TreeSitterSwift' in project 'TreeSitterSwift' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+ReadFileContents /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/docc/features.json
+
+Build description signature: bb8e89066e36d0cd1bf6ca0f65889666
+Build description path: /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/XCBuildData/bb8e89066e36d0cd1bf6ca0f65889666.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk /Users/jack/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/macosx26.2-25C57-00fa09913b459cbbc988d1f6730289ae.sdkstatcache
+    cd /Users/jack/Projects/osx/osx-ide/osx-ide.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -o /Users/jack/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/macosx26.2-25C57-00fa09913b459cbbc988d1f6730289ae.sdkstatcache
+
+ProcessInfoPlistFile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwift_TreeSitterSwift.bundle/Contents/Info.plist /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift_TreeSitterSwift.build/empty-TreeSitterSwift_TreeSitterSwift.plist (in target 'TreeSitterSwift_TreeSitterSwift' from project 'TreeSitterSwift')
+    cd /Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift
+    builtin-infoPlistUtility /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift_TreeSitterSwift.build/empty-TreeSitterSwift_TreeSitterSwift.plist -producttype com.apple.product-type.bundle -expandbuildsettings -platform macosx -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwift_TreeSitterSwift.bundle/Contents/Info.plist
+
+WriteAuxiliaryFile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.SwiftFileList (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    write-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.SwiftFileList
+
+WriteAuxiliaryFile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide-OutputFileMap.json (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    write-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.LinkFileList (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    write-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.LinkFileList
+
+WriteAuxiliaryFile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.SwiftConstValuesFileList (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    write-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.SwiftConstValuesFileList
+
+SwiftDriver SwiftTreeSitter normal arm64 com.apple.xcode.tools.swift.compiler (in target 'SwiftTreeSitter' from project 'SwiftTreeSitter')
+    cd /Users/jack/Projects/osx/osx-ide/osx-ide.xcodeproj
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name SwiftTreeSitter -Onone -enforce-exclusivity\=checked @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter.SwiftFileList -DSWIFT_PACKAGE -DDEBUG -DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE -Xcc -fmodule-map-file\=/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/GeneratedModuleMaps/TreeSitter.modulemap -DXcode -enable-experimental-feature StrictConcurrency -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -target arm64-apple-macos10.13 -g -module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -suppress-warnings -index-store-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -F /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/macosx26.2-25C57-00fa09913b459cbbc988d1f6730289ae.sdkstatcache -output-file-map /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -package-name swifttreesitter -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter_const_extract_protocols.json -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/SourcePackages/checkouts/tree-sitter/lib/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/DerivedSources-normal/arm64 -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/DerivedSources/arm64 -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/DerivedSources -Xcc -DSWIFT_PACKAGE -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter-Swift.h -working-directory /Users/jack/Projects/osx/osx-ide/osx-ide.xcodeproj -experimental-emit-module-separately -disable-cmo
+
+CompileC /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwiftC.build/Objects-normal/arm64/parser.o /Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift/Sources/TreeSitterSwiftC/src/parser.c normal arm64 c com.apple.compilers.llvm.clang.1_0.compiler (in target 'TreeSitterSwiftC' from project 'TreeSitterSwift')
+    cd /Users/jack/Projects/osx/osx-ide/osx-ide.xcodeproj
+    
+    Using response file: /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwiftC.build/Objects-normal/arm64/7187679823f38a2a940e0043cdf9d637-common-args.resp
+    
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -x c -ivfsstatcache /Users/jack/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/macosx26.2-25C57-00fa09913b459cbbc988d1f6730289ae.sdkstatcache -fmessage-length\=0 -fdiagnostics-show-note-include-stack -fmacro-backtrace-limit\=0 -fno-color-diagnostics -fmodules-prune-interval\=86400 -fmodules-prune-after\=345600 -fbuild-session-file\=/Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -fmodules-validate-once-per-build-session -Wnon-modular-include-in-framework-module -Werror\=non-modular-include-in-framework-module -Wno-trigraphs -Wno-missing-field-initializers -Wno-missing-prototypes -Wno-return-type -Wno-missing-braces -Wparentheses -Wswitch -Wno-unused-function -Wno-unused-label -Wno-unused-parameter -Wno-unused-variable -Wunused-value -Wno-empty-body -Wno-uninitialized -Wno-unknown-pragmas -w -Wno-shadow -Wno-four-char-constants -Wno-conversion -Wno-constant-conversion -Wno-int-conversion -Wno-bool-conversion -Wno-enum-conversion -Wno-float-conversion -Wno-non-literal-null-conversion -Wno-objc-literal-conversion -Wshorten-64-to-32 -Wpointer-sign -Wno-newline-eof -Wno-implicit-fallthrough -fstrict-aliasing -Wdeprecated-declarations -Wno-sign-conversion -Wno-infinite-recursion -Wno-comma -Wno-block-capture-autoreleasing -Wno-strict-prototypes -Wno-semicolon-before-method-body -index-store-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Index.noindex/DataStore @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwiftC.build/Objects-normal/arm64/7187679823f38a2a940e0043cdf9d637-common-args.resp -MMD -MT dependencies -MF /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwiftC.build/Objects-normal/arm64/parser.d --serialize-diagnostics /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwiftC.build/Objects-normal/arm64/parser.dia -c /Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift/Sources/TreeSitterSwiftC/src/parser.c -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwiftC.build/Objects-normal/arm64/parser.o -index-unit-output-path /TreeSitterSwift.build/Debug/TreeSitterSwiftC.build/Objects-normal/arm64/parser.o
+
+SwiftDriver\ Compilation\ Requirements SwiftTreeSitter normal arm64 com.apple.xcode.tools.swift.compiler (in target 'SwiftTreeSitter' from project 'SwiftTreeSitter')
+    cd /Users/jack/Projects/osx/osx-ide/osx-ide.xcodeproj
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name SwiftTreeSitter -Onone -enforce-exclusivity\=checked @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter.SwiftFileList -DSWIFT_PACKAGE -DDEBUG -DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE -Xcc -fmodule-map-file\=/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/GeneratedModuleMaps/TreeSitter.modulemap -DXcode -enable-experimental-feature StrictConcurrency -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -target arm64-apple-macos10.13 -g -module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -suppress-warnings -index-store-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -F /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/macosx26.2-25C57-00fa09913b459cbbc988d1f6730289ae.sdkstatcache -output-file-map /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -package-name swifttreesitter -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter_const_extract_protocols.json -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/SourcePackages/checkouts/tree-sitter/lib/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/DerivedSources-normal/arm64 -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/DerivedSources/arm64 -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/DerivedSources -Xcc -DSWIFT_PACKAGE -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter-Swift.h -working-directory /Users/jack/Projects/osx/osx-ide/osx-ide.xcodeproj -experimental-emit-module-separately -disable-cmo
+
+SwiftDriver osx-ide normal arm64 com.apple.xcode.tools.swift.compiler (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name osx_ide -Onone -enforce-exclusivity\=checked @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.SwiftFileList -DDEBUG -Xcc -fmodule-map-file\=/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/GeneratedModuleMaps/TreeSitterSwiftC.modulemap -Xcc -fmodule-map-file\=/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/GeneratedModuleMaps/TreeSitter.modulemap -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -target arm64-apple-macos26.0 -g -module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -emit-localized-strings -emit-localized-strings-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/macosx26.2-25C57-00fa09913b459cbbc988d1f6730289ae.sdkstatcache -output-file-map /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide_const_extract_protocols.json -Xcc -iquote -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-generated-files.hmap -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-own-target-headers.hmap -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide-2f59763a9a1a42e2ac3e3ca4c97d30ac-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-project-headers.hmap -Xcc -I/Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift/Sources/TreeSitterSwiftC/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/SourcePackages/checkouts/tree-sitter/lib/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources-normal/arm64 -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources/arm64 -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide-Swift.h -working-directory /Users/jack/Projects/osx/osx-ide -experimental-emit-module-separately -disable-cmo
+
+RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/SwiftTreeSitter.o (in target 'SwiftTreeSitter' from project 'SwiftTreeSitter')
+    cd /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/SourcePackages/checkouts/SwiftTreeSitter
+    builtin-RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/SwiftTreeSitter.o
+
+SwiftCompile normal arm64 Compiling\ OpenRouterSettingsViewModel.swift,\ SettingsView.swift,\ SyntaxHighlighter.swift,\ TreeSitterManager.swift,\ WindowAccessor.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/OpenRouterSettingsViewModel.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/SettingsView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/SyntaxHighlighter.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/TreeSitterManager.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/WindowAccessor.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/OpenRouterSettingsViewModel.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/SettingsView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/SettingsView.swift:346:34: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead.
+                                .onChange(of: viewModel.modelQuery) { _ in
+                                 ^
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/SyntaxHighlighter.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/TreeSitterManager.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/WindowAccessor.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 Compiling\ LiquidGlassScrollView.swift,\ MessageListView.swift,\ ModernFileTreeView.swift,\ NativeTerminalEmbedder.swift,\ NativeTerminalView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScrollView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/MessageListView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/ModernFileTreeView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/NativeTerminalEmbedder.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/NativeTerminalView.swift (in target 'osx-ide' from project 'osx-ide')
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScrollView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScrollView.swift:37:38: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead.
+                                    .onChange(of: contentGeometry.size) { newSize in
+                                     ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScrollView.swift:51:18: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead.
+                .onChange(of: containerGeometry.size) { newSize in
+                 ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScrollView.swift:101:13: warning: capture of non-Sendable type 'Content.Type' in an isolated closure
+            isScrolling = false
+            ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScrollView.swift:101:13: warning: main actor-isolated property 'isScrolling' can not be mutated from a Sendable closure
+            isScrolling = false
+            ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScrollView.swift:15:24: note: mutation of this property is only permitted within the actor
+    @State private var isScrolling = false
+                       ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScrollView.swift:102:13: warning: call to main actor-isolated instance method 'updateVisibility()' in a synchronous nonisolated context
+            updateVisibility()
+            ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScrollView.swift:106:18: note: calls to instance method 'updateVisibility()' from outside of its actor context are implicitly asynchronous
+    private func updateVisibility() {
+                 ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScrollView.swift:106:18: note: main actor isolation inferred from conformance to protocol 'View'
+    private func updateVisibility() {
+                 ^
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/MessageListView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/ModernFileTreeView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/ModernFileTreeView.swift:37:48: warning: 'sourceList' was deprecated in macOS 12.0: Set the NSTableView.style property to NSTableViewStyleSourceList instead.
+        outlineView.selectionHighlightStyle = .sourceList
+                                               ^
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/NativeTerminalEmbedder.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/NativeTerminalEmbedder.swift:282:34: warning: immutable value 'terminalView' was never used; consider replacing with '_' or removing it
+        guard !isCleaningUp, let terminalView = terminalView else { return }
+                             ~~~~^~~~~~~~~~~~
+                             _
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/NativeTerminalEmbedder.swift:634:34: warning: immutable value 'writeHandle' was never used; consider replacing with '_' or removing it
+        guard !isCleaningUp, let writeHandle = writeHandle else { return false }
+                             ~~~~^~~~~~~~~~~
+                             _
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/NativeTerminalView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ osx_ide (in target 'osx-ide' from project 'osx-ide')
+
+EmitSwiftModule normal arm64 (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 Compiling\ CodePreviewView.swift,\ FileExplorerView.swift,\ GlassStyle.swift,\ LineNumberRulerView.swift,\ LiquidGlassScroller.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodePreviewView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/FileExplorerView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/GlassStyle.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/LineNumberRulerView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScroller.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodePreviewView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/FileExplorerView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/GlassStyle.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/LineNumberRulerView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/LiquidGlassScroller.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 Compiling\ ActionButtonsView.swift,\ AIChatPanel.swift,\ AutosavingSplitView.swift,\ ChatInputView.swift,\ CodeEditorView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/ActionButtonsView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/AIChatPanel.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/AutosavingSplitView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/ChatInputView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/ActionButtonsView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/AIChatPanel.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/AutosavingSplitView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/ChatInputView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:163:34: warning: main actor-isolated property 'selectedRange' can not be referenced from a nonisolated context
+            let range = textView.selectedRange
+                                 ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AppKit.framework/Headers/NSText.h:100:19: note: property declared here
+@property NSRange selectedRange;
+                  ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:162:22: note: add '@MainActor' to make instance method 'updateSelectionContext(from:)' part of global actor 'MainActor'
+        private func updateSelectionContext(from textView: NSTextView) {
+                     ^
+        @MainActor 
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:166:59: warning: main actor-isolated property 'string' can not be referenced from a nonisolated context
+               range.location + range.length <= (textView.string as NSString).length {
+                                                          ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AppKit.framework/Headers/NSText.h:75:28: note: property declared here
+@property (copy) NSString *string;
+                           ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:162:22: note: add '@MainActor' to make instance method 'updateSelectionContext(from:)' part of global actor 'MainActor'
+        private func updateSelectionContext(from textView: NSTextView) {
+                     ^
+        @MainActor 
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:167:42: warning: main actor-isolated property 'string' can not be referenced from a nonisolated context
+                let selected = (textView.string as NSString).substring(with: range)
+                                         ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AppKit.framework/Headers/NSText.h:75:28: note: property declared here
+@property (copy) NSString *string;
+                           ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:162:22: note: add '@MainActor' to make instance method 'updateSelectionContext(from:)' part of global actor 'MainActor'
+        private func updateSelectionContext(from textView: NSTextView) {
+                     ^
+        @MainActor 
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:168:24: warning: main actor-isolated property 'selectionContext' can not be mutated from a nonisolated context
+                parent.selectionContext.selectedText = selected
+                       ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:43:25: note: mutation of this property is only permitted within the actor
+    @ObservedObject var selectionContext: CodeSelectionContext
+                        ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:162:22: note: add '@MainActor' to make instance method 'updateSelectionContext(from:)' part of global actor 'MainActor'
+        private func updateSelectionContext(from textView: NSTextView) {
+                     ^
+        @MainActor 
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:169:24: warning: main actor-isolated property 'selectionContext' can not be mutated from a nonisolated context
+                parent.selectionContext.selectedRange = range
+                       ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:43:25: note: mutation of this property is only permitted within the actor
+    @ObservedObject var selectionContext: CodeSelectionContext
+                        ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:162:22: note: add '@MainActor' to make instance method 'updateSelectionContext(from:)' part of global actor 'MainActor'
+        private func updateSelectionContext(from textView: NSTextView) {
+                     ^
+        @MainActor 
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:171:24: warning: main actor-isolated property 'selectionContext' can not be mutated from a nonisolated context
+                parent.selectionContext.selectedText = ""
+                       ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:43:25: note: mutation of this property is only permitted within the actor
+    @ObservedObject var selectionContext: CodeSelectionContext
+                        ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:162:22: note: add '@MainActor' to make instance method 'updateSelectionContext(from:)' part of global actor 'MainActor'
+        private func updateSelectionContext(from textView: NSTextView) {
+                     ^
+        @MainActor 
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:172:24: warning: main actor-isolated property 'selectionContext' can not be mutated from a nonisolated context
+                parent.selectionContext.selectedRange = nil
+                       ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:43:25: note: mutation of this property is only permitted within the actor
+    @ObservedObject var selectionContext: CodeSelectionContext
+                        ^
+/Users/jack/Projects/osx/osx-ide/osx-ide/Components/CodeEditorView.swift:162:22: note: add '@MainActor' to make instance method 'updateSelectionContext(from:)' part of global actor 'MainActor'
+        private func updateSelectionContext(from textView: NSTextView) {
+                     ^
+        @MainActor 
+
+SwiftCompile normal arm64 Compiling\ AIMode.swift,\ ChatMessage.swift,\ AppError.swift,\ ErrorManager.swift,\ FileTools.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Models/AIMode.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Models/ChatMessage.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Errors/AppError.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Errors/ErrorManager.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Tools/FileTools.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Models/AIMode.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Models/ChatMessage.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Errors/AppError.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Errors/ErrorManager.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Tools/FileTools.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 Compiling\ FileEditorService.swift,\ FileEditorStateManager.swift,\ FileSystemService.swift,\ OpenRouterAIService.swift,\ OpenRouterService.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/FileEditorService.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/FileEditorStateManager.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/FileSystemService.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/OpenRouterAIService.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/OpenRouterService.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/FileEditorService.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/FileEditorStateManager.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/FileSystemService.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/OpenRouterAIService.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+/Users/jack/Projects/osx/osx-ide/osx-ide/Services/OpenRouterAIService.swift:32:13: warning: variable 'openRouterMessages' was never mutated; consider changing to 'let' constant
+        var openRouterMessages = messages.compactMap { msg -> OpenRouterChatMessage? in
+        ~~~ ^
+        let
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/OpenRouterService.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 Compiling\ AppConstants.swift,\ AppState.swift,\ ConversationManager.swift,\ DependencyContainer.swift,\ FileDialogService.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/AppConstants.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/AppState.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/ConversationManager.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/DependencyContainer.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/FileDialogService.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/AppConstants.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/AppState.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/ConversationManager.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+/Users/jack/Projects/osx/osx-ide/osx-ide/Services/ConversationManager.swift:96:13: warning: initialization of immutable value 'userInput' was never used; consider replacing with assignment to '_' or removing it
+        let userInput = currentInput
+        ~~~~^~~~~~~~~
+        _
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/DependencyContainer.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/FileDialogService.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 Compiling\ WorkspaceStateManager.swift,\ ContentView.swift,\ osx_ideApp.swift,\ GeneratedAssetSymbols.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/WorkspaceStateManager.swift /Users/jack/Projects/osx/osx-ide/osx-ide/ContentView.swift /Users/jack/Projects/osx/osx-ide/osx-ide/osx_ideApp.swift /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/WorkspaceStateManager.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/ContentView.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/osx_ideApp.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 Compiling\ ProjectTools.swift,\ SearchTools.swift,\ TerminalTools.swift,\ AIService.swift,\ AITool.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Tools/ProjectTools.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Tools/SearchTools.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Tools/TerminalTools.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/AIService.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/AITool.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Tools/ProjectTools.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Tools/SearchTools.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/Tools/TerminalTools.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/AIService.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/AITool.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for osx_ide (in target 'osx-ide' from project 'osx-ide')
+
+SwiftDriver\ Compilation\ Requirements osx-ide normal arm64 com.apple.xcode.tools.swift.compiler (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name osx_ide -Onone -enforce-exclusivity\=checked @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.SwiftFileList -DDEBUG -Xcc -fmodule-map-file\=/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/GeneratedModuleMaps/TreeSitterSwiftC.modulemap -Xcc -fmodule-map-file\=/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/GeneratedModuleMaps/TreeSitter.modulemap -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -target arm64-apple-macos26.0 -g -module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -emit-localized-strings -emit-localized-strings-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/macosx26.2-25C57-00fa09913b459cbbc988d1f6730289ae.sdkstatcache -output-file-map /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide_const_extract_protocols.json -Xcc -iquote -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-generated-files.hmap -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-own-target-headers.hmap -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide-2f59763a9a1a42e2ac3e3ca4c97d30ac-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-project-headers.hmap -Xcc -I/Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift/Sources/TreeSitterSwiftC/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/SourcePackages/checkouts/tree-sitter/lib/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources-normal/arm64 -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources/arm64 -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide-Swift.h -working-directory /Users/jack/Projects/osx/osx-ide -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal arm64 Compiling AIMode.swift, ChatMessage.swift, AppError.swift, ErrorManager.swift, FileTools.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftCompile normal arm64 Compiling\ PathValidator.swift,\ ToolAwarenessPrompt.swift,\ UIService.swift,\ UIStateManager.swift,\ WorkspaceService.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/PathValidator.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/ToolAwarenessPrompt.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/UIService.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/UIStateManager.swift /Users/jack/Projects/osx/osx-ide/osx-ide/Services/WorkspaceService.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/PathValidator.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/ToolAwarenessPrompt.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/UIService.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+/Users/jack/Projects/osx/osx-ide/osx-ide/Services/UIService.swift:25:9: warning: result of call to 'loadSettings()' is unused
+        loadSettings()
+        ^           ~~
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/UIStateManager.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftCompile normal arm64 /Users/jack/Projects/osx/osx-ide/osx-ide/Services/WorkspaceService.swift (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+
+SwiftMergeGeneratedHeaders /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources/osx_ide-Swift.h /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide-Swift.h (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-swiftHeaderTool -arch arm64 /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide-Swift.h -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources/osx_ide-Swift.h
+
+SwiftDriverJobDiscovery normal arm64 Compiling AppConstants.swift, AppState.swift, ConversationManager.swift, DependencyContainer.swift, FileDialogService.swift (in target 'osx-ide' from project 'osx-ide')
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx_ide.swiftmodule/arm64-apple-macos.swiftmodule /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.swiftmodule (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.swiftmodule /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx_ide.swiftmodule/arm64-apple-macos.swiftmodule
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx_ide.swiftmodule/arm64-apple-macos.swiftdoc /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.swiftdoc (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.swiftdoc /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx_ide.swiftmodule/arm64-apple-macos.swiftdoc
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx_ide.swiftmodule/arm64-apple-macos.abi.json /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.abi.json (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.abi.json /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx_ide.swiftmodule/arm64-apple-macos.abi.json
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx_ide.swiftmodule/Project/arm64-apple-macos.swiftsourceinfo /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.swiftsourceinfo (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.swiftsourceinfo /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx_ide.swiftmodule/Project/arm64-apple-macos.swiftsourceinfo
+
+SwiftDriverJobDiscovery normal arm64 Compiling WorkspaceStateManager.swift, ContentView.swift, osx_ideApp.swift, GeneratedAssetSymbols.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftDriverJobDiscovery normal arm64 Compiling FileEditorService.swift, FileEditorStateManager.swift, FileSystemService.swift, OpenRouterAIService.swift, OpenRouterService.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftDriverJobDiscovery normal arm64 Compiling ActionButtonsView.swift, AIChatPanel.swift, AutosavingSplitView.swift, ChatInputView.swift, CodeEditorView.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftDriverJobDiscovery normal arm64 Compiling PathValidator.swift, ToolAwarenessPrompt.swift, UIService.swift, UIStateManager.swift, WorkspaceService.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftDriverJobDiscovery normal arm64 Compiling ProjectTools.swift, SearchTools.swift, TerminalTools.swift, AIService.swift, AITool.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftDriverJobDiscovery normal arm64 Compiling OpenRouterSettingsViewModel.swift, SettingsView.swift, SyntaxHighlighter.swift, TreeSitterManager.swift, WindowAccessor.swift (in target 'osx-ide' from project 'osx-ide')
+
+Ld /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwiftC.o normal (in target 'TreeSitterSwiftC' from project 'TreeSitterSwift')
+    cd /Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos10.13 -r -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -O0 -w -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -iframework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -filelist /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwiftC.build/Objects-normal/arm64/TreeSitterSwiftC.LinkFileList -nostdlib -Xlinker -object_path_lto -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwiftC.build/Objects-normal/arm64/TreeSitterSwiftC_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -debug_variant -Xlinker -dependency_info -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwiftC.build/Objects-normal/arm64/TreeSitterSwiftC_dependency_info.dat -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwiftC.o
+
+RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwiftC.o (in target 'TreeSitterSwiftC' from project 'TreeSitterSwift')
+    cd /Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift
+    builtin-RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwiftC.o
+
+SwiftDriverJobDiscovery normal arm64 Compiling CodePreviewView.swift, FileExplorerView.swift, GlassStyle.swift, LineNumberRulerView.swift, LiquidGlassScroller.swift (in target 'osx-ide' from project 'osx-ide')
+
+Ld /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwift.o normal (in target 'TreeSitterSwift' from project 'TreeSitterSwift')
+    cd /Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos10.13 -r -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -O0 -w -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -iframework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -filelist /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/Objects-normal/arm64/TreeSitterSwift.LinkFileList -nostdlib -Xlinker -object_path_lto -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/Objects-normal/arm64/TreeSitterSwift_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -debug_variant -Xlinker -dependency_info -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/Objects-normal/arm64/TreeSitterSwift_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/Objects-normal/arm64/TreeSitterSwift.swiftmodule @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/Objects-normal/arm64/TreeSitterSwift-linker-args.resp -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwift.o
+
+ExtractAppIntentsMetadata (in target 'TreeSitterSwift' from project 'TreeSitterSwift')
+    cd /Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name TreeSitterSwift --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk --xcode-version 17C52 --platform-family macOS --deployment-target 10.13 --bundle-identifier treesitterswift.TreeSitterSwift --output /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwift.appintents --target-triple arm64-apple-macos10.13 --binary-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwift.o --dependency-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/Objects-normal/arm64/TreeSitterSwift_dependency_info.dat --stringsdata-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/Objects-normal/arm64/TreeSitterSwift.SwiftFileList --metadata-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/TreeSitterSwift.DependencyMetadataFileList --static-metadata-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/TreeSitterSwift.DependencyStaticMetadataFileList --swift-const-vals-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/Objects-normal/arm64/TreeSitterSwift.SwiftConstValuesFileList --force --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2025-12-21 14:08:47.034 appintentsmetadataprocessor[96787:1466831] Starting appintentsmetadataprocessor export
+2025-12-21 14:08:47.116 appintentsmetadataprocessor[96787:1466831] Extracted no relevant App Intents symbols, skipping writing output
+
+SwiftDriverJobDiscovery normal arm64 Compiling LiquidGlassScrollView.swift, MessageListView.swift, ModernFileTreeView.swift, NativeTerminalEmbedder.swift, NativeTerminalView.swift (in target 'osx-ide' from project 'osx-ide')
+
+SwiftDriver\ Compilation osx-ide normal arm64 com.apple.xcode.tools.swift.compiler (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name osx_ide -Onone -enforce-exclusivity\=checked @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.SwiftFileList -DDEBUG -Xcc -fmodule-map-file\=/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/GeneratedModuleMaps/TreeSitterSwiftC.modulemap -Xcc -fmodule-map-file\=/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/GeneratedModuleMaps/TreeSitter.modulemap -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -target arm64-apple-macos26.0 -g -module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -emit-localized-strings -emit-localized-strings-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/macosx26.2-25C57-00fa09913b459cbbc988d1f6730289ae.sdkstatcache -output-file-map /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/jack/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide_const_extract_protocols.json -Xcc -iquote -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-generated-files.hmap -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-own-target-headers.hmap -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide-2f59763a9a1a42e2ac3e3ca4c97d30ac-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-project-headers.hmap -Xcc -I/Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift/Sources/TreeSitterSwiftC/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/SourcePackages/checkouts/tree-sitter/lib/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/include -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources-normal/arm64 -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources/arm64 -Xcc -I/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide-Swift.h -working-directory /Users/jack/Projects/osx/osx-ide -experimental-emit-module-separately -disable-cmo
+
+RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwift.o (in target 'TreeSitterSwift' from project 'TreeSitterSwift')
+    cd /Users/jack/Projects/osx/osx-ide/Packages/TreeSitterSwift
+    builtin-RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwift.o
+
+Ld /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib normal (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -O0 -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -filelist /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.LinkFileList -install_name @rpath/osx-ide.debug.dylib -Xlinker -rpath -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -Xlinker -rpath -Xlinker @executable_path/../Frameworks -dead_strip -Xlinker -object_path_lto -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -debug_variant -Xlinker -dependency_info -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide_dependency_info.dat -fobjc-link-runtime -fprofile-instr-generate -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.swiftmodule @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide-linker-args.resp -Wl,-no_warn_duplicate_libraries -Wl,-no_warn_duplicate_libraries -Wl,-no_warn_duplicate_libraries -Wl,-no_warn_duplicate_libraries -Xlinker -alias -Xlinker _main -Xlinker ___debug_main_executable_dylib_entry_point -Xlinker -no_adhoc_codesign -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib -Xlinker -add_ast_path -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/Objects-normal/arm64/TreeSitterSwift.swiftmodule @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/TreeSitterSwift.build/Debug/TreeSitterSwift.build/Objects-normal/arm64/TreeSitterSwift-linker-args.resp -Xlinker -add_ast_path -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter.swiftmodule @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/SwiftTreeSitter.build/Debug/SwiftTreeSitter.build/Objects-normal/arm64/SwiftTreeSitter-linker-args.resp
+
+CpResource /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Resources/swift.scm /Users/jack/Projects/osx/osx-ide/osx-ide/Resources/TreeSitter/Queries/swift.scm (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/jack/Projects/osx/osx-ide/osx-ide/Resources/TreeSitter/Queries/swift.scm /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Resources
+
+Ld /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/__preview.dylib normal (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -O0 -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -install_name @rpath/osx-ide.debug.dylib -dead_strip -rdynamic -Xlinker -no_deduplicate -Xlinker -debug_variant -Xlinker -dependency_info -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide_dependency_info.dat -Xlinker -no_adhoc_codesign -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/__preview.dylib
+
+CpResource /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Resources/javascript.scm /Users/jack/Projects/osx/osx-ide/osx-ide/Resources/TreeSitter/Queries/javascript.scm (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/jack/Projects/osx/osx-ide/osx-ide/Resources/TreeSitter/Queries/javascript.scm /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Resources
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Resources/TreeSitterSwift_TreeSitterSwift.bundle /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwift_TreeSitterSwift.bundle (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/TreeSitterSwift_TreeSitterSwift.bundle /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Resources
+
+CpResource /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Resources/python.scm /Users/jack/Projects/osx/osx-ide/osx-ide/Resources/TreeSitter/Queries/python.scm (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/jack/Projects/osx/osx-ide/osx-ide/Resources/TreeSitter/Queries/python.scm /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Resources
+
+ProcessInfoPlistFile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Info.plist /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/empty-osx-ide.plist (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-infoPlistUtility /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/empty-osx-ide.plist -producttype com.apple.product-type.application -genpkginfo /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PkgInfo -expandbuildsettings -platform macosx -additionalcontentfile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/assetcatalog_generated_info.plist -scanforprivacyfile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Resources/TreeSitterSwift_TreeSitterSwift.bundle -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Info.plist
+
+ConstructStubExecutorLinkFileList /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-ExecutorLinkFileList-normal-arm64.txt (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    construct-stub-executor-link-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libPreviewsJITStubExecutor_no_swift_entry_point.a /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libPreviewsJITStubExecutor.a --output /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-ExecutorLinkFileList-normal-arm64.txt
+note: Using stub executor library with Swift entry point. (in target 'osx-ide' from project 'osx-ide')
+
+Ld /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide normal (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -O0 -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/PackageFrameworks -Xlinker -rpath -Xlinker @executable_path/../Frameworks -rdynamic -Xlinker -no_deduplicate -Xlinker -debug_variant -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-ExecutorLinkFileList-normal-arm64.txt /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib -Xlinker -no_adhoc_codesign -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide
+
+ExtractAppIntentsMetadata (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name osx_ide --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk --xcode-version 17C52 --platform-family macOS --deployment-target 26.0 --bundle-identifier tdc.osx-ide --output /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Resources --target-triple arm64-apple-macos26.0 --binary-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide --dependency-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide_dependency_info.dat --stringsdata-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.SwiftFileList --metadata-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide.DependencyMetadataFileList --static-metadata-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide.DependencyStaticMetadataFileList --swift-const-vals-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2025-12-21 14:08:47.441 appintentsmetadataprocessor[96794:1466877] Starting appintentsmetadataprocessor export
+2025-12-21 14:08:47.441 appintentsmetadataprocessor[96794:1466877] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Library/SystemExtensions --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Extensions --platform macosx --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+CodeSign /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib
+
+CodeSign /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/__preview.dylib (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/__preview.dylib
+
+CodeSign /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide.app.xcent --timestamp\=none --generate-entitlement-der /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app
+
+RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app
+
+Validate /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-validationUtility /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app -no-validate-extension -infoplist-subpath Contents/Info.plist
+
+Touch /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /usr/bin/touch -c /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app
+
+RegisterWithLaunchServices /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app
+
+** BUILD SUCCEEDED **
+

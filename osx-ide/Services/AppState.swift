@@ -235,6 +235,10 @@ class AppState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
+                // Update conversation manager project root if workspace changed
+                if let currentDir = self?.workspaceStateManager.currentDirectory {
+                    self?._conversationManager.updateProjectRoot(currentDir)
+                }
             }
             .store(in: &cancellables)
         

@@ -32,10 +32,26 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     
     /// Embed terminal in the specified parent view
     func embedTerminal(in parentView: NSView, directory: URL? = nil) {
-        // Clean up any existing terminal first
+        // Normalize the new directory
+        let newDir = directory?.standardizedFileURL
+        
+        // If we already have a terminal view and process, check if we just need to change dir
+        if let existingView = terminalView, let process = shellProcess, process.isRunning {
+            // If the view is already a subview of the correct parent, just handle dir change
+            if existingView.enclosingScrollView?.superview == parentView || existingView.superview == parentView {
+                if let current = self.currentDirectory?.standardizedFileURL, let new = newDir, current.path != new.path {
+                    self.currentDirectory = new
+                    executeCommand("cd '\(new.path)'")
+                }
+                return
+            }
+        }
+        
+        // Clean up any existing terminal if we really need to (e.g. parent view changed significantly)
+        // Actually, let's try to just re-parent if possible, but for simplicity we'll keep it robust
         cleanup()
         
-        self.currentDirectory = directory ?? FileManager.default.homeDirectoryForCurrentUser
+        self.currentDirectory = newDir ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
         isCleaningUp = false
         
         setupTerminalView(in: parentView)
@@ -60,6 +76,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
+        scrollView.verticalScroller = LiquidGlassScroller()
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         scrollView.backgroundColor = NSColor.black
@@ -81,8 +98,11 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         terminalView.textContainer?.widthTracksTextView = true
         terminalView.textContainer?.heightTracksTextView = false
-        terminalView.textContainer?.lineFragmentPadding = 0
+        terminalView.textContainer?.lineFragmentPadding = 5
         terminalView.drawsBackground = true
+        // Use natural alignment to respect shell formatting
+        terminalView.baseWritingDirection = .natural
+        terminalView.alignment = .natural
         // Disable spell checking for terminal
         terminalView.isContinuousSpellCheckingEnabled = false
         terminalView.isAutomaticSpellingCorrectionEnabled = false
@@ -584,22 +604,32 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         // Remove notification observer
         NotificationCenter.default.removeObserver(self)
         
-        // Stop reading
+        // Stop reading - do this safely
+        let handleToClose = readHandle
+        let writeToClose = writeHandle
         readHandle?.readabilityHandler = nil
         
         // Terminate process without blocking the main actor
         if let process = shellProcess, process.isRunning {
-            process.terminate()
-            DispatchQueue.global().asyncAfter(deadline: .now() + AppConstants.Time.processTerminationTimeout) {
+            // Background the termination to avoid any main thread lag
+            DispatchQueue.global(qos: .userInitiated).async {
+                process.terminate()
+                
+                // Safety: Ensure it really stops
+                Thread.sleep(forTimeInterval: 0.1)
                 if process.isRunning {
-                    process.terminate()
+                    process.interrupt()
                 }
+                
+                // Close handles once process is likely starting to wind down
+                try? handleToClose?.close()
+                try? writeToClose?.close()
             }
+        } else {
+            // Close immediately if not running
+            try? handleToClose?.close()
+            try? writeToClose?.close()
         }
-        
-        // Close file handles
-        readHandle?.closeFile()
-        writeHandle?.closeFile()
         
         // Remove view
         terminalView?.removeFromSuperview()
@@ -630,10 +660,10 @@ extension NativeTerminalEmbedder: NSTextViewDelegate {
         guard !isCleaningUp, let writeHandle = writeHandle else { return false }
         
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-            // Send newline to shell
-            sendInput("\n".data(using: .utf8) ?? Data())
-            // Allow text view to add newline for display
-            return false
+            // Send carriage return to shell (standard terminal behavior for Enter)
+            sendInput("\r".data(using: .utf8) ?? Data())
+            // Suppress default newline insertion to prevent double echo
+            return true
         } else if commandSelector == #selector(NSResponder.deleteBackward(_:)) {
             // Send backspace (DEL) to shell
             sendInput("\u{7F}".data(using: .utf8) ?? Data())

@@ -50,9 +50,23 @@ final class ModernLineNumberRulerView: NSRulerView {
 
         var lineNumber = 1
         if firstCharIndex > 0 {
-            lineNumber = string.substring(to: firstCharIndex).reduce(into: 1) { acc, ch in
-                if ch == "\n" { acc += 1 }
+            // Optimization: Use character-based scanning or range-based counting
+            // For macOS v26, we ensure this remains responsive even for large files.
+            let sub = string.substring(to: firstCharIndex)
+            var count = 1
+            var pos = 0
+            while pos < sub.count {
+                let r = (sub as NSString).lineRange(for: NSRange(location: pos, length: 0))
+                if NSMaxRange(r) <= sub.count && NSMaxRange(r) > pos {
+                    if NSMaxRange(r) < sub.count {
+                        count += 1
+                    }
+                    pos = NSMaxRange(r)
+                } else {
+                    break
+                }
             }
+            lineNumber = count
         }
 
         // Enhanced attributes for macOS v26

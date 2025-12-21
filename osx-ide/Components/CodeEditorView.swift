@@ -36,6 +36,7 @@ struct CodeEditorView: View {
     }
 }
 
+@MainActor
 struct TextViewRepresentable: NSViewRepresentable {
     @Binding var text: String
     var language: String
@@ -70,6 +71,8 @@ struct TextViewRepresentable: NSViewRepresentable {
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
+        scrollView.verticalScroller = LiquidGlassScroller()
+        scrollView.horizontalScroller = LiquidGlassScroller()
         scrollView.autohidesScrollers = true
 
         if showLineNumbers {
@@ -78,13 +81,8 @@ struct TextViewRepresentable: NSViewRepresentable {
             scrollView.verticalRulerView = ModernLineNumberRulerView(scrollView: scrollView, textView: textView)
         }
         
-        // Apply syntax highlighting after the view is set up
-        DispatchQueue.main.async {
-            let attributedString = SyntaxHighlighter.shared.highlight(text, language: language)
-            textView.textStorage?.setAttributedString(attributedString)
-            // Ensure text color is set so content is visible
-            textView.textColor = NSColor.labelColor
-        }
+        // Apply syntax highlighting after the view is set up asynchronously
+        context.coordinator.performAsyncHighlight(for: text, in: textView, language: language)
         
         return scrollView
     }
@@ -95,12 +93,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         // Avoid unnecessary updates to prevent flicker/blanking
         let current = textView.string
         if current != text {
-            context.coordinator.isProgrammaticUpdate = true
-            defer { context.coordinator.isProgrammaticUpdate = false }
-            let attributedString = SyntaxHighlighter.shared.highlight(text, language: language)
-            textView.textStorage?.beginEditing()
-            textView.textStorage?.setAttributedString(attributedString)
-            textView.textStorage?.endEditing()
+            context.coordinator.performAsyncHighlight(for: text, in: textView, language: language)
         }
         
         
@@ -129,34 +122,65 @@ struct TextViewRepresentable: NSViewRepresentable {
         Coordinator(self)
     }
     
+    @MainActor
     class Coordinator: NSObject, NSTextViewDelegate {
         let parent: TextViewRepresentable
         var isProgrammaticUpdate = false
         var isProgrammaticSelectionUpdate = false
+        private var currentHighlightTask: Task<Void, Never>?
         
         init(_ parent: TextViewRepresentable) {
             self.parent = parent
         }
+
+        @MainActor
+        func performAsyncHighlight(for text: String, in textView: NSTextView, language: String) {
+            currentHighlightTask?.cancel()
+            
+            let syntaxHighlighter = SyntaxHighlighter.shared
+            
+            // Task inherits @MainActor from Coordinator
+            currentHighlightTask = Task {
+                // Since SyntaxHighlighter is @MainActor, we must await its call.
+                // Even though it runs on the MainActor, doing it in a Task prevents
+                // blocking the current execution flow.
+                let attributedString = await syntaxHighlighter.highlight(text, language: language)
+                
+                if Task.isCancelled { return }
+                
+                self.isProgrammaticUpdate = true
+                textView.textStorage?.beginEditing()
+                textView.textStorage?.setAttributedString(attributedString)
+                textView.textStorage?.endEditing()
+                self.isProgrammaticUpdate = false
+            }
+        }
         
+        @MainActor
         func textDidChange(_ notification: Notification) {
             if isProgrammaticUpdate { return }
             guard let textView = notification.object as? NSTextView else { return }
-            parent.text = textView.string
             
-            // Update selected range
-            parent.selectedRange = textView.selectedRange
+            // Mutate bindings on main actor
+            let newText = textView.string
+            let newRange = textView.selectedRange
+            
+            self.parent.text = newText
+            self.parent.selectedRange = newRange
             
             // Update the selection context with current selected text and range
             updateSelectionContext(from: textView)
         }
 
+        @MainActor
         func textViewDidChangeSelection(_ notification: Notification) {
             if isProgrammaticUpdate || isProgrammaticSelectionUpdate { return }
             guard let textView = notification.object as? NSTextView else { return }
-            parent.selectedRange = textView.selectedRange
+            self.parent.selectedRange = textView.selectedRange
             updateSelectionContext(from: textView)
         }
 
+        @MainActor
         private func updateSelectionContext(from textView: NSTextView) {
             let range = textView.selectedRange
             if range.location != NSNotFound,
