@@ -82,9 +82,19 @@ class AppState: ObservableObject {
         set { uiStateManager.setWordWrap(newValue) }
     }
     
+    var minimapVisible: Bool {
+        get { uiStateManager.minimapVisible }
+        set { uiStateManager.setMinimapVisible(newValue) }
+    }
+    
     var fontSize: Double {
         get { uiStateManager.fontSize }
         set { uiStateManager.updateFontSize(newValue) }
+    }
+    
+    var fontFamily: String {
+        get { uiStateManager.fontFamily }
+        set { uiStateManager.updateFontFamily(newValue) }
     }
     
     var selectedTheme: AppTheme {
@@ -189,6 +199,10 @@ class AppState: ObservableObject {
     
     func setSidebarVisible(_ visible: Bool) {
         uiStateManager.setSidebarVisible(visible)
+    }
+    
+    func resetSettings() {
+        uiStateManager.resetToDefaults()
     }
     
     // Conversation Operations

@@ -70,7 +70,7 @@ class DependencyContainer {
             errorManager: errorManager,
             fileSystemService: _fileSystemService
         )
-        _aiService = ConfigurableAIService()
+        _aiService = OpenRouterAIService()
         _conversationManager = ConversationManager(aiService: _aiService, errorManager: errorManager)
     }
     
