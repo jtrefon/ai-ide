@@ -46,6 +46,13 @@ struct osx_ideApp: App {
         }
         .windowToolbarStyle(.unifiedCompact)
         .commands {
+            CommandGroup(replacing: .appSettings) {
+                SettingsLink {
+                    Label("Settings...", systemImage: "gearshape")
+                }
+                .keyboardShortcut(",", modifiers: [.command])
+            }
+            
             CommandGroup(replacing: .newItem) {
                 Button("New") {
                     appState.newFile()
@@ -76,5 +83,9 @@ struct osx_ideApp: App {
             }
         }
         .windowResizability(.contentMinSize)
+        
+        Settings {
+            SettingsView(appState: appState)
+        }
     }
 }
