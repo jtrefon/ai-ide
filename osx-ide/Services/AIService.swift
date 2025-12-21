@@ -7,8 +7,15 @@
 
 import Foundation
 
+struct AIServiceResponse: Sendable {
+    let content: String?
+    let toolCalls: [AIToolCall]?
+}
+
 protocol AIService: Sendable {
-    func sendMessage(_ message: String, context: String?) async throws -> String
+    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws -> AIServiceResponse
+    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse
+    func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse
     func explainCode(_ code: String) async throws -> String
     func refactorCode(_ code: String, instructions: String) async throws -> String
     func generateCode(_ prompt: String) async throws -> String
@@ -37,17 +44,28 @@ final class ConfigurableAIService: AIService, @unchecked Sendable {
         self.customResponses = customResponses
     }
     
-    func sendMessage(_ message: String, context: String?) async throws -> String {
+    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws -> AIServiceResponse {
         // Simulate network delay
         try await Task.sleep(nanoseconds: responseDelay)
         
         // Check for custom response first
         if let customResponse = customResponses[message] {
-            return customResponse
+            return AIServiceResponse(content: customResponse, toolCalls: nil)
         }
         
         // Return configured or default responses
-        return responses.randomElement() ?? "I'm here to help with your coding questions!"
+        let content = responses.randomElement() ?? "I'm here to help with your coding questions!"
+        return AIServiceResponse(content: content, toolCalls: nil)
+    }
+    
+    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        return try await sendMessage(message, context: context, tools: tools, mode: mode)
+    }
+    
+    func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        // Simple mock implementation that just uses the last user message
+        let lastUserMessage = messages.last { $0.role == .user }?.content ?? ""
+        return try await sendMessage(lastUserMessage, context: context, tools: tools, mode: mode)
     }
     
     func explainCode(_ code: String) async throws -> String {

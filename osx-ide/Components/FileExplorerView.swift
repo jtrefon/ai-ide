@@ -23,22 +23,46 @@ struct FileExplorerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
-            HStack {
-                Text("Explorer")
-                    .font(.headline)
-                    .padding(.horizontal)
-                Spacer()
+            // Header with Search Input
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    
+                    TextField("Search...", text: $searchQuery)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                    
+                    if !searchQuery.isEmpty {
+                        Button(action: { searchQuery = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(6)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                )
+                
                 Button(action: {
                     refreshToken += 1
                 }) {
                     Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12)) 
                 }
                 .buttonStyle(BorderlessButtonStyle())
-                .padding(.horizontal)
+                .help("Refresh")
             }
-            .frame(height: 30)
+            .padding(8)
+            .frame(height: 48) // Slightly taller for search bar
             .nativeGlassBackground(.header)
-
             // Modern macOS v26 file tree with subtle styling
             ModernFileTreeView(
                 rootURL: appState.currentDirectory ?? FileManager.default.homeDirectoryForCurrentUser,

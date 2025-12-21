@@ -1,6 +1,6 @@
 import Foundation
 
-final class FileSystemService {
+final class FileSystemService: Sendable {
     func readFile(at url: URL) throws -> String {
         let data = try Data(contentsOf: url)
 

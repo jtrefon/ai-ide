@@ -22,10 +22,27 @@ class WorkspaceStateManager: ObservableObject {
     init(workspaceService: WorkspaceService, fileDialogService: FileDialogService) {
         self.workspaceService = workspaceService
         self.fileDialogService = fileDialogService
-        self.currentDirectory = workspaceService.currentDirectory
+        
+        // Restore previous session state
+        if let savedPath = UserDefaults.standard.string(forKey: "LastOpenDirectory") {
+            let url = URL(fileURLWithPath: savedPath)
+            // Verify path exists
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                workspaceService.currentDirectory = url
+                self.currentDirectory = url
+            }
+        } else {
+            self.currentDirectory = workspaceService.currentDirectory
+        }
     }
     
     // MARK: - Directory Operations
+    
+    /// Persist current directory to UserDefaults
+    private func saveCurrentDirectory(_ url: URL) {
+        UserDefaults.standard.set(url.path, forKey: "LastOpenDirectory")
+    }
     
     /// Open file dialog for selecting files or directories
     /// - Parameter onFileSelected: Callback invoked when a file (not directory) is selected
@@ -35,9 +52,13 @@ class WorkspaceStateManager: ObservableObject {
         if isDirectory {
             workspaceService.currentDirectory = url
             currentDirectory = url
+            saveCurrentDirectory(url)
         } else {
             workspaceService.currentDirectory = url.deletingLastPathComponent()
             currentDirectory = workspaceService.currentDirectory
+            if let cwd = currentDirectory {
+                saveCurrentDirectory(cwd)
+            }
             addToRecentlyOpened(url)
             onFileSelected?(url)
         }
@@ -48,18 +69,25 @@ class WorkspaceStateManager: ObservableObject {
         guard let url = fileDialogService.openFolder() else { return }
         workspaceService.currentDirectory = url
         currentDirectory = url
+        saveCurrentDirectory(url)
     }
     
     /// Navigate to parent directory
     func navigateToParent() {
         workspaceService.navigateToParent()
         currentDirectory = workspaceService.currentDirectory
+        if let cwd = currentDirectory {
+            saveCurrentDirectory(cwd)
+        }
     }
     
     /// Navigate to subdirectory
     func navigateTo(subdirectory: String) {
         workspaceService.navigateTo(subdirectory: subdirectory)
         currentDirectory = workspaceService.currentDirectory
+        if let cwd = currentDirectory {
+            saveCurrentDirectory(cwd)
+        }
     }
     
     // MARK: - File Management

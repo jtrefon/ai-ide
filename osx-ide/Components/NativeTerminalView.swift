@@ -90,11 +90,8 @@ struct TerminalContentView: NSViewRepresentable {
     }
     
     func updateNSView(_ nsView: NSView, context: Context) {
-        // Update if directory changes
-        if let currentDir = currentDirectory, currentDir != embedder.currentDirectory {
-            embedder.removeEmbedding()
-            embedder.embedTerminal(in: nsView, directory: currentDir)
-        }
+        // Update if directory changes - the embedder now handles reuse internally
+        embedder.embedTerminal(in: nsView, directory: currentDirectory)
     }
 }
 

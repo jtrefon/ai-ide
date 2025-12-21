@@ -16,7 +16,7 @@ enum AppConstants {
     
     enum Terminal {
         static let defaultRows = 24
-        static let defaultColumns = 80
+        static let defaultColumns = 150 // Increased to prevent premature wrapping
         static let charWidth: CGFloat = 7.2
         static let charHeight: CGFloat = 14.0
         static let responseDelay: UInt64 = 1_000_000_000 // 1 second in nanoseconds

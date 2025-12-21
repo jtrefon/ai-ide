@@ -14,15 +14,53 @@ class ConversationManager: ObservableObject {
     @Published var currentInput: String = ""
     @Published var isSending: Bool = false
     @Published var error: String? = nil
+    @Published var currentMode: AIMode = .chat
     
     private var aiService: AIService
     private let errorManager: ErrorManager
+    private let fileSystemService: FileSystemService
     private let historyKey = "AIChatHistory"
     private var cancellables = Set<AnyCancellable>()
     
-    init(aiService: AIService = SampleAIService(), errorManager: ErrorManager) {
+    // Project root for sandboxing
+    var projectRoot: URL
+    
+    private var pathValidator: PathValidator {
+        return PathValidator(projectRoot: projectRoot)
+    }
+    
+    private var allTools: [AITool] {
+        let validator = pathValidator
+        return [
+            // Project awareness tools
+            GetProjectStructureTool(projectRoot: projectRoot),
+            ListAllFilesTool(projectRoot: projectRoot),
+            FindFileRegexTool(projectRoot: projectRoot),
+            
+            // File operation tools
+            ReadFileTool(fileSystemService: fileSystemService, pathValidator: validator),
+            WriteFileTool(fileSystemService: fileSystemService, pathValidator: validator),
+            CreateFileTool(pathValidator: validator),
+            DeleteFileTool(pathValidator: validator),
+            ListFilesTool(pathValidator: validator),
+            ReplaceInFileTool(fileSystemService: fileSystemService, pathValidator: validator),
+            
+            // Search and execution
+            GrepTool(pathValidator: validator),
+            FindFileTool(pathValidator: validator),
+            RunCommandTool()
+        ]
+    }
+    
+    private var availableTools: [AITool] {
+        return currentMode.allowedTools(from: allTools)
+    }
+    
+    init(aiService: AIService = SampleAIService(), errorManager: ErrorManager, fileSystemService: FileSystemService = FileSystemService(), projectRoot: URL? = nil) {
         self.aiService = aiService
         self.errorManager = errorManager
+        self.fileSystemService = fileSystemService
+        self.projectRoot = projectRoot ?? FileManager.default.homeDirectoryForCurrentUser
         loadConversationHistory()
         
         // If no messages, initialize with a welcome message
@@ -37,6 +75,10 @@ class ConversationManager: ObservableObject {
     /// Update the AI service (used by dependency container)
     func updateAIService(_ newService: AIService) {
         self.aiService = newService
+    }
+    
+    func updateProjectRoot(_ newRoot: URL) {
+        projectRoot = newRoot
     }
     
     func sendMessage(context: String? = nil) {
@@ -64,11 +106,117 @@ class ConversationManager: ObservableObject {
             guard let self = self else { return }
             
             do {
-                let response = try await aiService.sendMessage(userInput, context: context)
+                // Initial call with full history
+                var currentResponse = try await aiService.sendMessage(self.messages, context: context, tools: availableTools, mode: currentMode, projectRoot: projectRoot)
+                
+                // Tool calling loop
+                var toolIteration = 0
+                let maxIterations = 5
+                
+                // Check if response has tool calls
+                while let toolCalls = currentResponse.toolCalls, !toolCalls.isEmpty && toolIteration < maxIterations {
+                    toolIteration += 1
+                    
+                    // 1. Immediately record the Assistant's Request (with tool calls) to history
+                    // This ensures the AI sees "I want to call X" before seeing "Result of X"
+                    let assistantMsg = ChatMessage(
+                        role: .assistant,
+                        content: currentResponse.content ?? "", // May form "thought"
+                        toolCalls: toolCalls
+                    )
+                    
+                    await MainActor.run {
+                        self.messages.append(assistantMsg)
+                    }
+                    
+                    // 2. Execute Tools
+                    var toolResults: [String] = []
+                    
+                    for toolCall in toolCalls {
+                        let targetFile = toolCall.arguments["path"] as? String
+                        
+                        // "Executing" indicator (UI only really, but we add to messages for now)
+                        await MainActor.run {
+                            let executingMsg = ChatMessage(
+                                role: .tool,
+                                content: "Executing \(toolCall.name)...",
+                                toolName: toolCall.name,
+                                toolStatus: .executing,
+                                targetFile: targetFile,
+                                toolCallId: toolCall.id
+                            )
+                            self.messages.append(executingMsg)
+                        }
+                        
+                        // Execute
+                        if let tool = availableTools.first(where: { $0.name == toolCall.name }) {
+                            do {
+                                let result = try await tool.execute(arguments: toolCall.arguments)
+                                
+                                // Update to "completed" message (Tool Output)
+                                await MainActor.run {
+                                    // Remove the temporary "executing" message to replace it with result.
+                                    // For simplicity and history validity, let's keep it.
+                                    if let lastMsg = self.messages.last, lastMsg.toolName == toolCall.name && lastMsg.toolStatus == .executing {
+                                        self.messages.removeLast()
+                                    }
+                                    
+                                    let completedMsg = ChatMessage(
+                                        role: .tool,
+                                        content: result,
+                                        toolName: toolCall.name,
+                                        toolStatus: .completed,
+                                        targetFile: targetFile,
+                                        toolCallId: toolCall.id
+                                    )
+                                    self.messages.append(completedMsg)
+                                }
+                                
+                                toolResults.append(result)
+                            } catch {
+                                // Failed
+                                await MainActor.run {
+                                    if let lastMsg = self.messages.last, lastMsg.toolName == toolCall.name && lastMsg.toolStatus == .executing {
+                                        self.messages.removeLast()
+                                    }
+                                    let failedMsg = ChatMessage(
+                                        role: .tool,
+                                        content: "Error: \(error.localizedDescription)",
+                                        toolName: toolCall.name,
+                                        toolStatus: .failed,
+                                        targetFile: targetFile,
+                                        toolCallId: toolCall.id
+                                    )
+                                    self.messages.append(failedMsg)
+                                }
+                            }
+                        } else {
+                            // Tool not found
+                            await MainActor.run {
+                                let failedMsg = ChatMessage(
+                                    role: .tool,
+                                    content: "Tool not found",
+                                    toolName: toolCall.name,
+                                    toolStatus: .failed,
+                                    targetFile: targetFile,
+                                    toolCallId: toolCall.id
+                                )
+                                self.messages.append(failedMsg)
+                            }
+                        }
+                    }
+                    
+                    // 3. Send updated history (with tool outputs) back to AI
+                    // We don't send "toolFeedback" string anymore, we send the updated `self.messages`
+                    currentResponse = try await aiService.sendMessage(self.messages, context: context, tools: availableTools, mode: currentMode, projectRoot: projectRoot)
+                }
+                
+                // Final Response (Answer)
+                let finalContent = currentResponse.content ?? "No response received."
+                
                 await MainActor.run {
-                    self.messages.append(ChatMessage(role: .assistant, content: response))
+                    self.messages.append(ChatMessage(role: .assistant, content: finalContent))
                     self.isSending = false
-                    // Save after AI response
                     self.saveConversationHistory()
                 }
             } catch {
