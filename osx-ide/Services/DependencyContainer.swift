@@ -18,22 +18,22 @@ class DependencyContainer {
     // MARK: - Public Accessors
     
     /// Error manager instance
-    var errorManager: ErrorManager {
+    var errorManager: ErrorManagerProtocol {
         return _errorManager
     }
     
     /// UI service instance
-    var uiService: UIService {
+    var uiService: UIServiceProtocol {
         return _uiService
     }
     
     /// Workspace service instance
-    var workspaceService: WorkspaceService {
+    var workspaceService: WorkspaceServiceProtocol {
         return _workspaceService
     }
     
     /// File editor service instance
-    var fileEditorService: FileEditorService {
+    var fileEditorService: FileEditorServiceProtocol {
         return _fileEditorService
     }
 
@@ -43,7 +43,7 @@ class DependencyContainer {
     }
 
     /// File dialog service instance
-    var fileDialogService: FileDialogService {
+    var fileDialogService: FileDialogServiceProtocol {
         return _fileDialogService
     }
     
@@ -53,7 +53,7 @@ class DependencyContainer {
     }
     
     /// Conversation manager instance
-    var conversationManager: ConversationManager {
+    var conversationManager: ConversationManagerProtocol {
         return _conversationManager
     }
     
@@ -88,7 +88,8 @@ class DependencyContainer {
             workspaceService: workspaceService,
             fileEditorService: fileEditorService,
             conversationManager: conversationManager,
-            fileDialogService: fileDialogService
+            fileDialogService: fileDialogService,
+            fileSystemService: fileSystemService
         )
     }
     
@@ -104,14 +105,14 @@ class DependencyContainer {
 
     // MARK: - Stored Services
 
-    private let _errorManager: ErrorManager
-    private let _uiService: UIService
-    private let _workspaceService: WorkspaceService
-    private let _fileEditorService: FileEditorService
+    private let _errorManager: ErrorManagerProtocol
+    private let _uiService: UIServiceProtocol
+    private let _workspaceService: WorkspaceServiceProtocol
+    private let _fileEditorService: FileEditorServiceProtocol
     private let _fileSystemService: FileSystemService
-    private let _fileDialogService: FileDialogService
+    private let _fileDialogService: FileDialogServiceProtocol
     private var _aiService: AIService
-    private var _conversationManager: ConversationManager
+    private var _conversationManager: ConversationManagerProtocol
 }
 
 // MARK: - Testing Support

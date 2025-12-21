@@ -10,7 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var appState: AppState
     @State private var selectedRange: NSRange? = nil
-    @StateObject private var selectionContext = CodeSelectionContext()
+    @ObservedObject private var registry = UIRegistry.shared
     
     var body: some View {
         VStack(spacing: 0) {
@@ -29,8 +29,10 @@ struct ContentView: View {
 
             HSplitView {
                 // Left sidebar
-                FileExplorerView(appState: appState)
-                    .frame(minWidth: 200, maxWidth: 300)
+                // Left sidebar
+                if let view = registry.views(for: .sidebarLeft).first?.content {
+                    view.frame(minWidth: 200, maxWidth: 300)
+                }
                 
                 // Main content area
                 HSplitView {
@@ -59,7 +61,7 @@ struct ContentView: View {
                                 text: $appState.editorContent,
                                 language: appState.editorLanguage,
                                 selectedRange: $selectedRange,
-                                selectionContext: selectionContext,
+                                selectionContext: appState.selectionContext,
                                 showLineNumbers: appState.showLineNumbers
                             )
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -67,17 +69,18 @@ struct ContentView: View {
                         .frame(minHeight: 100)
                         
                         // Terminal panel
-                        NativeTerminalView(currentDirectory: appState.currentDirectory)
-                            .frame(minHeight: 100)
+                        // Terminal panel
+                        if let view = registry.views(for: .panelBottom).first?.content {
+                            view.frame(minHeight: 100)
+                        }
                     }
                     .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
                     
                     // AI Chat Panel
-                    AIChatPanel(
-                        selectionContext: selectionContext,
-                        conversationManager: appState.conversationManager
-                    )
-                    .frame(minWidth: 300)
+                    // AI Chat Panel
+                    if let view = registry.views(for: .panelRight).first?.content {
+                        view.frame(minWidth: 300)
+                    }
                 }
             }
         }

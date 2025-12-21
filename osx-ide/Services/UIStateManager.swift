@@ -15,16 +15,16 @@ class UIStateManager: ObservableObject {
     // MARK: - Layout State
     
     @Published var isSidebarVisible: Bool = true
-    @Published var sidebarWidth: Double = 250
-    @Published var terminalHeight: Double = 200
-    @Published var chatPanelWidth: Double = 300
+    @Published var sidebarWidth: Double = AppConstants.Layout.defaultSidebarWidth
+    @Published var terminalHeight: Double = AppConstants.Layout.defaultTerminalHeight
+    @Published var chatPanelWidth: Double = AppConstants.Layout.defaultChatPanelWidth
     
     // MARK: - Editor State
     
     @Published var showLineNumbers: Bool = true
     @Published var wordWrap: Bool = false
     @Published var minimapVisible: Bool = false
-    @Published var fontSize: Double = 14
+    @Published var fontSize: Double = AppConstants.Editor.defaultFontSize
     @Published var fontFamily: String = "SF Mono"
     
     // MARK: - Theme State
@@ -39,24 +39,30 @@ class UIStateManager: ObservableObject {
     @Published var isFullScreen: Bool = false
     @Published var windowTitle: String = "OSX IDE"
     
-    // MARK: - Settings
+    // MARK: - Services
     
-    private let uiService: UIService
-    private let userDefaults = UserDefaults.standard
+    private let uiService: UIServiceProtocol
+    private var cancellables = Set<AnyCancellable>()
     
-    private let sidebarWidthKey = "SidebarWidth"
-    private let terminalHeightKey = "TerminalHeight"
-    private let chatPanelWidthKey = "ChatPanelWidth"
-    private let fontSizeKey = "FontSize"
-    private let fontFamilyKey = "FontFamily"
-    private let showLineNumbersKey = "ShowLineNumbers"
-    private let wordWrapKey = "WordWrap"
-    private let minimapVisibleKey = "MinimapVisible"
-    
-    init(uiService: UIService) {
+    init(uiService: UIServiceProtocol) {
         self.uiService = uiService
         loadSettings()
         updateTheme()
+        setupEventSubscriptions()
+    }
+    
+    private func setupEventSubscriptions() {
+        EventBus.shared.subscribe(to: SidebarWidthChangedEvent.self) { [weak self] event in
+            self?.sidebarWidth = event.width
+        }.store(in: &cancellables)
+        
+        EventBus.shared.subscribe(to: TerminalHeightChangedEvent.self) { [weak self] event in
+            self?.terminalHeight = event.height
+        }.store(in: &cancellables)
+        
+        EventBus.shared.subscribe(to: ChatPanelWidthChangedEvent.self) { [weak self] event in
+            self?.chatPanelWidth = event.width
+        }.store(in: &cancellables)
     }
     
     // MARK: - Layout Management
@@ -71,17 +77,17 @@ class UIStateManager: ObservableObject {
     
     func updateSidebarWidth(_ width: Double) {
         sidebarWidth = max(AppConstants.Layout.minSidebarWidth, min(AppConstants.Layout.maxSidebarWidth, width))
-        userDefaults.set(sidebarWidth, forKey: sidebarWidthKey)
+        uiService.setSidebarWidth(sidebarWidth)
     }
     
     func updateTerminalHeight(_ height: Double) {
         terminalHeight = max(AppConstants.Layout.minTerminalHeight, min(AppConstants.Layout.maxTerminalHeight, height))
-        userDefaults.set(terminalHeight, forKey: terminalHeightKey)
+        uiService.setTerminalHeight(terminalHeight)
     }
     
     func updateChatPanelWidth(_ width: Double) {
         chatPanelWidth = max(AppConstants.Layout.minChatPanelWidth, min(AppConstants.Layout.maxChatPanelWidth, width))
-        userDefaults.set(chatPanelWidth, forKey: chatPanelWidthKey)
+        uiService.setChatPanelWidth(chatPanelWidth)
     }
     
     // MARK: - Editor Settings
@@ -142,15 +148,10 @@ class UIStateManager: ObservableObject {
         case .dark:
             isDarkMode = true
         case .system:
-            // Modern approach using SwiftUI Environment instead of deprecated AppKit APIs
-            // The isDarkMode will be automatically determined by the system appearance
-            // This provides proper macOS v26 compliance
             if let app = NSApp {
-                // Use modern appearance detection for macOS v26
                 let currentAppearance = app.effectiveAppearance
                 isDarkMode = currentAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             } else {
-                // Fallback for preview contexts
                 isDarkMode = false
             }
         }
@@ -168,7 +169,6 @@ class UIStateManager: ObservableObject {
     
     func toggleFullScreen() {
         isFullScreen.toggle()
-        // This would be handled by the window controller
     }
     
     func updateWindowTitle(_ title: String) {
@@ -185,27 +185,19 @@ class UIStateManager: ObservableObject {
         showLineNumbers = settings.showLineNumbers
         wordWrap = settings.wordWrap
         minimapVisible = settings.minimapVisible
-        
-        // Load layout settings
-        sidebarWidth = userDefaults.double(forKey: sidebarWidthKey)
-        if sidebarWidth == 0 { sidebarWidth = AppConstants.Layout.defaultSidebarWidth }
-        
-        terminalHeight = userDefaults.double(forKey: terminalHeightKey)
-        if terminalHeight == 0 { terminalHeight = AppConstants.Layout.defaultTerminalHeight }
-        
-        chatPanelWidth = userDefaults.double(forKey: chatPanelWidthKey)
-        if chatPanelWidth == 0 { chatPanelWidth = AppConstants.Layout.defaultChatPanelWidth }
+        sidebarWidth = settings.sidebarWidth
+        terminalHeight = settings.terminalHeight
+        chatPanelWidth = settings.chatPanelWidth
         
         updateTheme()
     }
     
     func resetToDefaults() {
-        // Reset UI service
         uiService.resetToDefaults()
         
-        // Reset local state
+        // Reset local state to defaults
         isSidebarVisible = true
-        sidebarWidth = 250
+        sidebarWidth = AppConstants.Layout.defaultSidebarWidth
         terminalHeight = AppConstants.Layout.defaultTerminalHeight
         chatPanelWidth = AppConstants.Layout.defaultChatPanelWidth
         showLineNumbers = true
@@ -215,40 +207,18 @@ class UIStateManager: ObservableObject {
         fontFamily = "SF Mono"
         selectedTheme = .system
         
-        // Clear UserDefaults for layout settings
-        userDefaults.removeObject(forKey: sidebarWidthKey)
-        userDefaults.removeObject(forKey: terminalHeightKey)
-        userDefaults.removeObject(forKey: chatPanelWidthKey)
-        
         updateTheme()
     }
     
     // MARK: - Settings Export/Import
     
     func exportSettings() -> [String: Any] {
-        var settings = uiService.exportSettings()
-        settings["sidebarWidth"] = sidebarWidth
-        settings["terminalHeight"] = terminalHeight
-        settings["chatPanelWidth"] = chatPanelWidth
-        return settings
+        return uiService.exportSettings()
     }
     
     func importSettings(_ settings: [String: Any]) {
         uiService.importSettings(settings)
-        
-        if let sidebarWidth = settings["sidebarWidth"] as? Double {
-            updateSidebarWidth(sidebarWidth)
-        }
-        
-        if let terminalHeight = settings["terminalHeight"] as? Double {
-            updateTerminalHeight(terminalHeight)
-        }
-        
-        if let chatPanelWidth = settings["chatPanelWidth"] as? Double {
-            updateChatPanelWidth(chatPanelWidth)
-        }
-        
-        loadSettings()
+        loadSettings() // Refresh local state
     }
 }
 

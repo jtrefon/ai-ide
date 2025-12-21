@@ -10,7 +10,7 @@ import SwiftUI
 
 /// Manages file editing operations and state
 @MainActor
-class FileEditorService: ObservableObject {
+class FileEditorService: ObservableObject, FileEditorServiceProtocol {
     @Published var selectedFile: String? = nil
     @Published var editorContent = "" {
         didSet {
@@ -23,10 +23,10 @@ class FileEditorService: ObservableObject {
     @Published var isDirty = false
     
     private var isLoadingFile = false
-    private let errorManager: ErrorManager
+    private let errorManager: ErrorManagerProtocol
     private let fileSystemService: FileSystemService
     
-    init(errorManager: ErrorManager, fileSystemService: FileSystemService) {
+    init(errorManager: ErrorManagerProtocol, fileSystemService: FileSystemService) {
         self.errorManager = errorManager
         self.fileSystemService = fileSystemService
     }

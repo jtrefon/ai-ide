@@ -1,0 +1,207 @@
+//
+//  GeneralSettingsTab.swift
+//  osx-ide
+//
+//  Created by AI Assistant on 21/12/2025.
+//
+
+import SwiftUI
+
+struct GeneralSettingsTab: View {
+    @ObservedObject var appState: AppState
+    
+    private let fontFamilies = [
+        "SF Mono",
+        "Menlo",
+        "JetBrains Mono",
+        "Fira Code",
+        "Source Code Pro",
+        "Courier New"
+    ]
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                SettingsCard(
+                    title: "Appearance",
+                    subtitle: "Choose a theme that feels native and calm."
+                ) {
+                    SettingsRow(
+                        title: "Theme",
+                        subtitle: "Match the system or pick a style.",
+                        systemImage: "paintpalette"
+                    ) {
+                        Picker("", selection: themeBinding) {
+                            ForEach(AppTheme.allCases, id: \.self) { theme in
+                                Text(theme.displayName)
+                                    .tag(theme)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 220)
+                    }
+                }
+                
+                SettingsCard(
+                    title: "Editor",
+                    subtitle: "Typography and layout tuned for focus."
+                ) {
+                    SettingsRow(
+                        title: "Font family",
+                        subtitle: "Select a monospace font for code.",
+                        systemImage: "textformat"
+                    ) {
+                        Picker("", selection: fontFamilyBinding) {
+                            ForEach(fontFamilies, id: \.self) { family in
+                                Text(family)
+                                    .tag(family)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 200)
+                    }
+                    
+                    SettingsRow(
+                        title: "Font size",
+                        subtitle: "Adjust the editor point size.",
+                        systemImage: "textformat.size"
+                    ) {
+                        HStack(spacing: 12) {
+                            Slider(
+                                value: fontSizeBinding,
+                                in: AppConstants.Editor.minFontSize...AppConstants.Editor.maxFontSize,
+                                step: 1
+                            )
+                            .frame(width: 180)
+                            
+                            Text("\(Int(appState.fontSize)) pt")
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    
+                    SettingsRow(
+                        title: "Line numbers",
+                        subtitle: "Show a gutter for navigation.",
+                        systemImage: "list.number"
+                    ) {
+                        Toggle("", isOn: showLineNumbersBinding)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
+                    
+                    SettingsRow(
+                        title: "Word wrap",
+                        subtitle: "Keep long lines within the view.",
+                        systemImage: "arrow.left.and.right.text.vertical"
+                    ) {
+                        Toggle("", isOn: wordWrapBinding)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
+                    
+                    SettingsRow(
+                        title: "Minimap",
+                        subtitle: "Quickly scan large files.",
+                        systemImage: "rectangle.inset.filled.and.person.filled"
+                    ) {
+                        Toggle("", isOn: minimapBinding)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
+                }
+                
+                SettingsCard(
+                    title: "Workspace",
+                    subtitle: "Layout options for your daily flow."
+                ) {
+                    SettingsRow(
+                        title: "Sidebar",
+                        subtitle: "Show the file tree and tabs.",
+                        systemImage: "sidebar.leading"
+                    ) {
+                        Toggle("", isOn: sidebarBinding)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
+                }
+                
+                SettingsCard(
+                    title: "Defaults",
+                    subtitle: "Restore the original configuration."
+                ) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Reset settings")
+                                .font(.body)
+                            Text("Revert all preferences to their factory values.")
+                                .font(.caption)
+                            Text("This will restore layouts and editor preferences.")
+                                .font(.caption2)
+                                .foregroundStyle(.red.opacity(0.8))
+                        }
+                        
+                        Spacer()
+                        
+                        Button("Reset to Defaults") {
+                            appState.resetSettings()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.white.opacity(0.2))
+                    }
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+    
+    private var themeBinding: Binding<AppTheme> {
+        Binding(
+            get: { appState.selectedTheme },
+            set: { appState.selectedTheme = $0 }
+        )
+    }
+    
+    private var fontSizeBinding: Binding<Double> {
+        Binding(
+            get: { appState.fontSize },
+            set: { appState.fontSize = $0 }
+        )
+    }
+    
+    private var fontFamilyBinding: Binding<String> {
+        Binding(
+            get: { appState.fontFamily },
+            set: { appState.fontFamily = $0 }
+        )
+    }
+    
+    private var showLineNumbersBinding: Binding<Bool> {
+        Binding(
+            get: { appState.showLineNumbers },
+            set: { appState.showLineNumbers = $0 }
+        )
+    }
+    
+    private var wordWrapBinding: Binding<Bool> {
+        Binding(
+            get: { appState.wordWrap },
+            set: { appState.wordWrap = $0 }
+        )
+    }
+    
+    private var minimapBinding: Binding<Bool> {
+        Binding(
+            get: { appState.minimapVisible },
+            set: { appState.minimapVisible = $0 }
+        )
+    }
+    
+    private var sidebarBinding: Binding<Bool> {
+        Binding(
+            get: { appState.isSidebarVisible },
+            set: { appState.isSidebarVisible = $0 }
+        )
+    }
+}

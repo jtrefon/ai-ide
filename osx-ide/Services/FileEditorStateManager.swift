@@ -24,10 +24,10 @@ class FileEditorStateManager: ObservableObject {
     @Published var isDirty: Bool = false
     
     private var isLoadingFile = false
-    private let fileEditorService: FileEditorService
-    private let fileDialogService: FileDialogService
+    private let fileEditorService: FileEditorServiceProtocol
+    private let fileDialogService: FileDialogServiceProtocol
     
-    init(fileEditorService: FileEditorService, fileDialogService: FileDialogService) {
+    init(fileEditorService: FileEditorServiceProtocol, fileDialogService: FileDialogServiceProtocol) {
         self.fileEditorService = fileEditorService
         self.fileDialogService = fileDialogService
     }
@@ -38,7 +38,7 @@ class FileEditorStateManager: ObservableObject {
     func loadFile(from url: URL) {
         // Input validation
         guard validateFilePath(url.path) else {
-            fileEditorService.handleError(.invalidFilePath("Invalid file path: \(url.path)"))
+            fileEditorService.handleError(AppError.invalidFilePath("Invalid file path: \(url.path)"))
             return
         }
         

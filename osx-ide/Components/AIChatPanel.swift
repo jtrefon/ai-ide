@@ -3,7 +3,8 @@ import SwiftUI
 /// An AI chat panel that uses the user's code selection as context for AI queries and displays responses.
 struct AIChatPanel: View {
     @ObservedObject var selectionContext: CodeSelectionContext
-    @ObservedObject var conversationManager: ConversationManager
+    let conversationManager: any ConversationManagerProtocol
+    @State private var refreshID = UUID()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -45,12 +46,16 @@ struct AIChatPanel: View {
             
             // Input area
             ChatInputView(
-                text: $conversationManager.currentInput,
+                text: inputBinding,
                 isSending: conversationManager.isSending,
                 onSend: {
                     sendMessage()
                 }
             )
+            .id(refreshID)
+            .onReceive(conversationManager.statePublisher) { _ in
+                refreshID = UUID()
+            }
             
             // Mode selector
             HStack(spacing: 8) {
@@ -58,7 +63,7 @@ struct AIChatPanel: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
-                Picker("Mode", selection: $conversationManager.currentMode) {
+                Picker("Mode", selection: modeBinding) {
                     ForEach(AIMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
@@ -84,6 +89,22 @@ struct AIChatPanel: View {
     var currentSelection: String? { 
         selectionContext.selectedText.isEmpty ? nil : selectionContext.selectedText
     }
+    
+    // MARK: - Bindings
+    
+    private var inputBinding: Binding<String> {
+        Binding(
+            get: { conversationManager.currentInput },
+            set: { conversationManager.currentInput = $0 }
+        )
+    }
+    
+    private var modeBinding: Binding<AIMode> {
+        Binding(
+            get: { conversationManager.currentMode },
+            set: { conversationManager.currentMode = $0 }
+        )
+    }
 
     private func sendMessage() {
         // Use selected code as context if available
@@ -94,12 +115,13 @@ struct AIChatPanel: View {
 }
 
 #Preview {
-    let ctx = CodeSelectionContext()
-    ctx.selectedText = "func helloWorld() { print(\"Hello\") }"
-    let container = DependencyContainer.shared
-    return AIChatPanel(
-        selectionContext: ctx,
-        conversationManager: container.conversationManager
-    )
+    Group {
+        let ctx = CodeSelectionContext()
+        let container = DependencyContainer.shared
+        AIChatPanel(
+            selectionContext: ctx,
+            conversationManager: container.conversationManager
+        )
+    }
 }
 

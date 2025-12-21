@@ -18,7 +18,20 @@ class AppState: ObservableObject {
     private let fileEditorStateManager: FileEditorStateManager
     private let workspaceStateManager: WorkspaceStateManager
     private let uiStateManager: UIStateManager
-    private let errorManager: ErrorManager
+    
+    // MARK: - Services
+    
+    private let errorManager: ErrorManagerProtocol
+    let uiService: UIServiceProtocol
+    let workspaceService: WorkspaceServiceProtocol
+    let fileEditorService: FileEditorServiceProtocol
+    let conversationManager: ConversationManagerProtocol
+    let fileDialogService: FileDialogServiceProtocol
+    let fileSystemService: FileSystemService
+    
+    // MARK: - Shared Contexts
+    
+    let selectionContext = CodeSelectionContext()
     
     // MARK: - Published Properties (Delegated to State Managers)
     
@@ -103,8 +116,8 @@ class AppState: ObservableObject {
     }
     
     // Conversation State
-    var conversationManager: ConversationManager {
-        return _conversationManager
+    var conversationState: ConversationManagerProtocol {
+        return conversationManager
     }
     
     // Error State
@@ -119,20 +132,24 @@ class AppState: ObservableObject {
         }
     }
     
-    private let _conversationManager: ConversationManager
-    
     // MARK: - Initialization
     
     init(
-        errorManager: ErrorManager,
-        uiService: UIService,
-        workspaceService: WorkspaceService,
-        fileEditorService: FileEditorService,
-        conversationManager: ConversationManager,
-        fileDialogService: FileDialogService
+        errorManager: ErrorManagerProtocol,
+        uiService: UIServiceProtocol,
+        workspaceService: WorkspaceServiceProtocol,
+        fileEditorService: FileEditorServiceProtocol,
+        conversationManager: ConversationManagerProtocol,
+        fileDialogService: FileDialogServiceProtocol,
+        fileSystemService: FileSystemService
     ) {
         self.errorManager = errorManager
-        self._conversationManager = conversationManager
+        self.uiService = uiService
+        self.workspaceService = workspaceService
+        self.fileEditorService = fileEditorService
+        self.conversationManager = conversationManager
+        self.fileDialogService = fileDialogService
+        self.fileSystemService = fileSystemService
         
         // Initialize specialized state managers
         self.fileEditorStateManager = FileEditorStateManager(
@@ -207,11 +224,11 @@ class AppState: ObservableObject {
     
     // Conversation Operations
     func sendMessage() {
-        _conversationManager.sendMessage()
+        conversationManager.sendMessage()
     }
     
     func clearConversation() {
-        _conversationManager.clearConversation()
+        conversationManager.clearConversation()
     }
     
     // Helper Methods
@@ -237,7 +254,7 @@ class AppState: ObservableObject {
                 self?.objectWillChange.send()
                 // Update conversation manager project root if workspace changed
                 if let currentDir = self?.workspaceStateManager.currentDirectory {
-                    self?._conversationManager.updateProjectRoot(currentDir)
+                    self?.conversationManager.updateProjectRoot(currentDir)
                 }
             }
             .store(in: &cancellables)
@@ -251,7 +268,7 @@ class AppState: ObservableObject {
             .store(in: &cancellables)
         
         // Observe conversation changes
-        _conversationManager.objectWillChange
+        conversationManager.statePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -259,7 +276,7 @@ class AppState: ObservableObject {
             .store(in: &cancellables)
         
         // Observe error changes
-        errorManager.objectWillChange
+        errorManager.statePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()

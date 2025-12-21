@@ -9,10 +9,7 @@
 
 import SwiftUI
 
-class CodeSelectionContext: ObservableObject {
-    @Published var selectedText: String = ""
-    @Published var selectedRange: NSRange? = nil
-}
+// CodeSelectionContext moved to Services/CodeSelectionContext.swift
 
 struct CodeEditorView: View {
     @Binding var text: String

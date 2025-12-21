@@ -95,4 +95,18 @@ enum AppConstants {
         static let minResponseDelay: UInt64 = 100_000_000 // 0.1 seconds
         static let maxResponseDelay: UInt64 = 10_000_000_000 // 10 seconds
     }
+    
+    // MARK: - Storage Constants
+    
+    enum Storage {
+        static let themeKey = "AppTheme"
+        static let fontSizeKey = "FontSize"
+        static let fontFamilyKey = "FontFamily"
+        static let showLineNumbersKey = "ShowLineNumbers"
+        static let wordWrapKey = "WordWrap"
+        static let minimapVisibleKey = "MinimapVisible"
+        static let sidebarWidthKey = "SidebarWidth"
+        static let terminalHeightKey = "TerminalHeight"
+        static let chatPanelWidthKey = "ChatPanelWidth"
+    }
 }

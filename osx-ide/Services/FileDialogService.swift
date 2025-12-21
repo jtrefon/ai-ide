@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 /// Handles user-facing file dialogs.
 @MainActor
-final class FileDialogService {
+final class FileDialogService: FileDialogServiceProtocol {
     func openFileOrFolder() -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true

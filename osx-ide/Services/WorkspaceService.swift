@@ -3,12 +3,12 @@ import SwiftUI
 
 /// Manages workspace and directory operations including file/folder creation and directory navigation
 @MainActor
-final class WorkspaceService: ObservableObject {
+final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
     @Published var currentDirectory: URL?
     
-    private let errorManager: ErrorManager
+    private let errorManager: ErrorManagerProtocol
     
-    init(errorManager: ErrorManager) {
+    init(errorManager: ErrorManagerProtocol) {
         self.errorManager = errorManager
         // Set default directory to user's home directory
         self.currentDirectory = FileManager.default.homeDirectoryForCurrentUser

@@ -8,61 +8,74 @@
 import Foundation
 import SwiftUI
 
-/// Persists UI settings to UserDefaults.
+/// Persists UI settings and layout state to UserDefaults.
 @MainActor
-final class UIService {
-    private let errorManager: ErrorManager
+final class UIService: UIServiceProtocol {
+    private let errorManager: ErrorManagerProtocol
     private let userDefaults = UserDefaults.standard
-    private let themeKey = "AppTheme"
-    private let fontSizeKey = "FontSize"
-    private let fontFamilyKey = "FontFamily"
-    private let showLineNumbersKey = "ShowLineNumbers"
-    private let wordWrapKey = "WordWrap"
-    private let minimapVisibleKey = "MinimapVisible"
     
-    init(errorManager: ErrorManager) {
+    init(errorManager: ErrorManagerProtocol) {
         self.errorManager = errorManager
-        loadSettings()
     }
     
     // MARK: - Theme Management
     
     /// Change application theme
     func setTheme(_ theme: AppTheme) {
-        userDefaults.set(theme.rawValue, forKey: themeKey)
+        userDefaults.set(theme.rawValue, forKey: AppConstants.Storage.themeKey)
     }
     
     // MARK: - Font Settings
     
     /// Update font size
     func setFontSize(_ size: Double) {
-        guard size >= 8 && size <= 72 else {
-            errorManager.handle(.invalidFilePath("Font size must be between 8 and 72"))
+        guard size >= AppConstants.Editor.minFontSize && size <= AppConstants.Editor.maxFontSize else {
+            errorManager.handle(.invalidFilePath("Font size must be between \(AppConstants.Editor.minFontSize) and \(AppConstants.Editor.maxFontSize)"))
             return
         }
-        userDefaults.set(size, forKey: fontSizeKey)
+        userDefaults.set(size, forKey: AppConstants.Storage.fontSizeKey)
     }
     
     /// Update font family
     func setFontFamily(_ family: String) {
-        userDefaults.set(family, forKey: fontFamilyKey)
+        userDefaults.set(family, forKey: AppConstants.Storage.fontFamilyKey)
     }
     
     // MARK: - Editor Settings
     
     /// Toggle line numbers visibility
     func setShowLineNumbers(_ show: Bool) {
-        userDefaults.set(show, forKey: showLineNumbersKey)
+        userDefaults.set(show, forKey: AppConstants.Storage.showLineNumbersKey)
     }
     
     /// Toggle word wrap
     func setWordWrap(_ wrap: Bool) {
-        userDefaults.set(wrap, forKey: wordWrapKey)
+        userDefaults.set(wrap, forKey: AppConstants.Storage.wordWrapKey)
     }
     
     /// Toggle minimap visibility
     func setMinimapVisible(_ visible: Bool) {
-        userDefaults.set(visible, forKey: minimapVisibleKey)
+        userDefaults.set(visible, forKey: AppConstants.Storage.minimapVisibleKey)
+    }
+    
+    // MARK: - Layout Settings
+    
+    /// Update sidebar width
+    func setSidebarWidth(_ width: Double) {
+        userDefaults.set(width, forKey: AppConstants.Storage.sidebarWidthKey)
+        EventBus.shared.publish(SidebarWidthChangedEvent(width: width))
+    }
+    
+    /// Update terminal height
+    func setTerminalHeight(_ height: Double) {
+        userDefaults.set(height, forKey: AppConstants.Storage.terminalHeightKey)
+        EventBus.shared.publish(TerminalHeightChangedEvent(height: height))
+    }
+    
+    /// Update chat panel width
+    func setChatPanelWidth(_ width: Double) {
+        userDefaults.set(width, forKey: AppConstants.Storage.chatPanelWidthKey)
+        EventBus.shared.publish(ChatPanelWidthChangedEvent(width: width))
     }
     
     // MARK: - Settings Persistence
@@ -70,35 +83,60 @@ final class UIService {
     /// Load settings from UserDefaults
     func loadSettings() -> UISettings {
         let storedTheme: AppTheme
-        if let themeRaw = userDefaults.string(forKey: themeKey),
+        if let themeRaw = userDefaults.string(forKey: AppConstants.Storage.themeKey),
            let themeValue = AppTheme(rawValue: themeRaw) {
             storedTheme = themeValue
         } else {
             storedTheme = .system
         }
         
-        let storedFontSize = userDefaults.double(forKey: fontSizeKey)
-        let fontSize = storedFontSize == 0 ? 14 : storedFontSize
+        let storedFontSize = userDefaults.double(forKey: AppConstants.Storage.fontSizeKey)
+        let fontSize = storedFontSize == 0 ? AppConstants.Editor.defaultFontSize : storedFontSize
+        
+        let sidebarWidth = userDefaults.double(forKey: AppConstants.Storage.sidebarWidthKey)
+        let terminalHeight = userDefaults.double(forKey: AppConstants.Storage.terminalHeightKey)
+        let chatPanelWidth = userDefaults.double(forKey: AppConstants.Storage.chatPanelWidthKey)
         
         return UISettings(
             selectedTheme: storedTheme,
             fontSize: fontSize,
-            fontFamily: userDefaults.string(forKey: fontFamilyKey) ?? "SF Mono",
-            showLineNumbers: userDefaults.bool(forKey: showLineNumbersKey),
-            wordWrap: userDefaults.bool(forKey: wordWrapKey),
-            minimapVisible: userDefaults.bool(forKey: minimapVisibleKey)
+            fontFamily: userDefaults.string(forKey: AppConstants.Storage.fontFamilyKey) ?? "SF Mono",
+            showLineNumbers: userDefaults.bool(forKey: AppConstants.Storage.showLineNumbersKey),
+            wordWrap: userDefaults.bool(forKey: AppConstants.Storage.wordWrapKey),
+            minimapVisible: userDefaults.bool(forKey: AppConstants.Storage.minimapVisibleKey),
+            sidebarWidth: sidebarWidth == 0 ? AppConstants.Layout.defaultSidebarWidth : sidebarWidth,
+            terminalHeight: terminalHeight == 0 ? AppConstants.Layout.defaultTerminalHeight : terminalHeight,
+            chatPanelWidth: chatPanelWidth == 0 ? AppConstants.Layout.defaultChatPanelWidth : chatPanelWidth
         )
+    }
+    
+    /// Save settings to UserDefaults
+    func saveSettings(_ settings: UISettings) {
+        setTheme(settings.selectedTheme)
+        setFontSize(settings.fontSize)
+        setFontFamily(settings.fontFamily)
+        setShowLineNumbers(settings.showLineNumbers)
+        setWordWrap(settings.wordWrap)
+        setMinimapVisible(settings.minimapVisible)
+        setSidebarWidth(settings.sidebarWidth)
+        setTerminalHeight(settings.terminalHeight)
+        setChatPanelWidth(settings.chatPanelWidth)
     }
     
     /// Reset all settings to defaults
     func resetToDefaults() {
-        // Clear UserDefaults
-        userDefaults.removeObject(forKey: themeKey)
-        userDefaults.removeObject(forKey: fontSizeKey)
-        userDefaults.removeObject(forKey: fontFamilyKey)
-        userDefaults.removeObject(forKey: showLineNumbersKey)
-        userDefaults.removeObject(forKey: wordWrapKey)
-        userDefaults.removeObject(forKey: minimapVisibleKey)
+        let keys = [
+            AppConstants.Storage.themeKey,
+            AppConstants.Storage.fontSizeKey,
+            AppConstants.Storage.fontFamilyKey,
+            AppConstants.Storage.showLineNumbersKey,
+            AppConstants.Storage.wordWrapKey,
+            AppConstants.Storage.minimapVisibleKey,
+            AppConstants.Storage.sidebarWidthKey,
+            AppConstants.Storage.terminalHeightKey,
+            AppConstants.Storage.chatPanelWidthKey
+        ]
+        keys.forEach { userDefaults.removeObject(forKey: $0) }
     }
     
     /// Export current settings
@@ -110,7 +148,10 @@ final class UIService {
             "fontFamily": settings.fontFamily,
             "showLineNumbers": settings.showLineNumbers,
             "wordWrap": settings.wordWrap,
-            "minimapVisible": settings.minimapVisible
+            "minimapVisible": settings.minimapVisible,
+            "sidebarWidth": settings.sidebarWidth,
+            "terminalHeight": settings.terminalHeight,
+            "chatPanelWidth": settings.chatPanelWidth
         ]
     }
     
@@ -118,27 +159,39 @@ final class UIService {
     func importSettings(_ settings: [String: Any]) {
         if let themeRaw = settings["theme"] as? String,
            let theme = AppTheme(rawValue: themeRaw) {
-            userDefaults.set(theme.rawValue, forKey: themeKey)
+            setTheme(theme)
         }
         
         if let size = settings["fontSize"] as? Double {
-            userDefaults.set(size, forKey: fontSizeKey)
+            setFontSize(size)
         }
         
         if let family = settings["fontFamily"] as? String {
-            userDefaults.set(family, forKey: fontFamilyKey)
+            setFontFamily(family)
         }
         
         if let show = settings["showLineNumbers"] as? Bool {
-            userDefaults.set(show, forKey: showLineNumbersKey)
+            setShowLineNumbers(show)
         }
         
         if let wrap = settings["wordWrap"] as? Bool {
-            userDefaults.set(wrap, forKey: wordWrapKey)
+            setWordWrap(wrap)
         }
         
         if let visible = settings["minimapVisible"] as? Bool {
-            userDefaults.set(visible, forKey: minimapVisibleKey)
+            setMinimapVisible(visible)
+        }
+        
+        if let width = settings["sidebarWidth"] as? Double {
+            setSidebarWidth(width)
+        }
+        
+        if let height = settings["terminalHeight"] as? Double {
+            setTerminalHeight(height)
+        }
+        
+        if let width = settings["chatPanelWidth"] as? Double {
+            setChatPanelWidth(width)
         }
     }
 }
@@ -150,6 +203,9 @@ struct UISettings {
     let showLineNumbers: Bool
     let wordWrap: Bool
     let minimapVisible: Bool
+    let sidebarWidth: Double
+    let terminalHeight: Double
+    let chatPanelWidth: Double
 }
 
 /// Application theme options
