@@ -9,6 +9,17 @@ import SwiftUI
 import AppKit
 import Foundation
 
+@MainActor
+protocol ShellManaging: AnyObject {
+    var delegate: ShellManagerDelegate? { get set }
+    func start(in directory: URL?)
+    func sendInput(_ text: String)
+    func interrupt()
+    func terminate()
+}
+
+extension ShellManager: ShellManaging {}
+
 /// Reliable terminal UI implementation that integrates with ShellManager
 @MainActor
 class NativeTerminalEmbedder: NSObject, ObservableObject {
@@ -16,10 +27,11 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     @Published var errorMessage: String?
     
     private var terminalView: NSTextView?
-    private let shellManager = ShellManager()
+    private let shellManager: ShellManaging
     private var isCleaningUp = false
     
-    override init() {
+    init(shellManager: ShellManaging = ShellManager()) {
+        self.shellManager = shellManager
         super.init()
         shellManager.delegate = self
     }
@@ -68,8 +80,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
-        scrollView.verticalScroller = LiquidGlassScroller()
-        scrollView.autohidesScrollers = true
+        scrollView.autohidesScrollers = false
         scrollView.borderType = .noBorder
         scrollView.backgroundColor = NSColor.black
         scrollView.drawsBackground = true
@@ -320,7 +331,7 @@ extension NativeTerminalEmbedder: NSTextViewDelegate {
         guard !isCleaningUp else { return false }
         
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-            shellManager.sendInput("\r")
+            shellManager.sendInput("\n")
             return true
         } else if commandSelector == #selector(NSResponder.deleteBackward(_:)) {
             shellManager.sendInput("\u{7F}")

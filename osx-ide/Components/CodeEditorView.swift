@@ -72,9 +72,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
-        scrollView.verticalScroller = LiquidGlassScroller()
-        scrollView.horizontalScroller = LiquidGlassScroller()
-        scrollView.autohidesScrollers = true
+        scrollView.autohidesScrollers = false
 
         if showLineNumbers {
             scrollView.hasVerticalRuler = true
