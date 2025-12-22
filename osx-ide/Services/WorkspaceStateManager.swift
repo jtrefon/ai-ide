@@ -17,7 +17,6 @@ class WorkspaceStateManager: ObservableObject {
     
     private let workspaceService: WorkspaceServiceProtocol
     private let fileDialogService: FileDialogServiceProtocol
-    private let maxRecentFiles = 10
     
     init(workspaceService: WorkspaceServiceProtocol, fileDialogService: FileDialogServiceProtocol) {
         self.workspaceService = workspaceService

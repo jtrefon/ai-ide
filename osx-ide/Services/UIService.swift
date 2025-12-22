@@ -96,14 +96,26 @@ final class UIService: UIServiceProtocol {
         let sidebarWidth = userDefaults.double(forKey: AppConstants.Storage.sidebarWidthKey)
         let terminalHeight = userDefaults.double(forKey: AppConstants.Storage.terminalHeightKey)
         let chatPanelWidth = userDefaults.double(forKey: AppConstants.Storage.chatPanelWidthKey)
+
+        let showLineNumbers: Bool = userDefaults.object(forKey: AppConstants.Storage.showLineNumbersKey) == nil
+            ? true
+            : userDefaults.bool(forKey: AppConstants.Storage.showLineNumbersKey)
+
+        let wordWrap: Bool = userDefaults.object(forKey: AppConstants.Storage.wordWrapKey) == nil
+            ? false
+            : userDefaults.bool(forKey: AppConstants.Storage.wordWrapKey)
+
+        let minimapVisible: Bool = userDefaults.object(forKey: AppConstants.Storage.minimapVisibleKey) == nil
+            ? false
+            : userDefaults.bool(forKey: AppConstants.Storage.minimapVisibleKey)
         
         return UISettings(
             selectedTheme: storedTheme,
             fontSize: fontSize,
             fontFamily: userDefaults.string(forKey: AppConstants.Storage.fontFamilyKey) ?? "SF Mono",
-            showLineNumbers: userDefaults.bool(forKey: AppConstants.Storage.showLineNumbersKey),
-            wordWrap: userDefaults.bool(forKey: AppConstants.Storage.wordWrapKey),
-            minimapVisible: userDefaults.bool(forKey: AppConstants.Storage.minimapVisibleKey),
+            showLineNumbers: showLineNumbers,
+            wordWrap: wordWrap,
+            minimapVisible: minimapVisible,
             sidebarWidth: sidebarWidth == 0 ? AppConstants.Layout.defaultSidebarWidth : sidebarWidth,
             terminalHeight: terminalHeight == 0 ? AppConstants.Layout.defaultTerminalHeight : terminalHeight,
             chatPanelWidth: chatPanelWidth == 0 ? AppConstants.Layout.defaultChatPanelWidth : chatPanelWidth

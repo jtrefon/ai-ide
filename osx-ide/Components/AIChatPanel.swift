@@ -1,10 +1,12 @@
 import SwiftUI
+import Combine
 
 /// An AI chat panel that uses the user's code selection as context for AI queries and displays responses.
 struct AIChatPanel: View {
     @ObservedObject var selectionContext: CodeSelectionContext
     let conversationManager: any ConversationManagerProtocol
-    @State private var refreshID = UUID()
+
+    @State private var stateTick: UInt = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -52,10 +54,6 @@ struct AIChatPanel: View {
                     sendMessage()
                 }
             )
-            .id(refreshID)
-            .onReceive(conversationManager.statePublisher) { _ in
-                refreshID = UUID()
-            }
             
             // Mode selector
             HStack(spacing: 8) {
@@ -82,6 +80,10 @@ struct AIChatPanel: View {
             .padding(.vertical, 6)
             .background(Color.gray.opacity(0.1))
         }
+        .onReceive(conversationManager.statePublisher) { _ in
+            stateTick &+= 1
+        }
+        .animation(nil, value: stateTick)
         .accessibilityIdentifier("AIChatPanel")
         .background(Color(NSColor.controlBackgroundColor))
     }

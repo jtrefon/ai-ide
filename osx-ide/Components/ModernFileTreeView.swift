@@ -3,13 +3,13 @@
 //  osx-ide
 //
 //  Created by Jack Trefon on 20/12/2025.
-//  Modern macOS v26 file tree with liquid glass effects and native APIs
+//  Modern macOS v26 file tree with native APIs
 //
 
 import SwiftUI
 import AppKit
 
-/// Modern macOS v26 file tree view with enhanced liquid glass effects
+/// Modern macOS v26 file tree view
 struct ModernFileTreeView: NSViewRepresentable {
     let rootURL: URL
     @Binding var searchQuery: String
@@ -19,25 +19,17 @@ struct ModernFileTreeView: NSViewRepresentable {
     let onOpenFile: (URL) -> Void
 
     func makeNSView(context: Context) -> NSView {
-        let containerView = NSVisualEffectView()
-        containerView.material = .sidebar
-        containerView.blendingMode = .behindWindow
-        containerView.state = .active
-        containerView.wantsLayer = true
-        containerView.layer?.cornerRadius = 8
+        let containerView = NSView()
 
         let outlineView = NSOutlineView(frame: .zero)
         outlineView.setAccessibilityIdentifier("Modern Explorer")
         outlineView.headerView = nil
         outlineView.rowSizeStyle = .medium
-        outlineView.usesAlternatingRowBackgroundColors = true
+        outlineView.usesAlternatingRowBackgroundColors = false
         outlineView.focusRingType = .none
         outlineView.allowsMultipleSelection = false
-        outlineView.selectionHighlightStyle = .sourceList
-        outlineView.style = .sourceList
-        outlineView.wantsLayer = true
-        outlineView.layer?.cornerRadius = 6
-        outlineView.backgroundColor = .clear
+        outlineView.selectionHighlightStyle = .regular
+        outlineView.backgroundColor = .textBackgroundColor
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
         column.resizingMask = .autoresizingMask
@@ -55,10 +47,8 @@ struct ModernFileTreeView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder
         scrollView.documentView = outlineView
-        scrollView.wantsLayer = true
-        scrollView.drawsBackground = false
-        scrollView.layer?.backgroundColor = NSColor.clear.cgColor
-        scrollView.verticalScroller = LiquidGlassScroller()
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = .textBackgroundColor
 
         context.coordinator.attach(outlineView: outlineView)
         
@@ -104,6 +94,8 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
     private weak var outlineView: NSOutlineView?
     private var searchWorkItem: DispatchWorkItem?
     var refreshToken: Int = 0
+    private var lastRootPath: String?
+    private var lastSearchQuery: String = ""
 
     init(
         expandedRelativePaths: Binding<Set<String>>,
@@ -114,10 +106,6 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         self.selectedRelativePath = selectedRelativePath
         self.onOpenFile = onOpenFile
         super.init()
-        
-        dataSource.onDataChanged = { [weak self] parentURL in
-            self?.restoreExpandedChildrenIfNeeded(parentURL: parentURL)
-        }
     }
 
     func attach(outlineView: NSOutlineView) {
@@ -126,13 +114,30 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
     }
 
     func update(rootURL: URL, searchQuery: String, refreshToken: Int) {
+        var needsReload = false
+
         if self.refreshToken != refreshToken {
             self.refreshToken = refreshToken
             dataSource.resetCaches()
+            needsReload = true
         }
-        
-        dataSource.setRootURL(rootURL)
-        setSearchQuery(searchQuery)
+
+        let rootPath = rootURL.standardizedFileURL.path
+        if lastRootPath != rootPath {
+            lastRootPath = rootPath
+            dataSource.setRootURL(rootURL)
+            needsReload = true
+        }
+
+        if lastSearchQuery != searchQuery {
+            lastSearchQuery = searchQuery
+            setSearchQuery(searchQuery)
+            needsReload = true
+        }
+
+        if needsReload {
+            outlineView?.reloadData()
+        }
     }
 
     private func setSearchQuery(_ value: String) {
@@ -244,12 +249,20 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         }()
 
         cell.textField?.stringValue = dataSource.displayName(for: ftItem)
-        cell.imageView?.image = NSWorkspace.shared.icon(forFile: url.path ?? "")
+        if let path = url.path, !path.isEmpty {
+            cell.imageView?.image = NSWorkspace.shared.icon(forFile: path)
+        } else {
+            if dataSource.isDirectory(url) {
+                cell.imageView?.image = NSImage(named: NSImage.folderName)
+            } else {
+                cell.imageView?.image = NSImage(named: NSImage.multipleDocumentsName)
+            }
+        }
         
         if let relativePath = dataSource.relativePath(for: url), relativePath == selectedRelativePath.wrappedValue {
-            cell.textField?.textColor = .systemBlue
+            cell.textField?.textColor = fileLabelColor(for: url) ?? .labelColor
         } else {
-            cell.textField?.textColor = fileLabelColor(for: url) ?? .controlTextColor
+            cell.textField?.textColor = fileLabelColor(for: url) ?? .labelColor
         }
         
         return cell
@@ -279,6 +292,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
             
             Task { @MainActor in
                 self.dataSource.setSearchResults(results)
+                self.outlineView?.reloadData()
             }
         }
 
@@ -286,27 +300,12 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.25, execute: work)
     }
 
-    private func restoreExpandedChildrenIfNeeded(parentURL: NSURL?) {
-        guard let outlineView, let parentURL = parentURL else { return }
-        // Note: Simple logic to restore expansion state when data is loaded
-        // In a real app, this would recursively check children
-        if parentURL == dataSource.url(forRelativePath: "") as NSURL? {
-            // Root loaded, could select item
-            if let selected = selectedRelativePath.wrappedValue, let url = dataSource.canonicalUrl(forRelativePath: selected) {
-                DispatchQueue.main.async {
-                    let row = outlineView.row(forItem: url)
-                    if row >= 0 {
-                        outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-                        outlineView.scrollRowToVisible(row)
-                    }
-                }
-            }
-        }
-    }
-
     private func fileLabelColor(for url: NSURL) -> NSColor? {
         guard let labelNumber = try? (url as URL).resourceValues(forKeys: [.labelNumberKey]).labelNumber,
               labelNumber > 0 else { return nil }
-        return NSWorkspace.shared.fileLabelColors[labelNumber - 1]
+        let colors = NSWorkspace.shared.fileLabelColors
+        let index = labelNumber - 1
+        guard index >= 0, index < colors.count else { return nil }
+        return colors[index]
     }
 }

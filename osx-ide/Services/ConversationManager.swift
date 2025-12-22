@@ -56,7 +56,7 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
         return currentMode.allowedTools(from: allTools)
     }
     
-    init(aiService: AIService = SampleAIService(), errorManager: ErrorManagerProtocol, fileSystemService: FileSystemService = FileSystemService(), projectRoot: URL? = nil) {
+    init(aiService: AIService, errorManager: ErrorManagerProtocol, fileSystemService: FileSystemService = FileSystemService(), projectRoot: URL? = nil) {
         self.aiService = aiService
         self.errorManager = errorManager
         self.fileSystemService = fileSystemService
