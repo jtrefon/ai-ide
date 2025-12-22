@@ -32,7 +32,7 @@ struct AIChatPanel: View {
             .nativeGlassBackground(.header)
             
             // Messages list
-            MessageListView(messages: conversationManager.messages)
+            MessageListView(messages: conversationManager.messages, isSending: conversationManager.isSending)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             
             // Error display

@@ -147,36 +147,40 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
     @objc func onDoubleClick(_ sender: Any?) {
         guard let outlineView else { return }
         let row = outlineView.clickedRow
-        guard row >= 0, let item = outlineView.item(atRow: row) as? NSURL else { return }
-
-        if dataSource.isDirectory(item) {
+        guard row >= 0, let item = outlineView.item(atRow: row) as? FileTreeItem else { return }
+        
+        if dataSource.isDirectory(item.url) {
             if outlineView.isItemExpanded(item) {
                 outlineView.collapseItem(item)
             } else {
                 outlineView.expandItem(item)
             }
         } else {
-            onOpenFile(item as URL)
+            onOpenFile(item.url as URL)
         }
     }
 
     // MARK: - NSOutlineViewDelegate
 
     func outlineViewItemDidExpand(_ notification: Notification) {
-        guard !dataSource.isSearching, let url = notification.userInfo?["NSObject"] as? NSURL else { return }
-        if let relative = dataSource.relativePath(for: url) {
-            Task { @MainActor in
-                expandedRelativePaths.wrappedValue.insert(relative)
+        guard !dataSource.isSearching, let item = notification.userInfo?["NSObject"] as? FileTreeItem else { return }
+        if let relative = dataSource.relativePath(for: item.url) {
+            DispatchQueue.main.async {
+                if !self.expandedRelativePaths.wrappedValue.contains(relative) {
+                    self.expandedRelativePaths.wrappedValue.insert(relative)
+                }
             }
         }
     }
 
     func outlineViewItemDidCollapse(_ notification: Notification) {
-        guard !dataSource.isSearching, let url = notification.userInfo?["NSObject"] as? NSURL else { return }
-        if let relative = dataSource.relativePath(for: url) {
-            Task { @MainActor in
-                expandedRelativePaths.wrappedValue.remove(relative)
-                expandedRelativePaths.wrappedValue = expandedRelativePaths.wrappedValue.filter { !$0.hasPrefix(relative + "/") }
+        guard !dataSource.isSearching, let item = notification.userInfo?["NSObject"] as? FileTreeItem else { return }
+        if let relative = dataSource.relativePath(for: item.url) {
+            DispatchQueue.main.async {
+                if self.expandedRelativePaths.wrappedValue.contains(relative) {
+                    self.expandedRelativePaths.wrappedValue.remove(relative)
+                    self.expandedRelativePaths.wrappedValue = self.expandedRelativePaths.wrappedValue.filter { !$0.hasPrefix(relative + "/") }
+                }
             }
         }
     }
@@ -184,27 +188,30 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !dataSource.isSearching, let outlineView = notification.object as? NSOutlineView else { return }
         let row = outlineView.selectedRow
-        guard row >= 0, let url = outlineView.item(atRow: row) as? NSURL else {
-            Task { @MainActor in
-                selectedRelativePath.wrappedValue = nil
+        guard row >= 0, let item = outlineView.item(atRow: row) as? FileTreeItem else {
+            DispatchQueue.main.async {
+                self.selectedRelativePath.wrappedValue = nil
             }
             return
         }
         
-        if dataSource.isDirectory(url) {
-            Task { @MainActor in
-                selectedRelativePath.wrappedValue = nil
+        if dataSource.isDirectory(item.url) {
+            DispatchQueue.main.async {
+                self.selectedRelativePath.wrappedValue = nil
             }
         } else {
-            let relative = dataSource.relativePath(for: url)
-            Task { @MainActor in
-                selectedRelativePath.wrappedValue = relative
+            let relative = dataSource.relativePath(for: item.url)
+            DispatchQueue.main.async {
+                if self.selectedRelativePath.wrappedValue != relative {
+                    self.selectedRelativePath.wrappedValue = relative
+                }
             }
         }
     }
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
-        guard let url = item as? NSURL else { return nil }
+        guard let ftItem = item as? FileTreeItem else { return nil }
+        let url = ftItem.url
 
         let identifier = NSUserInterfaceItemIdentifier("cell")
         let cell: NSTableCellView = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView ?? {
@@ -236,8 +243,8 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
             return cell
         }()
 
-        cell.textField?.stringValue = dataSource.displayName(for: url)
-        cell.imageView?.image = NSWorkspace.shared.icon(forFile: url.path!)
+        cell.textField?.stringValue = dataSource.displayName(for: ftItem)
+        cell.imageView?.image = NSWorkspace.shared.icon(forFile: url.path ?? "")
         
         if let relativePath = dataSource.relativePath(for: url), relativePath == selectedRelativePath.wrappedValue {
             cell.textField?.textColor = .systemBlue
@@ -258,18 +265,18 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         }
 
         let work = DispatchWorkItem { [weak self] in
-            guard let self, let rootURL = self.dataSource.url(forRelativePath: "") else { return }
-            var results: [NSURL] = []
-            let enumerator = FileManager.default.enumerator(at: rootURL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
+            guard let self, let rootItem = self.dataSource.canonicalUrl(forRelativePath: "") else { return }
+            var results: [FileTreeItem] = []
+            let enumerator = FileManager.default.enumerator(at: rootItem.url as URL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
             let lowerQuery = query.lowercased()
             
             while let next = enumerator?.nextObject() as? URL {
                 if results.count >= 500 { break }
                 if next.lastPathComponent.lowercased().contains(lowerQuery) {
-                    results.append(next as NSURL)
+                    results.append(self.dataSource.canonical(next))
                 }
             }
-
+            
             Task { @MainActor in
                 self.dataSource.setSearchResults(results)
             }
@@ -286,10 +293,12 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         if parentURL == dataSource.url(forRelativePath: "") as NSURL? {
             // Root loaded, could select item
             if let selected = selectedRelativePath.wrappedValue, let url = dataSource.canonicalUrl(forRelativePath: selected) {
-                let row = outlineView.row(forItem: url)
-                if row >= 0 {
-                    outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-                    outlineView.scrollRowToVisible(row)
+                DispatchQueue.main.async {
+                    let row = outlineView.row(forItem: url)
+                    if row >= 0 {
+                        outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                        outlineView.scrollRowToVisible(row)
+                    }
                 }
             }
         }

@@ -6,14 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		047420C42EF6D5140011D000 /* SwiftTreeSitter in Frameworks */ = {isa = PBXBuildFile; productRef = 047420C32EF6D5140011D000 /* SwiftTreeSitter */; };
-		047420C62EF6D51C0011D000 /* SwiftTreeSitterLayer in Frameworks */ = {isa = PBXBuildFile; productRef = 047420C52EF6D51C0011D000 /* SwiftTreeSitterLayer */; };
-		047420C82EF6D5200011D000 /* TreeSitterSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 047420C72EF6D5200011D000 /* TreeSitterSwift */; };
-		B9F6F7A22F0A1C7B00A1B2C3 /* TreeSitterSwift in Frameworks */ = {isa = PBXBuildFile; productRef = B9F6F7A32F0A1C7B00A1B2C3 /* TreeSitterSwift */; };
-		B9F6F7A52F0A1C9A00A1B2C3 /* SwiftTreeSitter in Frameworks */ = {isa = PBXBuildFile; productRef = B9F6F7A62F0A1C9A00A1B2C3 /* SwiftTreeSitter */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		04C2CE182E5C8E9E007A5EF7 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -60,8 +52,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B9F6F7A22F0A1C7B00A1B2C3 /* TreeSitterSwift in Frameworks */,
-				B9F6F7A52F0A1C9A00A1B2C3 /* SwiftTreeSitter in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -76,9 +66,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				047420C42EF6D5140011D000 /* SwiftTreeSitter in Frameworks */,
-				047420C62EF6D51C0011D000 /* SwiftTreeSitterLayer in Frameworks */,
-				047420C82EF6D5200011D000 /* TreeSitterSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -133,8 +120,6 @@
 			);
 			name = "osx-ide";
 			packageProductDependencies = (
-				B9F6F7A32F0A1C7B00A1B2C3 /* TreeSitterSwift */,
-				B9F6F7A62F0A1C9A00A1B2C3 /* SwiftTreeSitter */,
 			);
 			productName = "osx-ide";
 			productReference = 04C2CE092E5C8E9D007A5EF7 /* osx-ide.app */;
@@ -181,9 +166,6 @@
 			);
 			name = "osx-ideUITests";
 			packageProductDependencies = (
-				047420C32EF6D5140011D000 /* SwiftTreeSitter */,
-				047420C52EF6D51C0011D000 /* SwiftTreeSitterLayer */,
-				047420C72EF6D5200011D000 /* TreeSitterSwift */,
 			);
 			productName = "osx-ideUITests";
 			productReference = 04C2CE212E5C8E9E007A5EF7 /* osx-ideUITests.xctest */;
@@ -222,8 +204,6 @@
 			mainGroup = 04C2CE002E5C8E9D007A5EF7;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				048553DD2EF5B40600195B94 /* XCRemoteSwiftPackageReference "SwiftTreeSitter" */,
-				B9F6F7A42F0A1C7B00A1B2C3 /* XCLocalSwiftPackageReference "Packages/TreeSitterSwift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 04C2CE0A2E5C8E9D007A5EF7 /* Products */;
@@ -587,52 +567,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		B9F6F7A42F0A1C7B00A1B2C3 /* XCLocalSwiftPackageReference "Packages/TreeSitterSwift" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/TreeSitterSwift;
-		};
-/* End XCLocalSwiftPackageReference section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		048553DD2EF5B40600195B94 /* XCRemoteSwiftPackageReference "SwiftTreeSitter" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ChimeHQ/SwiftTreeSitter";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.25.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		047420C32EF6D5140011D000 /* SwiftTreeSitter */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 048553DD2EF5B40600195B94 /* XCRemoteSwiftPackageReference "SwiftTreeSitter" */;
-			productName = SwiftTreeSitter;
-		};
-		047420C52EF6D51C0011D000 /* SwiftTreeSitterLayer */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 048553DD2EF5B40600195B94 /* XCRemoteSwiftPackageReference "SwiftTreeSitter" */;
-			productName = SwiftTreeSitterLayer;
-		};
-		047420C72EF6D5200011D000 /* TreeSitterSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = B9F6F7A42F0A1C7B00A1B2C3 /* XCLocalSwiftPackageReference "Packages/TreeSitterSwift" */;
-			productName = TreeSitterSwift;
-		};
-		B9F6F7A32F0A1C7B00A1B2C3 /* TreeSitterSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = B9F6F7A42F0A1C7B00A1B2C3 /* XCLocalSwiftPackageReference "Packages/TreeSitterSwift" */;
-			productName = TreeSitterSwift;
-		};
-		B9F6F7A62F0A1C9A00A1B2C3 /* SwiftTreeSitter */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 048553DD2EF5B40600195B94 /* XCRemoteSwiftPackageReference "SwiftTreeSitter" */;
-			productName = SwiftTreeSitter;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 04C2CE012E5C8E9D007A5EF7 /* Project object */;
 }

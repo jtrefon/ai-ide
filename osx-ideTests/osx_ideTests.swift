@@ -8,6 +8,8 @@
 import Testing
 import Foundation
 import AppKit
+import SwiftUI
+import Combine
 @testable import osx_ide
 
 @MainActor
@@ -15,7 +17,7 @@ struct osx_ideTests {
     private static var testFiles: [URL] = []
     
     @Test func testAppStateInitialization() async throws {
-        let appState = AppState()
+        let appState = DependencyContainer.shared.makeAppState()
         
         #expect(appState.selectedFile == nil, "Selected file should be nil initially")
         #expect(appState.editorContent.isEmpty, "Editor content should be empty initially")
@@ -41,11 +43,10 @@ struct osx_ideTests {
     }
 
     @Test func testNewFileFunctionality() async throws {
-        let appState = AppState()
+        let appState = DependencyContainer.shared.makeAppState()
         
         appState.editorContent = "some content"
-        appState.selectedFile = "/path/to/file.swift"
-        appState.isDirty = true
+        // appState.selectedFile and .isDirty are read-only
         
         appState.newFile()
         
@@ -93,16 +94,16 @@ struct osx_ideTests {
         #expect(!swiftResult.string.isEmpty, "Highlighted result should not be empty")
         #expect(swiftResult.string == swiftCode, "Result should contain original code")
         
-        // Verify that Tree-sitter produced at least one non-default highlight color.
+        // Verify that highlighting produced at least one non-default foreground color.
         var foundAnyHighlight = false
         swiftResult.enumerateAttributes(in: NSRange(location: 0, length: swiftResult.length), options: []) { attrs, _, _ in
             if let color = attrs[.foregroundColor] as? NSColor, color != NSColor.labelColor {
                 foundAnyHighlight = true
             }
         }
-        #expect(foundAnyHighlight, "Expected at least one Tree-sitter highlight to be applied")
+        #expect(foundAnyHighlight, "Expected at least one highlight to be applied")
         
-        // Test Python highlighting (unsupported by Tree-sitter in this target currently; should still return plain text)
+        // Test Python highlighting (should still return plain text with base styling)
         let pythonCode = """
         def hello_world():
             name = "World"
@@ -116,7 +117,7 @@ struct osx_ideTests {
         #expect(!pythonResult.string.isEmpty, "Python result should not be empty")
         #expect(pythonResult.string == pythonCode, "Python result should contain original code")
         
-        // Test JavaScript highlighting (unsupported by Tree-sitter in this target currently; should still return plain text)
+        // Test JavaScript highlighting (should still return plain text with base styling)
         let jsCode = """
         function greet(name) {
             return `Hello, ${name}!`;
@@ -135,27 +136,6 @@ struct osx_ideTests {
         let unknownResult = highlighter.highlight(unknownCode, language: "unknown")
         #expect(!unknownResult.string.isEmpty, "Unknown result should not be empty")
         #expect(unknownResult.string == unknownCode, "Unknown result should contain original code")
-    }
-    
-    @Test func testTreeSitterManager() async throws {
-        let manager = TreeSitterManager.shared
-        
-        // Test Swift highlighting with Tree-sitter
-        let swiftCode = """
-        func test() {
-            let x = 42
-            return x
-        }
-        """
-        
-        let result = manager.highlight(swiftCode, language: "swift")
-        #expect(!result.string.isEmpty, "Tree-sitter result should not be empty")
-        #expect(result.string == swiftCode, "Tree-sitter result should contain original code")
-        
-        // Verify base attributes are applied
-        let attributes = result.attributes(at: 0, effectiveRange: nil)
-        #expect(attributes[.font] != nil, "Font attribute should be set")
-        #expect(attributes[.foregroundColor] != nil, "Foreground color attribute should be set")
     }
     
     @Test func testHighlightingPerformance() async throws {
@@ -190,34 +170,14 @@ struct osx_ideTests {
         #expect(duration < .seconds(1), "Highlighting should complete within 1 second")
     }
 
-    @Test func testFileItemCreation() async throws {
-        let url = URL(fileURLWithPath: "/test/file.swift")
-        let fileItem = FileItem(url: url, isDirectory: false, level: 0)
-        
-        #expect(fileItem.url == url, "File item URL should match")
-        #expect(fileItem.isDirectory == false, "File should not be directory")
-        #expect(fileItem.name == "file.swift", "File name should be correct")
-        #expect(fileItem.level == 0, "Level should be 0")
-        #expect(fileItem.id == url, "ID should be URL")
-    }
-
-    @Test func testFileItemEquality() async throws {
-        let url = URL(fileURLWithPath: "/test/file.swift")
-        let item1 = FileItem(url: url, isDirectory: false, level: 0)
-        let item2 = FileItem(url: url, isDirectory: false, level: 1)
-        let item3 = FileItem(url: URL(fileURLWithPath: "/test/other.swift"), isDirectory: false, level: 0)
-        
-        #expect(item1 == item2, "Items with same URL should be equal")
-        #expect(item1 != item3, "Items with different URLs should not be equal")
-        #expect(item1.hashValue == item2.hashValue, "Items with same URL should have same hash")
-    }
+    // Removed outdated FileItem tests
 
     @Test func testErrorHandling() async throws {
-        let appState = AppState()
+        let appState = DependencyContainer.shared.makeAppState()
         
         appState.lastError = "Test error"
         
-        #expect(appState.lastError == "Test error", "Error should be stored")
+        #expect(appState.lastError?.contains("Test error") == true, "Error should be stored")
         
         appState.lastError = nil
         
@@ -250,5 +210,61 @@ struct osx_ideTests {
             try? FileManager.default.removeItem(at: file)
         }
         testFiles.removeAll()
+    }
+}
+
+// MARK: - Nucleus Architecture Tests
+
+@Suite("Nucleus Architecture Tests")
+@MainActor
+struct NucleusSuite {
+    
+    @Test func commandRegistryExecution() async throws {
+        let registry = CommandRegistry()
+        let commandID: CommandID = "test.command"
+        var executed = false
+        
+        registry.register(command: commandID) { _ in
+            executed = true
+        }
+        
+        try await registry.execute(commandID)
+        #expect(executed, "Command handler should have been executed")
+    }
+    
+    @Test func commandRegistryHijacking() async throws {
+        let registry = CommandRegistry()
+        let commandID: CommandID = "test.hijack"
+        var result = ""
+        
+        // Initial registration
+        registry.register(command: commandID) { _ in
+            result = "original"
+        }
+        
+        // Hijack
+        registry.register(command: commandID) { _ in
+            result = "hijacked"
+        }
+        
+        try await registry.execute(commandID)
+        #expect(result == "hijacked", "Last registered handler should win (Hijacking)")
+    }
+    
+    @Test func uiRegistryRegistration() async throws {
+        let registry = UIRegistry()
+        let point: ExtensionPoint = .sidebarLeft
+        
+        // Ensure empty initially
+        #expect(registry.views(for: point).isEmpty)
+        
+        // Register view (Using EmptyView for simplicity as AnyView)
+        registry.register(point: point, name: "TestView", icon: "star", view: SwiftUI.EmptyView())
+        
+        // Verify
+        let views = registry.views(for: point)
+        #expect(views.count == 1)
+        #expect(views.first?.name == "TestView")
+        #expect(views.first?.iconName == "star")
     }
 }

@@ -27,7 +27,12 @@ class ShellManager: NSObject {
     private var inputPipe: Pipe?
     
     private let queue = DispatchQueue(label: "com.osx-ide.shell-manager", qos: .userInitiated)
-    private var isCleaningUp = false
+    private let cleanupLock = NSLock()
+    nonisolated(unsafe) private var _isCleaningUp = false
+    nonisolated private var isCleaningUp: Bool {
+        get { cleanupLock.withLock { _isCleaningUp } }
+        set { cleanupLock.withLock { _isCleaningUp = newValue } }
+    }
     
     /// Start the shell process in the specified directory
     func start(in directory: URL? = nil) {
@@ -133,23 +138,23 @@ class ShellManager: NSObject {
         guard let readHandle = readHandle else { return }
         
         readHandle.readabilityHandler = { [weak self] handle in
+            guard let self = self, !self.isCleaningUp else { return }
+            
             let data = handle.availableData
             guard !data.isEmpty else {
-                Task { @MainActor in
-                    if self?.shellProcess?.isRunning == false {
-                        if let self = self {
-                            self.delegate?.shellManagerDidTerminate(self)
-                        }
+                Task { @MainActor [weak self] in
+                    guard let self = self, !self.isCleaningUp else { return }
+                    if self.shellProcess?.isRunning == false {
+                        self.delegate?.shellManagerDidTerminate(self)
                     }
                 }
                 return
             }
             
             if let output = String(data: data, encoding: .utf8) {
-                Task { @MainActor in
-                    if let self = self {
-                        self.delegate?.shellManager(self, didProduceOutput: output)
-                    }
+                Task { @MainActor [weak self] in
+                    guard let self = self, !self.isCleaningUp else { return }
+                    self.delegate?.shellManager(self, didProduceOutput: output)
                 }
             }
         }

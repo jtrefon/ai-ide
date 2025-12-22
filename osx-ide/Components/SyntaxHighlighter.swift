@@ -17,16 +17,9 @@ final class SyntaxHighlighter {
     // MARK: - Public API
 
     /// Returns an attributed string with syntax highlighting applied for the given language.
-    /// This method first tries to use Tree-sitter for accurate highlighting, and falls back
-    /// to regex-based highlighting when Tree-sitter is not available for the language.
+    /// This method uses a robust, always-on high-level highlighting approach.
     func highlight(_ code: String, language: String = "text") -> NSAttributedString {
-        // Tree-sitter highlighting for supported languages.
-        // For unsupported languages, we return a plain monospaced string.
         let lang = language.lowercased()
-        if lang == "swift" {
-            return TreeSitterManager.shared.highlight(code, language: lang)
-        }
-
         let attributed = NSMutableAttributedString(string: code)
         let fullRange = NSRange(location: 0, length: (code as NSString).length)
 
@@ -37,6 +30,8 @@ final class SyntaxHighlighter {
         ], range: fullRange)
 
         switch lang {
+        case "swift":
+            applySwiftHighlighting(in: attributed, code: code)
         case "javascript", "js":
             applyJavaScriptHighlighting(in: attributed, code: code)
         case "typescript", "ts":

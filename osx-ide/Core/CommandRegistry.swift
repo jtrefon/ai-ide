@@ -8,7 +8,7 @@
 import Foundation
 
 /// A unique identifier for a command, e.g., "editor.save" or "git.commit".
-public struct CommandID: Hashable, ExpressibleByStringLiteral, CustomStringConvertible {
+public struct CommandID: Hashable, ExpressibleByStringLiteral, CustomStringConvertible, Sendable {
     public let value: String
     
     public init(_ value: String) {

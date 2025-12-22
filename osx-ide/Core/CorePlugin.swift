@@ -40,6 +40,29 @@ final class CorePlugin {
             )
         )
         
-        print("[CorePlugin] Initialized core UI components")
+        // Register Standard Commands
+        let registry = CommandRegistry.shared
+        
+        registry.register(command: .fileNew) { _ in
+            appState.newFile()
+        }
+        
+        registry.register(command: .fileOpen) { _ in
+            appState.openFile()
+        }
+        
+        registry.register(command: .fileOpenFolder) { _ in
+            appState.openFolder()
+        }
+        
+        registry.register(command: .fileSave) { _ in
+            appState.saveFile()
+        }
+        
+        registry.register(command: .fileSaveAs) { _ in
+            appState.saveFileAs()
+        }
+        
+        print("[CorePlugin] Initialized core UI components and commands")
     }
 }

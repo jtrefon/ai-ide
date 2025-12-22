@@ -53,8 +53,9 @@ public final class EventBus: EventBusProtocol {
             subjects[key] = subject
         }
         
+        // EventBus is @MainActor; publish() is expected to be called from the main actor.
+        // Delivering synchronously here avoids races/flakiness in tests and keeps UI updates deterministic.
         return subject
-            .receive(on: DispatchQueue.main)
             .sink(receiveValue: handler)
     }
 }

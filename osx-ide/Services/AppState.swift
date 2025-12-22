@@ -183,18 +183,24 @@ class AppState: ObservableObject {
     }
     
     func saveFileAs() {
-        fileEditorStateManager.saveFileAs()
+        Task { @MainActor in
+            await fileEditorStateManager.saveFileAs()
+        }
     }
     
     // Workspace Operations
     func openFile() {
-        workspaceStateManager.openFileOrFolder { [weak self] url in
-            self?.loadFile(from: url)
+        Task { @MainActor in
+            await workspaceStateManager.openFileOrFolder { [weak self] url in
+                self?.loadFile(from: url)
+            }
         }
     }
     
     func openFolder() {
-        workspaceStateManager.openFolder()
+        Task { @MainActor in
+            await workspaceStateManager.openFolder()
+        }
     }
     
     func createFile(name: String) {

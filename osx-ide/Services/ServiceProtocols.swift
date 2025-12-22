@@ -88,9 +88,9 @@ extension FileEditorServiceProtocol where Self: ObservableObject {
 /// Protocol for user-facing file dialogs
 @MainActor
 protocol FileDialogServiceProtocol {
-    func openFileOrFolder() -> URL?
-    func openFolder() -> URL?
-    func saveFile(defaultFileName: String, allowedContentTypes: [UTType]) -> URL?
+    func openFileOrFolder() async -> URL?
+    func openFolder() async -> URL?
+    func saveFile(defaultFileName: String, allowedContentTypes: [UTType]) async -> URL?
 }
 
 /// Protocol for AI conversation management

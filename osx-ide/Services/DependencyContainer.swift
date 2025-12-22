@@ -46,6 +46,10 @@ class DependencyContainer {
     var fileDialogService: FileDialogServiceProtocol {
         return _fileDialogService
     }
+
+    var windowProvider: WindowProvider {
+        return _windowProvider
+    }
     
     /// AI service instance
     var aiService: AIService {
@@ -65,7 +69,8 @@ class DependencyContainer {
         _uiService = UIService(errorManager: errorManager)
         _workspaceService = WorkspaceService(errorManager: errorManager)
         _fileSystemService = FileSystemService()
-        _fileDialogService = FileDialogService()
+        _windowProvider = WindowProvider()
+        _fileDialogService = FileDialogService(windowProvider: _windowProvider)
         _fileEditorService = FileEditorService(
             errorManager: errorManager,
             fileSystemService: _fileSystemService
@@ -111,6 +116,7 @@ class DependencyContainer {
     private let _fileEditorService: FileEditorServiceProtocol
     private let _fileSystemService: FileSystemService
     private let _fileDialogService: FileDialogServiceProtocol
+    private let _windowProvider: WindowProvider
     private var _aiService: AIService
     private var _conversationManager: ConversationManagerProtocol
 }

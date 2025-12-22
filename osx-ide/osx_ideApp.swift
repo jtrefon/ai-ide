@@ -58,29 +58,29 @@ struct osx_ideApp: App {
             
             CommandGroup(replacing: .newItem) {
                 Button("New") {
-                    appState.newFile()
+                    Task { try? await CommandRegistry.shared.execute(.fileNew) }
                 }
                 .keyboardShortcut("n", modifiers: [.command])
             }
             
             CommandGroup(after: .importExport) {
                 Button("Open...") {
-                    appState.openFile()
+                    Task { try? await CommandRegistry.shared.execute(.fileOpen) }
                 }
                 .keyboardShortcut("o", modifiers: [.command])
                 
                 Button("Open Folder...") {
-                    appState.openFolder()
+                    Task { try? await CommandRegistry.shared.execute(.fileOpenFolder) }
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
                 
                 Button("Save") {
-                    appState.saveFile()
+                    Task { try? await CommandRegistry.shared.execute(.fileSave) }
                 }
                 .keyboardShortcut("s", modifiers: [.command])
                 
                 Button("Save As...") {
-                    appState.saveFileAs()
+                    Task { try? await CommandRegistry.shared.execute(.fileSaveAs) }
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
             }

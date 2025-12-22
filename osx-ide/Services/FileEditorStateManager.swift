@@ -62,7 +62,9 @@ class FileEditorStateManager: ObservableObject {
     /// Save current content to selected file
     func saveFile() {
         guard selectedFile != nil else {
-            saveFileAs()
+            Task { @MainActor in
+                await self.saveFileAs()
+            }
             return
         }
         syncServiceState()
@@ -71,11 +73,11 @@ class FileEditorStateManager: ObservableObject {
     }
     
     /// Save file to new location
-    func saveFileAs() {
+    func saveFileAs() async {
         syncServiceState()
         let defaultName = selectedFile != nil ?
             URL(fileURLWithPath: selectedFile!).lastPathComponent : "Untitled.swift"
-        guard let url = fileDialogService.saveFile(defaultFileName: defaultName, allowedContentTypes: [.swiftSource, .plainText]) else {
+        guard let url = await fileDialogService.saveFile(defaultFileName: defaultName, allowedContentTypes: [.swiftSource, .plainText]) else {
             return
         }
         fileEditorService.saveFileAs(to: url)

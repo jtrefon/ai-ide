@@ -15,6 +15,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             WindowAccessor { window in
+                DependencyContainer.shared.windowProvider.setWindow(window)
                 // Modern macOS v26 window styling
                 window.titleVisibility = .hidden
                 window.titlebarAppearsTransparent = true

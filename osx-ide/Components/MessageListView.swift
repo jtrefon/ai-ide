@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MessageListView: View {
     let messages: [ChatMessage]
+    let isSending: Bool
     @State private var scrollToBottomTrigger: Int = 0
     
     var body: some View {
@@ -17,6 +18,22 @@ struct MessageListView: View {
                 ForEach(messages) { message in
                     MessageView(message: message)
                         .id(message.id)
+                }
+
+                if isSending {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Assistant is typing…")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.gray.opacity(0.15))
+                    .cornerRadius(16)
+                    .frame(maxWidth: 400)
                 }
             }
             .padding()
@@ -175,10 +192,13 @@ struct MessageView: View {
 
 struct MessageListView_Previews: PreviewProvider {
     static var previews: some View {
-        MessageListView(messages: [
-            ChatMessage(role: .assistant, content: "Hello! How can I help you today?"),
-            ChatMessage(role: .user, content: "Can you explain this code?"),
-            ChatMessage(role: .assistant, content: "Sure! This code implements a chat interface."),
-        ])
+        MessageListView(
+            messages: [
+                ChatMessage(role: .assistant, content: "Hello! How can I help you today?"),
+                ChatMessage(role: .user, content: "Can you explain this code?"),
+                ChatMessage(role: .assistant, content: "Sure! This code implements a chat interface."),
+            ],
+            isSending: true
+        )
     }
 }
