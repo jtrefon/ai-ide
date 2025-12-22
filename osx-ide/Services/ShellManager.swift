@@ -7,6 +7,7 @@
 
 import Foundation
 import AppKit
+import Darwin
 
 /// Protocol for monitoring shell output
 protocol ShellManagerDelegate: AnyObject {
@@ -23,8 +24,8 @@ class ShellManager: NSObject {
     private var shellProcess: Process?
     private var readHandle: FileHandle?
     private var writeHandle: FileHandle?
-    private var outputPipe: Pipe?
-    private var inputPipe: Pipe?
+    private var ptyMasterFD: Int32?
+    private var ptySlaveFD: Int32?
     
     private let queue = DispatchQueue(label: "com.osx-ide.shell-manager", qos: .userInitiated)
     private let cleanupLock = NSLock()
@@ -36,9 +37,13 @@ class ShellManager: NSObject {
     
     /// Start the shell process in the specified directory
     func start(in directory: URL? = nil) {
+        start(in: directory, arguments: ["-i"], environmentOverrides: [:])
+    }
+
+    func start(in directory: URL? = nil, arguments: [String], environmentOverrides: [String: String]) {
         cleanup()
         isCleaningUp = false
-        
+
         let shellPath: String
         if FileManager.default.fileExists(atPath: "/bin/zsh") {
             shellPath = "/bin/zsh"
@@ -48,45 +53,67 @@ class ShellManager: NSObject {
             notifyError("No suitable shell found (zsh or bash required)")
             return
         }
-        
+
         guard FileManager.default.isExecutableFile(atPath: shellPath) else {
             notifyError("Shell at \(shellPath) is not executable")
             return
         }
 
+        var master: Int32 = 0
+        var slave: Int32 = 0
+        guard openpty(&master, &slave, nil, nil, nil) == 0 else {
+            notifyError("Failed to create PTY")
+            return
+        }
+
+        // Configure a reasonable initial window size so shells that depend on it behave.
+        var winSize = winsize(
+            ws_row: UInt16(AppConstants.Terminal.defaultRows),
+            ws_col: UInt16(AppConstants.Terminal.defaultColumns),
+            ws_xpixel: 0,
+            ws_ypixel: 0
+        )
+        _ = ioctl(master, TIOCSWINSZ, &winSize)
+
+        let masterHandle = FileHandle(fileDescriptor: master, closeOnDealloc: false)
+        let slaveHandle = FileHandle(fileDescriptor: slave, closeOnDealloc: false)
+
         let process = Process()
-        let outputPipe = Pipe()
-        let inputPipe = Pipe()
-        
         process.executableURL = URL(fileURLWithPath: shellPath)
-        process.arguments = ["-i"]
+        process.arguments = arguments
         process.currentDirectoryURL = directory ?? FileManager.default.homeDirectoryForCurrentUser
-        
-        process.standardOutput = outputPipe
-        process.standardInput = inputPipe
-        process.standardError = outputPipe
-        
+        process.standardInput = slaveHandle
+        process.standardOutput = slaveHandle
+        process.standardError = slaveHandle
+
         var environment = ProcessInfo.processInfo.environment
-        environment["TERM"] = "xterm"
-        environment["COLUMNS"] = "\(AppConstants.Terminal.defaultColumns)"
-        environment["LINES"] = "\(AppConstants.Terminal.defaultRows)"
-        environment["PROMPT"] = "$ "
-        environment["PROMPT_EOL_MARK"] = ""
-        environment["ZSH_THEME"] = ""
-        environment["DISABLE_AUTO_TITLE"] = "true"
+        environment["TERM"] = environmentOverrides["TERM"] ?? "xterm-256color"
+        environment["COLUMNS"] = environmentOverrides["COLUMNS"] ?? "\(AppConstants.Terminal.defaultColumns)"
+        environment["LINES"] = environmentOverrides["LINES"] ?? "\(AppConstants.Terminal.defaultRows)"
+        environment["PROMPT"] = environmentOverrides["PROMPT"] ?? "$ "
+        environment["PROMPT_EOL_MARK"] = environmentOverrides["PROMPT_EOL_MARK"] ?? ""
+        environment["ZSH_THEME"] = environmentOverrides["ZSH_THEME"] ?? ""
+        environment["DISABLE_AUTO_TITLE"] = environmentOverrides["DISABLE_AUTO_TITLE"] ?? "true"
+        for (k, v) in environmentOverrides {
+            environment[k] = v
+        }
         process.environment = environment
-        
+
         self.shellProcess = process
-        self.outputPipe = outputPipe
-        self.inputPipe = inputPipe
-        self.readHandle = outputPipe.fileHandleForReading
-        self.writeHandle = inputPipe.fileHandleForWriting
-        
+        self.ptyMasterFD = master
+        self.ptySlaveFD = slave
+        self.readHandle = masterHandle
+        self.writeHandle = masterHandle
+
         setupOutputMonitoring()
-        
+
         do {
             try process.run()
-            
+
+            // Parent no longer needs to hold the slave side open once the child is running.
+            try? slaveHandle.close()
+            self.ptySlaveFD = nil
+
             // Re-verify after a short delay
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
@@ -183,8 +210,8 @@ class ShellManager: NSObject {
         shellProcess = nil
         readHandle = nil
         writeHandle = nil
-        outputPipe = nil
-        inputPipe = nil
+        ptyMasterFD = nil
+        ptySlaveFD = nil
     }
     
     private func notifyError(_ message: String) {

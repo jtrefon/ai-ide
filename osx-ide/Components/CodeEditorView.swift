@@ -44,8 +44,7 @@ struct TextViewRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         let textView = NSTextView()
-        
-        textView.delegate = context.coordinator
+
         textView.isEditable = true
         textView.isSelectable = true
         textView.allowsUndo = true
@@ -67,7 +66,12 @@ struct TextViewRepresentable: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = false
         
         // Set initial text without syntax highlighting to avoid initialization issues
+        context.coordinator.isProgrammaticUpdate = true
         textView.string = text
+        context.coordinator.isProgrammaticUpdate = false
+
+        // Assign delegate only after initial programmatic setup to avoid publishing SwiftUI state during view updates.
+        textView.delegate = context.coordinator
         
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true

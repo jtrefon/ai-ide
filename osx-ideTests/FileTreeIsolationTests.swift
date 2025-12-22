@@ -29,15 +29,12 @@ final class FileTreeIsolationTests: XCTestCase {
         try await super.tearDown()
     }
     
-    func testRapidRootChange() async throws {
+    func testRapidRootChange() throws {
         // Create dummy files
         for i in 0..<100 {
             let fileURL = tempDirectory.appendingPathComponent("file_\(i).txt")
             try? "content".write(to: fileURL, atomically: true, encoding: .utf8)
         }
-        
-        let expectation = expectation(description: "Rapid reload completed")
-        expectation.expectedFulfillmentCount = 50
         
         // Rapidly change root/search to provoke race conditions
         for i in 0..<50 {
@@ -46,13 +43,10 @@ final class FileTreeIsolationTests: XCTestCase {
             } else {
                 self.dataSource.setSearchQuery("file")
             }
-            expectation.fulfill()
         }
-        
-        await fulfillment(of: [expectation], timeout: 2.0)
     }
     
-    func testDataSourceConsistency() async throws {
+    func testDataSourceConsistency() throws {
         // Setup
         let folderA = tempDirectory.appendingPathComponent("FolderA")
         try? FileManager.default.createDirectory(at: folderA, withIntermediateDirectories: true)
@@ -60,28 +54,27 @@ final class FileTreeIsolationTests: XCTestCase {
         try? "content".write(to: fileA, atomically: true, encoding: .utf8)
         
         dataSource.setRootURL(tempDirectory)
-        
-        // Wait for potential async loading
-        try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
-        
+
+        // Allow any pending work to settle.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+
         let outlineView = NSOutlineView()
         let count = dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil)
         XCTAssertTrue(count > 0, "Should have loaded children")
-        
+
         // Check if root is correct
         let child = dataSource.outlineView(outlineView, child: 0, ofItem: nil)
         XCTAssertNotNil(child as? FileTreeItem)
     }
 
-    func testChildOfUnexpectedItemDoesNotCrash() async throws {
+    func testChildOfUnexpectedItemDoesNotCrash() throws {
         dataSource.setRootURL(tempDirectory)
-
         let outlineView = NSOutlineView()
         let child = dataSource.outlineView(outlineView, child: 0, ofItem: NSObject())
         XCTAssertNotNil(child)
     }
 
-    func testNestedDirectoryChildrenCanBeLoadedSynchronously() async throws {
+    func testNestedDirectoryChildrenCanBeLoadedSynchronously() throws {
         let folderA = tempDirectory.appendingPathComponent("FolderA")
         try FileManager.default.createDirectory(at: folderA, withIntermediateDirectories: true)
         let nested = folderA.appendingPathComponent("Nested")
@@ -105,7 +98,7 @@ final class FileTreeIsolationTests: XCTestCase {
         XCTAssertGreaterThan(folderAChildrenCount, 0)
     }
 
-    func testOutlineCellRenderingForNestedItemsDoesNotCrash() async throws {
+    func testOutlineCellRenderingForNestedItemsDoesNotCrash() throws {
         let folderA = tempDirectory.appendingPathComponent("FolderA")
         try FileManager.default.createDirectory(at: folderA, withIntermediateDirectories: true)
         let folderB = folderA.appendingPathComponent("FolderB")
@@ -148,5 +141,36 @@ final class FileTreeIsolationTests: XCTestCase {
                 }
             }
         }
+    }
+
+    func testSearchTypingDoesNotCrashAndProducesResults() throws {
+        for i in 0..<50 {
+            let fileURL = tempDirectory.appendingPathComponent("file_\(i).txt")
+            try "content".write(to: fileURL, atomically: true, encoding: .utf8)
+        }
+
+        let expanded = Binding<Set<String>>(get: { [] }, set: { _ in })
+        let selected = Binding<String?>(get: { nil }, set: { _ in })
+        let coordinator = ModernCoordinator(
+            expandedRelativePaths: expanded,
+            selectedRelativePath: selected,
+            onOpenFile: { _ in }
+        )
+
+        coordinator.update(rootURL: tempDirectory, searchQuery: "", refreshToken: 0)
+        coordinator.update(rootURL: tempDirectory, searchQuery: "f", refreshToken: 0)
+        coordinator.update(rootURL: tempDirectory, searchQuery: "fi", refreshToken: 0)
+        coordinator.update(rootURL: tempDirectory, searchQuery: "file_1", refreshToken: 0)
+
+        let outlineView = NSOutlineView()
+        var childCount = 0
+        let deadline = Date().addingTimeInterval(3.0)
+        while Date() < deadline {
+            childCount = coordinator.dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil)
+            if childCount > 0 { break }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+
+        XCTAssertGreaterThan(childCount, 0)
     }
 }
