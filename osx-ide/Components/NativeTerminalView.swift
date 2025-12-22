@@ -82,16 +82,33 @@ struct TerminalContentView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView()
         containerView.wantsLayer = true
-        
-        // Embed terminal immediately when view is created
-        embedder.embedTerminal(in: containerView, directory: currentDirectory)
+
+        context.coordinator.scheduleEmbed(into: containerView, directory: currentDirectory, embedder: embedder)
         
         return containerView
     }
     
     func updateNSView(_ nsView: NSView, context: Context) {
-        // Update if directory changes - the embedder now handles reuse internally
-        embedder.embedTerminal(in: nsView, directory: currentDirectory)
+        context.coordinator.scheduleEmbed(into: nsView, directory: currentDirectory, embedder: embedder)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator {
+        private var lastEmbeddedPath: String?
+
+        func scheduleEmbed(into view: NSView, directory: URL?, embedder: NativeTerminalEmbedder) {
+            let path = directory?.standardizedFileURL.path
+            guard lastEmbeddedPath != path else { return }
+            lastEmbeddedPath = path
+
+            Task { @MainActor in
+                await Task.yield()
+                embedder.embedTerminal(in: view, directory: directory)
+            }
+        }
     }
 }
 

@@ -93,8 +93,10 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
     private let onOpenFile: (URL) -> Void
     private weak var outlineView: NSOutlineView?
     private var searchWorkItem: DispatchWorkItem?
+    private var searchGeneration: Int = 0
     var refreshToken: Int = 0
     private var lastRootPath: String?
+    private var lastRootURL: URL?
     private var lastSearchQuery: String = ""
 
     init(
@@ -125,6 +127,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         let rootPath = rootURL.standardizedFileURL.path
         if lastRootPath != rootPath {
             lastRootPath = rootPath
+            lastRootURL = rootURL.standardizedFileURL
             dataSource.setRootURL(rootURL)
             needsReload = true
         }
@@ -136,16 +139,22 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         }
 
         if needsReload {
-            outlineView?.reloadData()
+            // Avoid triggering delegate callbacks that publish SwiftUI state during view updates.
+            Task { @MainActor [weak self] in
+                await Task.yield()
+                self?.outlineView?.reloadData()
+            }
         }
     }
 
     private func setSearchQuery(_ value: String) {
         let wasSearching = dataSource.isSearching
         dataSource.setSearchQuery(value)
-        
-        if wasSearching != dataSource.isSearching {
+
+        if dataSource.isSearching {
             scheduleSearch(query: value)
+        } else if wasSearching {
+            dataSource.resetCaches()
         }
     }
 
@@ -170,7 +179,8 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
     func outlineViewItemDidExpand(_ notification: Notification) {
         guard !dataSource.isSearching, let item = notification.userInfo?["NSObject"] as? FileTreeItem else { return }
         if let relative = dataSource.relativePath(for: item.url) {
-            DispatchQueue.main.async {
+            Task { @MainActor in
+                await Task.yield()
                 if !self.expandedRelativePaths.wrappedValue.contains(relative) {
                     self.expandedRelativePaths.wrappedValue.insert(relative)
                 }
@@ -181,7 +191,8 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
     func outlineViewItemDidCollapse(_ notification: Notification) {
         guard !dataSource.isSearching, let item = notification.userInfo?["NSObject"] as? FileTreeItem else { return }
         if let relative = dataSource.relativePath(for: item.url) {
-            DispatchQueue.main.async {
+            Task { @MainActor in
+                await Task.yield()
                 if self.expandedRelativePaths.wrappedValue.contains(relative) {
                     self.expandedRelativePaths.wrappedValue.remove(relative)
                     self.expandedRelativePaths.wrappedValue = self.expandedRelativePaths.wrappedValue.filter { !$0.hasPrefix(relative + "/") }
@@ -194,19 +205,22 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         guard !dataSource.isSearching, let outlineView = notification.object as? NSOutlineView else { return }
         let row = outlineView.selectedRow
         guard row >= 0, let item = outlineView.item(atRow: row) as? FileTreeItem else {
-            DispatchQueue.main.async {
+            Task { @MainActor in
+                await Task.yield()
                 self.selectedRelativePath.wrappedValue = nil
             }
             return
         }
         
         if dataSource.isDirectory(item.url) {
-            DispatchQueue.main.async {
+            Task { @MainActor in
+                await Task.yield()
                 self.selectedRelativePath.wrappedValue = nil
             }
         } else {
             let relative = dataSource.relativePath(for: item.url)
-            DispatchQueue.main.async {
+            Task { @MainActor in
+                await Task.yield()
                 if self.selectedRelativePath.wrappedValue != relative {
                     self.selectedRelativePath.wrappedValue = relative
                 }
@@ -270,28 +284,73 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
 
     // MARK: - Private
 
+    private nonisolated static func enumerateMatches(rootURL: URL, query: String, limit: Int) -> [URL] {
+        var results: [URL] = []
+        let enumerator = FileManager.default.enumerator(
+            at: rootURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+        let lowerQuery = query.lowercased()
+
+        while let next = enumerator?.nextObject() as? URL {
+            if results.count >= limit { break }
+            if next.lastPathComponent.lowercased().contains(lowerQuery) {
+                results.append(next)
+            }
+        }
+
+        return results
+    }
+
+    private nonisolated static func makeSearchWorkItem(
+        rootURL: URL,
+        query: String,
+        limit: Int,
+        onResults: @escaping ([URL]) -> Void
+    ) -> DispatchWorkItem {
+        DispatchWorkItem {
+            let results = Self.enumerateMatches(rootURL: rootURL, query: query, limit: limit)
+            onResults(results)
+        }
+    }
+
     private func scheduleSearch(query: String) {
         searchWorkItem?.cancel()
+        searchGeneration += 1
+        let currentGeneration = searchGeneration
+        let rootURLSnapshot = lastRootURL
+        let querySnapshot = query
+
         if query.isEmpty {
             dataSource.resetCaches()
             return
         }
 
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, let rootItem = self.dataSource.canonicalUrl(forRelativePath: "") else { return }
-            var results: [FileTreeItem] = []
-            let enumerator = FileManager.default.enumerator(at: rootItem.url as URL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
-            let lowerQuery = query.lowercased()
-            
-            while let next = enumerator?.nextObject() as? URL {
-                if results.count >= 500 { break }
-                if next.lastPathComponent.lowercased().contains(lowerQuery) {
-                    results.append(self.dataSource.canonical(next))
-                }
-            }
-            
-            Task { @MainActor in
-                self.dataSource.setSearchResults(results)
+        // XCTest runs the app-hosted test bundle in a way that can SIGTRAP if we spin the main
+        // runloop to await debounced background work. Make search deterministic for tests by
+        // performing it synchronously on the MainActor.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            guard let rootURL = rootURLSnapshot else { return }
+            let results = Self.enumerateMatches(rootURL: rootURL, query: querySnapshot, limit: 500)
+
+            guard self.searchGeneration == currentGeneration else { return }
+            guard self.lastSearchQuery == querySnapshot else { return }
+            let items = results.map { self.dataSource.canonical($0) }
+            self.dataSource.setSearchResults(items)
+            self.outlineView?.reloadData()
+            return
+        }
+
+        guard let rootURL = rootURLSnapshot else { return }
+
+        let work = Self.makeSearchWorkItem(rootURL: rootURL, query: querySnapshot, limit: 500) { [weak self] results in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard self.searchGeneration == currentGeneration else { return }
+                guard self.lastSearchQuery == querySnapshot else { return }
+                let items = results.map { self.dataSource.canonical($0) }
+                self.dataSource.setSearchResults(items)
                 self.outlineView?.reloadData()
             }
         }

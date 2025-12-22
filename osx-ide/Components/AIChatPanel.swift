@@ -81,7 +81,9 @@ struct AIChatPanel: View {
             .background(Color.gray.opacity(0.1))
         }
         .onReceive(conversationManager.statePublisher) { _ in
-            stateTick &+= 1
+            DispatchQueue.main.async {
+                stateTick &+= 1
+            }
         }
         .animation(nil, value: stateTick)
         .accessibilityIdentifier("AIChatPanel")
