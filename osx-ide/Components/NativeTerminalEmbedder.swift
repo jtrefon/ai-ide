@@ -36,7 +36,9 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         if let existingView = terminalView {
             if existingView.enclosingScrollView?.superview == parentView || existingView.superview == parentView {
                 if let current = self.currentDirectory?.standardizedFileURL, let new = newDir, current.path != new.path {
-                    self.currentDirectory = new
+                    DispatchQueue.main.async { [weak self] in
+                        self?.currentDirectory = new
+                    }
                     shellManager.sendInput("cd '\(new.path)'\n")
                 }
                 return
@@ -45,15 +47,16 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         
         cleanup()
         
-        self.currentDirectory = newDir ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
-        isCleaningUp = false
-        
-        setupTerminalView(in: parentView)
-        shellManager.start(in: currentDirectory)
+        let targetDir = newDir ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
         
         DispatchQueue.main.async { [weak self] in
+            self?.currentDirectory = targetDir
             self?.errorMessage = nil
         }
+        
+        isCleaningUp = false
+        setupTerminalView(in: parentView)
+        shellManager.start(in: targetDir)
     }
     
     /// Setup terminal view

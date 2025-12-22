@@ -11,6 +11,7 @@ struct ChatInputView: View {
     @Binding var text: String
     var isSending: Bool
     var onSend: () -> Void
+    @State private var inputMonitor: Any?
     
     var body: some View {
         HStack {
@@ -19,6 +20,7 @@ struct ChatInputView: View {
                     .frame(height: 60)
                     .padding(4)
                     .background(Color(NSColor.textBackgroundColor))
+                    .accessibilityIdentifier("AIChatInputTextView")
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
@@ -26,7 +28,7 @@ struct ChatInputView: View {
                     )
                     .onAppear {
                         // Register for key events
-                        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                        self.inputMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                             if event.keyCode == 36 { // Enter key
                                 if event.modifierFlags.contains(.shift) {
                                     // Shift+Enter: insert newline (let it through)
@@ -34,12 +36,20 @@ struct ChatInputView: View {
                                 } else {
                                     // Plain Enter: send message
                                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending {
-                                        onSend()
+                                        DispatchQueue.main.async {
+                                            onSend()
+                                        }
                                     }
                                     return nil // Consume the event
                                 }
                             }
                             return event
+                        }
+                    }
+                    .onDisappear {
+                        if let monitor = self.inputMonitor {
+                            NSEvent.removeMonitor(monitor)
+                            self.inputMonitor = nil
                         }
                     }
                 

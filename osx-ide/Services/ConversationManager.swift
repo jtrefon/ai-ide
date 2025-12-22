@@ -111,7 +111,13 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
             
             do {
                 // Initial call with full history
-                var currentResponse = try await aiService.sendMessage(self.messages, context: context, tools: availableTools, mode: currentMode, projectRoot: projectRoot)
+                var currentResponse = try await sendMessageWithRetry(
+                    messages: self.messages,
+                    context: context,
+                    tools: availableTools,
+                    mode: currentMode,
+                    projectRoot: projectRoot
+                )
                 
                 // Tool calling loop
                 var toolIteration = 0
@@ -212,7 +218,13 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     
                     // 3. Send updated history (with tool outputs) back to AI
                     // We don't send "toolFeedback" string anymore, we send the updated `self.messages`
-                    currentResponse = try await aiService.sendMessage(self.messages, context: context, tools: availableTools, mode: currentMode, projectRoot: projectRoot)
+                    currentResponse = try await sendMessageWithRetry(
+                        messages: self.messages,
+                        context: context,
+                        tools: availableTools,
+                        mode: currentMode,
+                        projectRoot: projectRoot
+                    )
                 }
                 
                 // Final Response (Answer)
@@ -231,6 +243,31 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 }
             }
         }
+    }
+
+    private func sendMessageWithRetry(
+        messages: [ChatMessage],
+        context: String?,
+        tools: [AITool],
+        mode: AIMode,
+        projectRoot: URL
+    ) async throws -> AIServiceResponse {
+        let maxAttempts = 3
+        let delayNs: UInt64 = 5_000_000_000
+
+        var lastError: Error?
+        for attempt in 1...maxAttempts {
+            do {
+                return try await aiService.sendMessage(messages, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
+            } catch {
+                lastError = error
+                if attempt < maxAttempts {
+                    try await Task.sleep(nanoseconds: delayNs)
+                }
+            }
+        }
+
+        throw lastError ?? NSError(domain: "ConversationManager", code: -1)
     }
     
     func clearConversation() {

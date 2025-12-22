@@ -47,8 +47,8 @@ class WorkspaceStateManager: ObservableObject {
     
     /// Open file dialog for selecting files or directories
     /// - Parameter onFileSelected: Callback invoked when a file (not directory) is selected
-    func openFileOrFolder(onFileSelected: ((URL) -> Void)? = nil) {
-        guard let url = fileDialogService.openFileOrFolder() else { return }
+    func openFileOrFolder(onFileSelected: ((URL) -> Void)? = nil) async {
+        guard let url = await fileDialogService.openFileOrFolder() else { return }
         let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
         if isDirectory {
             workspaceService.currentDirectory = url
@@ -66,8 +66,8 @@ class WorkspaceStateManager: ObservableObject {
     }
     
     /// Open folder dialog specifically for directories
-    func openFolder() {
-        guard let url = fileDialogService.openFolder() else { return }
+    func openFolder() async {
+        guard let url = await fileDialogService.openFolder() else { return }
         workspaceService.currentDirectory = url
         currentDirectory = url
         saveCurrentDirectory(url)

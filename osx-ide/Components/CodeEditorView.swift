@@ -54,6 +54,10 @@ struct TextViewRepresentable: NSViewRepresentable {
         textView.insertionPointColor = NSColor.labelColor
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
+
+        // UI Tests need a stable identifier; otherwise `app.textViews.firstMatch` can
+        // accidentally match the AI chat input instead of the editor.
+        textView.setAccessibilityIdentifier("CodeEditorTextView")
         
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
