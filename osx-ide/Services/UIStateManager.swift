@@ -32,13 +32,6 @@ class UIStateManager: ObservableObject {
     @Published var selectedTheme: AppTheme = .system
     @Published var isDarkMode: Bool = false
     
-    // MARK: - View State
-    
-    @Published var activeView: ActiveView = .editor
-    @Published var isLoading: Bool = false
-    @Published var isFullScreen: Bool = false
-    @Published var windowTitle: String = "OSX IDE"
-    
     // MARK: - Services
     
     private let uiService: UIServiceProtocol
@@ -157,24 +150,6 @@ class UIStateManager: ObservableObject {
         }
     }
     
-    // MARK: - View State Management
-    
-    func setActiveView(_ view: ActiveView) {
-        activeView = view
-    }
-    
-    func setLoading(_ loading: Bool) {
-        isLoading = loading
-    }
-    
-    func toggleFullScreen() {
-        isFullScreen.toggle()
-    }
-    
-    func updateWindowTitle(_ title: String) {
-        windowTitle = title
-    }
-    
     // MARK: - Settings Persistence
     
     private func loadSettings() {
@@ -220,12 +195,4 @@ class UIStateManager: ObservableObject {
         uiService.importSettings(settings)
         loadSettings() // Refresh local state
     }
-}
-
-/// UI State enums
-enum ActiveView {
-    case editor
-    case terminal
-    case chat
-    case settings
 }

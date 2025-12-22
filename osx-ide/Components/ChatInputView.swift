@@ -6,12 +6,14 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct ChatInputView: View {
     @Binding var text: String
     var isSending: Bool
     var onSend: () -> Void
     @State private var inputMonitor: Any?
+    @FocusState private var isInputFocused: Bool
     
     var body: some View {
         HStack {
@@ -21,6 +23,7 @@ struct ChatInputView: View {
                     .padding(4)
                     .background(Color(NSColor.textBackgroundColor))
                     .accessibilityIdentifier("AIChatInputTextView")
+                    .focused($isInputFocused)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
@@ -29,6 +32,7 @@ struct ChatInputView: View {
                     .onAppear {
                         // Register for key events
                         self.inputMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                            guard isInputFocused else { return event }
                             if event.keyCode == 36 { // Enter key
                                 if event.modifierFlags.contains(.shift) {
                                     // Shift+Enter: insert newline (let it through)

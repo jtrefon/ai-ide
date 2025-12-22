@@ -62,7 +62,7 @@ struct FileExplorerView: View {
             }
             .padding(8)
             .frame(height: 48) // Slightly taller for search bar
-            .nativeGlassBackground(.header)
+            .background(Color(NSColor.windowBackgroundColor))
             // Modern macOS v26 file tree with subtle styling
             ModernFileTreeView(
                 rootURL: appState.currentDirectory ?? FileManager.default.homeDirectoryForCurrentUser,
@@ -74,7 +74,7 @@ struct FileExplorerView: View {
                     appState.loadFile(from: url)
                 }
             )
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(Color(NSColor.windowBackgroundColor))
             .contextMenu {
                 Button("New File") {
                     newFileName = ""

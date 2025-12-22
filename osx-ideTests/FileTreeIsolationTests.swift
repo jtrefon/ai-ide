@@ -7,6 +7,7 @@
 
 import XCTest
 import AppKit
+import SwiftUI
 @testable import osx_ide
 
 @MainActor
@@ -70,5 +71,82 @@ final class FileTreeIsolationTests: XCTestCase {
         // Check if root is correct
         let child = dataSource.outlineView(outlineView, child: 0, ofItem: nil)
         XCTAssertNotNil(child as? FileTreeItem)
+    }
+
+    func testChildOfUnexpectedItemDoesNotCrash() async throws {
+        dataSource.setRootURL(tempDirectory)
+
+        let outlineView = NSOutlineView()
+        let child = dataSource.outlineView(outlineView, child: 0, ofItem: NSObject())
+        XCTAssertNotNil(child)
+    }
+
+    func testNestedDirectoryChildrenCanBeLoadedSynchronously() async throws {
+        let folderA = tempDirectory.appendingPathComponent("FolderA")
+        try FileManager.default.createDirectory(at: folderA, withIntermediateDirectories: true)
+        let nested = folderA.appendingPathComponent("Nested")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        let file = nested.appendingPathComponent("hello.txt")
+        try "hi".write(to: file, atomically: true, encoding: .utf8)
+
+        dataSource.setRootURL(tempDirectory)
+
+        let outlineView = NSOutlineView()
+        let rootChildCount = dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil)
+        XCTAssertGreaterThan(rootChildCount, 0)
+
+        let folderAItemAny = dataSource.outlineView(outlineView, child: 0, ofItem: nil)
+        guard let folderAItem = folderAItemAny as? FileTreeItem else {
+            XCTFail("Expected FileTreeItem")
+            return
+        }
+
+        let folderAChildrenCount = dataSource.outlineView(outlineView, numberOfChildrenOfItem: folderAItem)
+        XCTAssertGreaterThan(folderAChildrenCount, 0)
+    }
+
+    func testOutlineCellRenderingForNestedItemsDoesNotCrash() async throws {
+        let folderA = tempDirectory.appendingPathComponent("FolderA")
+        try FileManager.default.createDirectory(at: folderA, withIntermediateDirectories: true)
+        let folderB = folderA.appendingPathComponent("FolderB")
+        try FileManager.default.createDirectory(at: folderB, withIntermediateDirectories: true)
+        let fileB = folderB.appendingPathComponent("file.txt")
+        try "content".write(to: fileB, atomically: true, encoding: .utf8)
+
+        let expanded = Binding<Set<String>>(get: { [] }, set: { _ in })
+        let selected = Binding<String?>(get: { nil }, set: { _ in })
+        let coordinator = ModernCoordinator(
+            expandedRelativePaths: expanded,
+            selectedRelativePath: selected,
+            onOpenFile: { _ in }
+        )
+
+        let outlineView = NSOutlineView()
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
+        outlineView.addTableColumn(column)
+        outlineView.outlineTableColumn = column
+
+        outlineView.dataSource = coordinator.dataSource
+        outlineView.delegate = coordinator
+        coordinator.attach(outlineView: outlineView)
+
+        coordinator.dataSource.setRootURL(tempDirectory)
+        outlineView.reloadData()
+
+        let rootChildCount = coordinator.dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil)
+        XCTAssertGreaterThan(rootChildCount, 0)
+
+        for i in 0..<min(rootChildCount, 5) {
+            let childAny = coordinator.dataSource.outlineView(outlineView, child: i, ofItem: nil)
+            _ = coordinator.outlineView(outlineView, viewFor: column, item: childAny)
+
+            if coordinator.dataSource.outlineView(outlineView, isItemExpandable: childAny) {
+                let nestedCount = coordinator.dataSource.outlineView(outlineView, numberOfChildrenOfItem: childAny)
+                for j in 0..<min(nestedCount, 5) {
+                    let nestedAny = coordinator.dataSource.outlineView(outlineView, child: j, ofItem: childAny)
+                    _ = coordinator.outlineView(outlineView, viewFor: column, item: nestedAny)
+                }
+            }
+        }
     }
 }

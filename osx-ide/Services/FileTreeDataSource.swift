@@ -45,7 +45,6 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
     private lazy var fallbackItem = FileTreeItem(url: NSURL(fileURLWithPath: "/dev/null"))
     
     weak var outlineView: NSOutlineView?
-    var onDataChanged: ((NSURL?) -> Void)?
     
     // MARK: - Properties
     
@@ -62,9 +61,6 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
         loadGeneration += 1
         rootURL = item
         resetCaches(includeItemCache: false)
-        
-        // Prime the root load
-        loadChildren(for: item)
     }
     
     func setSearchQuery(_ query: String) {
@@ -74,7 +70,6 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
         
         if wasSearching != isSearching {
             searchResults.removeAll()
-            outlineView?.reloadData()
         }
     }
     
@@ -84,10 +79,6 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
         searchResults.removeAll()
         if includeItemCache {
             itemCache.removeAll()
-        }
-        
-        DispatchQueue.main.async { [weak self] in
-            self?.outlineView?.reloadData()
         }
     }
     
@@ -134,63 +125,54 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
     func displayName(for item: FileTreeItem) -> String {
         if isSearching, let rootURL = self.rootURL {
             let relative = item.path.replacingOccurrences(of: rootURL.path, with: "")
-            if relative.isEmpty { return item.url.lastPathComponent! }
+            if relative.isEmpty {
+                return item.url.lastPathComponent ?? (item.path as NSString).lastPathComponent
+            }
             return relative.hasPrefix("/") ? String(relative.dropFirst()) : relative
         }
-        return item.url.lastPathComponent!
+        return item.url.lastPathComponent ?? (item.path as NSString).lastPathComponent
     }
     
     // MARK: - Data Loading
     
-    func loadChildren(for item: FileTreeItem) {
-        let pathURL = item.asURL
-        if childrenCache[pathURL] != nil { return }
-        childrenCache[pathURL] = []
-        
-        let generation = self.loadGeneration
-        Task { @MainActor in
-            guard let contents = try? self.fileManager.contentsOfDirectory(at: pathURL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else {
-                self.childrenCache[pathURL] = []
-                DispatchQueue.main.async {
-                    self.outlineView?.reloadItem(item, reloadChildren: true)
-                }
-                return
-            }
-            
-            let resultItems: [FileTreeItem] = contents.sorted { a, b in
-                let aIsDir = (try? a.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-                let bIsDir = (try? b.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-                if aIsDir != bIsDir { return aIsDir && !bIsDir }
-                return a.lastPathComponent.localizedCaseInsensitiveCompare(b.lastPathComponent) == .orderedAscending
-            }.map { self.canonical($0) }
-            
-            // Invalidation check: did the root change while we were loading?
-            guard self.loadGeneration == generation else { return }
-            
-            self.childrenCache[pathURL] = resultItems
-            for subItem in resultItems {
-                let itemPath = subItem.asURL
-                let isDir = (try? itemPath.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-                self.isDirectoryCache[itemPath] = isDir
-            }
-            
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self, let ov = self.outlineView, self.loadGeneration == generation else { return }
-                
-                if item.path == self.rootURL?.path {
-                    ov.reloadData()
-                } else if ov.isItemExpanded(item) {
-                    ov.reloadItem(item, reloadChildren: true)
-                }
-                
-                self.onDataChanged?(item.url)
-            }
+    private func children(for item: FileTreeItem) -> [FileTreeItem] {
+        let url = item.asURL
+        if let cached = childrenCache[url] { return cached }
+        guard isDirectory(item.url) else {
+            childrenCache[url] = []
+            return []
         }
+
+        let contents: [URL]
+        do {
+            contents = try fileManager.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+        } catch {
+            childrenCache[url] = []
+            return []
+        }
+
+        let resultItems: [FileTreeItem] = contents.sorted { a, b in
+            let aIsDir = (try? a.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            let bIsDir = (try? b.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if aIsDir != bIsDir { return aIsDir && !bIsDir }
+            return a.lastPathComponent.localizedCaseInsensitiveCompare(b.lastPathComponent) == .orderedAscending
+        }.map { canonical($0) }
+
+        childrenCache[url] = resultItems
+        for subItem in resultItems {
+            let itemPath = subItem.asURL
+            let isDir = (try? itemPath.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            isDirectoryCache[itemPath] = isDir
+        }
+        return resultItems
     }
     
     func setSearchResults(_ results: [FileTreeItem]) {
         self.searchResults = results
-        self.outlineView?.reloadData()
     }
     
     // MARK: - NSOutlineViewDataSource
@@ -209,12 +191,8 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
             targetItem = root
         }
         
-        let pathURL = targetItem.asURL
         if !isDirectory(targetItem.url) { return 0 }
-        if let cached = childrenCache[pathURL] { return cached.count }
-        
-        loadChildren(for: targetItem)
-        return 0
+        return children(for: targetItem).count
     }
     
     func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
@@ -225,15 +203,15 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
         
         let targetItem: FileTreeItem
         if let item {
-            targetItem = item as! FileTreeItem
+            guard let ftItem = item as? FileTreeItem else { return fallbackItem }
+            targetItem = ftItem
         } else {
             guard let root = self.rootURL else { return fallbackItem }
             targetItem = root
         }
-        
-        guard let children = childrenCache[targetItem.asURL], index < children.count else {
-            return fallbackItem
-        }
+
+        let children = children(for: targetItem)
+        guard index < children.count else { return fallbackItem }
         return children[index]
     }
     
