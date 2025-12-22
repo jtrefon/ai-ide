@@ -24,13 +24,6 @@ struct LiquidGlassScrollView<Content: View>: NSViewRepresentable {
         scrollView.drawsBackground = false
         scrollView.backgroundColor = .clear
         
-        if axes.contains(.vertical) {
-            scrollView.verticalScroller = LiquidGlassScroller()
-        }
-        if axes.contains(.horizontal) {
-            scrollView.horizontalScroller = LiquidGlassScroller()
-        }
-
         let hostingView = NSHostingView(rootView: content)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         

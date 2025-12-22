@@ -35,8 +35,9 @@ final class ShellManagerTests: XCTestCase, ShellManagerDelegate {
     
     func shellManager(_ manager: ShellManager, didProduceOutput output: String) {
         lastOutput += output
-        if lastOutput.contains("hello_test") {
-            outputExpectation?.fulfill()
+        if lastOutput.contains("hello_test"), let exp = outputExpectation {
+            exp.fulfill()
+            outputExpectation = nil
         }
     }
     

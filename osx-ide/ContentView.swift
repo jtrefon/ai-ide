@@ -55,7 +55,7 @@ struct ContentView: View {
                                 Spacer()
                             }
                             .frame(height: 30)
-                            .nativeGlassBackground(.header)
+                            .background(Color(NSColor.windowBackgroundColor))
                             
                             // Code editor
                             CodeEditorView(

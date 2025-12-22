@@ -31,7 +31,7 @@ struct AIChatPanel: View {
                 .padding(.horizontal)
             }
             .frame(height: 30)
-            .nativeGlassBackground(.header)
+            .background(Color(NSColor.windowBackgroundColor))
             
             // Messages list
             MessageListView(messages: conversationManager.messages, isSending: conversationManager.isSending)
