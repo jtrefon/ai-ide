@@ -30,6 +30,11 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     private let shellManager: ShellManaging
     private var isCleaningUp = false
     
+    private var currentLineStartLocation: Int = 0
+    private var cursorColumn: Int = 0
+    private var currentTextAttributes: [NSAttributedString.Key: Any] = [:]
+    private var pendingEraseToEndOfLine: Bool = false
+    
     init(shellManager: ShellManaging = ShellManager()) {
         self.shellManager = shellManager
         super.init()
@@ -122,29 +127,193 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         ])
         
         self.terminalView = terminalView
+
+        currentLineStartLocation = 0
+        cursorColumn = 0
+        currentTextAttributes = terminalView.typingAttributes
+        pendingEraseToEndOfLine = false
     }
     
     private func appendOutput(_ text: String) {
         guard !isCleaningUp, terminalView != nil else { return }
-        
-        let processedText = processANSIEscapeSequences(text)
-        guard processedText.length > 0 else { return }
-        
-        // Ensure UI updates are strictly on main thread
+
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let terminalView = self.terminalView, !self.isCleaningUp else { return }
-            
-            if let textStorage = terminalView.textStorage {
-                textStorage.append(processedText)
-            } else {
-                terminalView.string += processedText.string
-            }
-            
+            self.applyTerminalOutput(text, to: terminalView)
+
             let range = NSRange(location: terminalView.string.count, length: 0)
             terminalView.setSelectedRange(range)
             terminalView.scrollRangeToVisible(range)
             terminalView.needsDisplay = true
         }
+    }
+
+    private func applyTerminalOutput(_ text: String, to terminalView: NSTextView) {
+        guard let textStorage = terminalView.textStorage else {
+            // Fallback to old behavior if textStorage isn't available.
+            terminalView.string += processANSIEscapeSequences(text).string
+            currentLineStartLocation = terminalView.string.count
+            cursorColumn = 0
+            currentTextAttributes = terminalView.typingAttributes
+            pendingEraseToEndOfLine = false
+            return
+        }
+
+        if currentTextAttributes.isEmpty {
+            currentTextAttributes = terminalView.typingAttributes
+        }
+
+        var i = text.startIndex
+        while i < text.endIndex {
+            let ch = text[i]
+
+            if ch == "\u{1B}" {
+                if let parsed = parseANSISequence(text, from: i) {
+                    i = parsed.newIndex
+                    if !parsed.shouldSkip {
+                        currentTextAttributes.merge(parsed.attributes) { _, new in new }
+                    }
+                    continue
+                }
+            }
+
+            if ch == "\n" {
+                textStorage.append(NSAttributedString(string: "\n", attributes: currentTextAttributes))
+                currentLineStartLocation = textStorage.length
+                cursorColumn = 0
+                pendingEraseToEndOfLine = false
+                i = text.index(after: i)
+                continue
+            }
+
+            if ch == "\r" {
+                // Treat CRLF as newline to avoid arming redraw erasure on Enter.
+                if text.index(after: i) < text.endIndex, text[text.index(after: i)] == "\n" {
+                    i = text.index(after: i)
+                    continue
+                }
+                cursorColumn = 0
+                // Shells redraw the current line by carriage returning and rewriting.
+                // Clear stale tail once before the next printable character to avoid leftover prompt chars (e.g. '>'/'=').
+                pendingEraseToEndOfLine = true
+                i = text.index(after: i)
+                continue
+            }
+
+            // Backspace
+            if ch == "\u{08}" {
+                cursorColumn = max(0, cursorColumn - 1)
+                pendingEraseToEndOfLine = false
+                i = text.index(after: i)
+                continue
+            }
+
+            // DEL often used as backspace by shells
+            if ch == "\u{7F}" {
+                cursorColumn = max(0, cursorColumn - 1)
+                pendingEraseToEndOfLine = false
+                i = text.index(after: i)
+                continue
+            }
+
+            // Filter other control chars except tab.
+            let scalarValue = ch.unicodeScalars.first?.value ?? 0
+            if scalarValue < 32, ch != "\t" {
+                i = text.index(after: i)
+                continue
+            }
+
+            // Treat tab as spaces (simple rendering).
+            if ch == "\t" {
+                for _ in 0..<4 {
+                    putCharacter(" ", into: textStorage)
+                }
+                pendingEraseToEndOfLine = false
+                i = text.index(after: i)
+                continue
+            }
+
+            if pendingEraseToEndOfLine {
+                eraseToEndOfLine(in: textStorage)
+                pendingEraseToEndOfLine = false
+            }
+
+            putCharacter(String(ch), into: textStorage)
+            i = text.index(after: i)
+        }
+    }
+
+    private func eraseToEndOfLine(in textStorage: NSTextStorage) {
+        let full = textStorage.string as NSString
+        let startIndex = max(0, currentLineStartLocation + cursorColumn)
+        let searchRange = NSRange(location: currentLineStartLocation, length: max(0, full.length - currentLineStartLocation))
+        let newlineRange = full.range(of: "\n", options: [], range: searchRange)
+        let lineEnd = (newlineRange.location == NSNotFound) ? full.length : newlineRange.location
+        if startIndex < lineEnd {
+            textStorage.deleteCharacters(in: NSRange(location: startIndex, length: lineEnd - startIndex))
+        }
+    }
+
+    private func eraseInLine(mode: Int, in textStorage: NSTextStorage) {
+        let full = textStorage.string as NSString
+        let lineRange = NSRange(location: currentLineStartLocation, length: max(0, full.length - currentLineStartLocation))
+        let newlineRange = full.range(of: "\n", options: [], range: lineRange)
+        let lineEnd = (newlineRange.location == NSNotFound) ? full.length : newlineRange.location
+        let cursorIndex = max(0, min(currentLineStartLocation + cursorColumn, lineEnd))
+
+        switch mode {
+        case 0:
+            eraseToEndOfLine(in: textStorage)
+        case 1:
+            // From start of line to cursor (inclusive in terminals, but inclusive isn't critical for us).
+            if currentLineStartLocation < cursorIndex {
+                textStorage.deleteCharacters(in: NSRange(location: currentLineStartLocation, length: cursorIndex - currentLineStartLocation))
+                currentLineStartLocation = max(0, currentLineStartLocation)
+                cursorColumn = 0
+            }
+        case 2:
+            // Entire line.
+            if currentLineStartLocation < lineEnd {
+                textStorage.deleteCharacters(in: NSRange(location: currentLineStartLocation, length: lineEnd - currentLineStartLocation))
+            }
+            cursorColumn = 0
+        default:
+            break
+        }
+    }
+
+    private func deleteCharacters(_ count: Int, in textStorage: NSTextStorage) {
+        guard count > 0 else { return }
+        let full = textStorage.string as NSString
+        let lineRange = NSRange(location: currentLineStartLocation, length: max(0, full.length - currentLineStartLocation))
+        let newlineRange = full.range(of: "\n", options: [], range: lineRange)
+        let lineEnd = (newlineRange.location == NSNotFound) ? full.length : newlineRange.location
+        let cursorIndex = max(0, min(currentLineStartLocation + cursorColumn, lineEnd))
+        let deleteEnd = min(lineEnd, cursorIndex + count)
+        if cursorIndex < deleteEnd {
+            textStorage.deleteCharacters(in: NSRange(location: cursorIndex, length: deleteEnd - cursorIndex))
+        }
+    }
+
+    private func putCharacter(_ character: String, into textStorage: NSTextStorage) {
+        let absoluteCursor = max(0, currentLineStartLocation + cursorColumn)
+
+        // Find end-of-line (or end-of-buffer) so we overwrite within the line.
+        let full = textStorage.string as NSString
+        let searchRange = NSRange(location: currentLineStartLocation, length: max(0, full.length - currentLineStartLocation))
+        let newlineRange = full.range(of: "\n", options: [], range: searchRange)
+        let lineEnd = (newlineRange.location == NSNotFound) ? full.length : newlineRange.location
+
+        if absoluteCursor < lineEnd {
+            // Overwrite within existing line.
+            textStorage.replaceCharacters(in: NSRange(location: absoluteCursor, length: 1), with: NSAttributedString(string: character, attributes: currentTextAttributes))
+        } else {
+            // Append at end of line (before newline if present).
+            let insertLocation = lineEnd
+            textStorage.insert(NSAttributedString(string: character, attributes: currentTextAttributes), at: insertLocation)
+        }
+
+        cursorColumn += 1
     }
     
     /// Process ANSI escape sequences and return attributed string
@@ -238,6 +407,84 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
                     attributes = applySGRParameters(parameters)
                     i = text.index(after: i)
                     return (i, attributes, false)
+                case "H", "f":
+                    // Cursor position (row;col). We don't emulate a full screen buffer.
+                    // Best-effort: move to end so we don't overwrite earlier content (prevents prompt pinned to top-left).
+                    if let terminalView = terminalView, let storage = terminalView.textStorage {
+                        currentLineStartLocation = storage.length
+                        cursorColumn = 0
+                        pendingEraseToEndOfLine = false
+                    }
+                    i = text.index(after: i)
+                    return (i, [:], true)
+                case "J":
+                    // Erase in display. Best-effort: if clear-screen requested, clear the buffer.
+                    let mode = parameters.first ?? 0
+                    if let terminalView = terminalView, let storage = terminalView.textStorage {
+                        if mode == 2 || mode == 3 {
+                            storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: "")
+                            currentLineStartLocation = 0
+                            cursorColumn = 0
+                            pendingEraseToEndOfLine = false
+                        } else {
+                            currentLineStartLocation = storage.length
+                            cursorColumn = 0
+                            pendingEraseToEndOfLine = false
+                        }
+                    }
+                    i = text.index(after: i)
+                    return (i, [:], true)
+                case "K":
+                    // Erase in line. Support common mode 0 (cursor to end).
+                    let mode = parameters.first ?? 0
+                    if let terminalView = terminalView, let storage = terminalView.textStorage {
+                        eraseInLine(mode: mode, in: storage)
+                    }
+                    i = text.index(after: i)
+                    return (i, [:], true)
+                case "P":
+                    // Delete characters (DCH) starting at cursor.
+                    let n = max(1, parameters.first ?? 1)
+                    if let terminalView = terminalView, let storage = terminalView.textStorage {
+                        deleteCharacters(n, in: storage)
+                    }
+                    i = text.index(after: i)
+                    return (i, [:], true)
+                case "X":
+                    // Erase characters (ECH). Best-effort: delete them to avoid stale prompt artifacts.
+                    let n = max(1, parameters.first ?? 1)
+                    if let terminalView = terminalView, let storage = terminalView.textStorage {
+                        deleteCharacters(n, in: storage)
+                    }
+                    i = text.index(after: i)
+                    return (i, [:], true)
+                case "A", "B":
+                    // Cursor up/down. Without a screen model, avoid overwriting by forcing append position.
+                    if let terminalView = terminalView, let storage = terminalView.textStorage {
+                        currentLineStartLocation = storage.length
+                        cursorColumn = 0
+                        pendingEraseToEndOfLine = false
+                    }
+                    i = text.index(after: i)
+                    return (i, [:], true)
+                case "G":
+                    // Cursor horizontal absolute.
+                    let col = max(1, parameters.first ?? 1)
+                    cursorColumn = max(0, col - 1)
+                    i = text.index(after: i)
+                    return (i, [:], true)
+                case "C":
+                    // Cursor forward.
+                    let n = max(1, parameters.first ?? 1)
+                    cursorColumn += n
+                    i = text.index(after: i)
+                    return (i, [:], true)
+                case "D":
+                    // Cursor backward.
+                    let n = max(1, parameters.first ?? 1)
+                    cursorColumn = max(0, cursorColumn - n)
+                    i = text.index(after: i)
+                    return (i, [:], true)
                 default:
                     i = text.index(after: i)
                     return (i, [:], true)
