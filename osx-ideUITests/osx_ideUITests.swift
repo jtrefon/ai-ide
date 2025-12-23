@@ -22,8 +22,16 @@ final class osx_ideUITests: XCTestCase {
         }
         Self.testFiles.removeAll()
         
-        // Terminate the app to ensure clean state
-        XCUIApplication().terminate()
+        // Terminate the app to ensure clean state with timeout
+        let app = XCUIApplication()
+        if app.state == .runningForeground || app.state == .runningBackground {
+            app.terminate()
+            // Wait a moment for termination to complete
+            let timeout = Date().addingTimeInterval(5.0)
+            while Date() < timeout && (app.state == .runningForeground || app.state == .runningBackground) {
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+        }
     }
 
     private func createTestFile() -> URL {

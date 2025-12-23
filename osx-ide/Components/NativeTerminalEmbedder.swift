@@ -125,7 +125,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     }
     
     private func appendOutput(_ text: String) {
-        guard !isCleaningUp, let terminalView = terminalView else { return }
+        guard !isCleaningUp, terminalView != nil else { return }
         
         let processedText = processANSIEscapeSequences(text)
         guard processedText.length > 0 else { return }
@@ -332,10 +332,10 @@ extension NativeTerminalEmbedder: NSTextViewDelegate {
         
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
             shellManager.sendInput("\n")
-            return true
+            return true // Prevent local newline handling
         } else if commandSelector == #selector(NSResponder.deleteBackward(_:)) {
             shellManager.sendInput("\u{7F}")
-            return false
+            return true // Prevent local backspace handling
         } else if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
             shellManager.interrupt()
             return false
@@ -347,6 +347,7 @@ extension NativeTerminalEmbedder: NSTextViewDelegate {
     func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
         guard !isCleaningUp, let replacementString = replacementString else { return false }
         shellManager.sendInput(replacementString)
-        return true
+        // Return false to prevent local echo - the shell will echo back the input
+        return false
     }
 }
