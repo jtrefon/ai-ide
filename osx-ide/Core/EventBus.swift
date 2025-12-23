@@ -14,7 +14,7 @@ public protocol Event { }
 
 /// Protocol for the system-wide Event Bus.
 @MainActor
-public protocol EventBusProtocol {
+public protocol EventBusProtocol: Sendable {
     /// Publishes an event to all subscribers.
     func publish<E: Event>(_ event: E)
     

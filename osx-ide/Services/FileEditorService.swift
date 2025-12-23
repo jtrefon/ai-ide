@@ -25,10 +25,12 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
     private var isLoadingFile = false
     private let errorManager: ErrorManagerProtocol
     private let fileSystemService: FileSystemService
+    private let eventBus: EventBusProtocol
     
-    init(errorManager: ErrorManagerProtocol, fileSystemService: FileSystemService) {
+    init(errorManager: ErrorManagerProtocol, fileSystemService: FileSystemService, eventBus: EventBusProtocol) {
         self.errorManager = errorManager
         self.fileSystemService = fileSystemService
+        self.eventBus = eventBus
     }
     
     /// Handle error through the service's error manager
@@ -64,6 +66,7 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
         do {
             try fileSystemService.writeFile(content: editorContent, toPath: filePath)
             isDirty = false
+            eventBus.publish(FileModifiedEvent(url: URL(fileURLWithPath: filePath)))
         } catch {
             errorManager.handle(.fileOperationFailed("save file", underlying: error))
         }
@@ -71,11 +74,18 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
     
     /// Save file to new location
     func saveFileAs(to url: URL) {
+        let oldPath = selectedFile
         do {
             try fileSystemService.writeFile(content: editorContent, to: url)
             selectedFile = url.path
             editorLanguage = Self.languageForFileExtension(url.pathExtension)
             isDirty = false
+            if let oldPath, oldPath != url.path {
+                eventBus.publish(FileRenamedEvent(oldUrl: URL(fileURLWithPath: oldPath), newUrl: url))
+            } else {
+                eventBus.publish(FileCreatedEvent(url: url))
+            }
+            eventBus.publish(FileModifiedEvent(url: url))
         } catch {
             errorManager.handle(.fileOperationFailed("save file as", underlying: error))
         }

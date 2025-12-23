@@ -15,6 +15,7 @@ struct ModernFileTreeView: NSViewRepresentable {
     @Binding var searchQuery: String
     @Binding var expandedRelativePaths: Set<String>
     @Binding var selectedRelativePath: String?
+    let showHiddenFiles: Bool
     let refreshToken: Int
     let onOpenFile: (URL) -> Void
 
@@ -70,6 +71,7 @@ struct ModernFileTreeView: NSViewRepresentable {
         coordinator.update(
             rootURL: rootURL,
             searchQuery: searchQuery,
+            showHiddenFiles: showHiddenFiles,
             refreshToken: refreshToken
         )
     }
@@ -98,6 +100,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
     private var lastRootPath: String?
     private var lastRootURL: URL?
     private var lastSearchQuery: String = ""
+    private var lastShowHiddenFiles: Bool = false
 
     init(
         expandedRelativePaths: Binding<Set<String>>,
@@ -115,7 +118,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         dataSource.outlineView = outlineView
     }
 
-    func update(rootURL: URL, searchQuery: String, refreshToken: Int) {
+    func update(rootURL: URL, searchQuery: String, showHiddenFiles: Bool, refreshToken: Int) {
         var needsReload = false
 
         if self.refreshToken != refreshToken {
@@ -135,6 +138,12 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         if lastSearchQuery != searchQuery {
             lastSearchQuery = searchQuery
             setSearchQuery(searchQuery)
+            needsReload = true
+        }
+
+        if lastShowHiddenFiles != showHiddenFiles {
+            lastShowHiddenFiles = showHiddenFiles
+            dataSource.setShowHiddenFiles(showHiddenFiles)
             needsReload = true
         }
 

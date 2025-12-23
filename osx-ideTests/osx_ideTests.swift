@@ -24,8 +24,12 @@ struct osx_ideTests {
         #expect(appState.editorLanguage == "swift", "Default language should be swift")
         #expect(appState.isDirty == false, "Should not be dirty initially")
         #expect(appState.lastError == nil, "Should have no errors initially")
-        #expect(appState.currentDirectory != nil, "Should have a current directory set")
-        #expect(appState.conversationManager != nil, "Should have conversation manager")
+
+        // Workspace can be nil until the user explicitly selects a folder.
+        if let dir = appState.currentDirectory {
+            var isDir: ObjCBool = false
+            #expect(FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir) && isDir.boolValue, "If set, currentDirectory must exist and be a directory")
+        }
     }
 
     @Test func testLanguageDetection() async throws {

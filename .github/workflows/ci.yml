@@ -29,8 +29,7 @@ jobs:
           build
           CODE_SIGNING_ALLOWED=NO
 
-      - name: Test (self-hosted macOS 26 only)
-        if: false
+      - name: Test (Unit Tests Only)
         run: >
           xcodebuild
           -project osx-ide.xcodeproj
@@ -38,4 +37,5 @@ jobs:
           -configuration Debug
           test
           -destination 'platform=macOS'
+          -only-testing:osx-ideTests
           CODE_SIGNING_ALLOWED=NO

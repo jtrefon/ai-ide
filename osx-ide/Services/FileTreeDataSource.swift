@@ -35,6 +35,8 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
     private var rootURL: FileTreeItem?
     private var searchQuery: String = ""
     private var loadGeneration: Int = 0
+
+    private var showHiddenFiles: Bool = false
     
     private var childrenCache: [URL: [FileTreeItem]] = [:]
     private var isDirectoryCache: [URL: Bool] = [:]
@@ -80,6 +82,12 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
         if includeItemCache {
             itemCache.removeAll()
         }
+    }
+
+    func setShowHiddenFiles(_ show: Bool) {
+        guard showHiddenFiles != show else { return }
+        showHiddenFiles = show
+        resetCaches(includeItemCache: false)
     }
     
     func canonical(_ url: URL) -> FileTreeItem {
@@ -145,10 +153,11 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
 
         let contents: [URL]
         do {
+            let options: FileManager.DirectoryEnumerationOptions = showHiddenFiles ? [] : [.skipsHiddenFiles]
             contents = try fileManager.contentsOfDirectory(
                 at: url,
                 includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
+                options: options
             )
         } catch {
             childrenCache[url] = []

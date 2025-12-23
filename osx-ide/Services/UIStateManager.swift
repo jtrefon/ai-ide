@@ -15,6 +15,8 @@ class UIStateManager: ObservableObject {
     // MARK: - Layout State
     
     @Published var isSidebarVisible: Bool = true
+    @Published var isTerminalVisible: Bool = true
+    @Published var isAIChatVisible: Bool = true
     @Published var sidebarWidth: Double = AppConstants.Layout.defaultSidebarWidth
     @Published var terminalHeight: Double = AppConstants.Layout.defaultTerminalHeight
     @Published var chatPanelWidth: Double = AppConstants.Layout.defaultChatPanelWidth
@@ -66,6 +68,14 @@ class UIStateManager: ObservableObject {
     
     func setSidebarVisible(_ visible: Bool) {
         isSidebarVisible = visible
+    }
+
+    func setTerminalVisible(_ visible: Bool) {
+        isTerminalVisible = visible
+    }
+
+    func setAIChatVisible(_ visible: Bool) {
+        isAIChatVisible = visible
     }
     
     func updateSidebarWidth(_ width: Double) {
@@ -172,6 +182,8 @@ class UIStateManager: ObservableObject {
         
         // Reset local state to defaults
         isSidebarVisible = true
+        isTerminalVisible = true
+        isAIChatVisible = true
         sidebarWidth = AppConstants.Layout.defaultSidebarWidth
         terminalHeight = AppConstants.Layout.defaultTerminalHeight
         chatPanelWidth = AppConstants.Layout.defaultChatPanelWidth

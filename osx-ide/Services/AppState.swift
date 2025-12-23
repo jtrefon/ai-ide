@@ -84,6 +84,16 @@ class AppState: ObservableObject {
         get { uiStateManager.isSidebarVisible }
         set { uiStateManager.setSidebarVisible(newValue) }
     }
+
+    var isTerminalVisible: Bool {
+        get { uiStateManager.isTerminalVisible }
+        set { uiStateManager.setTerminalVisible(newValue) }
+    }
+
+    var isAIChatVisible: Bool {
+        get { uiStateManager.isAIChatVisible }
+        set { uiStateManager.setAIChatVisible(newValue) }
+    }
     
     var showLineNumbers: Bool {
         get { uiStateManager.showLineNumbers }
@@ -254,14 +264,14 @@ class AppState: ObservableObject {
             .store(in: &cancellables)
         
         // Observe workspace changes
-        workspaceStateManager.objectWillChange
+        workspaceStateManager.$currentDirectory
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] newDir in
                 self?.objectWillChange.send()
-                // Update conversation manager project root if workspace changed
-                if let currentDir = self?.workspaceStateManager.currentDirectory {
-                    self?.conversationManager.updateProjectRoot(currentDir)
-                }
+                guard let self else { return }
+                guard let newDir else { return }
+                self.conversationManager.updateProjectRoot(newDir)
+                DependencyContainer.shared.configureCodebaseIndex(projectRoot: newDir)
             }
             .store(in: &cancellables)
         

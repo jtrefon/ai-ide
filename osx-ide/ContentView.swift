@@ -31,7 +31,7 @@ struct ContentView: View {
             HSplitView {
                 // Left sidebar
                 // Left sidebar
-                if let view = registry.views(for: .sidebarLeft).first?.content {
+                if appState.isSidebarVisible, let view = registry.views(for: .sidebarLeft).first?.content {
                     view.frame(minWidth: 200, maxWidth: 300)
                 }
                 
@@ -71,7 +71,7 @@ struct ContentView: View {
                         
                         // Terminal panel
                         // Terminal panel
-                        if let view = registry.views(for: .panelBottom).first?.content {
+                        if appState.isTerminalVisible, let view = registry.views(for: .panelBottom).first?.content {
                             view.frame(minHeight: 100)
                         }
                     }
@@ -79,11 +79,13 @@ struct ContentView: View {
                     
                     // AI Chat Panel
                     // AI Chat Panel
-                    if let view = registry.views(for: .panelRight).first?.content {
+                    if appState.isAIChatVisible, let view = registry.views(for: .panelRight).first?.content {
                         view.frame(minWidth: 300)
                     }
                 }
             }
+
+            IndexStatusBarView()
         }
         .background(Color.clear)
     }
