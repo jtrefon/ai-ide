@@ -37,7 +37,7 @@ class ShellManager: NSObject {
     
     /// Start the shell process in the specified directory
     func start(in directory: URL? = nil) {
-        start(in: directory, arguments: ["-i"], environmentOverrides: [:])
+        start(in: directory, arguments: ["-l", "-i"], environmentOverrides: [:])
     }
 
     func start(in directory: URL? = nil, arguments: [String], environmentOverrides: [String: String]) {
@@ -90,10 +90,17 @@ class ShellManager: NSObject {
         environment["TERM"] = environmentOverrides["TERM"] ?? "xterm-256color"
         environment["COLUMNS"] = environmentOverrides["COLUMNS"] ?? "\(AppConstants.Terminal.defaultColumns)"
         environment["LINES"] = environmentOverrides["LINES"] ?? "\(AppConstants.Terminal.defaultRows)"
-        environment["PROMPT"] = environmentOverrides["PROMPT"] ?? "$ "
-        environment["PROMPT_EOL_MARK"] = environmentOverrides["PROMPT_EOL_MARK"] ?? ""
-        environment["ZSH_THEME"] = environmentOverrides["ZSH_THEME"] ?? ""
-        environment["DISABLE_AUTO_TITLE"] = environmentOverrides["DISABLE_AUTO_TITLE"] ?? "true"
+
+        // Ensure HOME is present so login shells locate user configuration correctly.
+        if environment["HOME"]?.isEmpty ?? true {
+            environment["HOME"] = FileManager.default.homeDirectoryForCurrentUser.path
+        }
+
+        // zsh uses PROMPT_EOL_MARK to display an end-of-line marker for prompts.
+        // In embedded terminals this often shows up as a stray '='. Disable by default.
+        if environmentOverrides["PROMPT_EOL_MARK"] == nil {
+            environment["PROMPT_EOL_MARK"] = ""
+        }
         for (k, v) in environmentOverrides {
             environment[k] = v
         }
