@@ -157,10 +157,14 @@ final class FileTreeIsolationTests: XCTestCase {
             onOpenFile: { _ in }
         )
 
-        coordinator.update(rootURL: tempDirectory, searchQuery: "", refreshToken: 0)
-        coordinator.update(rootURL: tempDirectory, searchQuery: "f", refreshToken: 0)
-        coordinator.update(rootURL: tempDirectory, searchQuery: "fi", refreshToken: 0)
-        coordinator.update(rootURL: tempDirectory, searchQuery: "file_1", refreshToken: 0)
+        let dataSource = coordinator.dataSource
+        dataSource.setRootURL(tempDirectory)
+        dataSource.setSearchQuery("")
+        
+        coordinator.update(rootURL: tempDirectory, searchQuery: "", showHiddenFiles: false, refreshToken: 0)
+        coordinator.update(rootURL: tempDirectory, searchQuery: "f", showHiddenFiles: false, refreshToken: 0)
+        coordinator.update(rootURL: tempDirectory, searchQuery: "fi", showHiddenFiles: false, refreshToken: 0)
+        coordinator.update(rootURL: tempDirectory, searchQuery: "file_1", showHiddenFiles: false, refreshToken: 0)
 
         let outlineView = NSOutlineView()
         var childCount = 0

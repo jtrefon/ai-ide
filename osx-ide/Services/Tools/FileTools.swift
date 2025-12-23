@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 
 /// Read content of a file
 struct ReadFileTool: AITool {
@@ -68,7 +69,15 @@ struct WriteFileTool: AITool {
             throw AppError.aiServiceError("Missing 'content' argument for write_file")
         }
         let url = try pathValidator.validateAndResolve(path)
+        let existed = FileManager.default.fileExists(atPath: url.path)
         try fileSystemService.writeFile(content: content, to: url)
+        Task { @MainActor in
+            if existed {
+                EventBus.shared.publish(FileModifiedEvent(url: url))
+            } else {
+                EventBus.shared.publish(FileCreatedEvent(url: url))
+            }
+        }
         return "Successfully wrote to \(pathValidator.relativePath(for: url))"
     }
 }
@@ -101,6 +110,9 @@ struct CreateFileTool: AITool {
             return "Error: File already exists at \(pathValidator.relativePath(for: url))"
         }
         try "".write(to: url, atomically: true, encoding: .utf8)
+        Task { @MainActor in
+            EventBus.shared.publish(FileCreatedEvent(url: url))
+        }
         return "Successfully created file at \(pathValidator.relativePath(for: url))"
     }
 }
@@ -162,6 +174,9 @@ struct DeleteFileTool: AITool {
             return "Error: File does not exist at \(pathValidator.relativePath(for: url))"
         }
         try fileManager.removeItem(at: url)
+        Task { @MainActor in
+            EventBus.shared.publish(FileDeletedEvent(url: url))
+        }
         return "Successfully deleted file at \(pathValidator.relativePath(for: url))"
     }
 }
@@ -214,6 +229,9 @@ struct ReplaceInFileTool: AITool {
         
         let newContent = content.replacingOccurrences(of: oldText, with: newText)
         try fileSystemService.writeFile(content: newContent, to: url)
+        Task { @MainActor in
+            EventBus.shared.publish(FileModifiedEvent(url: url))
+        }
         
         return "Successfully replaced content in \(pathValidator.relativePath(for: url))"
     }

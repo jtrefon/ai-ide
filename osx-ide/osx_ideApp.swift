@@ -11,6 +11,9 @@ import SwiftUI
 struct osx_ideApp: App {
     @StateObject private var appState: AppState
     @StateObject private var errorManager: ErrorManager
+    @AppStorage("CodebaseIndexEnabled") private var codebaseIndexEnabled: Bool = true
+    @AppStorage("CodebaseIndexAIEnrichmentEnabled") private var codebaseIndexAIEnrichmentEnabled: Bool = false
+    @AppStorage("ShowHiddenFilesInFileTree") private var showHiddenFilesInFileTree: Bool = false
     
     init() {
         let container = DependencyContainer.shared
@@ -83,6 +86,55 @@ struct osx_ideApp: App {
                     Task { try? await CommandRegistry.shared.execute(.fileSaveAs) }
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
+            }
+
+            CommandGroup(after: .sidebar) {
+                Toggle("Show File Explorer", isOn: Binding(
+                    get: { appState.isSidebarVisible },
+                    set: { appState.isSidebarVisible = $0 }
+                ))
+
+                Toggle("Show Terminal", isOn: Binding(
+                    get: { appState.isTerminalVisible },
+                    set: { appState.isTerminalVisible = $0 }
+                ))
+
+                Toggle("Show AI Chat", isOn: Binding(
+                    get: { appState.isAIChatVisible },
+                    set: { appState.isAIChatVisible = $0 }
+                ))
+
+                Divider()
+
+                Toggle("Show Hidden Files", isOn: $showHiddenFilesInFileTree)
+                    .keyboardShortcut(".", modifiers: [.command, .shift])
+            }
+
+            CommandMenu("Tools") {
+                Toggle("Codebase Index Enabled", isOn: $codebaseIndexEnabled)
+                    .onChange(of: codebaseIndexEnabled) { _, newValue in
+                        DependencyContainer.shared.setCodebaseIndexEnabled(newValue)
+                    }
+
+                Toggle("AI Enrichment Indexing", isOn: $codebaseIndexAIEnrichmentEnabled)
+                    .onChange(of: codebaseIndexAIEnrichmentEnabled) { _, newValue in
+                        if newValue {
+                            let settings = OpenRouterSettingsStore().load()
+                            let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if model.isEmpty {
+                                errorManager.handle(.aiServiceError("Select an OpenRouter model in Settings before enabling AI enrichment indexing."))
+                                codebaseIndexAIEnrichmentEnabled = false
+                                return
+                            }
+                        }
+                        DependencyContainer.shared.setAIEnrichmentIndexingEnabled(newValue)
+                    }
+
+                Divider()
+
+                Button("Reindex Project Now") {
+                    DependencyContainer.shared.reindexProjectNow()
+                }
             }
         }
         .windowResizability(.contentMinSize)

@@ -19,6 +19,7 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var aiService: AIService
     private let errorManager: ErrorManagerProtocol
     private let fileSystemService: FileSystemService
+    private var codebaseIndex: CodebaseIndexProtocol?
     private let historyKey = "AIChatHistory"
     private var cancellables = Set<AnyCancellable>()
     
@@ -56,11 +57,12 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
         return currentMode.allowedTools(from: allTools)
     }
     
-    init(aiService: AIService, errorManager: ErrorManagerProtocol, fileSystemService: FileSystemService = FileSystemService(), projectRoot: URL? = nil) {
+    init(aiService: AIService, errorManager: ErrorManagerProtocol, fileSystemService: FileSystemService = FileSystemService(), projectRoot: URL? = nil, codebaseIndex: CodebaseIndexProtocol? = nil) {
         self.aiService = aiService
         self.errorManager = errorManager
         self.fileSystemService = fileSystemService
-        self.projectRoot = projectRoot ?? FileManager.default.homeDirectoryForCurrentUser
+        self.projectRoot = projectRoot ?? FileManager.default.temporaryDirectory
+        self.codebaseIndex = codebaseIndex
         loadConversationHistory()
         
         // If no messages, initialize with a welcome message
@@ -75,6 +77,10 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
     /// Update the AI service (used by dependency container)
     func updateAIService(_ newService: AIService) {
         self.aiService = newService
+    }
+
+    func updateCodebaseIndex(_ newIndex: CodebaseIndexProtocol?) {
+        self.codebaseIndex = newIndex
     }
     
     func updateProjectRoot(_ newRoot: URL) {
@@ -258,7 +264,12 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
         var lastError: Error?
         for attempt in 1...maxAttempts {
             do {
-                return try await aiService.sendMessage(messages, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
+                let augmentedContext = ContextBuilder.buildContext(
+                    userInput: messages.last?.content ?? "",
+                    explicitContext: context,
+                    index: codebaseIndex
+                )
+                return try await aiService.sendMessage(messages, context: augmentedContext, tools: tools, mode: mode, projectRoot: projectRoot)
             } catch {
                 lastError = error
                 if attempt < maxAttempts {

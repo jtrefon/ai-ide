@@ -14,6 +14,8 @@ struct FileExplorerView: View {
     @State private var selectedRelativePath: String? = nil
     @State private var refreshToken: Int = 0
 
+    @AppStorage("ShowHiddenFilesInFileTree") private var showHiddenFiles: Bool = false
+
     // State for new file/folder creation
     @State private var isShowingNewFileSheet = false
     @State private var isShowingNewFolderSheet = false
@@ -65,10 +67,11 @@ struct FileExplorerView: View {
             .background(Color(NSColor.windowBackgroundColor))
             // Modern macOS v26 file tree with subtle styling
             ModernFileTreeView(
-                rootURL: appState.currentDirectory ?? FileManager.default.homeDirectoryForCurrentUser,
+                rootURL: appState.currentDirectory ?? FileManager.default.temporaryDirectory,
                 searchQuery: $searchQuery,
                 expandedRelativePaths: $expandedRelativePaths,
                 selectedRelativePath: $selectedRelativePath,
+                showHiddenFiles: showHiddenFiles,
                 refreshToken: refreshToken,
                 onOpenFile: { url in
                     appState.loadFile(from: url)

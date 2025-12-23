@@ -1,0 +1,5 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project osx-ide.xcodeproj -scheme osx-ideTests -configuration Debug test -destination platform=macOS
+
+2025-12-23 16:44:42.230 xcodebuild[73144:4760238] Writing error result bundle to /var/folders/xw/1ts56fvd6nz1r7zybsbkq6gm0000gn/T/ResultBundle_2025-23-12_16-44-0042.xcresult
+xcodebuild: error: The project named "osx-ide" does not contain a scheme named "osx-ideTests". The "-list" option can be used to find the names of the schemes in the project.

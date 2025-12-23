@@ -60,6 +60,77 @@ class DependencyContainer {
     var conversationManager: ConversationManagerProtocol {
         return _conversationManager
     }
+
+    /// Codebase index instance
+    var codebaseIndex: CodebaseIndexProtocol? {
+        return _codebaseIndex
+    }
+
+    var isCodebaseIndexEnabled: Bool {
+        return UserDefaults.standard.object(forKey: "CodebaseIndexEnabled") as? Bool ?? true
+    }
+
+    var isAIEnrichmentIndexingEnabled: Bool {
+        return UserDefaults.standard.object(forKey: "CodebaseIndexAIEnrichmentEnabled") as? Bool ?? false
+    }
+
+    func setCodebaseIndexEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: "CodebaseIndexEnabled")
+        _codebaseIndex?.setEnabled(enabled)
+        if enabled {
+            _codebaseIndex?.reindexProject(aiEnrichmentEnabled: false)
+        }
+    }
+
+    func reindexProjectNow() {
+        _codebaseIndex?.reindexProject(aiEnrichmentEnabled: isAIEnrichmentIndexingEnabled)
+    }
+
+    func setAIEnrichmentIndexingEnabled(_ enabled: Bool) {
+        if enabled {
+            let settings = OpenRouterSettingsStore().load()
+            let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
+            if model.isEmpty {
+                UserDefaults.standard.set(false, forKey: "CodebaseIndexAIEnrichmentEnabled")
+                _errorManager.handle(.aiServiceError("OpenRouter model is not set."))
+                return
+            }
+        }
+
+        UserDefaults.standard.set(enabled, forKey: "CodebaseIndexAIEnrichmentEnabled")
+        if enabled, isCodebaseIndexEnabled {
+            _codebaseIndex?.runAIEnrichment()
+        }
+    }
+
+    func configureCodebaseIndex(projectRoot: URL) {
+        do {
+            _codebaseIndex = try CodebaseIndex(eventBus: EventBus.shared, projectRoot: projectRoot, aiService: _aiService)
+            _codebaseIndex?.start()
+            _codebaseIndex?.setEnabled(isCodebaseIndexEnabled)
+            if isCodebaseIndexEnabled {
+                scheduleAutoReindexAfterDelay()
+            }
+
+            if let cm = _conversationManager as? ConversationManager {
+                cm.updateCodebaseIndex(_codebaseIndex)
+                cm.updateProjectRoot(projectRoot)
+            }
+        } catch {
+            _codebaseIndex = nil
+            print("Failed to initialize CodebaseIndex: \(error)")
+        }
+    }
+
+    private func scheduleAutoReindexAfterDelay() {
+        pendingAutoReindexTask?.cancel()
+        pendingAutoReindexTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard let self else { return }
+            guard self.isCodebaseIndexEnabled else { return }
+            self._codebaseIndex?.reindexProject(aiEnrichmentEnabled: false)
+        }
+    }
     
     // MARK: - Initialization
     
@@ -67,20 +138,29 @@ class DependencyContainer {
         let errorManager = ErrorManager()
         _errorManager = errorManager
         _uiService = UIService(errorManager: errorManager)
-        _workspaceService = WorkspaceService(errorManager: errorManager)
+        _workspaceService = WorkspaceService(errorManager: errorManager, eventBus: EventBus.shared)
         _fileSystemService = FileSystemService()
         _windowProvider = WindowProvider()
         _fileDialogService = FileDialogService(windowProvider: _windowProvider)
         _fileEditorService = FileEditorService(
             errorManager: errorManager,
-            fileSystemService: _fileSystemService
+            fileSystemService: _fileSystemService,
+            eventBus: EventBus.shared
         )
         _aiService = OpenRouterAIService()
+
+        _codebaseIndex = nil
         _conversationManager = ConversationManager(
             aiService: _aiService,
             errorManager: errorManager,
-            fileSystemService: _fileSystemService
+            fileSystemService: _fileSystemService,
+            codebaseIndex: nil
         )
+
+        if let root = _workspaceService.currentDirectory {
+            _conversationManager.updateProjectRoot(root)
+            configureCodebaseIndex(projectRoot: root)
+        }
     }
     
     // MARK: - Factory Methods
@@ -104,7 +184,8 @@ class DependencyContainer {
         _conversationManager = ConversationManager(
             aiService: newService,
             errorManager: _errorManager,
-            fileSystemService: _fileSystemService
+            fileSystemService: _fileSystemService,
+            codebaseIndex: _codebaseIndex
         )
     }
 
@@ -119,6 +200,8 @@ class DependencyContainer {
     private let _windowProvider: WindowProvider
     private var _aiService: AIService
     private var _conversationManager: ConversationManagerProtocol
+    private var _codebaseIndex: CodebaseIndexProtocol?
+    private var pendingAutoReindexTask: Task<Void, Never>?
 }
 
 // MARK: - Testing Support

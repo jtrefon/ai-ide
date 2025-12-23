@@ -7,11 +7,12 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
     @Published var currentDirectory: URL?
     
     private let errorManager: ErrorManagerProtocol
+    private let eventBus: EventBusProtocol
     
-    init(errorManager: ErrorManagerProtocol) {
+    init(errorManager: ErrorManagerProtocol, eventBus: EventBusProtocol) {
         self.errorManager = errorManager
-        // Set default directory to user's home directory
-        self.currentDirectory = FileManager.default.homeDirectoryForCurrentUser
+        self.eventBus = eventBus
+        self.currentDirectory = nil
     }
     
     /// Handle error through the service's error manager
@@ -36,6 +37,7 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
             }
             
             try "".write(to: newFileURL, atomically: true, encoding: .utf8)
+            eventBus.publish(FileCreatedEvent(url: newFileURL))
         } catch {
             handleError(.fileOperationFailed("create file", underlying: error))
         }

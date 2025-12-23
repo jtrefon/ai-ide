@@ -1,0 +1,451 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project osx-ide.xcodeproj -scheme osx-ide -configuration Debug test -destination platform=macOS "-only-testing:osx-ideTests" CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:macOS, arch:arm64, id:00008132-000C704002B9001C, name:My Mac }
+{ platform:macOS, arch:x86_64, id:00008132-000C704002B9001C, name:My Mac }
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (3 targets)
+    Target 'osx-ideUITests' in project 'osx-ide'
+        ➜ Explicit dependency on target 'osx-ide' in project 'osx-ide'
+    Target 'osx-ideTests' in project 'osx-ide'
+        ➜ Explicit dependency on target 'osx-ide' in project 'osx-ide'
+    Target 'osx-ide' in project 'osx-ide' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+Build description signature: 9c326333b4fd28797ced69bf74c75b24
+Build description path: /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/XCBuildData/9c326333b4fd28797ced69bf74c75b24.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk /Users/jack/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/macosx26.2-25C57-00fa09913b459cbbc988d1f6730289ae.sdkstatcache
+    cd /Users/jack/Projects/osx/osx-ide/osx-ide.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -o /Users/jack/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/macosx26.2-25C57-00fa09913b459cbbc988d1f6730289ae.sdkstatcache
+
+MkDir /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /bin/mkdir -p /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest
+
+MkDir /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest (in target 'osx-ideTests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /bin/mkdir -p /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks/XCTestSupport.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks/XCTestCore.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks/XCTest.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks/libXCTestBundleInject.dylib /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestBundleInject.dylib (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestBundleInject.dylib /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks
+
+Ld /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/__preview.dylib normal (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -O0 -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -install_name @rpath/osx-ide.debug.dylib -dead_strip -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide_dependency_info.dat -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/__preview.dylib
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks/XCUnit.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks
+
+Ld /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib normal (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -O0 -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -filelist /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.LinkFileList -install_name @rpath/osx-ide.debug.dylib -Xlinker -rpath -Xlinker @executable_path/../Frameworks -dead_strip -Xlinker -object_path_lto -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide.swiftmodule @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx_ide-linker-args.resp -Xlinker -alias -Xlinker _main -Xlinker ___debug_main_executable_dylib_entry_point -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks/XCUIAutomation.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks/XCTAutomationSupport.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks/Testing.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks
+
+ProcessInfoPlistFile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Info.plist /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/empty-osx-ide.plist (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-infoPlistUtility /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/empty-osx-ide.plist -producttype com.apple.product-type.application -genpkginfo /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PkgInfo -expandbuildsettings -platform macosx -additionalcontentfile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/assetcatalog_generated_info.plist -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Info.plist
+
+ConstructStubExecutorLinkFileList /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-ExecutorLinkFileList-normal-arm64.txt (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    construct-stub-executor-link-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libPreviewsJITStubExecutor_no_swift_entry_point.a /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libPreviewsJITStubExecutor.a --output /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-ExecutorLinkFileList-normal-arm64.txt
+note: Using stub executor library with Swift entry point. (in target 'osx-ide' from project 'osx-ide')
+
+Ld /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide normal (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -O0 -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker @executable_path/../Frameworks -rdynamic -Xlinker -no_deduplicate -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide-ExecutorLinkFileList-normal-arm64.txt /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide
+
+CopySwiftLibs /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Library/SystemExtensions --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Extensions --platform macosx --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+ExtractAppIntentsMetadata (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name osx_ide --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk --xcode-version 17C52 --platform-family macOS --deployment-target 26.0 --bundle-identifier tdc.osx-ide --output /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/Resources --target-triple arm64-apple-macos26.0 --binary-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide --dependency-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide_dependency_info.dat --stringsdata-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.SwiftFileList --metadata-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide.DependencyMetadataFileList --static-metadata-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide.DependencyStaticMetadataFileList --swift-const-vals-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/Objects-normal/arm64/osx-ide.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2025-12-23 19:47:19.662 appintentsmetadataprocessor[86660:4957483] Starting appintentsmetadataprocessor export
+2025-12-23 19:47:19.664 appintentsmetadataprocessor[86660:4957483] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+ProcessInfoPlistFile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/Info.plist /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/empty-osx-ideTests.plist (in target 'osx-ideTests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-infoPlistUtility /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/empty-osx-ideTests.plist -producttype com.apple.product-type.bundle.unit-test -expandbuildsettings -platform macosx -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/Info.plist
+
+Ld /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/MacOS/osx-ideTests normal (in target 'osx-ideTests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -bundle -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -O0 -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -iframework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -filelist /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/Objects-normal/arm64/osx-ideTests.LinkFileList -Xlinker -rpath -Xlinker @loader_path/../Frameworks -Xlinker -rpath -Xlinker @executable_path/../Frameworks -dead_strip -bundle_loader /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide -Xlinker -object_path_lto -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/Objects-normal/arm64/osx-ideTests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/Objects-normal/arm64/osx-ideTests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/Objects-normal/arm64/osx_ideTests.swiftmodule @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/Objects-normal/arm64/osx_ideTests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/MacOS/osx-ide.debug.dylib -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/MacOS/osx-ideTests
+
+ExtractAppIntentsMetadata (in target 'osx-ideTests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name osx_ideTests --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk --xcode-version 17C52 --platform-family macOS --deployment-target 26.0 --bundle-identifier tdc.osx-ideTests --output /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/Resources --target-triple arm64-apple-macos26.0 --binary-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/MacOS/osx-ideTests --dependency-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/Objects-normal/arm64/osx-ideTests_dependency_info.dat --stringsdata-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/Objects-normal/arm64/osx-ideTests.SwiftFileList --metadata-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/osx-ideTests.DependencyMetadataFileList --static-metadata-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/osx-ideTests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/Objects-normal/arm64/osx-ideTests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2025-12-23 19:47:19.960 appintentsmetadataprocessor[86663:4957502] Starting appintentsmetadataprocessor export
+2025-12-23 19:47:19.961 appintentsmetadataprocessor[86663:4957502] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest (in target 'osx-ideTests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/MacOS/osx-ideTests --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/Frameworks --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/PlugIns --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/Library/SystemExtensions --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/Extensions --platform macosx --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest/Contents/Frameworks --strip-bitcode --scan-executable /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideTests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest (in target 'osx-ideTests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest
+
+Touch /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest (in target 'osx-ideTests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /usr/bin/touch -c /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app/Contents/PlugIns/osx-ideTests.xctest
+
+Validate /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-validationUtility /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app -no-validate-extension -infoplist-subpath Contents/Info.plist
+
+RegisterWithLaunchServices /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app (in target 'osx-ide' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ide.app
+
+ProcessInfoPlistFile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/Info.plist /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/empty-osx-ideUITests.plist (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-infoPlistUtility /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/empty-osx-ideUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -platform macosx -additionalcontentfile /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/Info.plist
+
+Ld /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/MacOS/osx-ideUITests normal (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -bundle -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk -O0 -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug -iframework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -filelist /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/Objects-normal/arm64/osx-ideUITests.LinkFileList -Xlinker -rpath -Xlinker @loader_path/../Frameworks -dead_strip -Xlinker -object_path_lto -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/Objects-normal/arm64/osx-ideUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/Objects-normal/arm64/osx-ideUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/Objects-normal/arm64/osx_ideUITests.swiftmodule @/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/Objects-normal/arm64/osx_ideUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -o /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/MacOS/osx-ideUITests
+
+CopySwiftLibs /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/MacOS/osx-ideUITests --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/Frameworks --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/PlugIns --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/Library/SystemExtensions --scan-folder /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/Extensions --platform macosx --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/Frameworks --strip-bitcode --scan-executable /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+ExtractAppIntentsMetadata (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name osx_ideUITests --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk --xcode-version 17C52 --platform-family macOS --deployment-target 26.0 --bundle-identifier tdc.osx-ideUITests --output /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/Resources --target-triple arm64-apple-macos26.0 --binary-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest/Contents/MacOS/osx-ideUITests --dependency-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/Objects-normal/arm64/osx-ideUITests_dependency_info.dat --stringsdata-file /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/Objects-normal/arm64/osx-ideUITests.SwiftFileList --metadata-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/osx-ideUITests.DependencyMetadataFileList --static-metadata-file-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/osx-ideUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/Objects-normal/arm64/osx-ideUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2025-12-23 19:47:20.420 appintentsmetadataprocessor[86670:4957576] Starting appintentsmetadataprocessor export
+2025-12-23 19:47:20.421 appintentsmetadataprocessor[86670:4957576] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+MkDir /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /bin/mkdir -p /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks/Testing.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks/XCTestCore.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks/XCTest.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks
+
+CopyAndPreserveArchs /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/MacOS/osx-ideUITests-Runner (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/MacOS/XCTRunner -output /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/MacOS/osx-ideUITests-Runner -extract arm64
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks/XCUnit.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/Frameworks
+
+RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    builtin-RegisterExecutionPolicyException /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest
+
+Touch /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest (in target 'osx-ideUITests' from project 'osx-ide')
+    cd /Users/jack/Projects/osx/osx-ide
+    /usr/bin/touch -c /Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Products/Debug/osx-ideUITests-Runner.app/Contents/PlugIns/osx-ideUITests.xctest
+
+note: Removed stale file '/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/DerivedSources/Entitlements.plist'
+
+note: Removed stale file '/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/DerivedSources/Entitlements.plist'
+
+note: Removed stale file '/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide.app.xcent'
+
+note: Removed stale file '/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ide.build/osx-ide.app.xcent.der'
+
+note: Removed stale file '/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/osx-ideUITests.xctest.xcent'
+
+note: Removed stale file '/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Build/Intermediates.noindex/osx-ide.build/Debug/osx-ideUITests.build/osx-ideUITests.xctest.xcent.der'
+
+2025-12-23 19:47:22.710212+0400 osx-ide[86677:4957861] [User Defaults] CFPrefsPlistSource<0x107808240> (Domain: kCFPreferencesAnyApplication, User: kCFPreferencesCurrentUser, ByHost: No, Container: (null), Contents Need Refresh: No): Value for key AppleLanguages was (
+    "en-AE"
+). Expected (
+    "en-AE",
+    "pl-AE"
+) (UserAccountUpdater(1368): 2025-05-10 14:09:24 (PDT))
+[UIRegistry] Registered 'Internal.FileExplorer' at ide.sidebar.left
+[UIRegistry] Registered 'Internal.Terminal' at ide.panel.bottom
+[UIRegistry] Registered 'Internal.AIChat' at ide.panel.right
+[CommandRegistry] Registered: file.new
+[CommandRegistry] Registered: file.open
+[CommandRegistry] Registered: file.openFolder
+[CommandRegistry] Registered: file.save
+[CommandRegistry] Registered: file.saveAs
+[CorePlugin] Initialized core UI components and commands
+2025-12-23 19:47:22.836147+0400 osx-ide[86677:4957795] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/xw/1ts56fvd6nz1r7zybsbkq6gm0000gn/T/tdc.osx-ide.savedState
+CodebaseIndex service started
+2025-12-23 19:47:23.202780+0400 osx-ide[86677:4957902] [Common] Unable to obtain a task name port right for pid 394: (os/kern) failure (0x5)
+2025-12-23 19:47:23.264106+0400 osx-ide[86677:4957899] flock failed to lock list file (/var/folders/xw/1ts56fvd6nz1r7zybsbkq6gm0000gn/C//tdc.osx-ide/com.apple.metal/16777235_403/functions.list): errno = 35
+Test Suite 'All tests' started at 2025-12-23 19:47:24.591.
+Test Suite 'osx-ideTests.xctest' started at 2025-12-23 19:47:24.592.
+Test Suite 'CodebaseIndexTests' started at 2025-12-23 19:47:24.592.
+Test Case '-[osx_ideTests.CodebaseIndexTests testDatabaseManagerCreatesSchema]' started.
+Test Case '-[osx_ideTests.CodebaseIndexTests testDatabaseManagerCreatesSchema]' passed (0.006 seconds).
+Test Case '-[osx_ideTests.CodebaseIndexTests testDatabaseManagerSavesAndLoadsMemory]' started.
+Test Case '-[osx_ideTests.CodebaseIndexTests testDatabaseManagerSavesAndLoadsMemory]' passed (0.003 seconds).
+Test Case '-[osx_ideTests.CodebaseIndexTests testSwiftParserExtractsClass]' started.
+Test Case '-[osx_ideTests.CodebaseIndexTests testSwiftParserExtractsClass]' passed (0.001 seconds).
+Test Suite 'CodebaseIndexTests' passed at 2025-12-23 19:47:24.602.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+Test Suite 'ConversationManagerTests' started at 2025-12-23 19:47:24.602.
+Test Case '-[osx_ideTests.ConversationManagerTests testSendMessageFlow]' started.
+Test Case '-[osx_ideTests.ConversationManagerTests testSendMessageFlow]' passed (0.109 seconds).
+Test Case '-[osx_ideTests.ConversationManagerTests testWelcomeMessage]' started.
+Test Case '-[osx_ideTests.ConversationManagerTests testWelcomeMessage]' passed (0.203 seconds).
+Test Suite 'ConversationManagerTests' passed at 2025-12-23 19:47:24.914.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.311 (0.312) seconds
+Test Suite 'FileTreeIsolationTests' started at 2025-12-23 19:47:24.915.
+Test Case '-[osx_ideTests.FileTreeIsolationTests testChildOfUnexpectedItemDoesNotCrash]' started.
+Test Case '-[osx_ideTests.FileTreeIsolationTests testChildOfUnexpectedItemDoesNotCrash]' passed (0.148 seconds).
+Test Case '-[osx_ideTests.FileTreeIsolationTests testDataSourceConsistency]' started.
+Test Case '-[osx_ideTests.FileTreeIsolationTests testDataSourceConsistency]' passed (0.708 seconds).
+Test Case '-[osx_ideTests.FileTreeIsolationTests testNestedDirectoryChildrenCanBeLoadedSynchronously]' started.
+Test Case '-[osx_ideTests.FileTreeIsolationTests testNestedDirectoryChildrenCanBeLoadedSynchronously]' passed (0.209 seconds).
+Test Case '-[osx_ideTests.FileTreeIsolationTests testOutlineCellRenderingForNestedItemsDoesNotCrash]' started.
+Test Case '-[osx_ideTests.FileTreeIsolationTests testOutlineCellRenderingForNestedItemsDoesNotCrash]' passed (0.211 seconds).
+Test Case '-[osx_ideTests.FileTreeIsolationTests testRapidRootChange]' started.
+Test Case '-[osx_ideTests.FileTreeIsolationTests testRapidRootChange]' passed (0.243 seconds).
+Test Case '-[osx_ideTests.FileTreeIsolationTests testSearchTypingDoesNotCrashAndProducesResults]' started.
+Test Case '-[osx_ideTests.FileTreeIsolationTests testSearchTypingDoesNotCrashAndProducesResults]' passed (0.131 seconds).
+Test Suite 'FileTreeIsolationTests' passed at 2025-12-23 19:47:26.568.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 1.650 (1.653) seconds
+Test Suite 'NativeTerminalEmbedderTests' started at 2025-12-23 19:47:26.568.
+Test Case '-[osx_ideTests.NativeTerminalEmbedderTests testEnterSendsNewlineToShell]' started.
+Test Case '-[osx_ideTests.NativeTerminalEmbedderTests testEnterSendsNewlineToShell]' passed (0.001 seconds).
+Test Suite 'NativeTerminalEmbedderTests' passed at 2025-12-23 19:47:26.569.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'NucleusTests' started at 2025-12-23 19:47:26.569.
+Test Case '-[osx_ideTests.NucleusTests testCommandRegistryExecution]' started.
+[CommandRegistry] Registered: test.command
+[CommandRegistry] Executing: test.command
+Test Case '-[osx_ideTests.NucleusTests testCommandRegistryExecution]' passed (0.103 seconds).
+Test Case '-[osx_ideTests.NucleusTests testCommandRegistryHijacking]' started.
+[CommandRegistry] Registered: test.hijack
+[CommandRegistry] Registered: test.hijack
+[CommandRegistry] Executing: test.hijack
+Test Case '-[osx_ideTests.NucleusTests testCommandRegistryHijacking]' passed (0.103 seconds).
+Test Case '-[osx_ideTests.NucleusTests testEventBusPublishSubscribe]' started.
+Test Case '-[osx_ideTests.NucleusTests testEventBusPublishSubscribe]' passed (0.002 seconds).
+Test Case '-[osx_ideTests.NucleusTests testUIRegistryRegistration]' started.
+[UIRegistry] Registered 'TestView' at ide.sidebar.left
+Test Case '-[osx_ideTests.NucleusTests testUIRegistryRegistration]' passed (0.001 seconds).
+Test Suite 'NucleusTests' passed at 2025-12-23 19:47:26.780.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.208 (0.210) seconds
+Test Suite 'ShellManagerTests' started at 2025-12-23 19:47:26.780.
+Test Case '-[osx_ideTests.ShellManagerTests testConcurrentInput]' started.
+Test Case '-[osx_ideTests.ShellManagerTests testConcurrentInput]' passed (1.225 seconds).
+Test Case '-[osx_ideTests.ShellManagerTests testRapidRestart]' started.
+Test Case '-[osx_ideTests.ShellManagerTests testRapidRestart]' passed (0.121 seconds).
+Test Case '-[osx_ideTests.ShellManagerTests testShellLifecycle]' started.
+Test Case '-[osx_ideTests.ShellManagerTests testShellLifecycle]' passed (1.740 seconds).
+Test Suite 'ShellManagerTests' passed at 2025-12-23 19:47:29.867.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 3.086 (3.087) seconds
+Test Suite 'TerminalStressTests' started at 2025-12-23 19:47:29.868.
+Test Case '-[osx_ideTests.TerminalStressTests testRapidOutputBursts]' started.
+Test Case '-[osx_ideTests.TerminalStressTests testRapidOutputBursts]' passed (2.380 seconds).
+Test Case '-[osx_ideTests.TerminalStressTests testRapidReEmbedding]' started.
+Test Case '-[osx_ideTests.TerminalStressTests testRapidReEmbedding]' passed (0.125 seconds).
+Test Suite 'TerminalStressTests' passed at 2025-12-23 19:47:32.374.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 2.505 (2.506) seconds
+Test Suite 'ZshCompletionTests' started at 2025-12-23 19:47:32.374.
+Test Case '-[osx_ideTests.ZshCompletionTests testZshDoubleTabProducesCompletionOutput]' started.
+Test Case '-[osx_ideTests.ZshCompletionTests testZshDoubleTabProducesCompletionOutput]' passed (0.862 seconds).
+Test Suite 'ZshCompletionTests' passed at 2025-12-23 19:47:33.236.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.862 (0.862) seconds
+Test Suite 'osx-ideTests.xctest' passed at 2025-12-23 19:47:33.237.
+	 Executed 22 tests, with 0 failures (0 unexpected) in 8.632 (8.645) seconds
+Test Suite 'All tests' passed at 2025-12-23 19:47:33.237.
+	 Executed 22 tests, with 0 failures (0 unexpected) in 8.632 (8.646) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite osx_ideTests started.
+◇ Test testAppStateInitialization() started.
+2025-12-23 19:47:37.053320+0400 osx-ide[87180:4959047] [User Defaults] CFPrefsPlistSource<0x108508240> (Domain: kCFPreferencesAnyApplication, User: kCFPreferencesCurrentUser, ByHost: No, Container: (null), Contents Need Refresh: No): Value for key AppleLanguages was (
+    "en-AE"
+). Expected (
+    "en-AE",
+    "pl-AE"
+) (UserAccountUpdater(1368): 2025-05-10 14:09:24 (PDT))
+[UIRegistry] Registered 'Internal.FileExplorer' at ide.sidebar.left
+[UIRegistry] Registered 'Internal.Terminal' at ide.panel.bottom
+[UIRegistry] Registered 'Internal.AIChat' at ide.panel.right
+[CommandRegistry] Registered: file.new
+[CommandRegistry] Registered: file.open
+[CommandRegistry] Registered: file.openFolder
+[CommandRegistry] Registered: file.save
+[CommandRegistry] Registered: file.saveAs
+[CorePlugin] Initialized core UI components and commands
+2025-12-23 19:47:37.116007+0400 osx-ide[87180:4959032] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/xw/1ts56fvd6nz1r7zybsbkq6gm0000gn/T/tdc.osx-ide.savedState
+2025-12-23 19:47:37.433064+0400 osx-ide[87180:4959047] [Common] Unable to obtain a task name port right for pid 394: (os/kern) failure (0x5)
+CodebaseIndex service started
+2025-12-23 19:47:37.513670+0400 osx-ide[87180:4959047] flock failed to lock list file (/var/folders/xw/1ts56fvd6nz1r7zybsbkq6gm0000gn/C//tdc.osx-ide/com.apple.metal/16777235_403/functions.list): errno = 35
+
+Restarting after unexpected exit, crash, or test timeout; summary will include totals from previous launches.
+
+Test Suite 'Selected tests' started at 2025-12-23 19:47:37.682.
+Test Suite 'osx-ideTests.xctest' started at 2025-12-23 19:47:37.682.
+Test Suite 'osx-ideTests.xctest' passed at 2025-12-23 19:47:37.682.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2025-12-23 19:47:37.683.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite osx_ideTests started.
+◇ Test testLanguageDetection() started.
+✔ Test testLanguageDetection() passed after 0.001 seconds.
+◇ Test testNewFileFunctionality() started.
+2025-12-23 19:47:38.435962+0400 osx-ide[87228:4959315] [User Defaults] CFPrefsPlistSource<0x107985c30> (Domain: kCFPreferencesAnyApplication, User: kCFPreferencesCurrentUser, ByHost: No, Container: (null), Contents Need Refresh: No): Value for key AppleLanguages was (
+    "en-AE"
+). Expected (
+    "en-AE",
+    "pl-AE"
+) (UserAccountUpdater(1368): 2025-05-10 14:09:24 (PDT))
+[UIRegistry] Registered 'Internal.FileExplorer' at ide.sidebar.left
+[UIRegistry] Registered 'Internal.Terminal' at ide.panel.bottom
+[UIRegistry] Registered 'Internal.AIChat' at ide.panel.right
+[CommandRegistry] Registered: file.new
+[CommandRegistry] Registered: file.open
+[CommandRegistry] Registered: file.openFolder
+[CommandRegistry] Registered: file.save
+[CommandRegistry] Registered: file.saveAs
+[CorePlugin] Initialized core UI components and commands
+2025-12-23 19:47:38.494597+0400 osx-ide[87228:4959305] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/xw/1ts56fvd6nz1r7zybsbkq6gm0000gn/T/tdc.osx-ide.savedState
+CodebaseIndex service started
+2025-12-23 19:47:38.705294+0400 osx-ide[87228:4959337] [Common] Unable to obtain a task name port right for pid 394: (os/kern) failure (0x5)
+
+Restarting after unexpected exit, crash, or test timeout; summary will include totals from previous launches.
+
+2025-12-23 19:47:38.864009+0400 osx-ide[87228:4959338] flock failed to lock list file (/var/folders/xw/1ts56fvd6nz1r7zybsbkq6gm0000gn/C//tdc.osx-ide/com.apple.metal/16777235_403/functions.list): errno = 35
+Test Suite 'Selected tests' started at 2025-12-23 19:47:38.872.
+Test Suite 'osx-ideTests.xctest' started at 2025-12-23 19:47:38.873.
+Test Suite 'osx-ideTests.xctest' passed at 2025-12-23 19:47:38.873.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2025-12-23 19:47:38.873.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite osx_ideTests started.
+◇ Test testNewFileFunctionality() started.
+2025-12-23 19:47:39.585223+0400 osx-ide[87280:4959505] [User Defaults] CFPrefsPlistSource<0x107d89d70> (Domain: kCFPreferencesAnyApplication, User: kCFPreferencesCurrentUser, ByHost: No, Container: (null), Contents Need Refresh: No): Value for key AppleLanguages was (
+    "en-AE"
+). Expected (
+    "en-AE",
+    "pl-AE"
+) (UserAccountUpdater(1368): 2025-05-10 14:09:24 (PDT))
+[UIRegistry] Registered 'Internal.FileExplorer' at ide.sidebar.left
+[UIRegistry] Registered 'Internal.Terminal' at ide.panel.bottom
+[UIRegistry] Registered 'Internal.AIChat' at ide.panel.right
+[CommandRegistry] Registered: file.new
+[CommandRegistry] Registered: file.open
+[CommandRegistry] Registered: file.openFolder
+[CommandRegistry] Registered: file.save
+[CommandRegistry] Registered: file.saveAs
+[CorePlugin] Initialized core UI components and commands
+2025-12-23 19:47:39.659010+0400 osx-ide[87280:4959504] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/xw/1ts56fvd6nz1r7zybsbkq6gm0000gn/T/tdc.osx-ide.savedState
+2025-12-23 19:47:39.841816+0400 osx-ide[87280:4959510] [Common] Unable to obtain a task name port right for pid 394: (os/kern) failure (0x5)
+CodebaseIndex service started
+2025-12-23 19:47:39.897773+0400 osx-ide[87280:4959511] flock failed to lock list file (/var/folders/xw/1ts56fvd6nz1r7zybsbkq6gm0000gn/C//tdc.osx-ide/com.apple.metal/16777235_403/functions.list): errno = 35
+
+Restarting after unexpected exit, crash, or test timeout; summary will include totals from previous launches.
+
+Test Suite 'Selected tests' started at 2025-12-23 19:47:40.023.
+Test Suite 'osx-ideTests.xctest' started at 2025-12-23 19:47:40.023.
+Test Suite 'osx-ideTests.xctest' passed at 2025-12-23 19:47:40.023.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2025-12-23 19:47:40.024.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite osx_ideTests started.
+◇ Test testNewFileFunctionality() started.
+2025-12-23 19:47:48.547 xcodebuild[86628:4957184] [MT] IDETestOperationsObserverDebug: 28.101 elapsed -- Testing started completed.
+2025-12-23 19:47:48.548 xcodebuild[86628:4957184] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2025-12-23 19:47:48.548 xcodebuild[86628:4957184] [MT] IDETestOperationsObserverDebug: 28.101 sec, +28.101 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/jack/Library/Developer/Xcode/DerivedData/osx-ide-eoaklgmzoruiukhbgdkrilmnzybq/Logs/Test/Test-osx-ide-2025.12.23_19-47-17-+0400.xcresult
+
+** TEST FAILED **
+
+Testing started

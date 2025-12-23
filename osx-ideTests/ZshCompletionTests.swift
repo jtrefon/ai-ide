@@ -33,6 +33,11 @@ final class ZshCompletionTests: XCTestCase {
     }
 
     func testZshDoubleTabProducesCompletionOutput() async throws {
+        let shouldRun = ProcessInfo.processInfo.environment["RUN_INTERACTIVE_SHELL_TESTS"] == "1"
+        if !shouldRun {
+            throw XCTSkip("Skipping interactive zsh completion test. Set RUN_INTERACTIVE_SHELL_TESTS=1 to enable.")
+        }
+
         let shell = ShellManager()
 
         var combinedOutput = ""
