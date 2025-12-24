@@ -78,3 +78,9 @@ public struct Symbol: Codable, Sendable {
         self.description = description
     }
 }
+
+public struct IndexedFileMatch: Sendable {
+    public let path: String
+    public let aiEnriched: Bool
+    public let qualityScore: Double?
+}
