@@ -128,7 +128,19 @@ class DependencyContainer {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard let self else { return }
             guard self.isCodebaseIndexEnabled else { return }
-            self._codebaseIndex?.reindexProject(aiEnrichmentEnabled: false)
+
+            let aiEnabled: Bool
+            if self.isAIEnrichmentIndexingEnabled {
+                let settings = OpenRouterSettingsStore().load()
+                let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
+                aiEnabled = !model.isEmpty
+            } else {
+                aiEnabled = false
+            }
+
+            // Resume indexing incrementally (IndexerActor skips unchanged files using last_modified).
+            // If AI enrichment is enabled, CodebaseIndex will run it after baseline indexing completes.
+            self._codebaseIndex?.reindexProject(aiEnrichmentEnabled: aiEnabled)
         }
     }
     
