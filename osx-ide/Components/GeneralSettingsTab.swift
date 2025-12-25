@@ -40,6 +40,7 @@ struct GeneralSettingsTab: View {
                         .pickerStyle(.segmented)
                         .labelsHidden()
                         .frame(width: 220)
+                        .accessibilityIdentifier("Settings.Theme")
                     }
                 }
                 
@@ -60,6 +61,7 @@ struct GeneralSettingsTab: View {
                         }
                         .labelsHidden()
                         .frame(width: 200)
+                        .accessibilityIdentifier("Settings.FontFamily")
                     }
                     
                     SettingsRow(
@@ -74,6 +76,7 @@ struct GeneralSettingsTab: View {
                                 step: 1
                             )
                             .frame(width: 180)
+                            .accessibilityIdentifier("Settings.FontSize")
                             
                             Text("\(Int(appState.fontSize)) pt")
                                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
@@ -89,6 +92,7 @@ struct GeneralSettingsTab: View {
                         Toggle("", isOn: showLineNumbersBinding)
                             .labelsHidden()
                             .toggleStyle(.switch)
+                            .accessibilityIdentifier("Settings.ShowLineNumbers")
                     }
                     
                     SettingsRow(
@@ -99,6 +103,7 @@ struct GeneralSettingsTab: View {
                         Toggle("", isOn: wordWrapBinding)
                             .labelsHidden()
                             .toggleStyle(.switch)
+                            .accessibilityIdentifier("Settings.WordWrap")
                     }
                     
                     SettingsRow(
@@ -109,6 +114,7 @@ struct GeneralSettingsTab: View {
                         Toggle("", isOn: minimapBinding)
                             .labelsHidden()
                             .toggleStyle(.switch)
+                            .accessibilityIdentifier("Settings.Minimap")
                     }
                 }
                 
@@ -124,6 +130,7 @@ struct GeneralSettingsTab: View {
                         Toggle("", isOn: sidebarBinding)
                             .labelsHidden()
                             .toggleStyle(.switch)
+                            .accessibilityIdentifier("Settings.Sidebar")
                     }
                 }
                 
