@@ -122,6 +122,35 @@ class WorkspaceStateManager: ObservableObject {
         workspaceService.createFolder(named: name, in: directory)
     }
     
+    /// Create a new project directory at the specified location
+    func createProject(at location: URL, named name: String) async {
+        guard validateFileName(name) else {
+            workspaceService.handleError(.invalidFilePath("Invalid project name: \(name)"))
+            return
+        }
+        
+        let projectURL = location.appendingPathComponent(name)
+        
+        // Check if project directory already exists
+        if FileManager.default.fileExists(atPath: projectURL.path) {
+            workspaceService.handleError(.invalidFilePath("Project directory already exists: \(name)"))
+            return
+        }
+        
+        do {
+            // Create the project directory
+            try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
+            
+            // Set the new project as the current directory
+            workspaceService.currentDirectory = projectURL
+            currentDirectory = projectURL
+            saveCurrentDirectory(projectURL)
+            
+        } catch {
+            workspaceService.handleError(.invalidFilePath("Failed to create project directory: \(error.localizedDescription)"))
+        }
+    }
+    
     /// Check if path is valid and accessible
     func isValidPath(_ path: String) -> Bool {
         return workspaceService.isValidPath(path)
