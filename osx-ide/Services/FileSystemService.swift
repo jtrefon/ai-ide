@@ -17,6 +17,8 @@ final class FileSystemService: Sendable {
     }
 
     func writeFile(content: String, to url: URL) throws {
+        let parent = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true, attributes: nil)
         try content.write(to: url, atomically: true, encoding: .utf8)
     }
 

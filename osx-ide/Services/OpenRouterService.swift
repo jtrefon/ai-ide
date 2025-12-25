@@ -61,7 +61,7 @@ private struct OpenRouterModelResponse: Decodable {
 enum OpenRouterServiceError: LocalizedError {
     case invalidURL
     case invalidResponse
-    case serverError(Int)
+    case serverError(Int, body: String?)
     case missingAPIKey
     case emptyModel
     
@@ -71,7 +71,10 @@ enum OpenRouterServiceError: LocalizedError {
             return "The OpenRouter URL is invalid."
         case .invalidResponse:
             return "OpenRouter returned an unexpected response."
-        case .serverError(let code):
+        case .serverError(let code, let body):
+            if let body, !body.isEmpty {
+                return "OpenRouter request failed (HTTP \(code)): \(body)"
+            }
             return "OpenRouter request failed (HTTP \(code))."
         case .missingAPIKey:
             return "An API key is required."
@@ -106,7 +109,10 @@ actor OpenRouterAPIClient {
         
         let (data, response) = try await urlSession.data(for: request)
         let status = try httpStatus(from: response)
-        guard status == 200 else { throw OpenRouterServiceError.serverError(status) }
+        guard status == 200 else {
+            let body = String(data: data, encoding: .utf8)
+            throw OpenRouterServiceError.serverError(status, body: body)
+        }
         let decoded = try JSONDecoder().decode(OpenRouterModelResponse.self, from: data)
         return decoded.data
     }
@@ -172,7 +178,10 @@ actor OpenRouterAPIClient {
         
         let (data, response) = try await urlSession.data(for: request)
         let status = try httpStatus(from: response)
-        guard status == 200 else { throw OpenRouterServiceError.serverError(status) }
+        guard status == 200 else {
+            let body = String(data: data, encoding: .utf8)
+            throw OpenRouterServiceError.serverError(status, body: body)
+        }
         return data
     }
     
