@@ -10,6 +10,8 @@ import Foundation
 actor OpenRouterAIService: AIService {
     private let settingsStore: OpenRouterSettingsStore
     private let client: OpenRouterAPIClient
+
+    private static let maxToolOutputCharsForModel = 12_000
     
     init(
         settingsStore: OpenRouterSettingsStore = OpenRouterSettingsStore(),
@@ -44,10 +46,12 @@ actor OpenRouterAIService: AIService {
             case .tool:
                 // For tool outputs
                 if let toolCallId = msg.toolCallId {
-                    return OpenRouterChatMessage(role: "tool", content: msg.content, tool_call_id: toolCallId)
+                    let content = Self.truncate(msg.content, limit: Self.maxToolOutputCharsForModel)
+                    return OpenRouterChatMessage(role: "tool", content: content, tool_call_id: toolCallId)
                 } else {
                     // Fallback if ID missing (shouldn't happen with new logic)
-                    return OpenRouterChatMessage(role: "user", content: "Tool Output: \(msg.content)")
+                    let content = Self.truncate(msg.content, limit: Self.maxToolOutputCharsForModel)
+                    return OpenRouterChatMessage(role: "user", content: "Tool Output: \(content)")
                 }
             }
         }
@@ -137,6 +141,14 @@ actor OpenRouterAIService: AIService {
                 ]
             ]
         }
+
+        await AIToolTraceLogger.shared.log(type: "openrouter.request", data: [
+            "model": model,
+            "messages": finalMessages.count,
+            "tools": toolDefinitions?.count ?? 0,
+            "mode": mode?.rawValue as Any,
+            "projectRoot": projectRoot?.path as Any
+        ])
         
         let request = OpenRouterChatRequest(
             model: model,
@@ -147,23 +159,53 @@ actor OpenRouterAIService: AIService {
         )
         
         let body = try JSONEncoder().encode(request)
-        let data = try await client.chatCompletion(
-            apiKey: apiKey,
-            baseURL: settings.baseURL,
-            appName: "OSX IDE",
-            referer: "",
-            body: body
-        )
+
+        await AIToolTraceLogger.shared.log(type: "openrouter.request_body", data: [
+            "bytes": body.count
+        ])
+
+        let data: Data
+        do {
+            data = try await client.chatCompletion(
+                apiKey: apiKey,
+                baseURL: settings.baseURL,
+                appName: "OSX IDE",
+                referer: "",
+                body: body
+            )
+        } catch {
+            if let openRouterError = error as? OpenRouterServiceError {
+                if case let .serverError(code, body) = openRouterError {
+                    let snippet = (body ?? "").prefix(2000)
+                    await AIToolTraceLogger.shared.log(type: "openrouter.error", data: [
+                        "status": code,
+                        "bodySnippet": String(snippet)
+                    ])
+                }
+            }
+            throw error
+        }
         
         let response = try JSONDecoder().decode(OpenRouterChatResponse.self, from: data)
         guard let choice = response.choices.first else {
             throw AppError.aiServiceError("OpenRouter response was empty.")
         }
+
+        await AIToolTraceLogger.shared.log(type: "openrouter.response", data: [
+            "contentLength": choice.message.content?.count ?? 0,
+            "toolCalls": choice.message.toolCalls?.count ?? 0
+        ])
         
         return AIServiceResponse(
             content: choice.message.content,
             toolCalls: choice.message.toolCalls
         )
+    }
+
+    private static func truncate(_ text: String, limit: Int) -> String {
+        if text.count <= limit { return text }
+        let head = text.prefix(limit)
+        return String(head) + "\n\n[TRUNCATED]"
     }
 }
 
