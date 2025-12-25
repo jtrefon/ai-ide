@@ -225,6 +225,10 @@ class AppState: ObservableObject {
         workspaceStateManager.navigateToParent()
     }
     
+    func newProject() {
+        showNewProjectDialog()
+    }
+    
     // UI Operations
     func toggleSidebar() {
         uiStateManager.toggleSidebar()
@@ -253,6 +257,20 @@ class AppState: ObservableObject {
     }
     
     // MARK: - Private Methods
+    
+    private func showNewProjectDialog() {
+        let dialog = NewProjectDialog(
+            fileDialogService: fileDialogService
+        ) { [weak self] location, name in
+            await self?.workspaceStateManager.createProject(at: location, named: name)
+        }
+        
+        // Create and show the dialog as a sheet
+        if let window = DependencyContainer.shared.windowProvider.window {
+            let hostingController = NSHostingController(rootView: dialog)
+            window.contentViewController?.presentAsSheet(hostingController)
+        }
+    }
     
     private func setupStateObservation() {
         // Observe file editor changes

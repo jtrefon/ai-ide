@@ -38,6 +38,17 @@ final class FileDialogService: FileDialogServiceProtocol {
         return await runSavePanel(panel)
     }
 
+    func selectDirectory() async -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Select"
+        panel.title = "Choose Location for New Project"
+
+        return await runOpenPanel(panel)
+    }
+
     private func runOpenPanel(_ panel: NSOpenPanel) async -> URL? {
         await withCheckedContinuation { continuation in
             if let window = windowProvider.window ?? NSApp.keyWindow {

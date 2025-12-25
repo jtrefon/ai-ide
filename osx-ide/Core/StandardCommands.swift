@@ -12,6 +12,7 @@ import Foundation
 extension CommandID {
     // MARK: - File Operations
     public static let fileNew: CommandID = "file.new"
+    public static let projectNew: CommandID = "project.new"
     public static let fileOpen: CommandID = "file.open"
     public static let fileOpenFolder: CommandID = "file.openFolder"
     public static let fileSave: CommandID = "file.save"
