@@ -69,6 +69,10 @@ struct WriteFileTool: AITool {
             throw AppError.aiServiceError("Missing 'content' argument for write_file")
         }
         let url = try pathValidator.validateAndResolve(path)
+        await AIToolTraceLogger.shared.log(type: "fs.write_file", data: [
+            "path": pathValidator.relativePath(for: url),
+            "bytes": content.utf8.count
+        ])
         let existed = FileManager.default.fileExists(atPath: url.path)
         try fileSystemService.writeFile(content: content, to: url)
         Task { @MainActor in
@@ -79,6 +83,91 @@ struct WriteFileTool: AITool {
             }
         }
         return "Successfully wrote to \(pathValidator.relativePath(for: url))"
+    }
+}
+
+/// Write content to multiple files (preferred for scaffolding a project)
+struct WriteFilesTool: AITool {
+    let name = "write_files"
+    let description = "Write content to multiple files. Overwrites existing files. Preferred for scaffolding multi-file changes in one operation."
+    var parameters: [String: Any] {
+        [
+            "type": "object",
+            "properties": [
+                "files": [
+                    "type": "array",
+                    "description": "List of files to write.",
+                    "items": [
+                        "type": "object",
+                        "properties": [
+                            "path": [
+                                "type": "string",
+                                "description": "Absolute path or project-root-relative path to the file."
+                            ],
+                            "content": [
+                                "type": "string",
+                                "description": "Content to write to the file."
+                            ]
+                        ],
+                        "required": ["path", "content"]
+                    ]
+                ]
+            ],
+            "required": ["files"]
+        ]
+    }
+
+    let fileSystemService: FileSystemService
+    let pathValidator: PathValidator
+
+    func execute(arguments: [String: Any]) async throws -> String {
+        guard let files = arguments["files"] as? [[String: Any]] else {
+            throw AppError.aiServiceError("Missing 'files' argument for write_files")
+        }
+
+        if files.isEmpty {
+            return "No files to write."
+        }
+
+        var results: [String] = []
+        results.reserveCapacity(files.count)
+
+        await AIToolTraceLogger.shared.log(type: "fs.write_files_start", data: [
+            "count": files.count
+        ])
+
+        for entry in files {
+            guard let path = entry["path"] as? String else {
+                throw AppError.aiServiceError("Missing 'path' in a write_files entry")
+            }
+            guard let content = entry["content"] as? String else {
+                throw AppError.aiServiceError("Missing 'content' in a write_files entry")
+            }
+
+            let url = try pathValidator.validateAndResolve(path)
+            await AIToolTraceLogger.shared.log(type: "fs.write_files_entry", data: [
+                "path": pathValidator.relativePath(for: url),
+                "bytes": content.utf8.count
+            ])
+            let existed = FileManager.default.fileExists(atPath: url.path)
+            try fileSystemService.writeFile(content: content, to: url)
+
+            Task { @MainActor in
+                if existed {
+                    EventBus.shared.publish(FileModifiedEvent(url: url))
+                } else {
+                    EventBus.shared.publish(FileCreatedEvent(url: url))
+                }
+            }
+
+            results.append(pathValidator.relativePath(for: url))
+        }
+
+        await AIToolTraceLogger.shared.log(type: "fs.write_files_done", data: [
+            "count": results.count
+        ])
+
+        return "Successfully wrote \(results.count) file(s):\n" + results.joined(separator: "\n")
     }
 }
 
@@ -106,9 +195,16 @@ struct CreateFileTool: AITool {
         }
         let url = try pathValidator.validateAndResolve(path)
         let fileManager = FileManager.default
+
+        await AIToolTraceLogger.shared.log(type: "fs.create_file", data: [
+            "path": pathValidator.relativePath(for: url)
+        ])
         if fileManager.fileExists(atPath: url.path) {
             return "Error: File already exists at \(pathValidator.relativePath(for: url))"
         }
+
+        let parent = url.deletingLastPathComponent()
+        try fileManager.createDirectory(at: parent, withIntermediateDirectories: true, attributes: nil)
         try "".write(to: url, atomically: true, encoding: .utf8)
         Task { @MainActor in
             EventBus.shared.publish(FileCreatedEvent(url: url))
