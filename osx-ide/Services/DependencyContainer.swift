@@ -193,12 +193,11 @@ class DependencyContainer {
     /// Updates the AI service used by the application
     func updateAIService(_ newService: AIService) {
         _aiService = newService
-        _conversationManager = ConversationManager(
-            aiService: newService,
-            errorManager: _errorManager,
-            fileSystemService: _fileSystemService,
-            codebaseIndex: _codebaseIndex
-        )
+        // Update the existing conversation manager's AI service instead of creating a new one
+        // to preserve loaded chat history
+        if let cm = _conversationManager as? ConversationManager {
+            cm.updateAIService(newService)
+        }
     }
 
     // MARK: - Stored Services
