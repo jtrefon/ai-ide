@@ -14,9 +14,9 @@ public struct LanguageDetector {
         switch pathExtension {
         case "swift":
             return .swift
-        case "js":
+        case "js", "jsx":
             return .javascript
-        case "ts":
+        case "ts", "tsx":
             return .typescript
         case "py":
             return .python
