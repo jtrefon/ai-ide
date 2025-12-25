@@ -63,6 +63,25 @@ final class ConversationManagerTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 5.0)
         XCTAssertFalse(manager.isSending)
     }
+
+    func testSplitReasoningExtractsAndStripsBlock() {
+        let input = """
+        <ide_reasoning>
+        Analyze: A
+        Research: B
+        Plan: C
+        Reflect: D
+        </ide_reasoning>
+
+        Hello world.
+        """
+
+        let result = ConversationManager.splitReasoning(from: input)
+        XCTAssertEqual(result.content, "Hello world.")
+        XCTAssertNotNil(result.reasoning)
+        XCTAssertTrue((result.reasoning ?? "").contains("Analyze:"))
+        XCTAssertTrue((result.reasoning ?? "").contains("Reflect:"))
+    }
 }
 
 // MARK: - Mocks

@@ -37,6 +37,9 @@ final class OpenRouterSettingsViewModel: ObservableObject {
     @Published var systemPrompt: String {
         didSet { persist() }
     }
+    @Published var reasoningEnabled: Bool {
+        didSet { persist() }
+    }
     
     @Published private(set) var models: [OpenRouterModel] = []
     @Published private(set) var filteredModels: [OpenRouterModel] = []
@@ -63,6 +66,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
         self.selectedModel = settings.model
         self.modelQuery = settings.model
         self.systemPrompt = settings.systemPrompt
+        self.reasoningEnabled = settings.reasoningEnabled
     }
     
     func loadModels(force: Bool = false) async {
@@ -180,7 +184,8 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             apiKey: apiKey,
             model: activeModel,
             baseURL: baseURL,
-            systemPrompt: systemPrompt
+            systemPrompt: systemPrompt,
+            reasoningEnabled: reasoningEnabled
         )
         store.save(settings)
     }
