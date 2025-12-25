@@ -38,6 +38,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     private let aiService: AIService
     private let dbPath: String
     private let projectRoot: URL
+    private let excludePatterns: [String]
     private var isEnabled: Bool
     private var aiEnrichmentAfterIndexCancellable: AnyCancellable?
     
@@ -45,16 +46,20 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         self.eventBus = eventBus
         self.projectRoot = projectRoot
         self.aiService = aiService
-        self.isEnabled = config.enabled
+        let resolvedExcludePatterns = IndexCoordinator.loadExcludePatterns(projectRoot: projectRoot, defaultPatterns: config.excludePatterns)
+        let resolvedConfig = IndexConfiguration(enabled: config.enabled, debounceMs: config.debounceMs, excludePatterns: resolvedExcludePatterns)
+
+        self.excludePatterns = resolvedExcludePatterns
+        self.isEnabled = resolvedConfig.enabled
 
         let resolved = Self.resolveIndexDirectory(projectRoot: projectRoot)
         self.dbPath = resolved.appendingPathComponent("codebase.sqlite").path
         
         self.databaseManager = try DatabaseManager(path: dbPath)
-        self.indexer = IndexerActor(database: databaseManager, config: config)
+        self.indexer = IndexerActor(database: databaseManager, config: resolvedConfig)
         self.memoryManager = MemoryManager(database: databaseManager, eventBus: eventBus)
         self.queryService = QueryService(database: databaseManager)
-        self.coordinator = IndexCoordinator(eventBus: eventBus, indexer: indexer, config: config)
+        self.coordinator = IndexCoordinator(eventBus: eventBus, indexer: indexer, config: resolvedConfig)
     }
 
     public func listIndexedFiles(matching query: String?, limit: Int = 50, offset: Int = 0) throws -> [String] {
@@ -129,12 +134,21 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
             fileURL = projectRoot.appendingPathComponent(relative)
         }
 
-        let absPath = fileURL.standardizedFileURL.path
-        guard try databaseManager.hasResourcePath(absPath) else {
+        let standardizedFileURL = fileURL.standardizedFileURL
+        let standardizedProjectRoot = projectRoot.standardizedFileURL
+        if !standardizedFileURL.path.hasPrefix(standardizedProjectRoot.path + "/") {
+            throw AppError.permissionDenied("index_read_file may only read files within the project root")
+        }
+
+        let absPath = standardizedFileURL.path
+        let existsOnDisk = FileManager.default.fileExists(atPath: absPath)
+        let isInIndex = (try? databaseManager.hasResourcePath(absPath)) == true
+
+        if !existsOnDisk {
             throw AppError.fileNotFound(relative)
         }
 
-        let content = try String(contentsOf: fileURL, encoding: .utf8)
+        let content = try String(contentsOf: standardizedFileURL, encoding: .utf8)
         let lines = content.components(separatedBy: .newlines)
         let total = lines.count
 
@@ -238,7 +252,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
             let start = Date()
             eventBus.publish(AIEnrichmentStartedEvent())
 
-            let files = IndexCoordinator.enumerateProjectFiles(rootURL: projectRoot, excludePatterns: [])
+            let files = IndexCoordinator.enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns)
                 .filter { Self.isAIEnrichableFile($0) }
             let total = files.count
 
@@ -289,7 +303,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
 
     public func getStats() throws -> IndexStats {
         let counts = try databaseManager.getIndexStatsCounts()
-        let totalProjectFileCount = Self.computeTotalProjectFileCount(projectRoot: projectRoot)
+        let totalProjectFileCount = IndexCoordinator.enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns).count
 
         let allowed: Set<String> = [
             "swift", "js", "ts", "py", "html", "css", "json", "yaml", "yml", "md", "markdown"
@@ -364,36 +378,17 @@ Code:
         return nil
     }
 
-    private static func computeTotalProjectFileCount(projectRoot: URL) -> Int {
-        guard let enumerator = FileManager.default.enumerator(
-            at: projectRoot,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return 0
-        }
-
-        var count = 0
-        for case let url as URL in enumerator {
-            if url.lastPathComponent == ".ide" {
-                enumerator.skipDescendants()
-                continue
-            }
-            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if !isDirectory {
-                if Self.isIndexableFile(url) {
-                    count += 1
-                }
-            }
-        }
-        return count
-    }
-
     private static func isIndexableFile(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
         if ext.isEmpty { return false }
         let allowed: Set<String> = [
-            "swift", "js", "ts", "py", "html", "css", "json", "yaml", "yml", "md", "markdown"
+            "swift",
+            "js", "jsx",
+            "ts", "tsx",
+            "py",
+            "html", "css",
+            "json", "yaml", "yml",
+            "md", "markdown"
         ]
         return allowed.contains(ext)
     }
@@ -402,7 +397,11 @@ Code:
         let ext = url.pathExtension.lowercased()
         if ext.isEmpty { return false }
         let allowed: Set<String> = [
-            "swift", "js", "ts", "py", "html", "css"
+            "swift",
+            "js", "jsx",
+            "ts", "tsx",
+            "py",
+            "html", "css"
         ]
         return allowed.contains(ext)
     }
