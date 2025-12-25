@@ -88,14 +88,28 @@ public actor IndexerActor {
     }
     
     private func shouldExclude(_ url: URL) -> Bool {
-        // Simple check for now
-        let path = url.path
+        let path = url.standardizedFileURL.path.replacingOccurrences(of: "\\", with: "/")
+        let components = path.split(separator: "/").map(String.init)
+
         for pattern in config.excludePatterns {
-            // Very basic matching, should be improved with proper globbing later
-            if path.contains(pattern.replacingOccurrences(of: "*", with: "")) {
-                return true
+            let p = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
+            if p.isEmpty { continue }
+
+            if p.contains("*") {
+                let needle = p.replacingOccurrences(of: "*", with: "")
+                if !needle.isEmpty, path.contains(needle) { return true }
+                continue
             }
+
+            if p.contains("/") {
+                let needle = p.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                if !needle.isEmpty, path.contains(needle) { return true }
+                continue
+            }
+
+            if components.contains(p) { return true }
         }
+
         return false
     }
 }
