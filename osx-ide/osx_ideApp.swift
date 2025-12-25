@@ -73,8 +73,8 @@ struct osx_ideApp: App {
             }
             
             CommandGroup(replacing: .newItem) {
-                Button("New") {
-                    Task { try? await CommandRegistry.shared.execute(.fileNew) }
+                Button("New Project") {
+                    Task { try? await CommandRegistry.shared.execute(.projectNew) }
                 }
                 .keyboardShortcut("n", modifiers: [.command])
             }
