@@ -394,6 +394,32 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 }
                 
                 // Final Response (Answer)
+                if Self.isReasoningEnabled(),
+                   (currentResponse.toolCalls?.isEmpty ?? true),
+                   let raw = currentResponse.content,
+                   Self.needsReasoningFormatCorrection(text: raw) {
+                    await AIToolTraceLogger.shared.log(type: "reasoning.format_correction.retry", data: [
+                        "contentLength": raw.count
+                    ])
+
+                    let correctionSystem = ChatMessage(
+                        role: .system,
+                        content: "Your <ide_reasoning> block must include ALL four sections in order: Analyze, Research, Plan, Reflect. Do not omit any section; use 'N/A' if needed. Re-emit <ide_reasoning> followed by the normal answer."
+                    )
+
+                    let corrected = try await sendMessageWithRetry(
+                        messages: self.messages + [correctionSystem],
+                        context: context,
+                        tools: availableTools,
+                        mode: currentMode,
+                        projectRoot: projectRoot
+                    )
+
+                    if let correctedContent = corrected.content {
+                        currentResponse = AIServiceResponse(content: correctedContent, toolCalls: nil)
+                    }
+                }
+
                 let splitFinal = Self.splitReasoning(from: currentResponse.content ?? "No response received.")
                 let finalContent = splitFinal.content
 
@@ -497,6 +523,19 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
         let cleaned = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return (reasoning.isEmpty ? nil : reasoning, cleaned)
+    }
+
+    private static func isReasoningEnabled() -> Bool {
+        return OpenRouterSettingsStore().load().reasoningEnabled
+    }
+
+    private static func needsReasoningFormatCorrection(text: String) -> Bool {
+        let split = splitReasoning(from: text)
+        guard let reasoning = split.reasoning, !reasoning.isEmpty else { return false }
+
+        let r = reasoning.lowercased()
+        let required = ["analyze:", "research:", "plan:", "reflect:"]
+        return required.contains(where: { !r.contains($0) })
     }
     
     func clearConversation() {
