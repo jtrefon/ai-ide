@@ -9,14 +9,35 @@ import SwiftUI
 
 struct CodePreviewView: View {
     let code: String
+    let language: String?
+    let title: String
     @State private var isCopied = false
+    
+    init(code: String, language: String? = nil, title: String = "Code Preview") {
+        self.code = code
+        self.language = language
+        self.title = title
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Code Preview")
+                Text(title)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                
+                if let language = language {
+                    Text("•")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(language)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(Color.gray.opacity(0.2))
+                        .cornerRadius(4)
+                }
                 
                 Spacer()
                 
