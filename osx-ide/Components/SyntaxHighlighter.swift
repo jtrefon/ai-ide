@@ -18,14 +18,14 @@ final class SyntaxHighlighter {
 
     /// Returns an attributed string with syntax highlighting applied for the given language.
     /// This method uses a robust, always-on high-level highlighting approach.
-    func highlight(_ code: String, language: String = "text") -> NSAttributedString {
+    func highlight(_ code: String, language: String = "text", font: NSFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)) -> NSAttributedString {
         let lang = language.lowercased()
         let attributed = NSMutableAttributedString(string: code)
         let fullRange = NSRange(location: 0, length: (code as NSString).length)
 
         // Base style
         attributed.addAttributes([
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+            .font: font,
             .foregroundColor: NSColor.labelColor
         ], range: fullRange)
 
