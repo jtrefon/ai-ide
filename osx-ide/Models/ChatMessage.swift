@@ -24,6 +24,7 @@ struct ChatMessage: Identifiable, Codable {
     let id: UUID
     let role: MessageRole
     let content: String
+    let reasoning: String?
     let codeContext: String?
     let timestamp: Date
     
@@ -34,10 +35,11 @@ struct ChatMessage: Identifiable, Codable {
     let toolCallId: String? // For Tool Output messages (referencing the call)
     let toolCalls: [AIToolCall]? // For Assistant messages (the calls themselves)
     
-    init(role: MessageRole, content: String, codeContext: String? = nil, toolName: String? = nil, toolStatus: ToolExecutionStatus? = nil, targetFile: String? = nil, toolCallId: String? = nil, toolCalls: [AIToolCall]? = nil) {
+    init(role: MessageRole, content: String, reasoning: String? = nil, codeContext: String? = nil, toolName: String? = nil, toolStatus: ToolExecutionStatus? = nil, targetFile: String? = nil, toolCallId: String? = nil, toolCalls: [AIToolCall]? = nil) {
         self.id = UUID()
         self.role = role
         self.content = content
+        self.reasoning = reasoning
         self.codeContext = codeContext
         self.timestamp = Date()
         self.toolName = toolName

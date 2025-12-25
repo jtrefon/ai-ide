@@ -12,12 +12,14 @@ struct OpenRouterSettings: Equatable {
     var model: String
     var baseURL: String
     var systemPrompt: String
+    var reasoningEnabled: Bool
     
     static let empty = OpenRouterSettings(
         apiKey: "",
         model: "",
         baseURL: "https://openrouter.ai/api/v1",
-        systemPrompt: ""
+        systemPrompt: "",
+        reasoningEnabled: true
     )
 }
 
@@ -27,13 +29,15 @@ final class OpenRouterSettingsStore {
     private let modelKey = "OpenRouterModel"
     private let baseURLKey = "OpenRouterBaseURL"
     private let systemPromptKey = "OpenRouterSystemPrompt"
+    private let reasoningEnabledKey = "OpenRouterReasoningEnabled"
     
     func load() -> OpenRouterSettings {
         OpenRouterSettings(
             apiKey: userDefaults.string(forKey: apiKeyKey) ?? "",
             model: userDefaults.string(forKey: modelKey) ?? "",
             baseURL: userDefaults.string(forKey: baseURLKey) ?? OpenRouterSettings.empty.baseURL,
-            systemPrompt: userDefaults.string(forKey: systemPromptKey) ?? ""
+            systemPrompt: userDefaults.string(forKey: systemPromptKey) ?? "",
+            reasoningEnabled: userDefaults.object(forKey: reasoningEnabledKey) as? Bool ?? true
         )
     }
     
@@ -42,6 +46,7 @@ final class OpenRouterSettingsStore {
         userDefaults.set(settings.model, forKey: modelKey)
         userDefaults.set(settings.baseURL, forKey: baseURLKey)
         userDefaults.set(settings.systemPrompt, forKey: systemPromptKey)
+        userDefaults.set(settings.reasoningEnabled, forKey: reasoningEnabledKey)
     }
 }
 

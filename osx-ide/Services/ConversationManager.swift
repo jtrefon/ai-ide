@@ -240,9 +240,11 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     
                     // 1. Immediately record the Assistant's Request (with tool calls) to history
                     // This ensures the AI sees "I want to call X" before seeing "Result of X"
+                    let split = Self.splitReasoning(from: currentResponse.content ?? "")
                     let assistantMsg = ChatMessage(
                         role: .assistant,
-                        content: currentResponse.content ?? "", // May form "thought"
+                        content: split.content,
+                        reasoning: split.reasoning,
                         toolCalls: toolCalls
                     )
                     
@@ -392,7 +394,8 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 }
                 
                 // Final Response (Answer)
-                let finalContent = currentResponse.content ?? "No response received."
+                let splitFinal = Self.splitReasoning(from: currentResponse.content ?? "No response received.")
+                let finalContent = splitFinal.content
 
                 await AIToolTraceLogger.shared.log(type: "chat.final_response", data: [
                     "contentLength": finalContent.count,
@@ -400,7 +403,7 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 ])
                 
                 await MainActor.run {
-                    self.messages.append(ChatMessage(role: .assistant, content: finalContent))
+                    self.messages.append(ChatMessage(role: .assistant, content: finalContent, reasoning: splitFinal.reasoning))
                     self.isSending = false
                     self.saveConversationHistory()
                 }
@@ -468,6 +471,32 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
         ]
 
         return triggers.contains(where: { text.contains($0) })
+    }
+
+    static func splitReasoning(from text: String) -> (reasoning: String?, content: String) {
+        guard !text.isEmpty else { return (nil, "") }
+
+        let startTag = "<ide_reasoning>"
+        let endTag = "</ide_reasoning>"
+
+        guard let startRange = text.range(of: startTag),
+              let endRange = text.range(of: endTag) else {
+            return (nil, text)
+        }
+
+        guard startRange.lowerBound < endRange.lowerBound else {
+            return (nil, text)
+        }
+
+        let reasoningStart = startRange.upperBound
+        let reasoningEnd = endRange.lowerBound
+        let reasoning = String(text[reasoningStart..<reasoningEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var remaining = text
+        remaining.removeSubrange(startRange.lowerBound..<endRange.upperBound)
+        let cleaned = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return (reasoning.isEmpty ? nil : reasoning, cleaned)
     }
     
     func clearConversation() {

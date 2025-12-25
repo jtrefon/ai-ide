@@ -134,6 +134,20 @@ struct AISettingsTab: View {
                         }
                     }
                 }
+
+                SettingsCard(
+                    title: "Reasoning",
+                    subtitle: "Show the assistant's multi-step reasoning panel in chat."
+                ) {
+                    SettingsRow(
+                        title: "Reasoning",
+                        subtitle: "Adds an expandable reasoning section above assistant responses.",
+                        systemImage: "brain"
+                    ) {
+                        Toggle("", isOn: $viewModel.reasoningEnabled)
+                            .toggleStyle(.switch)
+                    }
+                }
             }
             .padding(.top, 4)
             .onAppear {
