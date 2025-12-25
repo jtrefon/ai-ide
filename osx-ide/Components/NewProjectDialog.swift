@@ -140,8 +140,11 @@ struct NewProjectDialog: View {
     }
     
     private func selectLocation() async {
-        if let location = await fileDialogService.selectDirectory() {
-            projectLocation = location
+        if let url = await fileDialogService.promptForNewProjectFolder(defaultName: projectName.isEmpty ? "NewProject" : projectName) {
+            projectLocation = url.deletingLastPathComponent()
+            if projectName.isEmpty {
+                projectName = url.lastPathComponent
+            }
         }
     }
     
@@ -171,5 +174,7 @@ class MockFileDialogService: FileDialogServiceProtocol {
     func openFileOrFolder() async -> URL? { nil }
     func openFolder() async -> URL? { nil }
     func saveFile(defaultFileName: String, allowedContentTypes: [UTType]) async -> URL? { nil }
-    func selectDirectory() async -> URL? { URL(fileURLWithPath: "/Users/test/Desktop") }
+    func promptForNewProjectFolder(defaultName: String) async -> URL? {
+        URL(fileURLWithPath: "/Users/test/Desktop").appendingPathComponent(defaultName)
+    }
 }

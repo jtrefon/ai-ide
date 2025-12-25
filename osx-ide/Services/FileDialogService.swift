@@ -38,15 +38,17 @@ final class FileDialogService: FileDialogServiceProtocol {
         return await runSavePanel(panel)
     }
 
-    func selectDirectory() async -> URL? {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Select"
-        panel.title = "Choose Location for New Project"
+    func promptForNewProjectFolder(defaultName: String) async -> URL? {
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = true
+        panel.nameFieldStringValue = defaultName
+        panel.prompt = "Create"
+        panel.title = "New Project"
+        panel.message = "Choose where to create the project folder, then enter a project name."
 
-        return await runOpenPanel(panel)
+        guard let url = await runSavePanel(panel) else { return nil }
+        return url
     }
 
     private func runOpenPanel(_ panel: NSOpenPanel) async -> URL? {
