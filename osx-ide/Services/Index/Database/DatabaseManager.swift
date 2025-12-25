@@ -253,6 +253,148 @@ public class DatabaseManager: @unchecked Sendable {
         try execute(sql: sql)
     }
 
+    public func listResourcePaths(matching query: String?, limit: Int, offset: Int) throws -> [String] {
+        let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasQuery = !(trimmed?.isEmpty ?? true)
+
+        let sql: String
+        if hasQuery {
+            let escaped = trimmed!.replacingOccurrences(of: "'", with: "''")
+            sql = "SELECT path FROM resources WHERE LOWER(path) LIKE LOWER('%\(escaped)%') ORDER BY path LIMIT \(limit) OFFSET \(offset);"
+        } else {
+            sql = "SELECT path FROM resources ORDER BY path LIMIT \(limit) OFFSET \(offset);"
+        }
+
+        var results: [String] = []
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            while sqlite3_step(statement) == SQLITE_ROW {
+                if let ptr = sqlite3_column_text(statement, 0) {
+                    results.append(String(cString: ptr))
+                }
+            }
+        }
+
+        return results
+    }
+
+    public func hasResourcePath(_ absolutePath: String) throws -> Bool {
+        let escaped = absolutePath.replacingOccurrences(of: "'", with: "''")
+        let sql = "SELECT 1 FROM resources WHERE path = '\(escaped)' LIMIT 1;"
+        var found = false
+
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            if sqlite3_step(statement) == SQLITE_ROW {
+                found = true
+            }
+        }
+
+        return found
+    }
+
+    public func findResourceMatches(query: String, limit: Int) throws -> [IndexedFileMatch] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return [] }
+
+        let escaped = trimmed.replacingOccurrences(of: "'", with: "''")
+        let sql = "SELECT path, ai_enriched, quality_score FROM resources WHERE LOWER(path) LIKE LOWER('%\(escaped)%') ORDER BY path LIMIT \(limit);"
+
+        var results: [IndexedFileMatch] = []
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            while sqlite3_step(statement) == SQLITE_ROW {
+                guard let pathPtr = sqlite3_column_text(statement, 0) else { continue }
+                let path = String(cString: pathPtr)
+                let ai = sqlite3_column_int(statement, 1) != 0
+
+                let isNull = sqlite3_column_type(statement, 2) == SQLITE_NULL
+                let score: Double? = isNull ? nil : sqlite3_column_double(statement, 2)
+
+                results.append(IndexedFileMatch(path: path, aiEnriched: ai, qualityScore: score))
+            }
+        }
+
+        return results
+    }
+
+    public func getResourceLastModified(resourceId: String) throws -> Double? {
+        let escapedId = resourceId.replacingOccurrences(of: "'", with: "''")
+        let sql = "SELECT last_modified FROM resources WHERE id = '\(escapedId)' LIMIT 1;"
+        var result: Double?
+
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            if sqlite3_step(statement) == SQLITE_ROW {
+                result = sqlite3_column_double(statement, 0)
+            }
+        }
+
+        return result
+    }
+
+    public func getResourceContentHash(resourceId: String) throws -> String? {
+        let escapedId = resourceId.replacingOccurrences(of: "'", with: "''")
+        let sql = "SELECT content_hash FROM resources WHERE id = '\(escapedId)' LIMIT 1;"
+        var result: String?
+
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            if sqlite3_step(statement) == SQLITE_ROW {
+                if let ptr = sqlite3_column_text(statement, 0) {
+                    result = String(cString: ptr)
+                }
+            }
+        }
+
+        return result
+    }
+
+    public func isResourceAIEnriched(resourceId: String) throws -> Bool {
+        let escapedId = resourceId.replacingOccurrences(of: "'", with: "''")
+        let sql = "SELECT ai_enriched FROM resources WHERE id = '\(escapedId)' LIMIT 1;"
+        var result = false
+
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            if sqlite3_step(statement) == SQLITE_ROW {
+                result = sqlite3_column_int(statement, 0) != 0
+            }
+        }
+
+        return result
+    }
+
     public func searchSymbols(nameLike query: String, limit: Int = 50) throws -> [Symbol] {
         let escaped = query.replacingOccurrences(of: "'", with: "''")
         let sql = "SELECT id, resource_id, name, kind, line_start, line_end, description FROM symbols WHERE name LIKE '%\(escaped)%' ORDER BY name LIMIT \(limit);"

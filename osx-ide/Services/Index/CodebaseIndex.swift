@@ -6,9 +6,10 @@
 //
 
 import Foundation
+import Combine
 
 @MainActor
-public protocol CodebaseIndexProtocol {
+public protocol CodebaseIndexProtocol: Sendable {
     func start()
 
     func setEnabled(_ enabled: Bool)
@@ -16,13 +17,18 @@ public protocol CodebaseIndexProtocol {
     func reindexProject(aiEnrichmentEnabled: Bool)
     func runAIEnrichment()
 
+    func listIndexedFiles(matching query: String?, limit: Int, offset: Int) throws -> [String]
+    func findIndexedFiles(query: String, limit: Int) throws -> [IndexedFileMatch]
+    func readIndexedFile(path: String, startLine: Int?, endLine: Int?) throws -> String
+    func searchIndexedText(pattern: String, limit: Int) async throws -> [String]
+
     func searchSymbols(nameLike query: String, limit: Int) throws -> [Symbol]
     func getMemories(tier: MemoryTier?) throws -> [MemoryEntry]
     func getStats() throws -> IndexStats
 }
 
 @MainActor
-public class CodebaseIndex: CodebaseIndexProtocol {
+public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     private let eventBus: EventBusProtocol
     private let coordinator: IndexCoordinator
     private let databaseManager: DatabaseManager
@@ -33,6 +39,7 @@ public class CodebaseIndex: CodebaseIndexProtocol {
     private let dbPath: String
     private let projectRoot: URL
     private var isEnabled: Bool
+    private var aiEnrichmentAfterIndexCancellable: AnyCancellable?
     
     init(eventBus: EventBusProtocol, projectRoot: URL, aiService: AIService, config: IndexConfiguration = .default) throws {
         self.eventBus = eventBus
@@ -48,6 +55,146 @@ public class CodebaseIndex: CodebaseIndexProtocol {
         self.memoryManager = MemoryManager(database: databaseManager, eventBus: eventBus)
         self.queryService = QueryService(database: databaseManager)
         self.coordinator = IndexCoordinator(eventBus: eventBus, indexer: indexer, config: config)
+    }
+
+    public func listIndexedFiles(matching query: String?, limit: Int = 50, offset: Int = 0) throws -> [String] {
+        let absPaths = try databaseManager.listResourcePaths(matching: query, limit: limit, offset: offset)
+        return absPaths.map { absPath in
+            if absPath.hasPrefix(projectRoot.path + "/") {
+                return String(absPath.dropFirst(projectRoot.path.count + 1))
+            }
+            return absPath
+        }
+    }
+
+    public func findIndexedFiles(query: String, limit: Int = 50) throws -> [IndexedFileMatch] {
+        let raw = try databaseManager.findResourceMatches(query: query, limit: max(1, min(500, limit)))
+        if raw.isEmpty { return [] }
+
+        func relPath(_ absPath: String) -> String {
+            if absPath.hasPrefix(projectRoot.path + "/") {
+                return String(absPath.dropFirst(projectRoot.path.count + 1))
+            }
+            return absPath
+        }
+
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        func score(for absPath: String, aiEnriched: Bool, qualityScore: Double?) -> Double {
+            let rel = relPath(absPath)
+            let lowerRel = rel.lowercased()
+            let base = URL(fileURLWithPath: rel).lastPathComponent.lowercased()
+
+            var s: Double = 0
+
+            if base == needle { s += 1000 }
+            if base.hasPrefix(needle) { s += 700 }
+            if base.contains(needle) { s += 500 }
+
+            if lowerRel == needle { s += 400 }
+            if lowerRel.hasPrefix(needle) { s += 250 }
+            if lowerRel.contains(needle) { s += 100 }
+
+            // Prefer code over docs when ambiguous.
+            if lowerRel.hasSuffix(".md") || lowerRel.hasSuffix(".markdown") { s -= 50 }
+
+            if aiEnriched { s += 25 }
+            if let qualityScore { s += qualityScore }
+
+            return s
+        }
+
+        let sorted = raw.sorted { a, b in
+            let sa = score(for: a.path, aiEnriched: a.aiEnriched, qualityScore: a.qualityScore)
+            let sb = score(for: b.path, aiEnriched: b.aiEnriched, qualityScore: b.qualityScore)
+            if sa != sb { return sa > sb }
+            return relPath(a.path) < relPath(b.path)
+        }
+
+        return sorted.map { m in
+            IndexedFileMatch(path: relPath(m.path), aiEnriched: m.aiEnriched, qualityScore: m.qualityScore)
+        }
+    }
+
+    public func readIndexedFile(path: String, startLine: Int? = nil, endLine: Int? = nil) throws -> String {
+        let relative = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !relative.isEmpty else {
+            throw AppError.aiServiceError("Missing 'path' argument")
+        }
+
+        let fileURL: URL
+        if relative.hasPrefix("/") {
+            fileURL = URL(fileURLWithPath: relative)
+        } else {
+            fileURL = projectRoot.appendingPathComponent(relative)
+        }
+
+        let absPath = fileURL.standardizedFileURL.path
+        guard try databaseManager.hasResourcePath(absPath) else {
+            throw AppError.fileNotFound(relative)
+        }
+
+        let content = try String(contentsOf: fileURL, encoding: .utf8)
+        let lines = content.components(separatedBy: .newlines)
+        let total = lines.count
+
+        let start = max(1, startLine ?? 1)
+        let end = min(total, endLine ?? total)
+        if start > end {
+            return ""
+        }
+
+        var output: [String] = []
+        output.reserveCapacity(end - start + 1)
+        for i in start...end {
+            let text = lines[i - 1]
+            output.append(String(format: "%6d | %@", i, text))
+        }
+
+        return output.joined(separator: "\n")
+    }
+
+    public func searchIndexedText(pattern: String, limit: Int = 100) async throws -> [String] {
+        let needle = pattern
+        if needle.isEmpty { return [] }
+
+        var matches: [String] = []
+        matches.reserveCapacity(min(limit, 100))
+
+        var offset = 0
+        let pageSize = 200
+
+        while matches.count < limit {
+            let batch = try databaseManager.listResourcePaths(matching: nil, limit: pageSize, offset: offset)
+            if batch.isEmpty { break }
+            offset += batch.count
+
+            for absPath in batch {
+                if matches.count >= limit { break }
+                do {
+                    let url = URL(fileURLWithPath: absPath)
+                    let content = try String(contentsOf: url, encoding: .utf8)
+                    let lines = content.components(separatedBy: .newlines)
+                    for (idx, line) in lines.enumerated() {
+                        if line.contains(needle) {
+                            let rel: String
+                            if absPath.hasPrefix(projectRoot.path + "/") {
+                                rel = String(absPath.dropFirst(projectRoot.path.count + 1))
+                            } else {
+                                rel = absPath
+                            }
+                            let snippet = line.trimmingCharacters(in: .whitespaces)
+                            matches.append("\(rel):\(idx + 1): \(snippet)")
+                            if matches.count >= limit { break }
+                        }
+                    }
+                } catch {
+                    continue
+                }
+            }
+        }
+
+        return matches
     }
 
     public convenience init(eventBus: EventBusProtocol) throws {
@@ -74,7 +221,13 @@ public class CodebaseIndex: CodebaseIndexProtocol {
         coordinator.reindexProject(rootURL: projectRoot)
 
         if aiEnrichmentEnabled {
-            runAIEnrichment()
+            aiEnrichmentAfterIndexCancellable?.cancel()
+            aiEnrichmentAfterIndexCancellable = eventBus.subscribe(to: IndexingCompletedEvent.self) { [weak self] _ in
+                guard let self else { return }
+                self.aiEnrichmentAfterIndexCancellable?.cancel()
+                self.aiEnrichmentAfterIndexCancellable = nil
+                self.runAIEnrichment()
+            }
         }
     }
 
@@ -93,6 +246,19 @@ public class CodebaseIndex: CodebaseIndexProtocol {
             for file in files {
                 if !isEnabled { break }
                 eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
+
+                let fileModTime = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
+
+                let existingModTime: Double? = (try? databaseManager.getResourceLastModified(resourceId: file.absoluteString)) ?? nil
+
+                if let fileModTime,
+                   let existingModTime,
+                   abs(existingModTime - fileModTime) < 0.000_001,
+                   (try? databaseManager.isResourceAIEnriched(resourceId: file.absoluteString)) == true {
+                    processed += 1
+                    eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
+                    continue
+                }
 
                 do {
                     let content = try String(contentsOf: file, encoding: .utf8)
