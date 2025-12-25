@@ -12,12 +12,25 @@ struct MessageListView: View {
     let messages: [ChatMessage]
     let isSending: Bool
     @State private var scrollToBottomTrigger: Int = 0
+    @State private var hiddenReasoningMessageIds: Set<UUID> = []
     
     var body: some View {
         LiquidGlassScrollView(.vertical, showsIndicators: false, scrollToBottomTrigger: scrollToBottomTrigger) {
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(messages) { message in
-                    MessageView(message: message)
+                    MessageView(
+                        message: message,
+                        isReasoningHidden: Binding(
+                            get: { hiddenReasoningMessageIds.contains(message.id) },
+                            set: { isHidden in
+                                if isHidden {
+                                    hiddenReasoningMessageIds.insert(message.id)
+                                } else {
+                                    hiddenReasoningMessageIds.remove(message.id)
+                                }
+                            }
+                        )
+                    )
                         .id(message.id)
                 }
 
@@ -53,8 +66,8 @@ struct MessageListView: View {
 
 struct MessageView: View {
     let message: ChatMessage
+    @Binding var isReasoningHidden: Bool
     @State private var isExpanded = false
-    @State private var showReasoningPanel = true
     @State private var showFullReasoning = false
     
     var body: some View {
@@ -124,7 +137,7 @@ struct MessageView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
 
-                        if message.role == .assistant, let reasoning = message.reasoning, !reasoning.isEmpty, showReasoningPanel {
+                        if message.role == .assistant, let reasoning = message.reasoning, !reasoning.isEmpty, !isReasoningHidden {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "brain")
@@ -163,7 +176,7 @@ struct MessageView: View {
 
                                     Button("Hide") {
                                         withAnimation(.easeInOut(duration: 0.2)) {
-                                            showReasoningPanel = false
+                                            isReasoningHidden = true
                                         }
                                     }
                                     .buttonStyle(.borderless)
