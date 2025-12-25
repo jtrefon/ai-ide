@@ -6,8 +6,8 @@ import AppKit
 struct LiquidGlassScrollView<Content: View>: NSViewRepresentable {
     let axes: Axis.Set
     let showsIndicators: Bool
-    let content: Content
     let scrollToBottomTrigger: Int
+    let content: Content
 
     init(_ axes: Axis.Set = .vertical, showsIndicators: Bool = false, scrollToBottomTrigger: Int = 0, @ViewBuilder content: () -> Content) {
         self.axes = axes
@@ -23,20 +23,18 @@ struct LiquidGlassScrollView<Content: View>: NSViewRepresentable {
         scrollView.autohidesScrollers = !showsIndicators
         scrollView.drawsBackground = false
         scrollView.backgroundColor = .clear
+        scrollView.verticalScrollElasticity = .allowed
         
+        // Create hosting view
         let hostingView = NSHostingView(rootView: content)
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        
+        hostingView.translatesAutoresizingMaskIntoConstraints = true
+        hostingView.autoresizingMask = axes.contains(.vertical) ? [.width] : []
+
         scrollView.documentView = hostingView
-        
-        // For vertical scrolling, we want the content to match the parent's width
-        if axes == [.vertical] {
-            NSLayoutConstraint.activate([
-                hostingView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
-                hostingView.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
-                hostingView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor)
-            ])
-        }
+
+        // Track bounds changes so we can recompute the hosted content size during live resize.
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        context.coordinator.attach(scrollView: scrollView)
         
         return scrollView
     }
@@ -44,6 +42,12 @@ struct LiquidGlassScrollView<Content: View>: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         if let hostingView = scrollView.documentView as? NSHostingView<Content> {
             hostingView.rootView = content
+
+            if axes.contains(.vertical) {
+                // Force layout to compute the true content height, then set the frame.
+                // This ensures the scroll view knows the full document height without cutoff.
+                context.coordinator.updateHostedSize()
+            }
             
             // Check for scroll to bottom trigger
             if context.coordinator.lastTrigger != scrollToBottomTrigger {
@@ -67,5 +71,41 @@ struct LiquidGlassScrollView<Content: View>: NSViewRepresentable {
 
     class Coordinator: NSObject {
         var lastTrigger: Int = 0
+        private weak var scrollView: NSScrollView?
+        private weak var hostingView: NSView?
+        private var boundsObserver: NSObjectProtocol?
+
+        deinit {
+            if let boundsObserver {
+                NotificationCenter.default.removeObserver(boundsObserver)
+            }
+        }
+
+        func attach(scrollView: NSScrollView) {
+            self.scrollView = scrollView
+            self.hostingView = scrollView.documentView
+
+            if let boundsObserver {
+                NotificationCenter.default.removeObserver(boundsObserver)
+            }
+
+            boundsObserver = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView,
+                queue: .main
+            ) { [weak self] _ in
+                self?.updateHostedSize()
+            }
+
+            updateHostedSize()
+        }
+
+        func updateHostedSize() {
+            guard let scrollView, let hostingView else { return }
+            let targetWidth = scrollView.contentView.bounds.width
+            hostingView.frame.size.width = targetWidth
+            hostingView.layoutSubtreeIfNeeded()
+            hostingView.frame.size.height = hostingView.fittingSize.height
+        }
     }
 }

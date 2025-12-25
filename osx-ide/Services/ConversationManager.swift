@@ -32,25 +32,28 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
     
     private var allTools: [AITool] {
         let validator = pathValidator
-        return [
-            // Project awareness tools
-            GetProjectStructureTool(projectRoot: projectRoot),
-            ListAllFilesTool(projectRoot: projectRoot),
-            FindFileRegexTool(projectRoot: projectRoot),
-            
-            // File operation tools
-            ReadFileTool(fileSystemService: fileSystemService, pathValidator: validator),
-            WriteFileTool(fileSystemService: fileSystemService, pathValidator: validator),
-            CreateFileTool(pathValidator: validator),
-            DeleteFileTool(pathValidator: validator),
-            ListFilesTool(pathValidator: validator),
-            ReplaceInFileTool(fileSystemService: fileSystemService, pathValidator: validator),
-            
-            // Search and execution
-            GrepTool(pathValidator: validator),
-            FindFileTool(pathValidator: validator),
-            RunCommandTool()
-        ]
+
+        var tools: [AITool] = []
+
+        // Index-backed discovery & search tools (preferred, authoritative).
+        if let codebaseIndex {
+            tools.append(IndexFindFilesTool(index: codebaseIndex))
+            tools.append(IndexListFilesTool(index: codebaseIndex))
+            tools.append(IndexSearchTextTool(index: codebaseIndex))
+            tools.append(IndexReadFileTool(index: codebaseIndex))
+            tools.append(IndexSearchSymbolsTool(index: codebaseIndex))
+        }
+
+        // File operations (writing/editing still uses the filesystem, but discovery/search should use the index).
+        tools.append(WriteFileTool(fileSystemService: fileSystemService, pathValidator: validator))
+        tools.append(CreateFileTool(pathValidator: validator))
+        tools.append(DeleteFileTool(pathValidator: validator))
+        tools.append(ReplaceInFileTool(fileSystemService: fileSystemService, pathValidator: validator))
+
+        // Execution
+        tools.append(RunCommandTool())
+
+        return tools
     }
     
     private var availableTools: [AITool] {

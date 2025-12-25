@@ -21,12 +21,22 @@ public actor IndexerActor {
         if shouldExclude(url) {
             return
         }
-        
+
         let language = LanguageDetector.detect(at: url)
-        
+
         // Basic metadata extraction for Phase 1
         let resourceId = url.absoluteString // Simple ID for now
-        let timestamp = Date().timeIntervalSince1970
+        let fileModTime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
+
+        let existingModTime: Double? = (try? database.getResourceLastModified(resourceId: resourceId)) ?? nil
+        if let fileModTime,
+           let existingModTime,
+           abs(existingModTime - fileModTime) < 0.000_001 {
+            // Already indexed for this exact file version; skip.
+            return
+        }
+
+        let timestamp = fileModTime ?? Date().timeIntervalSince1970
         
         // Read file content
         let content = try String(contentsOf: url, encoding: .utf8)

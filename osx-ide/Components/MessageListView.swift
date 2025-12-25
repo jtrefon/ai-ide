@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 struct MessageListView: View {
     let messages: [ChatMessage]
@@ -37,6 +38,7 @@ struct MessageListView: View {
                 }
             }
             .padding()
+            .padding(.bottom, 120)
         }
         .onChange(of: messages.count) {
             // Increment trigger to scroll to bottom when new messages are added
@@ -120,22 +122,41 @@ struct MessageView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        Text(message.content)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(backgroundColor(for: message))
-                            .foregroundColor(foregroundColor(for: message))
-                            .cornerRadius(16)
-                            .textSelection(.enabled)
-                            .contextMenu {
-                                Button {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(message.content, forType: .string)
-                                } label: {
-                                    Text("Copy Message")
-                                    Image(systemName: "doc.on.doc")
+                        if message.role == .assistant {
+                            MarkdownMessageView(content: message.content)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(backgroundColor(for: message))
+                                .foregroundColor(foregroundColor(for: message))
+                                .cornerRadius(16)
+                                .textSelection(.enabled)
+                                .contextMenu {
+                                    Button {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(message.content, forType: .string)
+                                    } label: {
+                                        Text("Copy Message")
+                                        Image(systemName: "doc.on.doc")
+                                    }
                                 }
-                            }
+                        } else {
+                            Text(message.content)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(backgroundColor(for: message))
+                                .foregroundColor(foregroundColor(for: message))
+                                .cornerRadius(16)
+                                .textSelection(.enabled)
+                                .contextMenu {
+                                    Button {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(message.content, forType: .string)
+                                    } label: {
+                                        Text("Copy Message")
+                                        Image(systemName: "doc.on.doc")
+                                    }
+                                }
+                        }
                     }
                 }
                 

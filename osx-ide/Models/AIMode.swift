@@ -38,7 +38,7 @@ enum AIMode: String, Codable, CaseIterable, Identifiable {
             
             **CURRENT MODE: CHAT (Read-Only)**
             You are in Chat mode. You can help users understand their code but CANNOT modify files.
-            Available tools: read_file, list_files, grep, run_command (read-only operations only).
+            Available tools: index_find_files, index_list_files, index_search_text, index_read_file, index_search_symbols, run_command (read-only operations only).
             If the user asks you to make changes, politely explain that you're in Chat mode and suggest they switch to Agent mode.
             """
         case .agent:
@@ -57,7 +57,14 @@ enum AIMode: String, Codable, CaseIterable, Identifiable {
         case .chat:
             // Read-only tools
             return allTools.filter { tool in
-                ["read_file", "list_files", "grep", "run_command"].contains(tool.name)
+                [
+                    "index_find_files",
+                    "index_list_files",
+                    "index_search_text",
+                    "index_read_file",
+                    "index_search_symbols",
+                    "run_command"
+                ].contains(tool.name)
             }
         case .agent:
             // All tools
