@@ -54,6 +54,8 @@ struct MessageListView: View {
 struct MessageView: View {
     let message: ChatMessage
     @State private var isExpanded = false
+    @State private var showReasoningPanel = true
+    @State private var showFullReasoning = false
     
     var body: some View {
         HStack {
@@ -121,6 +123,62 @@ struct MessageView: View {
                         Text(message.role == .user ? "You" : "Assistant")
                             .font(.caption)
                             .foregroundColor(.secondary)
+
+                        if message.role == .assistant, let reasoning = message.reasoning, !reasoning.isEmpty, showReasoningPanel {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "brain")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+
+                                    Text("Reasoning")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.secondary)
+
+                                    Spacer()
+
+                                    Image(systemName: showFullReasoning ? "chevron.up" : "chevron.down")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showFullReasoning.toggle()
+                                    }
+                                }
+
+                                Text(showFullReasoning ? reasoning : reasoningPreview(reasoning))
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(showFullReasoning ? nil : 5)
+
+                                HStack(spacing: 8) {
+                                    Button(showFullReasoning ? "Show less" : "Show more") {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            showFullReasoning.toggle()
+                                        }
+                                    }
+                                    .buttonStyle(.borderless)
+
+                                    Button("Hide") {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            showReasoningPanel = false
+                                        }
+                                    }
+                                    .buttonStyle(.borderless)
+
+                                    Spacer()
+                                }
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color.gray.opacity(0.12))
+                            .cornerRadius(14)
+                            .frame(maxWidth: 400)
+                        }
                         
                         if message.role == .assistant {
                             MarkdownMessageView(content: message.content)
@@ -208,6 +266,12 @@ struct MessageView: View {
     
     private func foregroundColor(for message: ChatMessage) -> Color {
         return message.role == .user ? .white : .primary
+    }
+
+    private func reasoningPreview(_ text: String) -> String {
+        let lines = text.split(whereSeparator: \.isNewline)
+        if lines.count <= 5 { return text }
+        return lines.prefix(5).joined(separator: "\n") + "\n…"
     }
 }
 

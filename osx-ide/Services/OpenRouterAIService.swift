@@ -119,6 +119,10 @@ actor OpenRouterAIService: AIService {
         if let projectRoot = projectRoot {
             systemContent += "\n\n**IMPORTANT CONTEXT:**\nProject Root: `\(projectRoot.path)`\nPlatform: macOS\nAll file paths must be relative to the project root or validated absolute paths within it. Never use Linux-style paths like /home."
         }
+
+        if settings.reasoningEnabled {
+            systemContent += "\n\n## Reasoning\nWhen responding, include a structured reasoning block enclosed in <ide_reasoning>...</ide_reasoning>. This block will be shown in a separate, foldable UI panel.\n\nRequirements:\n- Keep it concise and actionable; use short bullets.\n- Use these sections in order: Analyze, Research, Plan, Reflect.\n- Do NOT include code blocks in <ide_reasoning>.\n- After </ide_reasoning>, provide the normal user-facing answer as usual (markdown allowed).\n\nFormat example:\n<ide_reasoning>\nAnalyze: ...\nResearch: ...\nPlan: ...\nReflect: ...\n</ide_reasoning>"
+        }
         
         var finalMessages = [OpenRouterChatMessage(role: "system", content: systemContent)]
         
