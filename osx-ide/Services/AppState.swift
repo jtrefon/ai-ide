@@ -8,6 +8,7 @@
 
 import SwiftUI
 import Combine
+import AppKit
 
 /// Main application state coordinator that manages interaction between specialized state managers
 @MainActor
@@ -225,6 +226,15 @@ class AppState: ObservableObject {
         workspaceStateManager.navigateToParent()
     }
     
+    func newProject() {
+        Task { @MainActor in
+            guard let projectURL = await fileDialogService.promptForNewProjectFolder(defaultName: "NewProject") else {
+                return
+            }
+            workspaceStateManager.createProject(at: projectURL)
+        }
+    }
+    
     // UI Operations
     func toggleSidebar() {
         uiStateManager.toggleSidebar()
@@ -253,7 +263,6 @@ class AppState: ObservableObject {
     }
     
     // MARK: - Private Methods
-    
     private func setupStateObservation() {
         // Observe file editor changes
         fileEditorStateManager.objectWillChange
