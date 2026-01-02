@@ -17,8 +17,6 @@ struct SettingsView: View {
             SettingsBackgroundView()
             
             VStack(spacing: 16) {
-                SettingsHeaderView()
-                
                 TabView {
                     GeneralSettingsTab(appState: appState)
                         .tabItem {
@@ -34,34 +32,6 @@ struct SettingsView: View {
             .padding(24)
         }
         .frame(minWidth: 720, idealWidth: 760, minHeight: 560, idealHeight: 620)
-    }
-}
-
-private struct SettingsHeaderView: View {
-    var body: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Settings")
-                    .font(.system(size: 30, weight: .semibold, design: .rounded))
-                
-                Text("Liquid glass controls for your workspace and editor.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            
-            Spacer()
-            
-            Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 28, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.secondary)
-        }
-        .padding(18)
-        .nativeGlassBackground(.toolbar, cornerRadius: 18)
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.1), lineWidth: 0.6)
-        )
     }
 }
 

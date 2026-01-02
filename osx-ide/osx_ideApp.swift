@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 @main
 struct osx_ideApp: App {
@@ -14,6 +15,7 @@ struct osx_ideApp: App {
     @AppStorage("CodebaseIndexEnabled") private var codebaseIndexEnabled: Bool = true
     @AppStorage("CodebaseIndexAIEnrichmentEnabled") private var codebaseIndexAIEnrichmentEnabled: Bool = false
     @AppStorage("ShowHiddenFilesInFileTree") private var showHiddenFilesInFileTree: Bool = false
+    @State private var didInitializeCorePlugin: Bool = false
     
     init() {
         let container = DependencyContainer.shared
@@ -22,15 +24,26 @@ struct osx_ideApp: App {
         
         self._errorManager = StateObject(wrappedValue: errorMgr)
         self._appState = StateObject(wrappedValue: appSt)
-        
-        // Bootstrap Plugin UI
-        CorePlugin.initialize(registry: UIRegistry.shared, appState: appSt)
     }
     
     var body: some Scene {
         WindowGroup {
             ContentView(appState: appState)
                 .environmentObject(errorManager)
+                .onAppear {
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                .task {
+                    if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
+                        return
+                    }
+                    if didInitializeCorePlugin {
+                        return
+                    }
+
+                    CorePlugin.initialize(registry: UIRegistry.shared, appState: appState)
+                    didInitializeCorePlugin = true
+                }
                 .alert("Error", isPresented: $errorManager.showErrorAlert) {
                     Button("OK") {
                         errorManager.dismissError()
@@ -60,8 +73,8 @@ struct osx_ideApp: App {
             }
             
             CommandGroup(replacing: .newItem) {
-                Button("New") {
-                    Task { try? await CommandRegistry.shared.execute(.fileNew) }
+                Button("New Project") {
+                    Task { try? await CommandRegistry.shared.execute(.projectNew) }
                 }
                 .keyboardShortcut("n", modifiers: [.command])
             }

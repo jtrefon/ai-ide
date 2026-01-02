@@ -46,7 +46,11 @@ final class CorePlugin {
         commandRegistry.register(command: .fileNew) { _ in
             appState.fileEditor.newFile()
         }
-        
+
+        commandRegistry.register(command: .projectNew) { _ in
+            appState.newProject()
+        }
+
         commandRegistry.register(command: .fileOpen) { _ in
             appState.openFile()
         }
