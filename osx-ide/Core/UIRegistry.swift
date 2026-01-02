@@ -44,8 +44,6 @@ public final class UIRegistry: ObservableObject {
         }
         let pluginView = PluginView(name: name, iconName: icon, view: view)
         extensions[point]?.append(pluginView)
-        // Force publish change
-        objectWillChange.send()
         
         print("[UIRegistry] Registered '\(name)' at \(point.rawValue)")
     }

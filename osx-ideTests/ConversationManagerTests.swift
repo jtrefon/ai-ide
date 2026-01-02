@@ -45,8 +45,8 @@ final class ConversationManagerTests: XCTestCase {
     func testSendMessageFlow() async throws {
         manager.currentInput = "Hello AI"
         
-        let expectation = expectation(description: "AI responded")
-        expectation.assertForOverFulfill = false
+        let aiResponded = expectation(description: "AI responded")
+        aiResponded.assertForOverFulfill = false
         
         // Observe manager's objectWillChange to wait for response
         var cancellables = Set<AnyCancellable>()
@@ -55,7 +55,7 @@ final class ConversationManagerTests: XCTestCase {
                 // Using a small delay to allow state to actually change after notification
                 Task { @MainActor in
                     if self.manager.messages.contains(where: { $0.role == .assistant && $0.content == "Mock response" }) {
-                        expectation.fulfill()
+                        aiResponded.fulfill()
                     }
                 }
             }
@@ -63,7 +63,20 @@ final class ConversationManagerTests: XCTestCase {
         
         manager.sendMessage()
         
-        await fulfillment(of: [expectation], timeout: 5.0)
+        await fulfillment(of: [aiResponded], timeout: 5.0)
+
+        let sendingCleared = self.expectation(description: "Sending cleared")
+        Task { @MainActor in
+            let deadline = Date().addingTimeInterval(2.0)
+            while Date() < deadline {
+                if self.manager.isSending == false {
+                    sendingCleared.fulfill()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+        await fulfillment(of: [sendingCleared], timeout: 3.0)
         XCTAssertFalse(manager.isSending)
     }
 

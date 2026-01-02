@@ -63,7 +63,10 @@ struct ContentView: View {
                                 language: appState.fileEditor.editorLanguage,
                                 selectedRange: $selectedRange,
                                 selectionContext: appState.selectionContext,
-                                showLineNumbers: appState.ui.showLineNumbers
+                                showLineNumbers: appState.showLineNumbers,
+                                wordWrap: appState.wordWrap,
+                                fontSize: appState.fontSize,
+                                fontFamily: appState.fontFamily
                             )
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
@@ -88,6 +91,9 @@ struct ContentView: View {
             IndexStatusBarView()
         }
         .background(Color.clear)
+        .preferredColorScheme(appState.selectedTheme.colorScheme)
+        .accessibilityIdentifier("AppRootView")
+        .accessibilityValue("theme=\(appState.selectedTheme.rawValue)")
     }
 }
 
