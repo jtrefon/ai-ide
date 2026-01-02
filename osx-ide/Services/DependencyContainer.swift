@@ -61,29 +61,30 @@ class DependencyContainer {
         return _conversationManager
     }
 
-    /// Codebase index instance
+    /// Project coordinator instance
+    var projectCoordinator: ProjectCoordinator {
+        return _projectCoordinator
+    }
+    
+    /// Codebase index instance (proxied through coordinator)
     var codebaseIndex: CodebaseIndexProtocol? {
-        return _codebaseIndex
+        return _projectCoordinator.codebaseIndex
     }
 
     var isCodebaseIndexEnabled: Bool {
         return UserDefaults.standard.object(forKey: "CodebaseIndexEnabled") as? Bool ?? true
     }
 
-    var isAIEnrichmentIndexingEnabled: Bool {
-        return UserDefaults.standard.object(forKey: "CodebaseIndexAIEnrichmentEnabled") as? Bool ?? false
-    }
-
     func setCodebaseIndexEnabled(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: "CodebaseIndexEnabled")
-        _codebaseIndex?.setEnabled(enabled)
-        if enabled {
-            _codebaseIndex?.reindexProject(aiEnrichmentEnabled: false)
-        }
+        _projectCoordinator.setIndexEnabled(enabled)
     }
 
     func reindexProjectNow() {
-        _codebaseIndex?.reindexProject(aiEnrichmentEnabled: isAIEnrichmentIndexingEnabled)
+        _projectCoordinator.reindexProject(aiEnrichment: isAIEnrichmentIndexingEnabled)
+    }
+
+    var isAIEnrichmentIndexingEnabled: Bool {
+        return UserDefaults.standard.object(forKey: "CodebaseIndexAIEnrichmentEnabled") as? Bool ?? false
     }
 
     func setAIEnrichmentIndexingEnabled(_ enabled: Bool) {
@@ -99,49 +100,12 @@ class DependencyContainer {
 
         UserDefaults.standard.set(enabled, forKey: "CodebaseIndexAIEnrichmentEnabled")
         if enabled, isCodebaseIndexEnabled {
-            _codebaseIndex?.runAIEnrichment()
+            _projectCoordinator.codebaseIndex?.runAIEnrichment()
         }
     }
 
     func configureCodebaseIndex(projectRoot: URL) {
-        do {
-            _codebaseIndex = try CodebaseIndex(eventBus: EventBus.shared, projectRoot: projectRoot, aiService: _aiService)
-            _codebaseIndex?.start()
-            _codebaseIndex?.setEnabled(isCodebaseIndexEnabled)
-            if isCodebaseIndexEnabled {
-                scheduleAutoReindexAfterDelay()
-            }
-
-            if let cm = _conversationManager as? ConversationManager {
-                cm.updateCodebaseIndex(_codebaseIndex)
-                cm.updateProjectRoot(projectRoot)
-            }
-        } catch {
-            _codebaseIndex = nil
-            print("Failed to initialize CodebaseIndex: \(error)")
-        }
-    }
-
-    private func scheduleAutoReindexAfterDelay() {
-        pendingAutoReindexTask?.cancel()
-        pendingAutoReindexTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-            guard let self else { return }
-            guard self.isCodebaseIndexEnabled else { return }
-
-            let aiEnabled: Bool
-            if self.isAIEnrichmentIndexingEnabled {
-                let settings = OpenRouterSettingsStore().load()
-                let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
-                aiEnabled = !model.isEmpty
-            } else {
-                aiEnabled = false
-            }
-
-            // Resume indexing incrementally (IndexerActor skips unchanged files using last_modified).
-            // If AI enrichment is enabled, CodebaseIndex will run it after baseline indexing completes.
-            self._codebaseIndex?.reindexProject(aiEnrichmentEnabled: aiEnabled)
-        }
+        _projectCoordinator.configureProject(root: projectRoot)
     }
     
     // MARK: - Initialization
@@ -161,7 +125,6 @@ class DependencyContainer {
         )
         _aiService = OpenRouterAIService()
 
-        _codebaseIndex = nil
         _conversationManager = ConversationManager(
             aiService: _aiService,
             errorManager: errorManager,
@@ -169,9 +132,16 @@ class DependencyContainer {
             codebaseIndex: nil
         )
 
+        _projectCoordinator = ProjectCoordinator(
+            aiService: _aiService,
+            errorManager: errorManager,
+            eventBus: EventBus.shared,
+            conversationManager: _conversationManager
+        )
+
         if let root = _workspaceService.currentDirectory {
             _conversationManager.updateProjectRoot(root)
-            configureCodebaseIndex(projectRoot: root)
+            _projectCoordinator.configureProject(root: root)
         }
     }
     
@@ -211,8 +181,7 @@ class DependencyContainer {
     private let _windowProvider: WindowProvider
     private var _aiService: AIService
     private var _conversationManager: ConversationManagerProtocol
-    private var _codebaseIndex: CodebaseIndexProtocol?
-    private var pendingAutoReindexTask: Task<Void, Never>?
+    private var _projectCoordinator: ProjectCoordinator
 }
 
 // MARK: - Testing Support

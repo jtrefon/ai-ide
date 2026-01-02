@@ -46,14 +46,17 @@ final class ConversationManagerTests: XCTestCase {
         manager.currentInput = "Hello AI"
         
         let expectation = expectation(description: "AI responded")
+        expectation.assertForOverFulfill = false
         
-        // Observe messages to wait for response
+        // Observe manager's objectWillChange to wait for response
         var cancellables = Set<AnyCancellable>()
-        manager.$messages
-            .dropFirst()
-            .sink { messages in
-                if messages.contains(where: { $0.role == .assistant && $0.content == "Mock response" }) {
-                    expectation.fulfill()
+        manager.objectWillChange
+            .sink { _ in
+                // Using a small delay to allow state to actually change after notification
+                Task { @MainActor in
+                    if self.manager.messages.contains(where: { $0.role == .assistant && $0.content == "Mock response" }) {
+                        expectation.fulfill()
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -76,7 +79,7 @@ final class ConversationManagerTests: XCTestCase {
         Hello world.
         """
 
-        let result = ConversationManager.splitReasoning(from: input)
+        let result = ChatPromptBuilder.splitReasoning(from: input)
         XCTAssertEqual(result.content, "Hello world.")
         XCTAssertNotNil(result.reasoning)
         XCTAssertTrue((result.reasoning ?? "").contains("Analyze:"))

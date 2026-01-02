@@ -54,8 +54,9 @@ final class IndexStatusBarViewModel: ObservableObject {
         if let stats {
             if stats.totalProjectFileCount > 0 {
                 let indexed = min(stats.indexedResourceCount, stats.totalProjectFileCount)
-                let ai = min(stats.aiEnrichedResourceCount, stats.totalProjectFileCount)
-                return "Index \(indexed)/\(stats.totalProjectFileCount) | AI \(ai)/\(stats.totalProjectFileCount)"
+                let aiDenom = max(0, stats.aiEnrichableProjectFileCount)
+                let ai = min(stats.aiEnrichedResourceCount, aiDenom)
+                return "Index \(indexed)/\(stats.totalProjectFileCount) | AI \(ai)/\(aiDenom)"
             }
             return "Index: \(stats.indexedResourceCount) files"
         }

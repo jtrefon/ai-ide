@@ -31,7 +31,7 @@ struct ContentView: View {
             HSplitView {
                 // Left sidebar
                 // Left sidebar
-                if appState.isSidebarVisible, let view = registry.views(for: .sidebarLeft).first?.content {
+                if appState.ui.isSidebarVisible, let view = registry.views(for: .sidebarLeft).first?.content {
                     view.frame(minWidth: 200, maxWidth: 300)
                 }
                 
@@ -44,10 +44,10 @@ struct ContentView: View {
                             // Editor header
                             HStack {
                                 HStack {
-                                    let fileName = appState.displayName
+                                    let fileName = appState.fileEditor.displayName
                                     let fileExtension = (fileName as NSString).pathExtension
-                                    let _ = AppState.languageForFileExtension(fileExtension)
-                                    Text(fileName + (appState.isDirty ? " •" : ""))
+                                    let _ = FileEditorStateManager.languageForFileExtension(fileExtension)
+                                    Text(fileName + (appState.fileEditor.isDirty ? " •" : ""))
                                         .font(.headline)
                                         .padding(.horizontal)
                                     Spacer()
@@ -59,11 +59,11 @@ struct ContentView: View {
                             
                             // Code editor
                             CodeEditorView(
-                                text: $appState.editorContent,
-                                language: appState.editorLanguage,
+                                text: $appState.fileEditor.editorContent,
+                                language: appState.fileEditor.editorLanguage,
                                 selectedRange: $selectedRange,
                                 selectionContext: appState.selectionContext,
-                                showLineNumbers: appState.showLineNumbers
+                                showLineNumbers: appState.ui.showLineNumbers
                             )
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
@@ -71,7 +71,7 @@ struct ContentView: View {
                         
                         // Terminal panel
                         // Terminal panel
-                        if appState.isTerminalVisible, let view = registry.views(for: .panelBottom).first?.content {
+                        if appState.ui.isTerminalVisible, let view = registry.views(for: .panelBottom).first?.content {
                             view.frame(minHeight: 100)
                         }
                     }
@@ -79,7 +79,7 @@ struct ContentView: View {
                     
                     // AI Chat Panel
                     // AI Chat Panel
-                    if appState.isAIChatVisible, let view = registry.views(for: .panelRight).first?.content {
+                    if appState.ui.isAIChatVisible, let view = registry.views(for: .panelRight).first?.content {
                         view.frame(minWidth: 300)
                     }
                 }

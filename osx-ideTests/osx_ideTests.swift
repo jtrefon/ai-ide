@@ -19,44 +19,44 @@ struct osx_ideTests {
     @Test func testAppStateInitialization() async throws {
         let appState = DependencyContainer.shared.makeAppState()
         
-        #expect(appState.selectedFile == nil, "Selected file should be nil initially")
-        #expect(appState.editorContent.isEmpty, "Editor content should be empty initially")
-        #expect(appState.editorLanguage == "swift", "Default language should be swift")
-        #expect(appState.isDirty == false, "Should not be dirty initially")
+        #expect(appState.fileEditor.selectedFile == nil, "Selected file should be nil initially")
+        #expect(appState.fileEditor.editorContent.isEmpty, "Editor content should be empty initially")
+        #expect(appState.fileEditor.editorLanguage == "swift", "Default language should be swift")
+        #expect(appState.fileEditor.isDirty == false, "Should not be dirty initially")
         #expect(appState.lastError == nil, "Should have no errors initially")
 
         // Workspace can be nil until the user explicitly selects a folder.
-        if let dir = appState.currentDirectory {
+        if let dir = appState.workspace.currentDirectory {
             var isDir: ObjCBool = false
             #expect(FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir) && isDir.boolValue, "If set, currentDirectory must exist and be a directory")
         }
     }
 
     @Test func testLanguageDetection() async throws {
-        #expect(AppState.languageForFileExtension("swift") == "swift", "Swift files should detect as swift")
-        #expect(AppState.languageForFileExtension("js") == "javascript", "JS files should detect as javascript")
-        #expect(AppState.languageForFileExtension("jsx") == "javascript", "JSX files should detect as javascript")
-        #expect(AppState.languageForFileExtension("ts") == "typescript", "TS files should detect as typescript")
-        #expect(AppState.languageForFileExtension("tsx") == "typescript", "TSX files should detect as typescript")
-        #expect(AppState.languageForFileExtension("py") == "python", "Python files should detect as python")
-        #expect(AppState.languageForFileExtension("html") == "html", "HTML files should detect as html")
-        #expect(AppState.languageForFileExtension("css") == "css", "CSS files should detect as css")
-        #expect(AppState.languageForFileExtension("json") == "json", "JSON files should detect as json")
-        #expect(AppState.languageForFileExtension("unknown") == "text", "Unknown files should default to text")
-        #expect(AppState.languageForFileExtension("") == "text", "Empty extension should default to text")
+        #expect(FileEditorStateManager.languageForFileExtension("swift") == "swift", "Swift files should detect as swift")
+        #expect(FileEditorStateManager.languageForFileExtension("js") == "javascript", "JS files should detect as javascript")
+        #expect(FileEditorStateManager.languageForFileExtension("jsx") == "javascript", "JSX files should detect as javascript")
+        #expect(FileEditorStateManager.languageForFileExtension("ts") == "typescript", "TS files should detect as typescript")
+        #expect(FileEditorStateManager.languageForFileExtension("tsx") == "typescript", "TSX files should detect as typescript")
+        #expect(FileEditorStateManager.languageForFileExtension("py") == "python", "Python files should detect as python")
+        #expect(FileEditorStateManager.languageForFileExtension("html") == "html", "HTML files should detect as html")
+        #expect(FileEditorStateManager.languageForFileExtension("css") == "css", "CSS files should detect as css")
+        #expect(FileEditorStateManager.languageForFileExtension("json") == "json", "JSON files should detect as json")
+        #expect(FileEditorStateManager.languageForFileExtension("unknown") == "text", "Unknown files should default to text")
+        #expect(FileEditorStateManager.languageForFileExtension("") == "text", "Empty extension should default to text")
     }
 
     @Test func testNewFileFunctionality() async throws {
         let appState = DependencyContainer.shared.makeAppState()
         
-        appState.editorContent = "some content"
-        // appState.selectedFile and .isDirty are read-only
+        appState.fileEditor.editorContent = "some content"
+        // appState.fileEditor.selectedFile and .isDirty are read-only
         
-        appState.newFile()
+        appState.fileEditor.newFile()
         
-        #expect(appState.selectedFile == nil, "Selected file should be nil after new")
-        #expect(appState.editorContent.isEmpty, "Editor content should be empty after new")
-        #expect(appState.isDirty == false, "Should not be dirty after new")
+        #expect(appState.fileEditor.selectedFile == nil, "Selected file should be nil after new")
+        #expect(appState.fileEditor.editorContent.isEmpty, "Editor content should be empty after new")
+        #expect(appState.fileEditor.isDirty == false, "Should not be dirty after new")
         #expect(appState.lastError == nil, "Should have no errors after new")
     }
 

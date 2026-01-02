@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import SQLite3
 
 @MainActor
 public protocol CodebaseIndexProtocol: Sendable {
@@ -23,6 +24,7 @@ public protocol CodebaseIndexProtocol: Sendable {
     func searchIndexedText(pattern: String, limit: Int) async throws -> [String]
 
     func searchSymbols(nameLike query: String, limit: Int) throws -> [Symbol]
+    func getSummaries(projectRoot: URL, limit: Int) throws -> [(path: String, summary: String)]
     func getMemories(tier: MemoryTier?) throws -> [MemoryEntry]
     func getStats() throws -> IndexStats
 }
@@ -59,7 +61,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         self.indexer = IndexerActor(database: databaseManager, config: resolvedConfig)
         self.memoryManager = MemoryManager(database: databaseManager, eventBus: eventBus)
         self.queryService = QueryService(database: databaseManager)
-        self.coordinator = IndexCoordinator(eventBus: eventBus, indexer: indexer, config: resolvedConfig)
+        self.coordinator = IndexCoordinator(eventBus: eventBus, indexer: indexer, config: resolvedConfig, projectRoot: projectRoot)
     }
 
     public func listIndexedFiles(matching query: String?, limit: Int = 50, offset: Int = 0) throws -> [String] {
@@ -142,7 +144,6 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
 
         let absPath = standardizedFileURL.path
         let existsOnDisk = FileManager.default.fileExists(atPath: absPath)
-        let isInIndex = (try? databaseManager.hasResourcePath(absPath)) == true
 
         if !existsOnDisk {
             throw AppError.fileNotFound(relative)
@@ -169,46 +170,20 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     }
 
     public func searchIndexedText(pattern: String, limit: Int = 100) async throws -> [String] {
-        let needle = pattern
+        let needle = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
         if needle.isEmpty { return [] }
 
-        var matches: [String] = []
-        matches.reserveCapacity(min(limit, 100))
-
-        var offset = 0
-        let pageSize = 200
-
-        while matches.count < limit {
-            let batch = try databaseManager.listResourcePaths(matching: nil, limit: pageSize, offset: offset)
-            if batch.isEmpty { break }
-            offset += batch.count
-
-            for absPath in batch {
-                if matches.count >= limit { break }
-                do {
-                    let url = URL(fileURLWithPath: absPath)
-                    let content = try String(contentsOf: url, encoding: .utf8)
-                    let lines = content.components(separatedBy: .newlines)
-                    for (idx, line) in lines.enumerated() {
-                        if line.contains(needle) {
-                            let rel: String
-                            if absPath.hasPrefix(projectRoot.path + "/") {
-                                rel = String(absPath.dropFirst(projectRoot.path.count + 1))
-                            } else {
-                                rel = absPath
-                            }
-                            let snippet = line.trimmingCharacters(in: .whitespaces)
-                            matches.append("\(rel):\(idx + 1): \(snippet)")
-                            if matches.count >= limit { break }
-                        }
-                    }
-                } catch {
-                    continue
-                }
+        let results = try databaseManager.searchFTS(query: needle, limit: limit)
+        
+        return results.map { result in
+            let rel: String
+            if result.path.hasPrefix(projectRoot.path + "/") {
+                rel = String(result.path.dropFirst(projectRoot.path.count + 1))
+            } else {
+                rel = result.path
             }
+            return "\(rel): \(result.snippet)"
         }
-
-        return matches
     }
 
     public convenience init(eventBus: EventBusProtocol) throws {
@@ -246,20 +221,30 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     }
 
     public func runAIEnrichment() {
-        guard isEnabled else { return }
+        guard isEnabled else { 
+            Task { @MainActor in await IndexLogger.shared.log("AI Enrichment skipped: Indexing is disabled") }
+            return 
+        }
 
-        Task {
+        Task { @MainActor in
             let start = Date()
-            eventBus.publish(AIEnrichmentStartedEvent())
+            await IndexLogger.shared.log("AI Enrichment started")
+            await eventBus.publish(AIEnrichmentStartedEvent())
 
             let files = IndexCoordinator.enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns)
                 .filter { Self.isAIEnrichableFile($0) }
             let total = files.count
+            await IndexLogger.shared.log("Found \(total) files for AI enrichment")
 
             var processed = 0
             for file in files {
-                if !isEnabled { break }
-                eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
+                if !isEnabled { 
+                    await IndexLogger.shared.log("AI Enrichment aborted: Indexing disabled during process")
+                    break 
+                }
+                
+                await IndexLogger.shared.log("Enriching file \(processed + 1)/\(total): \(file.lastPathComponent)")
+                await eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
 
                 let fileModTime = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
 
@@ -269,32 +254,63 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
                    let existingModTime,
                    abs(existingModTime - fileModTime) < 0.000_001,
                    (try? databaseManager.isResourceAIEnriched(resourceId: file.absoluteString)) == true {
+                    await IndexLogger.shared.log("Skipping \(file.lastPathComponent) (already enriched)")
                     processed += 1
-                    eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
+                    await eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
                     continue
                 }
 
                 do {
                     let content = try String(contentsOf: file, encoding: .utf8)
-                    let prompt = Self.makeQualityPrompt(path: file.path, content: content)
-                    let response = try await aiService.sendMessage(prompt, context: nil, tools: nil, mode: nil, projectRoot: projectRoot)
-                    let score = Self.parseScore(from: response.content) ?? 0
-                    try databaseManager.markAIEnriched(resourceId: file.absoluteString, score: Double(score))
+                    let prompt = Self.makeEnrichmentPrompt(path: file.path, content: content)
+                    
+                    // Use a timeout for the AI call to prevent getting stuck
+                    let response = try await withTimeout(seconds: 45) {
+                        try await self.aiService.sendMessage(prompt, context: nil, tools: nil, mode: nil, projectRoot: self.projectRoot)
+                    }
+                    
+                    let result = Self.parseEnrichmentResponse(from: response.content)
+                    let score = result?.score ?? 0
+                    let summary = result?.summary
+                    
+                    try databaseManager.markAIEnriched(resourceId: file.absoluteString, score: Double(score), summary: summary)
+                    await IndexLogger.shared.log("Successfully enriched \(file.lastPathComponent) (Score: \(score))")
                 } catch {
-                    // If enrichment fails for a file, continue; progress still advances.
+                    await IndexLogger.shared.log("Failed to enrich \(file.lastPathComponent): \(error)")
                 }
 
                 processed += 1
-                eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
+                await eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
             }
 
             let duration = Date().timeIntervalSince(start)
-            eventBus.publish(AIEnrichmentCompletedEvent(processedCount: processed, duration: duration))
+            await IndexLogger.shared.log("AI Enrichment completed in \(String(format: "%.2f", duration))s")
+            await eventBus.publish(AIEnrichmentCompletedEvent(processedCount: processed, duration: duration))
+        }
+    }
+
+    private func withTimeout<T: Sendable>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw AppError.aiServiceError("AI request timed out after \(seconds)s")
+            }
+            
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
         }
     }
 
     public func searchSymbols(nameLike query: String, limit: Int = 50) throws -> [Symbol] {
         try queryService.searchSymbols(nameLike: query, limit: limit)
+    }
+
+    public func getSummaries(projectRoot: URL, limit: Int = 20) throws -> [(path: String, summary: String)] {
+        try databaseManager.getAIEnrichedSummaries(projectRoot: projectRoot, limit: limit)
     }
 
     public func getMemories(tier: MemoryTier? = nil) throws -> [MemoryEntry] {
@@ -304,6 +320,11 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     public func getStats() throws -> IndexStats {
         let counts = try databaseManager.getIndexStatsCounts()
         let totalProjectFileCount = IndexCoordinator.enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns).count
+
+        let aiEnrichableProjectFileCount = IndexCoordinator
+            .enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns)
+            .filter { Self.isAIEnrichableFile($0) }
+            .count
 
         let allowed: Set<String> = [
             "swift", "js", "ts", "py", "html", "css", "json", "yaml", "yml", "md", "markdown"
@@ -337,6 +358,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         return IndexStats(
             indexedResourceCount: scopedIndexedCount,
             aiEnrichedResourceCount: scopedAIEnrichedCount,
+            aiEnrichableProjectFileCount: aiEnrichableProjectFileCount,
             totalProjectFileCount: totalProjectFileCount,
             symbolCount: counts.symbolCount,
             classCount: classCount,
@@ -355,27 +377,41 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         )
     }
 
-    private static func makeQualityPrompt(path: String, content: String) -> String {
+    private static func makeEnrichmentPrompt(path: String, content: String) -> String {
         return """
-You are grading a source file for code quality.
-
-Return ONLY a single line JSON object like: {"score": 0}
-Where score is an integer from 0 to 100.
-
-File: \(path)
-
-Code:
-\(content)
-"""
+        Analyze the following source file and provide a quality score and a concise summary.
+        
+        The summary should be 1-2 sentences describing the main purpose of the file or the primary class/struct it contains. 
+        Focus on "what" and "why", not just "how".
+        
+        Return ONLY a single line JSON object like: 
+        {"score": 85, "summary": "Manages the SQLite database for the codebase index, handling table creation and thread-safe operations."}
+        
+        Where score is an integer from 0 to 100.
+        
+        File: \(path)
+        
+        Code:
+        \(content)
+        """
     }
 
-    private static func parseScore(from content: String?) -> Int? {
+    private static func parseEnrichmentResponse(from content: String?) -> (score: Int, summary: String?)? {
         guard let content else { return nil }
         guard let data = content.data(using: .utf8) else { return nil }
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        if let score = obj["score"] as? Int { return max(0, min(100, score)) }
-        if let score = obj["score"] as? Double { return max(0, min(100, Int(score.rounded()))) }
-        return nil
+        
+        let score: Int
+        if let s = obj["score"] as? Int { 
+            score = max(0, min(100, s)) 
+        } else if let s = obj["score"] as? Double {
+            score = max(0, min(100, Int(s.rounded())))
+        } else {
+            score = 0
+        }
+        
+        let summary = obj["summary"] as? String
+        return (score, summary)
     }
 
     private static func isIndexableFile(_ url: URL) -> Bool {
