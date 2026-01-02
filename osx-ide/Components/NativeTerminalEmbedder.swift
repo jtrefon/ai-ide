@@ -30,6 +30,9 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     private let shellManager: ShellManaging
     private var isCleaningUp = false
     
+    private var fontSize: CGFloat = 12
+    private var fontFamily: String = "SF Mono"
+    
     private var currentLineStartLocation: Int = 0
     private var cursorColumn: Int = 0
     private var currentTextAttributes: [NSAttributedString.Key: Any] = [:]
@@ -46,7 +49,14 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     }
     
     /// Embed terminal in the specified parent view
-    func embedTerminal(in parentView: NSView, directory: URL? = nil) {
+    func embedTerminal(in parentView: NSView, directory: URL? = nil, fontSize: Double? = nil, fontFamily: String? = nil) {
+        if let fontSize = fontSize {
+            self.fontSize = CGFloat(fontSize)
+        }
+        if let fontFamily = fontFamily {
+            self.fontFamily = fontFamily
+        }
+        
         let newDir = directory?.standardizedFileURL
         
         // If we already have a terminal view and process, check if we just need to change dir
@@ -95,7 +105,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView.isSelectable = true
         terminalView.isRichText = false
         terminalView.usesRuler = false
-        terminalView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        terminalView.font = resolveFont(size: fontSize, family: fontFamily)
         terminalView.backgroundColor = NSColor.black
         terminalView.textColor = NSColor.green
         terminalView.insertionPointColor = NSColor.white
@@ -110,7 +120,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .left
         terminalView.typingAttributes = [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+            .font: resolveFont(size: fontSize, family: fontFamily),
             .foregroundColor: NSColor.green,
             .paragraphStyle: paragraphStyle
         ]
@@ -132,6 +142,39 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         cursorColumn = 0
         currentTextAttributes = terminalView.typingAttributes
         pendingEraseToEndOfLine = false
+    }
+    
+    /// Update terminal font
+    func updateFont(size: Double, family: String) {
+        self.fontSize = CGFloat(size)
+        self.fontFamily = family
+        
+        guard let terminalView = terminalView else { return }
+        
+        let newFont = resolveFont(size: self.fontSize, family: self.fontFamily)
+        terminalView.font = newFont
+        
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .left
+        terminalView.typingAttributes = [
+            .font: newFont,
+            .foregroundColor: NSColor.green,
+            .paragraphStyle: paragraphStyle
+        ]
+        
+        // Refresh existing content font if needed
+        if let storage = terminalView.textStorage {
+            storage.beginEditing()
+            storage.addAttribute(.font, value: newFont, range: NSRange(location: 0, length: storage.length))
+            storage.endEditing()
+        }
+    }
+    
+    private func resolveFont(size: CGFloat, family: String, weight: NSFont.Weight = .regular) -> NSFont {
+        if let font = NSFont(name: family, size: size) {
+            return NSFontManager.shared.convert(font, toHaveTrait: weight == .bold ? .boldFontMask : .unboldFontMask)
+        }
+        return NSFont.monospacedSystemFont(ofSize: size, weight: weight)
     }
     
     private func appendOutput(_ text: String) {
@@ -322,7 +365,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .left
         var currentAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+            .font: resolveFont(size: fontSize, family: fontFamily),
             .foregroundColor: NSColor.green,
             .paragraphStyle: paragraphStyle
         ]
@@ -504,12 +547,12 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
                 let paragraphStyle = NSMutableParagraphStyle()
                 paragraphStyle.alignment = .left
                 attributes = [
-                    .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+                    .font: resolveFont(size: fontSize, family: fontFamily),
                     .foregroundColor: NSColor.green,
                     .paragraphStyle: paragraphStyle
                 ]
             case 1: // Bold
-                attributes[.font] = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
+                attributes[.font] = resolveFont(size: fontSize, family: fontFamily, weight: .bold)
             case 30...37: // Foreground
                 attributes[.foregroundColor] = ansiColor(param - 30)
             case 40...47: // Background

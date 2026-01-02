@@ -70,6 +70,7 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
         self.codebaseIndex = codebaseIndex
         
         self.historyManager = ChatHistoryManager()
+        self.historyManager.setProjectRoot(root)
         self.toolExecutor = AIToolExecutor(fileSystemService: fileSystemService, errorManager: errorManager, projectRoot: root)
 
         setupObservation()
@@ -122,6 +123,8 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
     
     func updateProjectRoot(_ newRoot: URL) {
         projectRoot = newRoot
+
+        historyManager.setProjectRoot(newRoot)
 
         Task {
             await AppLogger.shared.setProjectRoot(newRoot)

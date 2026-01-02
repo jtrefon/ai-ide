@@ -11,12 +11,8 @@ import AppKit
 /// Modern terminal view with native zsh shell integration for macOS 26
 struct NativeTerminalView: View {
     @StateObject private var embedder = NativeTerminalEmbedder()
-    
-    let currentDirectory: URL?
-    
-    init(currentDirectory: URL? = nil) {
-        self.currentDirectory = currentDirectory
-    }
+    @Binding var currentDirectory: URL?
+    @ObservedObject var ui: UIStateManager
     
     var body: some View {
         VStack(spacing: 0) {
@@ -33,13 +29,13 @@ struct NativeTerminalView: View {
                 .help("Clear Terminal")
                 
                 Text("Terminal")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
                     .foregroundColor(.primary)
                 
                 Spacer()
                 
                 Text(currentDirectory?.lastPathComponent ?? "Terminal")
-                    .font(.caption)
+                    .font(.system(size: max(10, ui.fontSize - 3)))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
@@ -49,8 +45,19 @@ struct NativeTerminalView: View {
             .background(Color(NSColor.controlBackgroundColor))
             
             // Terminal content area using proper NSViewRepresentable
-            TerminalContentView(embedder: embedder, currentDirectory: currentDirectory)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            TerminalContentView(
+                embedder: embedder,
+                currentDirectory: $currentDirectory,
+                fontSize: ui.fontSize,
+                fontFamily: ui.fontFamily
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onChange(of: ui.fontSize) { _, newValue in
+            embedder.updateFont(size: newValue, family: ui.fontFamily)
+        }
+        .onChange(of: ui.fontFamily) { _, newValue in
+            embedder.updateFont(size: ui.fontSize, family: newValue)
         }
         .alert("Terminal Error", isPresented: Binding(
             get: { embedder.errorMessage != nil },
@@ -77,19 +84,33 @@ struct NativeTerminalView: View {
 /// NSViewRepresentable that properly embeds the terminal view
 struct TerminalContentView: NSViewRepresentable {
     @ObservedObject var embedder: NativeTerminalEmbedder
-    let currentDirectory: URL?
+    @Binding var currentDirectory: URL?
+    var fontSize: Double
+    var fontFamily: String
     
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView()
         containerView.wantsLayer = true
 
-        context.coordinator.scheduleEmbed(into: containerView, directory: currentDirectory, embedder: embedder)
+        context.coordinator.scheduleEmbed(
+            into: containerView,
+            directory: currentDirectory,
+            embedder: embedder,
+            fontSize: fontSize,
+            fontFamily: fontFamily
+        )
         
         return containerView
     }
     
     func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.scheduleEmbed(into: nsView, directory: currentDirectory, embedder: embedder)
+        context.coordinator.scheduleEmbed(
+            into: nsView,
+            directory: currentDirectory,
+            embedder: embedder,
+            fontSize: fontSize,
+            fontFamily: fontFamily
+        )
     }
 
     func makeCoordinator() -> Coordinator {
@@ -98,21 +119,33 @@ struct TerminalContentView: NSViewRepresentable {
 
     final class Coordinator {
         private var lastEmbeddedPath: String?
+        private var lastFontSize: Double?
+        private var lastFontFamily: String?
 
-        func scheduleEmbed(into view: NSView, directory: URL?, embedder: NativeTerminalEmbedder) {
+        func scheduleEmbed(into view: NSView, directory: URL?, embedder: NativeTerminalEmbedder, fontSize: Double, fontFamily: String) {
             let path = directory?.standardizedFileURL.path
-            guard lastEmbeddedPath != path else { return }
+            guard lastEmbeddedPath != path || lastFontSize != fontSize || lastFontFamily != fontFamily else { return }
             lastEmbeddedPath = path
+            lastFontSize = fontSize
+            lastFontFamily = fontFamily
 
             Task { @MainActor in
                 await Task.yield()
-                embedder.embedTerminal(in: view, directory: directory)
+                embedder.embedTerminal(
+                    in: view,
+                    directory: directory,
+                    fontSize: fontSize,
+                    fontFamily: fontFamily
+                )
             }
         }
     }
 }
 
 #Preview {
-    NativeTerminalView()
-        .frame(width: 600, height: 400)
+    NativeTerminalView(
+        currentDirectory: .constant(nil),
+        ui: UIStateManager(uiService: UIService(errorManager: ErrorManager()))
+    )
+    .frame(width: 600, height: 400)
 }

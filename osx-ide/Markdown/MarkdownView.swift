@@ -3,15 +3,21 @@ import SwiftUI
 struct MarkdownView<CodeBlockContent: View>: View {
     private let document: MarkdownDocument
     private let codeBlock: (String, String?) -> CodeBlockContent
+    private let fontSize: Double?
+    private let fontFamily: String?
 
-    init(markdown: String, @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent) {
+    init(markdown: String, fontSize: Double? = nil, fontFamily: String? = nil, @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent) {
         self.document = MarkdownDocument.parse(markdown)
         self.codeBlock = codeBlock
+        self.fontSize = fontSize
+        self.fontFamily = fontFamily
     }
 
-    init(document: MarkdownDocument, @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent) {
+    init(document: MarkdownDocument, fontSize: Double? = nil, fontFamily: String? = nil, @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent) {
         self.document = document
         self.codeBlock = codeBlock
+        self.fontSize = fontSize
+        self.fontFamily = fontFamily
     }
 
     var body: some View {
@@ -19,7 +25,7 @@ struct MarkdownView<CodeBlockContent: View>: View {
             ForEach(document.blocks) { block in
                 switch block.kind {
                 case .richText(let markdownText):
-                    MarkdownRichTextView(markdown: markdownText)
+                    MarkdownRichTextView(markdown: markdownText, fontSize: fontSize, fontFamily: fontFamily)
                 case .code(let code, let language):
                     codeBlock(code, language)
                 case .horizontalRule:
@@ -32,6 +38,8 @@ struct MarkdownView<CodeBlockContent: View>: View {
 
 private struct MarkdownRichTextView: View {
     let markdown: String
+    let fontSize: Double?
+    let fontFamily: String?
 
     var body: some View {
         let normalized = normalizeMarkdownLineBreaks(markdown)
@@ -42,12 +50,30 @@ private struct MarkdownRichTextView: View {
                 failurePolicy: .returnPartiallyParsedIfPossible
             )
         ) {
-            Text(attributed)
+            Text(applyBaseFont(to: attributed))
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             Text(normalized)
+                .font(resolveBaseFont())
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func resolveBaseFont() -> Font? {
+        guard let fontSize else { return nil }
+        if let fontFamily, let nsFont = NSFont(name: fontFamily, size: CGFloat(fontSize)) {
+            return Font(nsFont)
+        }
+        return .system(size: CGFloat(fontSize))
+    }
+
+    private func applyBaseFont(to attributed: AttributedString) -> AttributedString {
+        guard let base = resolveBaseFont() else { return attributed }
+        var out = attributed
+        for run in out.runs {
+            out[run.range].font = base
+        }
+        return out
     }
 
     private func normalizeMarkdownLineBreaks(_ input: String) -> String {

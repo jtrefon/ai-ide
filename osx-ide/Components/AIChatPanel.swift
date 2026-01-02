@@ -5,6 +5,7 @@ import Combine
 struct AIChatPanel: View {
     @ObservedObject var selectionContext: CodeSelectionContext
     let conversationManager: any ConversationManagerProtocol
+    @ObservedObject var ui: UIStateManager
 
     @State private var stateTick: UInt = 0
 
@@ -34,8 +35,13 @@ struct AIChatPanel: View {
             .background(Color(NSColor.windowBackgroundColor))
             
             // Messages list
-            MessageListView(messages: conversationManager.messages, isSending: conversationManager.isSending)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            MessageListView(
+                messages: conversationManager.messages,
+                isSending: conversationManager.isSending,
+                fontSize: ui.fontSize,
+                fontFamily: ui.fontFamily
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             
             // Error display
             if let error = conversationManager.error {
@@ -50,6 +56,8 @@ struct AIChatPanel: View {
             ChatInputView(
                 text: inputBinding,
                 isSending: conversationManager.isSending,
+                fontSize: ui.fontSize,
+                fontFamily: ui.fontFamily,
                 onSend: {
                     sendMessage()
                 }
@@ -124,7 +132,8 @@ struct AIChatPanel: View {
         let container = DependencyContainer.shared
         AIChatPanel(
             selectionContext: ctx,
-            conversationManager: container.conversationManager
+            conversationManager: container.conversationManager,
+            ui: UIStateManager(uiService: UIService(errorManager: ErrorManager()))
         )
     }
 }

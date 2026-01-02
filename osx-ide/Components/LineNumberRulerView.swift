@@ -4,7 +4,7 @@ import SwiftUI
 /// Modern macOS v26 line number ruler with enhanced performance and liquid glass styling
 final class ModernLineNumberRulerView: NSRulerView {
     private weak var textView: NSTextView?
-    private let font: NSFont
+    private var font: NSFont
     private let textColor: NSColor
     private let backgroundColor: NSColor
     private let selectionColor: NSColor
@@ -13,7 +13,7 @@ final class ModernLineNumberRulerView: NSRulerView {
     init(scrollView: NSScrollView, textView: NSTextView) {
         self.textView = textView
         // Enhanced typography for macOS v26
-        self.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        self.font = textView.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         self.textColor = NSColor.secondaryLabelColor
         self.backgroundColor = NSColor.clear // Transparent for liquid glass
         self.selectionColor = NSColor.systemBlue.withAlphaComponent(0.1)
@@ -26,6 +26,13 @@ final class ModernLineNumberRulerView: NSRulerView {
         // Modern styling for macOS v26
         self.wantsLayer = true
         self.layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    func updateFont(_ font: NSFont?) {
+        guard let font else { return }
+        guard self.font != font else { return }
+        self.font = font
+        needsDisplay = true
     }
 
     required init(coder: NSCoder) {

@@ -20,6 +20,10 @@ class AppState: ObservableObject {
     var workspace: WorkspaceStateManager
     var ui: UIStateManager
     
+    @Published var fileTreeExpandedRelativePaths: Set<String> = []
+
+     @Published var showHiddenFilesInFileTree: Bool = false
+    
     // MARK: - Services
     
     private let errorManager: ErrorManagerProtocol
@@ -29,6 +33,11 @@ class AppState: ObservableObject {
     let conversationManager: ConversationManagerProtocol
     let fileDialogService: FileDialogServiceProtocol
     let fileSystemService: FileSystemService
+    
+    private let projectSessionStore = ProjectSessionStore()
+    private weak var window: NSWindow?
+    private var saveSessionTask: Task<Void, Never>?
+    private var isRestoringSession: Bool = false
     
     // MARK: - Shared Contexts
     
@@ -79,6 +88,31 @@ class AppState: ObservableObject {
         
         // Set up state observation
         setupStateObservation()
+
+        if let root = self.workspace.currentDirectory {
+            Task { [weak self] in
+                await self?.loadProjectSession(for: root)
+            }
+        }
+    }
+    
+    func attachWindow(_ window: NSWindow) {
+        guard self.window !== window else { return }
+        self.window = window
+
+        NotificationCenter.default.publisher(for: NSWindow.didMoveNotification, object: window)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.scheduleSaveProjectSession()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: NSWindow.didResizeNotification, object: window)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.scheduleSaveProjectSession()
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - State Coordination Methods (Keep high-level orchestration)
@@ -86,6 +120,7 @@ class AppState: ObservableObject {
     func loadFile(from url: URL) {
         fileEditor.loadFile(from: url)
         workspace.addOpenFile(url)
+        scheduleSaveProjectSession()
     }
     
     func openFile() {
@@ -179,6 +214,10 @@ class AppState: ObservableObject {
                 guard let newDir else { return }
                 self.conversationManager.updateProjectRoot(newDir)
                 DependencyContainer.shared.configureCodebaseIndex(projectRoot: newDir)
+
+                Task { [weak self] in
+                    await self?.loadProjectSession(for: newDir)
+                }
             }
             .store(in: &cancellables)
         
@@ -187,6 +226,7 @@ class AppState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
+                self?.scheduleSaveProjectSession()
             }
             .store(in: &cancellables)
         
@@ -195,16 +235,129 @@ class AppState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
+                self?.scheduleSaveProjectSession()
             }
             .store(in: &cancellables)
-        
-        // Observe error changes
-        errorManager.statePublisher
+
+        $fileTreeExpandedRelativePaths
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.objectWillChange.send()
+                self?.scheduleSaveProjectSession()
             }
             .store(in: &cancellables)
+
+         $showHiddenFilesInFileTree
+             .receive(on: DispatchQueue.main)
+             .sink { [weak self] _ in
+                 self?.scheduleSaveProjectSession()
+             }
+             .store(in: &cancellables)
+    }
+
+    private func loadProjectSession(for projectRoot: URL) async {
+        isRestoringSession = true
+        defer { isRestoringSession = false }
+
+        await projectSessionStore.setProjectRoot(projectRoot)
+
+        guard let session = try? await projectSessionStore.load() else {
+            scheduleSaveProjectSession()
+            return
+        }
+
+        if let frame = session.windowFrame?.rect, let window {
+            window.setFrame(frame, display: true)
+        }
+
+        ui.isSidebarVisible = session.isSidebarVisible
+        ui.isTerminalVisible = session.isTerminalVisible
+        ui.isAIChatVisible = session.isAIChatVisible
+        ui.sidebarWidth = session.sidebarWidth
+        ui.terminalHeight = session.terminalHeight
+        ui.chatPanelWidth = session.chatPanelWidth
+
+         if let theme = AppTheme(rawValue: session.selectedThemeRawValue) {
+             ui.selectedTheme = theme
+         }
+         ui.showLineNumbers = session.showLineNumbers
+         ui.wordWrap = session.wordWrap
+         ui.minimapVisible = session.minimapVisible
+
+         showHiddenFilesInFileTree = session.showHiddenFilesInFileTree
+
+        if let mode = AIMode(rawValue: session.aiModeRawValue) {
+            conversationManager.currentMode = mode
+        }
+
+        fileTreeExpandedRelativePaths = Set(session.fileTreeExpandedRelativePaths)
+
+        if let rel = session.lastOpenFileRelativePath {
+            let url = projectRoot.appendingPathComponent(rel)
+            let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if FileManager.default.fileExists(atPath: url.path), !isDir {
+                loadFile(from: url)
+            }
+        }
+    }
+
+    private func scheduleSaveProjectSession() {
+        guard !isRestoringSession else { return }
+        saveSessionTask?.cancel()
+        saveSessionTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.saveProjectSessionNow()
+            }
+        }
+    }
+
+    private func saveProjectSessionNow() {
+        guard !isRestoringSession else { return }
+        guard let projectRoot = workspace.currentDirectory else { return }
+
+        let windowFrame = window.map { ProjectSession.WindowFrame(rect: $0.frame) }
+        let lastOpenRelative: String?
+        if let selectedPath = fileEditor.selectedFile {
+            let selectedURL = URL(fileURLWithPath: selectedPath).standardizedFileURL
+            let rootURL = projectRoot.standardizedFileURL
+            if selectedURL.path.hasPrefix(rootURL.path) {
+                var relative = String(selectedURL.path.dropFirst(rootURL.path.count))
+                if relative.hasPrefix("/") { relative.removeFirst() }
+                lastOpenRelative = relative.isEmpty ? nil : relative
+            } else {
+                lastOpenRelative = nil
+            }
+        } else {
+            lastOpenRelative = nil
+        }
+
+        let session = ProjectSession(
+            windowFrame: windowFrame,
+            isSidebarVisible: ui.isSidebarVisible,
+            isTerminalVisible: ui.isTerminalVisible,
+            isAIChatVisible: ui.isAIChatVisible,
+            sidebarWidth: ui.sidebarWidth,
+            terminalHeight: ui.terminalHeight,
+            chatPanelWidth: ui.chatPanelWidth,
+
+             selectedThemeRawValue: ui.selectedTheme.rawValue,
+
+             showLineNumbers: ui.showLineNumbers,
+             wordWrap: ui.wordWrap,
+             minimapVisible: ui.minimapVisible,
+
+             showHiddenFilesInFileTree: showHiddenFilesInFileTree,
+
+            aiModeRawValue: conversationManager.currentMode.rawValue,
+            lastOpenFileRelativePath: lastOpenRelative,
+            fileTreeExpandedRelativePaths: fileTreeExpandedRelativePaths.sorted()
+        )
+
+        Task {
+            await projectSessionStore.setProjectRoot(projectRoot)
+            try? await projectSessionStore.save(session)
+        }
     }
     
     private var cancellables = Set<AnyCancellable>()
