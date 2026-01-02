@@ -75,7 +75,7 @@ struct GeneralSettingsTab: View {
                             )
                             .frame(width: 180)
                             
-                            Text("\(Int(appState.fontSize)) pt")
+                            Text("\(Int(appState.ui.fontSize)) pt")
                                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }
@@ -145,7 +145,7 @@ struct GeneralSettingsTab: View {
                         Spacer()
                         
                         Button("Reset to Defaults") {
-                            appState.resetSettings()
+                            appState.ui.resetToDefaults()
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Color.white.opacity(0.2))
@@ -158,50 +158,50 @@ struct GeneralSettingsTab: View {
     
     private var themeBinding: Binding<AppTheme> {
         Binding(
-            get: { appState.selectedTheme },
-            set: { appState.selectedTheme = $0 }
+            get: { appState.ui.selectedTheme },
+            set: { appState.ui.setTheme($0) }
         )
     }
     
     private var fontSizeBinding: Binding<Double> {
         Binding(
-            get: { appState.fontSize },
-            set: { appState.fontSize = $0 }
+            get: { appState.ui.fontSize },
+            set: { appState.ui.updateFontSize($0) }
         )
     }
     
     private var fontFamilyBinding: Binding<String> {
         Binding(
-            get: { appState.fontFamily },
-            set: { appState.fontFamily = $0 }
+            get: { appState.ui.fontFamily },
+            set: { appState.ui.updateFontFamily($0) }
         )
     }
     
     private var showLineNumbersBinding: Binding<Bool> {
         Binding(
-            get: { appState.showLineNumbers },
-            set: { appState.showLineNumbers = $0 }
+            get: { appState.ui.showLineNumbers },
+            set: { appState.ui.setShowLineNumbers($0) }
         )
     }
     
     private var wordWrapBinding: Binding<Bool> {
         Binding(
-            get: { appState.wordWrap },
-            set: { appState.wordWrap = $0 }
+            get: { appState.ui.wordWrap },
+            set: { appState.ui.setWordWrap($0) }
         )
     }
     
     private var minimapBinding: Binding<Bool> {
         Binding(
-            get: { appState.minimapVisible },
-            set: { appState.minimapVisible = $0 }
+            get: { appState.ui.minimapVisible },
+            set: { appState.ui.setMinimapVisible($0) }
         )
     }
     
     private var sidebarBinding: Binding<Bool> {
         Binding(
-            get: { appState.isSidebarVisible },
-            set: { appState.isSidebarVisible = $0 }
+            get: { appState.ui.isSidebarVisible },
+            set: { appState.ui.setSidebarVisible($0) }
         )
     }
 }

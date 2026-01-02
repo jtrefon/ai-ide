@@ -26,7 +26,7 @@ final class CorePlugin {
             point: .panelBottom,
             name: "Internal.Terminal",
             icon: "terminal",
-            view: NativeTerminalView(currentDirectory: appState.currentDirectory)
+            view: NativeTerminalView(currentDirectory: appState.workspace.currentDirectory)
         )
         
         // Register AI Chat (Right Panel)
@@ -41,26 +41,26 @@ final class CorePlugin {
         )
         
         // Register Standard Commands
-        let registry = CommandRegistry.shared
+        let commandRegistry = CommandRegistry.shared
         
-        registry.register(command: .fileNew) { _ in
-            appState.newFile()
+        commandRegistry.register(command: .fileNew) { _ in
+            appState.fileEditor.newFile()
         }
         
-        registry.register(command: .fileOpen) { _ in
+        commandRegistry.register(command: .fileOpen) { _ in
             appState.openFile()
         }
         
-        registry.register(command: .fileOpenFolder) { _ in
-            appState.openFolder()
+        commandRegistry.register(command: .fileOpenFolder) { _ in
+            Task { await appState.workspace.openFolder() }
         }
         
-        registry.register(command: .fileSave) { _ in
-            appState.saveFile()
+        commandRegistry.register(command: .fileSave) { _ in
+            appState.fileEditor.saveFile()
         }
         
-        registry.register(command: .fileSaveAs) { _ in
-            appState.saveFileAs()
+        commandRegistry.register(command: .fileSaveAs) { _ in
+            Task { await appState.fileEditor.saveFileAs() }
         }
         
         print("[CorePlugin] Initialized core UI components and commands")

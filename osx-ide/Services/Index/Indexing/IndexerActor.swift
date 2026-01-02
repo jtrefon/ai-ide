@@ -17,8 +17,10 @@ public actor IndexerActor {
     }
     
     public func indexFile(at url: URL) async throws {
+        await IndexLogger.shared.log("IndexerActor: Processing file \(url.path)")
         // Skip if matches exclude patterns
         if shouldExclude(url) {
+            await IndexLogger.shared.log("IndexerActor: Skipping excluded file \(url.lastPathComponent)")
             return
         }
 
@@ -33,9 +35,11 @@ public actor IndexerActor {
            let existingModTime,
            abs(existingModTime - fileModTime) < 0.000_001 {
             // Already indexed for this exact file version; skip.
+            await IndexLogger.shared.log("IndexerActor: File \(url.lastPathComponent) already indexed, skipping")
             return
         }
 
+        await IndexLogger.shared.log("IndexerActor: Indexing \(url.lastPathComponent) (Language: \(language.rawValue))")
         let timestamp = fileModTime ?? Date().timeIntervalSince1970
         
         // Read file content
@@ -53,6 +57,14 @@ public actor IndexerActor {
         
         try database.execute(sql: sql)
         
+        // Populate FTS table for full-text search
+        let ftsDeleteSql = "DELETE FROM resources_fts WHERE content_id = '\(resourceId)';"
+        let ftsInsertSql = "INSERT INTO resources_fts (path, content, content_id) VALUES (?, ?, ?);"
+        try database.transaction {
+            try database.execute(sql: ftsDeleteSql)
+            try database.execute(sql: ftsInsertSql, parameters: [url.path, content, resourceId])
+        }
+        
         // Extract symbols if supported language
         let symbols: [Symbol]
         switch language {
@@ -69,6 +81,7 @@ public actor IndexerActor {
         }
 
         if !symbols.isEmpty {
+            await IndexLogger.shared.log("IndexerActor: Extracted \(symbols.count) symbols from \(url.lastPathComponent)")
             try database.deleteSymbols(for: resourceId)
             try database.saveSymbols(symbols)
         }
