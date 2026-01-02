@@ -11,6 +11,8 @@ import Foundation
 struct MessageListView: View {
     let messages: [ChatMessage]
     let isSending: Bool
+    var fontSize: Double
+    var fontFamily: String
     @State private var scrollToBottomTrigger: Int = 0
     @State private var hiddenReasoningMessageIds: Set<UUID> = []
     
@@ -20,6 +22,8 @@ struct MessageListView: View {
                 ForEach(messages) { message in
                     MessageView(
                         message: message,
+                        fontSize: fontSize,
+                        fontFamily: fontFamily,
                         isReasoningHidden: Binding(
                             get: { hiddenReasoningMessageIds.contains(message.id) },
                             set: { isHidden in
@@ -66,6 +70,8 @@ struct MessageListView: View {
 
 struct MessageView: View {
     let message: ChatMessage
+    var fontSize: Double
+    var fontFamily: String
     @Binding var isReasoningHidden: Bool
     @State private var isExpanded = false
     @State private var showFullReasoning = false
@@ -86,12 +92,12 @@ struct MessageView: View {
                             
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(message.toolName ?? "Tool")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .medium))
                                     .foregroundColor(.primary)
                                 
                                 if let file = message.targetFile {
                                     Text(file)
-                                        .font(.system(size: 10))
+                                        .font(.system(size: CGFloat(max(9, fontSize - 4))))
                                         .foregroundColor(.secondary)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
@@ -119,7 +125,7 @@ struct MessageView: View {
                             VStack(alignment: .leading) {
                                 Divider()
                                 Text(message.content)
-                                    .font(.system(size: 11, design: .monospaced))
+                                    .font(resolveFont(size: fontSize - 2, family: fontFamily))
                                     .foregroundColor(.secondary)
                                     .padding(8)
                             }
@@ -145,7 +151,7 @@ struct MessageView: View {
                                         .foregroundColor(.secondary)
 
                                     Text("Reasoning")
-                                        .font(.system(size: 12, weight: .medium))
+                                        .font(resolveFont(size: max(10, fontSize - 2), family: fontFamily))
                                         .foregroundColor(.secondary)
 
                                     Spacer()
@@ -162,7 +168,7 @@ struct MessageView: View {
                                 }
 
                                 Text(showFullReasoning ? reasoning : reasoningPreview(reasoning))
-                                    .font(.system(size: 11, design: .monospaced))
+                                    .font(resolveFont(size: max(9, fontSize - 3), family: fontFamily))
                                     .foregroundColor(.secondary)
                                     .lineLimit(showFullReasoning ? nil : 5)
 
@@ -194,7 +200,11 @@ struct MessageView: View {
                         }
                         
                         if message.role == .assistant {
-                            MarkdownMessageView(content: message.content)
+                            MarkdownMessageView(
+                                content: message.content,
+                                fontSize: fontSize,
+                                fontFamily: fontFamily
+                            )
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
                                 .background(backgroundColor(for: message))
@@ -212,6 +222,7 @@ struct MessageView: View {
                                 }
                         } else {
                             Text(message.content)
+                                .font(.system(size: CGFloat(fontSize)))
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
                                 .background(backgroundColor(for: message))
@@ -232,7 +243,11 @@ struct MessageView: View {
                 }
                 
                 if let codeContext = message.codeContext {
-                    CodePreviewView(code: codeContext)
+                    CodePreviewView(
+                        code: codeContext,
+                        fontSize: fontSize,
+                        fontFamily: fontFamily
+                    )
                 }
             }
             
@@ -240,6 +255,13 @@ struct MessageView: View {
                 Spacer()
             }
         }
+    }
+    
+    private func resolveFont(size: Double, family: String) -> Font {
+        if let nsFont = NSFont(name: family, size: CGFloat(size)) {
+            return Font(nsFont)
+        }
+        return .system(size: CGFloat(size), weight: .regular, design: .monospaced)
     }
     
     private var statusIcon: some View {
@@ -296,7 +318,9 @@ struct MessageListView_Previews: PreviewProvider {
                 ChatMessage(role: .user, content: "Can you explain this code?"),
                 ChatMessage(role: .assistant, content: "Sure! This code implements a chat interface."),
             ],
-            isSending: true
+            isSending: true,
+            fontSize: 12,
+            fontFamily: "SF Mono"
         )
     }
 }

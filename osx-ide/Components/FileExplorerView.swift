@@ -10,11 +10,10 @@ import SwiftUI
 struct FileExplorerView: View {
     @ObservedObject var appState: AppState
     @State private var searchQuery: String = ""
-    @State private var expandedRelativePaths: Set<String> = []
     @State private var selectedRelativePath: String? = nil
     @State private var refreshToken: Int = 0
 
-    @AppStorage("ShowHiddenFilesInFileTree") private var showHiddenFiles: Bool = false
+    private var showHiddenFiles: Bool { appState.showHiddenFilesInFileTree }
 
     // State for new file/folder creation
     @State private var isShowingNewFileSheet = false
@@ -29,17 +28,17 @@ struct FileExplorerView: View {
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 12))
+                        .font(.system(size: max(10, appState.ui.fontSize - 2)))
                         .foregroundColor(.secondary)
                     
                     TextField("Search...", text: $searchQuery)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 13))
+                        .font(.system(size: CGFloat(appState.ui.fontSize)))
                     
                     if !searchQuery.isEmpty {
                         Button(action: { searchQuery = "" }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 12))
+                                .font(.system(size: max(10, appState.ui.fontSize - 2)))
                                 .foregroundColor(.secondary)
                         }
                         .buttonStyle(.plain)
@@ -57,7 +56,7 @@ struct FileExplorerView: View {
                     refreshToken += 1
                 }) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12)) 
+                        .font(.system(size: max(10, appState.ui.fontSize - 2))) 
                 }
                 .buttonStyle(BorderlessButtonStyle())
                 .help("Refresh")
@@ -69,13 +68,18 @@ struct FileExplorerView: View {
             ModernFileTreeView(
                 rootURL: appState.workspace.currentDirectory ?? FileManager.default.temporaryDirectory,
                 searchQuery: $searchQuery,
-                expandedRelativePaths: $expandedRelativePaths,
+                expandedRelativePaths: Binding(
+                    get: { appState.fileTreeExpandedRelativePaths },
+                    set: { appState.fileTreeExpandedRelativePaths = $0 }
+                ),
                 selectedRelativePath: $selectedRelativePath,
                 showHiddenFiles: showHiddenFiles,
                 refreshToken: refreshToken,
                 onOpenFile: { url in
                     appState.loadFile(from: url)
-                }
+                },
+                fontSize: appState.ui.fontSize,
+                fontFamily: appState.ui.fontFamily
             )
             .background(Color(NSColor.windowBackgroundColor))
             .contextMenu {

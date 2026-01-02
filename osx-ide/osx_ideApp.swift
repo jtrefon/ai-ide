@@ -14,7 +14,6 @@ struct osx_ideApp: App {
     @StateObject private var errorManager: ErrorManager
     @AppStorage("CodebaseIndexEnabled") private var codebaseIndexEnabled: Bool = true
     @AppStorage("CodebaseIndexAIEnrichmentEnabled") private var codebaseIndexAIEnrichmentEnabled: Bool = false
-    @AppStorage("ShowHiddenFilesInFileTree") private var showHiddenFilesInFileTree: Bool = false
     @State private var didInitializeCorePlugin: Bool = false
     
     init() {
@@ -119,7 +118,10 @@ struct osx_ideApp: App {
 
                 Divider()
 
-                Toggle("Show Hidden Files", isOn: $showHiddenFilesInFileTree)
+                Toggle("Show Hidden Files", isOn: Binding(
+                    get: { appState.showHiddenFilesInFileTree },
+                    set: { appState.showHiddenFilesInFileTree = $0 }
+                ))
                     .keyboardShortcut(".", modifiers: [.command, .shift])
             }
 

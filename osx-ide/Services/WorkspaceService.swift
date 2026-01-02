@@ -4,7 +4,11 @@ import SwiftUI
 /// Manages workspace and directory operations including file/folder creation and directory navigation
 @MainActor
 final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
-    @Published var currentDirectory: URL?
+    @Published var currentDirectory: URL? {
+        didSet {
+            saveCurrentDirectoryToUserDefaults(currentDirectory)
+        }
+    }
     
     private let errorManager: ErrorManagerProtocol
     private let eventBus: EventBusProtocol
@@ -12,7 +16,26 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
     init(errorManager: ErrorManagerProtocol, eventBus: EventBusProtocol) {
         self.errorManager = errorManager
         self.eventBus = eventBus
-        self.currentDirectory = nil
+        self.currentDirectory = Self.restoreCurrentDirectoryFromUserDefaults()
+    }
+
+    private func saveCurrentDirectoryToUserDefaults(_ url: URL?) {
+        guard let url else {
+            UserDefaults.standard.removeObject(forKey: AppConstants.Storage.lastWorkspacePathKey)
+            return
+        }
+        UserDefaults.standard.set(url.standardizedFileURL.path, forKey: AppConstants.Storage.lastWorkspacePathKey)
+    }
+
+    private static func restoreCurrentDirectoryFromUserDefaults() -> URL? {
+        guard let path = UserDefaults.standard.string(forKey: AppConstants.Storage.lastWorkspacePathKey), !path.isEmpty else {
+            return nil
+        }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            return nil
+        }
+        return URL(fileURLWithPath: path).standardizedFileURL
     }
     
     /// Handle error through the service's error manager

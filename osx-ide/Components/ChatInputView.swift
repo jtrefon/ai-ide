@@ -11,6 +11,8 @@ import AppKit
 struct ChatInputView: View {
     @Binding var text: String
     var isSending: Bool
+    var fontSize: Double
+    var fontFamily: String
     var onSend: () -> Void
     @State private var inputMonitor: Any?
     @FocusState private var isInputFocused: Bool
@@ -19,6 +21,7 @@ struct ChatInputView: View {
         HStack {
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $text)
+                    .font(resolveFont(size: fontSize, family: fontFamily))
                     .frame(height: 60)
                     .padding(4)
                     .background(Color(NSColor.textBackgroundColor))
@@ -80,6 +83,12 @@ struct ChatInputView: View {
         }
         .padding()
     }
+    private func resolveFont(size: Double, family: String) -> Font {
+        if let nsFont = NSFont(name: family, size: CGFloat(size)) {
+            return Font(nsFont)
+        }
+        return .system(size: CGFloat(size), weight: .regular, design: .monospaced)
+    }
 }
 
 struct ChatInputView_Previews: PreviewProvider {
@@ -87,6 +96,8 @@ struct ChatInputView_Previews: PreviewProvider {
         ChatInputView(
             text: .constant("Hello, how can you help me?"),
             isSending: false,
+            fontSize: 12,
+            fontFamily: "SF Mono",
             onSend: {}
         )
     }

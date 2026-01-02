@@ -11,12 +11,16 @@ struct CodePreviewView: View {
     let code: String
     let language: String?
     let title: String
+    var fontSize: Double
+    var fontFamily: String
     @State private var isCopied = false
     
-    init(code: String, language: String? = nil, title: String = "Code Preview") {
+    init(code: String, language: String? = nil, title: String = "Code Preview", fontSize: Double = 12, fontFamily: String = "SF Mono") {
         self.code = code
         self.language = language
         self.title = title
+        self.fontSize = fontSize
+        self.fontFamily = fontFamily
     }
     
     var body: some View {
@@ -53,13 +57,20 @@ struct CodePreviewView: View {
             }
             
             Text(code)
-                .font(.system(.caption, design: .monospaced))
+                .font(resolveFont(size: fontSize, family: fontFamily))
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.gray.opacity(0.1))
                 .cornerRadius(4)
         }
         .padding(.top, 4)
+    }
+    
+    private func resolveFont(size: Double, family: String) -> Font {
+        if let nsFont = NSFont(name: family, size: CGFloat(size)) {
+            return Font(nsFont)
+        }
+        return .system(size: CGFloat(size), weight: .regular, design: .monospaced)
     }
     
     private func copyCode() {
@@ -76,7 +87,11 @@ struct CodePreviewView: View {
 
 struct CodePreviewView_Previews: PreviewProvider {
     static var previews: some View {
-        CodePreviewView(code: "func helloWorld() {\n    print(\"Hello, World!\")\n}")
-            .padding()
+        CodePreviewView(
+            code: "func helloWorld() {\n    print(\"Hello, World!\")\n}",
+            fontSize: 12,
+            fontFamily: "SF Mono"
+        )
+        .padding()
     }
 }

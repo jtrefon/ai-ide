@@ -8,7 +8,7 @@
 import Foundation
 import SwiftUI
 
-/// Persists UI settings and layout state to UserDefaults.
+/// Persists global UI settings to UserDefaults.
 @MainActor
 final class UIService: UIServiceProtocol {
     private let errorManager: ErrorManagerProtocol
@@ -22,7 +22,7 @@ final class UIService: UIServiceProtocol {
     
     /// Change application theme
     func setTheme(_ theme: AppTheme) {
-        userDefaults.set(theme.rawValue, forKey: AppConstants.Storage.themeKey)
+        // Project-scoped setting. Persisted via .ide/session.json
     }
     
     // MARK: - Font Settings
@@ -45,36 +45,33 @@ final class UIService: UIServiceProtocol {
     
     /// Toggle line numbers visibility
     func setShowLineNumbers(_ show: Bool) {
-        userDefaults.set(show, forKey: AppConstants.Storage.showLineNumbersKey)
+        // Project-scoped setting. Persisted via .ide/session.json
     }
     
     /// Toggle word wrap
     func setWordWrap(_ wrap: Bool) {
-        userDefaults.set(wrap, forKey: AppConstants.Storage.wordWrapKey)
+        // Project-scoped setting. Persisted via .ide/session.json
     }
     
     /// Toggle minimap visibility
     func setMinimapVisible(_ visible: Bool) {
-        userDefaults.set(visible, forKey: AppConstants.Storage.minimapVisibleKey)
+        // Project-scoped setting. Persisted via .ide/session.json
     }
     
     // MARK: - Layout Settings
     
     /// Update sidebar width
     func setSidebarWidth(_ width: Double) {
-        userDefaults.set(width, forKey: AppConstants.Storage.sidebarWidthKey)
         EventBus.shared.publish(SidebarWidthChangedEvent(width: width))
     }
     
     /// Update terminal height
     func setTerminalHeight(_ height: Double) {
-        userDefaults.set(height, forKey: AppConstants.Storage.terminalHeightKey)
         EventBus.shared.publish(TerminalHeightChangedEvent(height: height))
     }
     
     /// Update chat panel width
     func setChatPanelWidth(_ width: Double) {
-        userDefaults.set(width, forKey: AppConstants.Storage.chatPanelWidthKey)
         EventBus.shared.publish(ChatPanelWidthChangedEvent(width: width))
     }
     
@@ -82,32 +79,18 @@ final class UIService: UIServiceProtocol {
     
     /// Load settings from UserDefaults
     func loadSettings() -> UISettings {
-        let storedTheme: AppTheme
-        if let themeRaw = userDefaults.string(forKey: AppConstants.Storage.themeKey),
-           let themeValue = AppTheme(rawValue: themeRaw) {
-            storedTheme = themeValue
-        } else {
-            storedTheme = .system
-        }
+        let storedTheme: AppTheme = .system
         
         let storedFontSize = userDefaults.double(forKey: AppConstants.Storage.fontSizeKey)
         let fontSize = storedFontSize == 0 ? AppConstants.Editor.defaultFontSize : storedFontSize
         
-        let sidebarWidth = userDefaults.double(forKey: AppConstants.Storage.sidebarWidthKey)
-        let terminalHeight = userDefaults.double(forKey: AppConstants.Storage.terminalHeightKey)
-        let chatPanelWidth = userDefaults.double(forKey: AppConstants.Storage.chatPanelWidthKey)
-
-        let showLineNumbers: Bool = userDefaults.object(forKey: AppConstants.Storage.showLineNumbersKey) == nil
-            ? true
-            : userDefaults.bool(forKey: AppConstants.Storage.showLineNumbersKey)
-
-        let wordWrap: Bool = userDefaults.object(forKey: AppConstants.Storage.wordWrapKey) == nil
-            ? false
-            : userDefaults.bool(forKey: AppConstants.Storage.wordWrapKey)
-
-        let minimapVisible: Bool = userDefaults.object(forKey: AppConstants.Storage.minimapVisibleKey) == nil
-            ? false
-            : userDefaults.bool(forKey: AppConstants.Storage.minimapVisibleKey)
+        let sidebarWidth = AppConstants.Layout.defaultSidebarWidth
+        let terminalHeight = AppConstants.Layout.defaultTerminalHeight
+        let chatPanelWidth = AppConstants.Layout.defaultChatPanelWidth
+        
+        let showLineNumbers: Bool = true
+        let wordWrap: Bool = false
+        let minimapVisible: Bool = false
         
         return UISettings(
             selectedTheme: storedTheme,
@@ -116,9 +99,9 @@ final class UIService: UIServiceProtocol {
             showLineNumbers: showLineNumbers,
             wordWrap: wordWrap,
             minimapVisible: minimapVisible,
-            sidebarWidth: sidebarWidth == 0 ? AppConstants.Layout.defaultSidebarWidth : sidebarWidth,
-            terminalHeight: terminalHeight == 0 ? AppConstants.Layout.defaultTerminalHeight : terminalHeight,
-            chatPanelWidth: chatPanelWidth == 0 ? AppConstants.Layout.defaultChatPanelWidth : chatPanelWidth
+            sidebarWidth: sidebarWidth,
+            terminalHeight: terminalHeight,
+            chatPanelWidth: chatPanelWidth
         )
     }
     
@@ -138,15 +121,8 @@ final class UIService: UIServiceProtocol {
     /// Reset all settings to defaults
     func resetToDefaults() {
         let keys = [
-            AppConstants.Storage.themeKey,
             AppConstants.Storage.fontSizeKey,
-            AppConstants.Storage.fontFamilyKey,
-            AppConstants.Storage.showLineNumbersKey,
-            AppConstants.Storage.wordWrapKey,
-            AppConstants.Storage.minimapVisibleKey,
-            AppConstants.Storage.sidebarWidthKey,
-            AppConstants.Storage.terminalHeightKey,
-            AppConstants.Storage.chatPanelWidthKey
+            AppConstants.Storage.fontFamilyKey
         ]
         keys.forEach { userDefaults.removeObject(forKey: $0) }
     }
@@ -155,7 +131,6 @@ final class UIService: UIServiceProtocol {
     func exportSettings() -> [String: Any] {
         let settings = loadSettings()
         return [
-            "theme": settings.selectedTheme.rawValue,
             "fontSize": settings.fontSize,
             "fontFamily": settings.fontFamily,
             "showLineNumbers": settings.showLineNumbers,
