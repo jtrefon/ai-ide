@@ -30,6 +30,13 @@ actor OpenRouterAIService: AIService {
     }
     
     func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        let validToolCallIds: Set<String> = Set(
+            messages
+                .compactMap { $0.toolCalls }
+                .flatMap { $0 }
+                .map { $0.id }
+        )
+
         // Convert [ChatMessage] to [OpenRouterChatMessage]
         var openRouterMessages = messages.compactMap { msg -> OpenRouterChatMessage? in
             switch msg.role {
@@ -44,8 +51,14 @@ actor OpenRouterAIService: AIService {
             case .system:
                 return OpenRouterChatMessage(role: "system", content: msg.content)
             case .tool:
+                if msg.toolStatus == .executing {
+                    return nil
+                }
                 // For tool outputs
                 if let toolCallId = msg.toolCallId {
+                    guard validToolCallIds.contains(toolCallId) else {
+                        return nil
+                    }
                     let content = Self.truncate(msg.content, limit: Self.maxToolOutputCharsForModel)
                     return OpenRouterChatMessage(role: "tool", content: content, tool_call_id: toolCallId)
                 } else {
@@ -94,6 +107,7 @@ actor OpenRouterAIService: AIService {
     }
 
     private func performChatWithHistory(messages: [OpenRouterChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        let requestId = UUID().uuidString
         let settings = settingsStore.load()
         let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -146,6 +160,15 @@ actor OpenRouterAIService: AIService {
             ]
         }
 
+        await AppLogger.shared.info(category: .ai, message: "openrouter.request_start", metadata: [
+            "requestId": requestId,
+            "model": model,
+            "messageCount": finalMessages.count,
+            "toolCount": toolDefinitions?.count ?? 0,
+            "mode": mode?.rawValue as Any,
+            "projectRoot": projectRoot?.path as Any
+        ])
+
         await AIToolTraceLogger.shared.log(type: "openrouter.request", data: [
             "model": model,
             "messages": finalMessages.count,
@@ -164,6 +187,11 @@ actor OpenRouterAIService: AIService {
         
         let body = try JSONEncoder().encode(request)
 
+        await AppLogger.shared.debug(category: .ai, message: "openrouter.request_body", metadata: [
+            "requestId": requestId,
+            "bytes": body.count
+        ])
+
         await AIToolTraceLogger.shared.log(type: "openrouter.request_body", data: [
             "bytes": body.count
         ])
@@ -181,6 +209,13 @@ actor OpenRouterAIService: AIService {
             if let openRouterError = error as? OpenRouterServiceError {
                 if case let .serverError(code, body) = openRouterError {
                     let snippet = (body ?? "").prefix(2000)
+
+                    await AppLogger.shared.error(category: .ai, message: "openrouter.request_error", metadata: [
+                        "requestId": requestId,
+                        "status": code,
+                        "bodySnippet": String(snippet)
+                    ])
+
                     await AIToolTraceLogger.shared.log(type: "openrouter.error", data: [
                         "status": code,
                         "bodySnippet": String(snippet)
@@ -189,11 +224,29 @@ actor OpenRouterAIService: AIService {
             }
             throw error
         }
-        
-        let response = try JSONDecoder().decode(OpenRouterChatResponse.self, from: data)
+
+        let response: OpenRouterChatResponse
+        do {
+            response = try JSONDecoder().decode(OpenRouterChatResponse.self, from: data)
+        } catch {
+            let bodySnippet = String(data: data.prefix(2000), encoding: .utf8) ?? ""
+            await AppLogger.shared.error(category: .ai, message: "openrouter.decode_error", metadata: [
+                "requestId": requestId,
+                "error": error.localizedDescription,
+                "bodySnippet": bodySnippet
+            ])
+            throw error
+        }
         guard let choice = response.choices.first else {
             throw AppError.aiServiceError("OpenRouter response was empty.")
         }
+
+        await AppLogger.shared.info(category: .ai, message: "openrouter.request_success", metadata: [
+            "requestId": requestId,
+            "contentLength": choice.message.content?.count ?? 0,
+            "toolCalls": choice.message.toolCalls?.count ?? 0,
+            "responseBytes": data.count
+        ])
 
         await AIToolTraceLogger.shared.log(type: "openrouter.response", data: [
             "contentLength": choice.message.content?.count ?? 0,

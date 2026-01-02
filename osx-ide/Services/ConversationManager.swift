@@ -14,6 +14,8 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published var isSending: Bool = false
     @Published var error: String? = nil
     @Published var currentMode: AIMode = .chat
+
+    private let conversationId: String
     
     private let historyManager: ChatHistoryManager
     private let toolExecutor: AIToolExecutor
@@ -59,6 +61,7 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
     }
     
     init(aiService: AIService, errorManager: ErrorManagerProtocol, fileSystemService: FileSystemService = FileSystemService(), projectRoot: URL? = nil, codebaseIndex: CodebaseIndexProtocol? = nil) {
+        self.conversationId = UUID().uuidString
         self.aiService = aiService
         self.errorManager = errorManager
         self.fileSystemService = fileSystemService
@@ -79,6 +82,28 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 "projectRoot": self.projectRoot.path
             ])
         }
+
+        Task {
+            await AppLogger.shared.info(category: .conversation, message: "conversation.start", metadata: [
+                "conversationId": self.conversationId,
+                "mode": self.currentMode.rawValue,
+                "projectRoot": self.projectRoot.path
+            ])
+            await ConversationLogStore.shared.append(
+                conversationId: self.conversationId,
+                type: "conversation.start",
+                data: [
+                    "mode": self.currentMode.rawValue,
+                    "projectRoot": self.projectRoot.path
+                ]
+            )
+
+            await ConversationIndexStore.shared.appendStart(
+                conversationId: self.conversationId,
+                mode: self.currentMode.rawValue,
+                projectRootPath: self.projectRoot.path
+            )
+        }
     }
     
     private func setupObservation() {
@@ -97,6 +122,15 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
     
     func updateProjectRoot(_ newRoot: URL) {
         projectRoot = newRoot
+
+        Task {
+            await AppLogger.shared.setProjectRoot(newRoot)
+            await ConversationLogStore.shared.setProjectRoot(newRoot)
+            await ConversationIndexStore.shared.setProjectRoot(newRoot)
+            await AppLogger.shared.info(category: .app, message: "logging.project_root_set", metadata: [
+                "projectRoot": newRoot.path
+            ])
+        }
     }
     
     func sendMessage() {
@@ -113,6 +147,22 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 "inputLength": currentInput.count,
                 "hasSelectionContext": (context?.isEmpty == false)
             ])
+
+            await AppLogger.shared.info(category: .conversation, message: "chat.user_message", metadata: [
+                "conversationId": self.conversationId,
+                "mode": self.currentMode.rawValue,
+                "projectRoot": self.projectRoot.path,
+                "inputLength": self.currentInput.count,
+                "hasSelectionContext": (context?.isEmpty == false)
+            ])
+            await ConversationLogStore.shared.append(
+                conversationId: self.conversationId,
+                type: "chat.user_message",
+                data: [
+                    "content": self.currentInput,
+                    "hasSelectionContext": (context?.isEmpty == false)
+                ]
+            )
         }
         
         let userMessage = ChatMessage(role: .user, content: currentInput, codeContext: context)
@@ -131,6 +181,21 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     "projectRoot": self.projectRoot.path,
                     "historyCount": self.messages.count
                 ])
+
+                await AppLogger.shared.info(category: .ai, message: "chat.ai_request_start", metadata: [
+                    "conversationId": self.conversationId,
+                    "mode": self.currentMode.rawValue,
+                    "projectRoot": self.projectRoot.path,
+                    "historyCount": self.messages.count
+                ])
+                await ConversationLogStore.shared.append(
+                    conversationId: self.conversationId,
+                    type: "chat.ai_request_start",
+                    data: [
+                        "mode": self.currentMode.rawValue,
+                        "historyCount": self.messages.count
+                    ]
+                )
 
                 var currentResponse = try await sendMessageWithRetry(
                     messages: self.messages,
@@ -174,8 +239,24 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
                         toolCalls: toolCalls
                     )
                     historyManager.append(assistantMsg)
+
+                    await AppLogger.shared.info(category: .conversation, message: "chat.assistant_tool_calls", metadata: [
+                        "conversationId": self.conversationId,
+                        "toolCalls": toolCalls.count
+                    ])
+                    await ConversationLogStore.shared.append(
+                        conversationId: self.conversationId,
+                        type: "chat.assistant_tool_calls",
+                        data: [
+                            "content": split.content,
+                            "toolCalls": toolCalls.map { [
+                                "id": $0.id,
+                                "name": $0.name
+                            ] }
+                        ]
+                    )
                     
-                    let _ = await toolExecutor.executeBatch(toolCalls, availableTools: availableTools) { progressMsg in
+                    let _ = await toolExecutor.executeBatch(toolCalls, availableTools: availableTools, conversationId: self.conversationId) { progressMsg in
                         self.historyManager.append(progressMsg)
                     }
                     
@@ -204,9 +285,38 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
                 let splitFinal = ChatPromptBuilder.splitReasoning(from: currentResponse.content ?? "No response received.")
                 historyManager.append(ChatMessage(role: .assistant, content: splitFinal.content, reasoning: splitFinal.reasoning))
+
+                let hasReasoning = (splitFinal.reasoning?.isEmpty == false)
+
+                await AppLogger.shared.info(category: .conversation, message: "chat.assistant_message", metadata: [
+                    "conversationId": self.conversationId,
+                    "contentLength": splitFinal.content.count,
+                    "hasReasoning": hasReasoning
+                ])
+                await ConversationLogStore.shared.append(
+                    conversationId: self.conversationId,
+                    type: "chat.assistant_message",
+                    data: [
+                        "content": splitFinal.content,
+                        "reasoning": splitFinal.reasoning
+                    ]
+                )
                 isSending = false
                 
             } catch {
+                Task {
+                    await AppLogger.shared.error(category: .error, message: "chat.error", metadata: [
+                        "conversationId": self.conversationId,
+                        "error": error.localizedDescription
+                    ])
+                    await ConversationLogStore.shared.append(
+                        conversationId: self.conversationId,
+                        type: "chat.error",
+                        data: [
+                            "error": error.localizedDescription
+                        ]
+                    )
+                }
                 await MainActor.run {
                     self.errorManager.handle(.aiServiceError(error.localizedDescription))
                     self.error = "Failed to get AI response: \(error.localizedDescription)"
