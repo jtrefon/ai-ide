@@ -30,12 +30,33 @@ public class AIToolExecutor {
     public func executeBatch(
         _ toolCalls: [AIToolCall],
         availableTools: [AITool],
+        conversationId: String? = nil,
         onProgress: @escaping (ChatMessage) -> Void
     ) async -> [ChatMessage] {
         var results: [ChatMessage] = []
         
         for toolCall in toolCalls {
             let targetFile = toolCall.arguments["path"] as? String
+
+            Task {
+                await AppLogger.shared.info(category: .tool, message: "tool.execute_start", metadata: [
+                    "conversationId": conversationId as Any,
+                    "tool": toolCall.name,
+                    "toolCallId": toolCall.id,
+                    "targetPath": targetFile as Any
+                ])
+                if let conversationId {
+                    await ConversationLogStore.shared.append(
+                        conversationId: conversationId,
+                        type: "tool.execute_start",
+                        data: [
+                            "tool": toolCall.name,
+                            "toolCallId": toolCall.id,
+                            "targetPath": targetFile as Any
+                        ]
+                    )
+                }
+            }
             
             await AIToolTraceLogger.shared.log(type: "tool.execute_start", data: [
                 "tool": toolCall.name,
@@ -59,6 +80,26 @@ public class AIToolExecutor {
             if let tool = availableTools.first(where: { $0.name == toolCall.name }) {
                 do {
                     let result = try await tool.execute(arguments: toolCall.arguments)
+
+                    Task {
+                        await AppLogger.shared.info(category: .tool, message: "tool.execute_success", metadata: [
+                            "conversationId": conversationId as Any,
+                            "tool": toolCall.name,
+                            "toolCallId": toolCall.id,
+                            "resultLength": result.count
+                        ])
+                        if let conversationId {
+                            await ConversationLogStore.shared.append(
+                                conversationId: conversationId,
+                                type: "tool.execute_success",
+                                data: [
+                                    "tool": toolCall.name,
+                                    "toolCallId": toolCall.id,
+                                    "resultLength": result.count
+                                ]
+                            )
+                        }
+                    }
                     
                     await AIToolTraceLogger.shared.log(type: "tool.execute_success", data: [
                         "tool": toolCall.name,
@@ -75,6 +116,26 @@ public class AIToolExecutor {
                         toolCallId: toolCall.id
                     )
                 } catch {
+                    Task {
+                        await AppLogger.shared.error(category: .tool, message: "tool.execute_error", metadata: [
+                            "conversationId": conversationId as Any,
+                            "tool": toolCall.name,
+                            "toolCallId": toolCall.id,
+                            "error": error.localizedDescription
+                        ])
+                        if let conversationId {
+                            await ConversationLogStore.shared.append(
+                                conversationId: conversationId,
+                                type: "tool.execute_error",
+                                data: [
+                                    "tool": toolCall.name,
+                                    "toolCallId": toolCall.id,
+                                    "error": error.localizedDescription
+                                ]
+                            )
+                        }
+                    }
+
                     await AIToolTraceLogger.shared.log(type: "tool.execute_error", data: [
                         "tool": toolCall.name,
                         "toolCallId": toolCall.id,
@@ -92,6 +153,24 @@ public class AIToolExecutor {
                     )
                 }
             } else {
+                Task {
+                    await AppLogger.shared.error(category: .tool, message: "tool.not_found", metadata: [
+                        "conversationId": conversationId as Any,
+                        "tool": toolCall.name,
+                        "toolCallId": toolCall.id
+                    ])
+                    if let conversationId {
+                        await ConversationLogStore.shared.append(
+                            conversationId: conversationId,
+                            type: "tool.not_found",
+                            data: [
+                                "tool": toolCall.name,
+                                "toolCallId": toolCall.id
+                            ]
+                        )
+                    }
+                }
+
                 await AIToolTraceLogger.shared.log(type: "tool.not_found", data: [
                     "tool": toolCall.name,
                     "toolCallId": toolCall.id

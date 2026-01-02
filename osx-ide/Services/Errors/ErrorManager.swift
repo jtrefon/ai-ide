@@ -71,6 +71,13 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
     private func logError(_ error: AppError) {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let logMessage = "[\(timestamp)] [\(error.severity)] \(error.localizedDescription)"
+
+        Task {
+            await AppLogger.shared.error(category: .error, message: "app.error", metadata: [
+                "severity": String(describing: error.severity),
+                "description": error.localizedDescription
+            ])
+        }
         
         #if DEBUG
         print(logMessage)
