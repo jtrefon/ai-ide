@@ -27,7 +27,7 @@ enum AppConstants {
     // MARK: - Editor Constants
     
     enum Editor {
-        static let defaultFontSize: Double = 14
+        static let defaultFontSize: Double = 12
         static let minFontSize: Double = 8
         static let maxFontSize: Double = 72
         static let lineNumberWidth: CGFloat = 45
@@ -102,6 +102,7 @@ enum AppConstants {
         static let themeKey = "AppTheme"
         static let fontSizeKey = "FontSize"
         static let fontFamilyKey = "FontFamily"
+        static let lastWorkspacePathKey = "LastWorkspacePath"
         static let showLineNumbersKey = "ShowLineNumbers"
         static let wordWrapKey = "WordWrap"
         static let minimapVisibleKey = "MinimapVisible"

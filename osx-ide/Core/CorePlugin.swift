@@ -26,7 +26,13 @@ final class CorePlugin {
             point: .panelBottom,
             name: "Internal.Terminal",
             icon: "terminal",
-            view: NativeTerminalView(currentDirectory: appState.workspace.currentDirectory)
+            view: NativeTerminalView(
+                currentDirectory: Binding(
+                    get: { appState.workspace.currentDirectory },
+                    set: { _ in }
+                ),
+                ui: appState.ui
+            )
         )
         
         // Register AI Chat (Right Panel)
@@ -36,7 +42,8 @@ final class CorePlugin {
             icon: "sparkles",
             view: AIChatPanel(
                 selectionContext: appState.selectionContext, // Use shared context
-                conversationManager: appState.conversationManager
+                conversationManager: appState.conversationManager,
+                ui: appState.ui
             )
         )
         

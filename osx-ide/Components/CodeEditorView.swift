@@ -90,13 +90,18 @@ struct TextViewRepresentable: NSViewRepresentable {
 
         DispatchQueue.main.async {
             applyWordWrap(wordWrap, to: scrollView, textView: textView)
-            updateAccessibilityValue(for: textView)
         }
 
         if showLineNumbers {
             scrollView.hasVerticalRuler = true
             scrollView.rulersVisible = true
             scrollView.verticalRulerView = ModernLineNumberRulerView(scrollView: scrollView, textView: textView)
+
+            // Ensure the ruler is laid out and painted on first draw (otherwise it can appear only after scrolling).
+            DispatchQueue.main.async {
+                scrollView.tile()
+                scrollView.verticalRulerView?.needsDisplay = true
+            }
         }
         
         // Apply syntax highlighting after the view is set up asynchronously
@@ -113,9 +118,12 @@ struct TextViewRepresentable: NSViewRepresentable {
             textView.font = resolvedFont
         }
 
+        if let ruler = scrollView.verticalRulerView as? ModernLineNumberRulerView {
+            ruler.updateFont(resolvedFont)
+        }
+
         DispatchQueue.main.async {
             applyWordWrap(wordWrap, to: scrollView, textView: textView)
-            updateAccessibilityValue(for: textView)
         }
         
         // Avoid unnecessary updates to prevent flicker/blanking
@@ -176,11 +184,6 @@ struct TextViewRepresentable: NSViewRepresentable {
         }
     }
 
-    private func updateAccessibilityValue(for textView: NSTextView) {
-        let value = "fontFamily=\(fontFamily);fontSize=\(Int(fontSize));wordWrap=\(wordWrap ? "1" : "0")"
-        textView.setAccessibilityValue(value)
-    }
-    
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
@@ -216,6 +219,15 @@ struct TextViewRepresentable: NSViewRepresentable {
                 textView.textStorage?.setAttributedString(attributedString)
                 textView.textStorage?.endEditing()
                 self.isProgrammaticUpdate = false
+
+                // Updating text storage can leave the ruler stale until the next scroll event.
+                if let container = textView.textContainer {
+                    textView.layoutManager?.ensureLayout(for: container)
+                }
+                if let scrollView = textView.enclosingScrollView {
+                    scrollView.verticalRulerView?.needsDisplay = true
+                    scrollView.tile()
+                }
             }
         }
         

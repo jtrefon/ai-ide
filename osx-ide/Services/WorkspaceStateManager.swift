@@ -22,26 +22,13 @@ class WorkspaceStateManager: ObservableObject {
         self.workspaceService = workspaceService
         self.fileDialogService = fileDialogService
         self.currentDirectory = workspaceService.currentDirectory
-        
-        // Restore previous session state
-        if let savedPath = UserDefaults.standard.string(forKey: "LastOpenDirectory") {
-            let url = URL(fileURLWithPath: savedPath)
-            // Verify path exists
-            var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-                workspaceService.currentDirectory = url
-                self.currentDirectory = url
-            }
-        } else {
-            self.currentDirectory = workspaceService.currentDirectory
-        }
     }
     
     // MARK: - Directory Operations
     
-    /// Persist current directory to UserDefaults
     private func saveCurrentDirectory(_ url: URL) {
-        UserDefaults.standard.set(url.path, forKey: "LastOpenDirectory")
+        workspaceService.currentDirectory = url
+        currentDirectory = url
     }
     
     /// Open file dialog for selecting files or directories
@@ -50,15 +37,9 @@ class WorkspaceStateManager: ObservableObject {
         guard let url = await fileDialogService.openFileOrFolder() else { return }
         let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
         if isDirectory {
-            workspaceService.currentDirectory = url
-            currentDirectory = url
             saveCurrentDirectory(url)
         } else {
-            workspaceService.currentDirectory = url.deletingLastPathComponent()
-            currentDirectory = workspaceService.currentDirectory
-            if let cwd = currentDirectory {
-                saveCurrentDirectory(cwd)
-            }
+            saveCurrentDirectory(url.deletingLastPathComponent())
             addToRecentlyOpened(url)
             onFileSelected?(url)
         }
@@ -67,8 +48,6 @@ class WorkspaceStateManager: ObservableObject {
     /// Open folder dialog specifically for directories
     func openFolder() async {
         guard let url = await fileDialogService.openFolder() else { return }
-        workspaceService.currentDirectory = url
-        currentDirectory = url
         saveCurrentDirectory(url)
     }
     
@@ -76,18 +55,12 @@ class WorkspaceStateManager: ObservableObject {
     func navigateToParent() {
         workspaceService.navigateToParent()
         currentDirectory = workspaceService.currentDirectory
-        if let cwd = currentDirectory {
-            saveCurrentDirectory(cwd)
-        }
     }
     
     /// Navigate to subdirectory
     func navigateTo(subdirectory: String) {
         workspaceService.navigateTo(subdirectory: subdirectory)
         currentDirectory = workspaceService.currentDirectory
-        if let cwd = currentDirectory {
-            saveCurrentDirectory(cwd)
-        }
     }
     
     // MARK: - File Management
@@ -140,7 +113,6 @@ class WorkspaceStateManager: ObservableObject {
             try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
             workspaceService.currentDirectory = projectURL
             currentDirectory = projectURL
-            saveCurrentDirectory(projectURL)
         } catch {
             workspaceService.handleError(.invalidFilePath("Failed to create project directory: \(error.localizedDescription)"))
         }

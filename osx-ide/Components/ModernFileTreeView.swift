@@ -18,6 +18,8 @@ struct ModernFileTreeView: NSViewRepresentable {
     let showHiddenFiles: Bool
     let refreshToken: Int
     let onOpenFile: (URL) -> Void
+    let fontSize: Double
+    let fontFamily: String
 
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView()
@@ -25,7 +27,8 @@ struct ModernFileTreeView: NSViewRepresentable {
         let outlineView = NSOutlineView(frame: .zero)
         outlineView.setAccessibilityIdentifier("Modern Explorer")
         outlineView.headerView = nil
-        outlineView.rowSizeStyle = .medium
+        outlineView.rowSizeStyle = .default
+        outlineView.rowHeight = max(18, CGFloat(fontSize) + 6)
         outlineView.usesAlternatingRowBackgroundColors = false
         outlineView.focusRingType = .none
         outlineView.allowsMultipleSelection = false
@@ -52,7 +55,7 @@ struct ModernFileTreeView: NSViewRepresentable {
         scrollView.backgroundColor = .textBackgroundColor
 
         context.coordinator.attach(outlineView: outlineView)
-        
+
         containerView.addSubview(scrollView)
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -67,12 +70,14 @@ struct ModernFileTreeView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSView, context: Context) {
         let coordinator = context.coordinator
-        
+
         coordinator.update(
             rootURL: rootURL,
             searchQuery: searchQuery,
             showHiddenFiles: showHiddenFiles,
-            refreshToken: refreshToken
+            refreshToken: refreshToken,
+            fontSize: fontSize,
+            fontFamily: fontFamily
         )
     }
 
@@ -101,6 +106,8 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
     private var lastRootURL: URL?
     private var lastSearchQuery: String = ""
     private var lastShowHiddenFiles: Bool = false
+    private var fontSize: Double = 13
+    private var fontFamily: String = "SF Mono"
 
     init(
         expandedRelativePaths: Binding<Set<String>>,
@@ -118,8 +125,14 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         dataSource.outlineView = outlineView
     }
 
-    func update(rootURL: URL, searchQuery: String, showHiddenFiles: Bool, refreshToken: Int) {
+    func update(rootURL: URL, searchQuery: String, showHiddenFiles: Bool, refreshToken: Int, fontSize: Double, fontFamily: String) {
         var needsReload = false
+
+        if self.fontSize != fontSize || self.fontFamily != fontFamily {
+            self.fontSize = fontSize
+            self.fontFamily = fontFamily
+            needsReload = true
+        }
 
         if self.refreshToken != refreshToken {
             self.refreshToken = refreshToken
@@ -152,8 +165,56 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
             Task { @MainActor [weak self] in
                 await Task.yield()
                 self?.outlineView?.reloadData()
+                self?.applyExpandedStateIfNeeded()
+                self?.applyAppearanceToVisibleRows()
+            }
+        } else {
+            applyExpandedStateIfNeeded()
+            applyAppearanceToVisibleRows()
+        }
+    }
+
+    private func applyExpandedStateIfNeeded() {
+        guard !dataSource.isSearching, let outlineView else { return }
+
+        let targets = expandedRelativePaths.wrappedValue
+            .sorted { a, b in
+                let aDepth = a.split(separator: "/").count
+                let bDepth = b.split(separator: "/").count
+                if aDepth != bDepth { return aDepth < bDepth }
+                return a < b
+            }
+
+        for relative in targets {
+            guard let item = dataSource.canonicalUrl(forRelativePath: relative) else { continue }
+            outlineView.expandItem(item)
+        }
+    }
+
+    private func applyAppearanceToVisibleRows() {
+        guard let outlineView else { return }
+
+        outlineView.rowSizeStyle = .default
+        outlineView.rowHeight = max(18, CGFloat(fontSize) + 6)
+
+        let resolvedFont = NSFont(name: fontFamily, size: CGFloat(fontSize)) ?? NSFont.systemFont(ofSize: CGFloat(fontSize), weight: .regular)
+        guard outlineView.numberOfRows > 0 else { return }
+
+        let visibleRect = outlineView.visibleRect
+        let visibleRange = outlineView.rows(in: visibleRect)
+        guard visibleRange.length > 0 else { return }
+
+        let start = max(0, visibleRange.location)
+        let end = min(outlineView.numberOfRows, visibleRange.location + visibleRange.length)
+        guard start < end else { return }
+
+        for row in start..<end {
+            if let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView {
+                cell.textField?.font = resolvedFont
             }
         }
+
+        outlineView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: start..<end))
     }
 
     private func setSearchQuery(_ value: String) {
@@ -178,6 +239,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
             } else {
                 outlineView.expandItem(item)
             }
+            applyAppearanceToVisibleRows()
         } else {
             onOpenFile(item.url as URL)
         }
@@ -193,6 +255,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
                 if !self.expandedRelativePaths.wrappedValue.contains(relative) {
                     self.expandedRelativePaths.wrappedValue.insert(relative)
                 }
+                self.applyAppearanceToVisibleRows()
             }
         }
     }
@@ -206,6 +269,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
                     self.expandedRelativePaths.wrappedValue.remove(relative)
                     self.expandedRelativePaths.wrappedValue = self.expandedRelativePaths.wrappedValue.filter { !$0.hasPrefix(relative + "/") }
                 }
+                self.applyAppearanceToVisibleRows()
             }
         }
     }
@@ -249,7 +313,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
             let textField = NSTextField(labelWithString: "")
             textField.translatesAutoresizingMaskIntoConstraints = false
             textField.lineBreakMode = .byTruncatingMiddle
-            textField.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+            textField.font = NSFont(name: self.fontFamily, size: CGFloat(self.fontSize)) ?? NSFont.systemFont(ofSize: CGFloat(self.fontSize), weight: .regular)
             
             let imageView = NSImageView()
             imageView.translatesAutoresizingMaskIntoConstraints = false
@@ -272,6 +336,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
         }()
 
         cell.textField?.stringValue = dataSource.displayName(for: ftItem)
+        cell.textField?.font = NSFont(name: self.fontFamily, size: CGFloat(self.fontSize)) ?? NSFont.systemFont(ofSize: CGFloat(self.fontSize), weight: .regular)
         if let path = url.path, !path.isEmpty {
             cell.imageView?.image = NSWorkspace.shared.icon(forFile: path)
         } else {
@@ -348,6 +413,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
             let items = results.map { self.dataSource.canonical($0) }
             self.dataSource.setSearchResults(items)
             self.outlineView?.reloadData()
+            self.applyAppearanceToVisibleRows()
             return
         }
 
@@ -361,6 +427,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate {
                 let items = results.map { self.dataSource.canonical($0) }
                 self.dataSource.setSearchResults(items)
                 self.outlineView?.reloadData()
+                self.applyAppearanceToVisibleRows()
             }
         }
 

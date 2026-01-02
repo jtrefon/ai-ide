@@ -16,6 +16,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             WindowAccessor { window in
                 DependencyContainer.shared.windowProvider.setWindow(window)
+                appState.attachWindow(window)
                 // Modern macOS v26 window styling
                 window.titleVisibility = .hidden
                 window.titlebarAppearsTransparent = true
@@ -91,6 +92,7 @@ struct ContentView: View {
             IndexStatusBarView()
         }
         .background(Color.clear)
+        .environment(\.font, .system(size: CGFloat(appState.ui.fontSize)))
         .preferredColorScheme(appState.selectedTheme.colorScheme)
         .accessibilityIdentifier("AppRootView")
         .accessibilityValue("theme=\(appState.selectedTheme.rawValue)")
