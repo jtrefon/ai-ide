@@ -8,7 +8,7 @@
 import Foundation
 
 /// Defines a tool that can be used by the AI agent
-protocol AITool: Sendable {
+public protocol AITool: Sendable {
     var name: String { get }
     var description: String { get }
     var parameters: [String: Any] { get } // JSON Schema
@@ -54,22 +54,22 @@ final class ToolRegistry: Sendable {
 }
 
 /// Represents a tool call requested by the AI
-struct AIToolCall: Codable, @unchecked Sendable {
-    let id: String
-    let name: String
-    let arguments: [String: Any]
+public struct AIToolCall: Codable, @unchecked Sendable {
+    public let id: String
+    public let name: String
+    public let arguments: [String: Any]
     
-    enum CodingKeys: String, CodingKey {
+    public enum CodingKeys: String, CodingKey {
         case id
         case function
     }
     
-    enum FunctionCodingKeys: String, CodingKey {
+    public enum FunctionCodingKeys: String, CodingKey {
         case name
         case arguments
     }
     
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         
@@ -92,7 +92,7 @@ struct AIToolCall: Codable, @unchecked Sendable {
         self.arguments = arguments
     }
     
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         

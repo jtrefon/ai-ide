@@ -3,6 +3,7 @@ import Foundation
 public struct IndexStats: Sendable {
     public let indexedResourceCount: Int
     public let aiEnrichedResourceCount: Int
+    public let aiEnrichableProjectFileCount: Int
     public let totalProjectFileCount: Int
     public let symbolCount: Int
     public let classCount: Int
@@ -22,6 +23,7 @@ public struct IndexStats: Sendable {
     public init(
         indexedResourceCount: Int,
         aiEnrichedResourceCount: Int,
+        aiEnrichableProjectFileCount: Int,
         totalProjectFileCount: Int,
         symbolCount: Int,
         classCount: Int,
@@ -40,6 +42,7 @@ public struct IndexStats: Sendable {
     ) {
         self.indexedResourceCount = indexedResourceCount
         self.aiEnrichedResourceCount = aiEnrichedResourceCount
+        self.aiEnrichableProjectFileCount = aiEnrichableProjectFileCount
         self.totalProjectFileCount = totalProjectFileCount
         self.symbolCount = symbolCount
         self.classCount = classCount
