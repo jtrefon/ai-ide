@@ -8,6 +8,7 @@
 
 import SwiftUI
 import Combine
+import AppKit
 
 /// Main application state coordinator that manages interaction between specialized state managers
 @MainActor
@@ -94,9 +95,72 @@ class AppState: ObservableObject {
             }
         }
     }
+
+    // MARK: - Convenience computed properties
+
+    var showLineNumbers: Bool { ui.showLineNumbers }
+    var wordWrap: Bool { ui.wordWrap }
+    var fontSize: Double { ui.fontSize }
+    var fontFamily: String { ui.fontFamily }
+    var selectedTheme: AppTheme { ui.selectedTheme }
+
+    // MARK: - Workspace Operations
+
+    func openFolder() {
+        Task { @MainActor in
+            await workspace.openFolder()
+        }
+    }
     
+    func createFile(name: String) {
+        workspace.createFile(named: name)
+    }
+    
+    func createFolder(name: String) {
+        workspace.createFolder(named: name)
+    }
+    
+    func navigateToParent() {
+        workspace.navigateToParent()
+    }
+    
+    func newProject() {
+        Task { @MainActor in
+            guard let projectURL = await fileDialogService.promptForNewProjectFolder(defaultName: "NewProject") else {
+                return
+            }
+            workspace.createProject(at: projectURL)
+        }
+    }
+    
+    // UI Operations
+    func toggleSidebar() {
+        ui.toggleSidebar()
+    }
+    
+    func setSidebarVisible(_ visible: Bool) {
+        ui.setSidebarVisible(visible)
+    }
+    
+    func resetSettings() {
+        ui.resetToDefaults()
+    }
+    
+    // Conversation Operations
+    func sendMessage() {
+        conversationManager.sendMessage()
+    }
+    
+    func clearConversation() {
+        conversationManager.clearConversation()
+    }
+    
+    // Helper Methods
+    static func languageForFileExtension(_ fileExtension: String) -> String {
+        return FileEditorStateManager.languageForFileExtension(fileExtension)
+    }
+
     // MARK: - Private Methods
-    
     private func setupStateObservation() {
         // Observe file editor changes
         fileEditor.objectWillChange

@@ -217,11 +217,13 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
     func reindexProject() {}
     func reindexProject(aiEnrichmentEnabled: Bool) {}
     func runAIEnrichment() {}
+    func getSummaries(projectRoot: URL, limit: Int) throws -> [(path: String, summary: String)] { [] }
     func getMemories(tier: MemoryTier?) throws -> [MemoryEntry] { [] }
     func getStats() throws -> IndexStats { 
         IndexStats(
             indexedResourceCount: 0,
             aiEnrichedResourceCount: 0,
+            aiEnrichableProjectFileCount: 0,
             totalProjectFileCount: 0,
             symbolCount: 0,
             classCount: 0,
