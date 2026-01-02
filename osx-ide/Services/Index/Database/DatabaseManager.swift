@@ -17,7 +17,7 @@ public enum DatabaseError: Error {
 }
 
 public class DatabaseManager: @unchecked Sendable {
-    private var db: OpaquePointer?
+    public var db: OpaquePointer?
     private let dbPath: String
     private let queue = DispatchQueue(label: "com.osx-ide.database", qos: .userInitiated)
     private let queueKey = DispatchSpecificKey<UUID>()
@@ -86,6 +86,12 @@ public class DatabaseManager: @unchecked Sendable {
             quality_score REAL
         );
         
+        CREATE VIRTUAL TABLE IF NOT EXISTS resources_fts USING fts5(
+            path,
+            content,
+            content_id UNINDEXED
+        );
+        
         CREATE TABLE IF NOT EXISTS symbols (
             id TEXT PRIMARY KEY,
             resource_id TEXT NOT NULL,
@@ -118,6 +124,7 @@ public class DatabaseManager: @unchecked Sendable {
 
         // Lightweight migration: add ai_enriched flag if missing.
         try ensureColumnExists(table: "resources", column: "ai_enriched", columnDefinition: "INTEGER NOT NULL DEFAULT 0")
+        try ensureColumnExists(table: "resources", column: "summary", columnDefinition: "TEXT")
     }
 
     private func ensureColumnExists(table: String, column: String, columnDefinition: String) throws {
@@ -452,9 +459,15 @@ public class DatabaseManager: @unchecked Sendable {
         try execute(sql: sql)
     }
 
-    public func markAIEnriched(resourceId: String, score: Double) throws {
+    public func markAIEnriched(resourceId: String, score: Double, summary: String?) throws {
         let escapedId = resourceId.replacingOccurrences(of: "'", with: "''")
-        let sql = "UPDATE resources SET ai_enriched = 1, quality_score = \(score) WHERE id = '\(escapedId)';"
+        let sql: String
+        if let summary = summary {
+            let escapedSummary = summary.replacingOccurrences(of: "'", with: "''")
+            sql = "UPDATE resources SET ai_enriched = 1, quality_score = \(score), summary = '\(escapedSummary)' WHERE id = '\(escapedId)';"
+        } else {
+            sql = "UPDATE resources SET ai_enriched = 1, quality_score = \(score) WHERE id = '\(escapedId)';"
+        }
         try execute(sql: sql)
     }
 
@@ -482,6 +495,86 @@ public class DatabaseManager: @unchecked Sendable {
         return try scalarDouble(sql: sql)
     }
 
+    public func getAIEnrichedSummaries(projectRoot: URL, limit: Int = 20) throws -> [(path: String, summary: String)] {
+        let rootPath = projectRoot.standardizedFileURL.path
+        let rootPrefix = rootPath.hasSuffix("/") ? rootPath : (rootPath + "/")
+        let escapedPrefix = rootPrefix.replacingOccurrences(of: "'", with: "''")
+        
+        let sql = "SELECT path, summary FROM resources WHERE ai_enriched = 1 AND path LIKE '\(escapedPrefix)%' AND summary IS NOT NULL AND summary != '' ORDER BY quality_score DESC LIMIT \(limit);"
+        
+        var results: [(path: String, summary: String)] = []
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+            
+            while sqlite3_step(statement) == SQLITE_ROW {
+                if let pathPtr = sqlite3_column_text(statement, 0),
+                   let summaryPtr = sqlite3_column_text(statement, 1) {
+                    results.append((String(cString: pathPtr), String(cString: summaryPtr)))
+                }
+            }
+        }
+        return results
+    }
+
+    public func searchFTS(query: String, limit: Int) throws -> [(path: String, snippet: String)] {
+        let escaped = query.replacingOccurrences(of: "'", with: "''")
+        let sql = """
+        SELECT path, snippet(resources_fts, 1, '', '', '...', 64) as match_snippet 
+        FROM resources_fts 
+        WHERE resources_fts MATCH '\(escaped)' 
+        ORDER BY rank 
+        LIMIT \(limit);
+        """
+        
+        var results: [(path: String, snippet: String)] = []
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+            
+            while sqlite3_step(statement) == SQLITE_ROW {
+                if let pathPtr = sqlite3_column_text(statement, 0),
+                   let snippetPtr = sqlite3_column_text(statement, 1) {
+                    results.append((String(cString: pathPtr), String(cString: snippetPtr)))
+                }
+            }
+        }
+        return results
+    }
+
+    public func execute(sql: String, parameters: [Any]) throws {
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+            
+            for (index, parameter) in parameters.enumerated() {
+                let bindIndex = Int32(index + 1)
+                if let string = parameter as? String {
+                    sqlite3_bind_text(statement, bindIndex, (string as NSString).utf8String, -1, nil)
+                } else if let int = parameter as? Int {
+                    sqlite3_bind_int(statement, bindIndex, Int32(int))
+                } else if let double = parameter as? Double {
+                    sqlite3_bind_double(statement, bindIndex, double)
+                } else {
+                    sqlite3_bind_null(statement, bindIndex)
+                }
+            }
+            
+            if sqlite3_step(statement) != SQLITE_DONE {
+                throw DatabaseError.stepFailed
+            }
+        }
+    }
+    
     public func execute(sql: String) throws {
         try syncOnQueue {
             try executeUnsafe(sql: sql)
@@ -535,7 +628,7 @@ public class DatabaseManager: @unchecked Sendable {
         return result
     }
 
-    private func syncOnQueue<T>(_ work: () throws -> T) throws -> T {
+    internal func syncOnQueue<T>(_ work: () throws -> T) throws -> T {
         if DispatchQueue.getSpecific(key: queueKey) == queueID {
             return try work()
         }

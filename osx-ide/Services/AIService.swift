@@ -7,12 +7,12 @@
 
 import Foundation
 
-struct AIServiceResponse: Sendable {
-    let content: String?
-    let toolCalls: [AIToolCall]?
+public struct AIServiceResponse: Sendable {
+    public let content: String?
+    public let toolCalls: [AIToolCall]?
 }
 
-protocol AIService: Sendable {
+public protocol AIService: Sendable {
     func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws -> AIServiceResponse
     func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse
     func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse

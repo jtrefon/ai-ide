@@ -67,7 +67,7 @@ struct FileExplorerView: View {
             .background(Color(NSColor.windowBackgroundColor))
             // Modern macOS v26 file tree with subtle styling
             ModernFileTreeView(
-                rootURL: appState.currentDirectory ?? FileManager.default.temporaryDirectory,
+                rootURL: appState.workspace.currentDirectory ?? FileManager.default.temporaryDirectory,
                 searchQuery: $searchQuery,
                 expandedRelativePaths: $expandedRelativePaths,
                 selectedRelativePath: $selectedRelativePath,
@@ -143,21 +143,21 @@ struct FileExplorerView: View {
         .onAppear {
             syncSelectionFromAppState()
         }
-        .onChange(of: appState.currentDirectory) {
+        .onChange(of: appState.workspace.currentDirectory) {
             refreshToken += 1
             syncSelectionFromAppState()
         }
-        .onChange(of: appState.selectedFile) {
+        .onChange(of: appState.fileEditor.selectedFile) {
             syncSelectionFromAppState()
         }
     }
 
     private func syncSelectionFromAppState() {
-        guard let rootURL = appState.currentDirectory?.standardizedFileURL ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL as URL? else {
+        guard let rootURL = appState.workspace.currentDirectory?.standardizedFileURL ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL as URL? else {
             selectedRelativePath = nil
             return
         }
-        guard let selectedFilePath = appState.selectedFile else {
+        guard let selectedFilePath = appState.fileEditor.selectedFile else {
             selectedRelativePath = nil
             return
         }
@@ -178,7 +178,7 @@ struct FileExplorerView: View {
         let trimmedName = newFileName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
         
-        appState.createFile(name: trimmedName)
+        appState.workspace.createFile(named: trimmedName)
         refreshToken += 1
     }
 
@@ -187,7 +187,7 @@ struct FileExplorerView: View {
         let trimmedName = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
         
-        appState.createFolder(name: trimmedName)
+        appState.workspace.createFolder(named: trimmedName)
         refreshToken += 1
     }
 }

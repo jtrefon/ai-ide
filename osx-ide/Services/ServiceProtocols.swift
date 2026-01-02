@@ -8,7 +8,7 @@ import Combine
 
 /// Protocol for application error management
 @MainActor
-protocol ErrorManagerProtocol: AnyObject {
+public protocol ErrorManagerProtocol: AnyObject {
     var currentError: AppError? { get }
     var showErrorAlert: Bool { get set }
     func handle(_ error: AppError)
@@ -17,7 +17,7 @@ protocol ErrorManagerProtocol: AnyObject {
     var statePublisher: ObservableObjectPublisher { get }
 }
 
-extension ErrorManagerProtocol where Self: ObservableObject {
+public extension ErrorManagerProtocol where Self: ObservableObject {
     var statePublisher: ObservableObjectPublisher {
         return self.objectWillChange as! ObservableObjectPublisher
     }
@@ -96,7 +96,7 @@ protocol FileDialogServiceProtocol {
 
 /// Protocol for AI conversation management
 @MainActor
-protocol ConversationManagerProtocol: AnyObject {
+public protocol ConversationManagerProtocol: AnyObject {
     var messages: [ChatMessage] { get }
     var currentInput: String { get set }
     var isSending: Bool { get }
@@ -110,7 +110,7 @@ protocol ConversationManagerProtocol: AnyObject {
     var statePublisher: ObservableObjectPublisher { get }
 }
 
-extension ConversationManagerProtocol where Self: ObservableObject {
+public extension ConversationManagerProtocol where Self: ObservableObject {
     var statePublisher: ObservableObjectPublisher {
         return self.objectWillChange as! ObservableObjectPublisher
     }

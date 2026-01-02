@@ -37,6 +37,12 @@ public final class EventBus: EventBusProtocol {
     
     public func publish<E: Event>(_ event: E) {
         let key = String(describing: E.self)
+
+        Task {
+            await AppLogger.shared.debug(category: .eventBus, message: "event.publish", metadata: [
+                "eventType": key
+            ])
+        }
         if let subject = subjects[key] as? PassthroughSubject<E, Never> {
             subject.send(event)
         }
@@ -44,6 +50,12 @@ public final class EventBus: EventBusProtocol {
     
     public func subscribe<E: Event>(to eventType: E.Type, handler: @escaping (E) -> Void) -> AnyCancellable {
         let key = String(describing: E.self)
+
+        Task {
+            await AppLogger.shared.debug(category: .eventBus, message: "event.subscribe", metadata: [
+                "eventType": key
+            ])
+        }
         let subject: PassthroughSubject<E, Never>
         
         if let existing = subjects[key] as? PassthroughSubject<E, Never> {
