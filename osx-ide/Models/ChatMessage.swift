@@ -7,37 +7,39 @@
 
 import Foundation
 
-enum MessageRole: String, Codable {
+public enum MessageRole: String, Codable, Sendable {
     case user
     case assistant
     case system
     case tool
 }
 
-enum ToolExecutionStatus: String, Codable {
+public enum ToolExecutionStatus: String, Codable, Sendable {
     case executing
     case completed
     case failed
 }
 
-struct ChatMessage: Identifiable, Codable {
-    let id: UUID
-    let role: MessageRole
-    let content: String
-    let codeContext: String?
-    let timestamp: Date
+public struct ChatMessage: Identifiable, Codable, Sendable {
+    public let id: UUID
+    public let role: MessageRole
+    public let content: String
+    public let reasoning: String?
+    public let codeContext: String?
+    public let timestamp: Date
     
     // Tool execution properties
-    let toolName: String?
-    let toolStatus: ToolExecutionStatus?
-    let targetFile: String?
-    let toolCallId: String? // For Tool Output messages (referencing the call)
-    let toolCalls: [AIToolCall]? // For Assistant messages (the calls themselves)
+    public let toolName: String?
+    public let toolStatus: ToolExecutionStatus?
+    public let targetFile: String?
+    public let toolCallId: String? // For Tool Output messages (referencing the call)
+    public let toolCalls: [AIToolCall]? // For Assistant messages (the calls themselves)
     
-    init(role: MessageRole, content: String, codeContext: String? = nil, toolName: String? = nil, toolStatus: ToolExecutionStatus? = nil, targetFile: String? = nil, toolCallId: String? = nil, toolCalls: [AIToolCall]? = nil) {
+    public init(role: MessageRole, content: String, reasoning: String? = nil, codeContext: String? = nil, toolName: String? = nil, toolStatus: ToolExecutionStatus? = nil, targetFile: String? = nil, toolCallId: String? = nil, toolCalls: [AIToolCall]? = nil) {
         self.id = UUID()
         self.role = role
         self.content = content
+        self.reasoning = reasoning
         self.codeContext = codeContext
         self.timestamp = Date()
         self.toolName = toolName
@@ -48,7 +50,7 @@ struct ChatMessage: Identifiable, Codable {
     }
     
     // Helper to check if this is a tool execution message
-    var isToolExecution: Bool {
+    public var isToolExecution: Bool {
         return role == .tool && toolName != nil
     }
 }

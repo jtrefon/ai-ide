@@ -2,3 +2,4 @@ verify_build_tests_*.txt
 
 .ide/index/
 .ide/index/**
+.build/

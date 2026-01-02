@@ -1,10 +1,3 @@
-//
-//  IndexCoordinator.swift
-//  osx-ide
-//
-//  Created by Cascade on 23/12/2025.
-//
-
 import Foundation
 import Combine
 
@@ -17,11 +10,18 @@ public class IndexCoordinator {
     private let config: IndexConfiguration
     private var isEnabled: Bool
     
-    public init(eventBus: EventBusProtocol, indexer: IndexerActor, config: IndexConfiguration = .default) {
+    public init(eventBus: EventBusProtocol, indexer: IndexerActor, config: IndexConfiguration = .default, projectRoot: URL? = nil) {
         self.eventBus = eventBus
         self.indexer = indexer
         self.config = config
         self.isEnabled = config.enabled
+        
+        if let projectRoot = projectRoot {
+            Task {
+                await IndexLogger.shared.setup(projectRoot: projectRoot)
+                await IndexLogger.shared.log("IndexCoordinator initialized with root: \(projectRoot.path)")
+            }
+        }
         
         setupSubscriptions()
     }
@@ -31,26 +31,39 @@ public class IndexCoordinator {
     }
 
     public func reindexProject(rootURL: URL) {
-        guard isEnabled else { return }
+        guard isEnabled else { 
+            Task { @MainActor in await IndexLogger.shared.log("Reindex skipped: Indexing is disabled") }
+            return 
+        }
 
-        Task {
+        Task { @MainActor in
             let start = Date()
-            eventBus.publish(IndexingStartedEvent())
+            await IndexLogger.shared.log("Starting project reindex for: \(rootURL.path)")
+            await eventBus.publish(IndexingStartedEvent())
 
             let files = Self.enumerateProjectFiles(rootURL: rootURL, excludePatterns: config.excludePatterns)
             let total = files.count
+            await IndexLogger.shared.log("Found \(total) files to index")
 
             var processed = 0
             for file in files {
-                if !isEnabled { break }
-                eventBus.publish(IndexingProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
-                try? await indexer.indexFile(at: file)
-                processed += 1
-                eventBus.publish(IndexingProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
+                if !isEnabled { 
+                    await IndexLogger.shared.log("Reindex aborted: Indexing was disabled during process")
+                    break 
+                }
+                await eventBus.publish(IndexingProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
+                do {
+                    try await indexer.indexFile(at: file)
+                    processed += 1
+                } catch {
+                    await IndexLogger.shared.log("Failed to index file \(file.path): \(error)")
+                }
+                await eventBus.publish(IndexingProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
             }
 
             let duration = Date().timeIntervalSince(start)
-            eventBus.publish(IndexingCompletedEvent(indexedCount: processed, duration: duration))
+            await IndexLogger.shared.log("Reindex completed: \(processed)/\(total) files in \(String(format: "%.2f", duration))s")
+            await eventBus.publish(IndexingCompletedEvent(indexedCount: processed, duration: duration))
         }
     }
     
@@ -96,16 +109,21 @@ public class IndexCoordinator {
     }
     
     private func indexFile(_ url: URL) {
-        Task {
+        Task { @MainActor in
             do {
-                guard isEnabled else { return }
-                eventBus.publish(IndexingStartedEvent())
-                eventBus.publish(IndexingProgressEvent(processedCount: 0, totalCount: 1, currentFile: url))
+                guard isEnabled else { 
+                    await IndexLogger.shared.log("Single file index skipped for \(url.path): Indexing disabled")
+                    return 
+                }
+                await IndexLogger.shared.log("Indexing single file: \(url.path)")
+                await eventBus.publish(IndexingStartedEvent())
+                await eventBus.publish(IndexingProgressEvent(processedCount: 0, totalCount: 1, currentFile: url))
                 try await indexer.indexFile(at: url)
-                eventBus.publish(IndexingProgressEvent(processedCount: 1, totalCount: 1, currentFile: url))
-                eventBus.publish(IndexingCompletedEvent(indexedCount: 1, duration: 0))
+                await eventBus.publish(IndexingProgressEvent(processedCount: 1, totalCount: 1, currentFile: url))
+                await eventBus.publish(IndexingCompletedEvent(indexedCount: 1, duration: 0))
+                await IndexLogger.shared.log("Successfully indexed single file: \(url.path)")
             } catch {
-                print("Failed to index file \(url): \(error)")
+                await IndexLogger.shared.log("Failed to index file \(url.path): \(error)")
             }
         }
     }

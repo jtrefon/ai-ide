@@ -1,12 +1,12 @@
 import Foundation
 
-actor AIToolTraceLogger {
-    static let shared = AIToolTraceLogger()
+public actor AIToolTraceLogger {
+    public static let shared = AIToolTraceLogger()
 
     private let sessionId: String
     private let logFileURL: URL
 
-    init(sessionId: String = UUID().uuidString, logDirectory: URL? = nil) {
+    public init(sessionId: String = UUID().uuidString, logDirectory: URL? = nil) {
         self.sessionId = sessionId
 
         let dir: URL
@@ -23,7 +23,7 @@ actor AIToolTraceLogger {
         self.logFileURL = dir.appendingPathComponent("ai-trace-\(date).ndjson")
     }
 
-    func log(type: String, data: [String: Any] = [:], file: String = #fileID, line: Int = #line) {
+    public func log(type: String, data: [String: Any] = [:], file: String = #fileID, line: Int = #line) {
         do {
             try ensureDirectoryExists()
 
@@ -54,7 +54,7 @@ actor AIToolTraceLogger {
         }
     }
 
-    func currentLogFilePath() -> String {
+    public func currentLogFilePath() -> String {
         return logFileURL.path
     }
 

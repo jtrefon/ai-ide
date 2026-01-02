@@ -7,13 +7,13 @@
 
 import Foundation
 
-enum AIMode: String, Codable, CaseIterable, Identifiable {
+public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case chat = "Chat"
     case agent = "Agent"
     
-    var id: String { rawValue }
+    public var id: String { rawValue }
     
-    var description: String {
+    public var description: String {
         switch self {
         case .chat:
             return "Read-only mode. AI can view files and search but cannot modify anything."
@@ -22,7 +22,7 @@ enum AIMode: String, Codable, CaseIterable, Identifiable {
         }
     }
     
-    var icon: String {
+    public var icon: String {
         switch self {
         case .chat:
             return "bubble.left.and.bubble.right"
@@ -31,7 +31,7 @@ enum AIMode: String, Codable, CaseIterable, Identifiable {
         }
     }
     
-    var systemPromptAddition: String {
+    public var systemPromptAddition: String {
         switch self {
         case .chat:
             return """
@@ -52,7 +52,7 @@ enum AIMode: String, Codable, CaseIterable, Identifiable {
     }
     
     // Determine which tools are available in this mode
-    func allowedTools(from allTools: [AITool]) -> [AITool] {
+    public func allowedTools(from allTools: [AITool]) -> [AITool] {
         switch self {
         case .chat:
             // Read-only tools
