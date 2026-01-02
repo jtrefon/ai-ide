@@ -150,7 +150,7 @@ final class DatabaseManagerTests: XCTestCase {
         """
         try dbManager.execute(sql: insertSql)
 
-        try dbManager.markAIEnriched(resourceId: id, score: 9.1)
+        try dbManager.markAIEnriched(resourceId: id, score: 9.1, summary: "Test summary")
 
         // Simple verification - just check that marking doesn't throw
         XCTAssertTrue(true)

@@ -45,23 +45,58 @@ final class ConversationManagerTests: XCTestCase {
     func testSendMessageFlow() async throws {
         manager.currentInput = "Hello AI"
         
-        let expectation = expectation(description: "AI responded")
+        let aiResponded = expectation(description: "AI responded")
+        aiResponded.assertForOverFulfill = false
         
-        // Observe messages to wait for response
+        // Observe manager's objectWillChange to wait for response
         var cancellables = Set<AnyCancellable>()
-        manager.$messages
-            .dropFirst()
-            .sink { messages in
-                if messages.contains(where: { $0.role == .assistant && $0.content == "Mock response" }) {
-                    expectation.fulfill()
+        manager.objectWillChange
+            .sink { _ in
+                // Using a small delay to allow state to actually change after notification
+                Task { @MainActor in
+                    if self.manager.messages.contains(where: { $0.role == .assistant && $0.content == "Mock response" }) {
+                        aiResponded.fulfill()
+                    }
                 }
             }
             .store(in: &cancellables)
         
         manager.sendMessage()
         
-        await fulfillment(of: [expectation], timeout: 5.0)
+        await fulfillment(of: [aiResponded], timeout: 5.0)
+
+        let sendingCleared = self.expectation(description: "Sending cleared")
+        Task { @MainActor in
+            let deadline = Date().addingTimeInterval(2.0)
+            while Date() < deadline {
+                if self.manager.isSending == false {
+                    sendingCleared.fulfill()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+        await fulfillment(of: [sendingCleared], timeout: 3.0)
         XCTAssertFalse(manager.isSending)
+    }
+
+    func testSplitReasoningExtractsAndStripsBlock() {
+        let input = """
+        <ide_reasoning>
+        Analyze: A
+        Research: B
+        Plan: C
+        Reflect: D
+        </ide_reasoning>
+
+        Hello world.
+        """
+
+        let result = ChatPromptBuilder.splitReasoning(from: input)
+        XCTAssertEqual(result.content, "Hello world.")
+        XCTAssertNotNil(result.reasoning)
+        XCTAssertTrue((result.reasoning ?? "").contains("Analyze:"))
+        XCTAssertTrue((result.reasoning ?? "").contains("Reflect:"))
     }
 }
 

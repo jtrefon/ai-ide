@@ -1,7 +1,11 @@
 import Foundation
 
-final class FileSystemService: Sendable {
-    func readFile(at url: URL) throws -> String {
+/// Service for interacting with the local file system.
+public final class FileSystemService: Sendable {
+    public init() {}
+    
+    /// Reads the content of a file at the specified URL.
+    public func readFile(at url: URL) throws -> String {
         let data = try Data(contentsOf: url)
 
         if let utf8 = String(data: data, encoding: .utf8) {
@@ -16,13 +20,16 @@ final class FileSystemService: Sendable {
         return String(decoding: data, as: UTF8.self)
     }
 
-    func writeFile(content: String, to url: URL) throws {
+    /// Writes the content to a file at the specified URL.
+    public func writeFile(content: String, to url: URL) throws {
         let parent = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true, attributes: nil)
         try content.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    func writeFile(content: String, toPath path: String) throws {
-        try content.write(toFile: path, atomically: true, encoding: .utf8)
+    /// Writes the content to a file at the specified path.
+    public func writeFile(content: String, toPath path: String) throws {
+        let url = URL(fileURLWithPath: path)
+        try writeFile(content: content, to: url)
     }
 }

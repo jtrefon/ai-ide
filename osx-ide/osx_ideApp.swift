@@ -103,18 +103,18 @@ struct osx_ideApp: App {
 
             CommandGroup(after: .sidebar) {
                 Toggle("Show File Explorer", isOn: Binding(
-                    get: { appState.isSidebarVisible },
-                    set: { appState.isSidebarVisible = $0 }
+                    get: { appState.ui.isSidebarVisible },
+                    set: { appState.ui.isSidebarVisible = $0 }
                 ))
 
                 Toggle("Show Terminal", isOn: Binding(
-                    get: { appState.isTerminalVisible },
-                    set: { appState.isTerminalVisible = $0 }
+                    get: { appState.ui.isTerminalVisible },
+                    set: { appState.ui.isTerminalVisible = $0 }
                 ))
 
                 Toggle("Show AI Chat", isOn: Binding(
-                    get: { appState.isAIChatVisible },
-                    set: { appState.isAIChatVisible = $0 }
+                    get: { appState.ui.isAIChatVisible },
+                    set: { appState.ui.isAIChatVisible = $0 }
                 ))
 
                 Divider()

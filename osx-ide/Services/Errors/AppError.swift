@@ -8,7 +8,7 @@
 import Foundation
 
 /// Application-specific error types for better error handling
-enum AppError: LocalizedError {
+public enum AppError: LocalizedError {
     case fileOperationFailed(String, underlying: Error)
     case invalidFilePath(String)
     case fileNotFound(String)
@@ -18,7 +18,7 @@ enum AppError: LocalizedError {
     case terminalError(String)
     case unknown(String)
     
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .fileOperationFailed(let operation, let underlying):
             return "File operation '\(operation)' failed: \(underlying.localizedDescription)"
@@ -39,7 +39,7 @@ enum AppError: LocalizedError {
         }
     }
     
-    var recoverySuggestion: String? {
+    public var recoverySuggestion: String? {
         switch self {
         case .fileOperationFailed:
             return "Check file permissions and try again."
@@ -60,7 +60,7 @@ enum AppError: LocalizedError {
         }
     }
     
-    var severity: ErrorSeverity {
+    public var severity: ErrorSeverity {
         switch self {
         case .fileOperationFailed, .invalidFilePath, .fileNotFound:
             return .warning
@@ -73,7 +73,7 @@ enum AppError: LocalizedError {
 }
 
 /// Error severity levels for UI feedback
-enum ErrorSeverity {
+public enum ErrorSeverity {
     case info
     case warning
     case error
