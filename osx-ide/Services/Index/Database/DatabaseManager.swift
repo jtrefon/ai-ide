@@ -56,7 +56,7 @@ public class DatabaseManager: @unchecked Sendable {
             .sorted()
             .joined(separator: " OR ")
 
-        let sql = "SELECT AVG(COALESCE(quality_score, 0)) FROM resources WHERE ai_enriched = 1 AND path LIKE ? AND (\(extPredicates));"
+        let sql = "SELECT AVG(quality_score) FROM resources WHERE ai_enriched = 1 AND quality_score > 0 AND path LIKE ? AND (\(extPredicates));"
         
         var parameters: [Any] = [rootPrefix + "%"]
         parameters.append(contentsOf: allowedExtensions.sorted().map { "%.\($0)" })
@@ -519,7 +519,7 @@ public class DatabaseManager: @unchecked Sendable {
     }
 
     public func getAverageQualityScore() throws -> Double {
-        let sql = "SELECT AVG(COALESCE(quality_score, 0)) FROM resources;"
+        let sql = "SELECT AVG(quality_score) FROM resources WHERE quality_score > 0;"
         return try scalarDouble(sql: sql)
     }
 

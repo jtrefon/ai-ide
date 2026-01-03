@@ -273,6 +273,8 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
                     let score = result?.score ?? 0
                     let summary = result?.summary
                     
+                    await IndexLogger.shared.log("IndexerActor: AI suggested score \(score) for \(file.lastPathComponent)")
+                    
                     try databaseManager.markAIEnriched(resourceId: file.absoluteString, score: Double(score), summary: summary)
                     await IndexLogger.shared.log("Successfully enriched \(file.lastPathComponent) (Score: \(score))")
                 } catch {

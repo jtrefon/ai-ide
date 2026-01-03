@@ -8,6 +8,81 @@
 import SwiftUI
 import Foundation
 
+struct RectCorner: OptionSet, Sendable {
+    let rawValue: Int
+    static let topLeft = RectCorner(rawValue: 1 << 0)
+    static let topRight = RectCorner(rawValue: 1 << 1)
+    static let bottomRight = RectCorner(rawValue: 1 << 2)
+    static let bottomLeft = RectCorner(rawValue: 1 << 3)
+    static let allCorners: RectCorner = [.topLeft, .topRight, .bottomLeft, .bottomRight]
+}
+
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: RectCorner) -> some View {
+        clipShape(RoundedCorner(radius: radius, corners: corners))
+    }
+}
+
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: RectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        
+        let p1 = CGPoint(x: rect.minX, y: rect.minY)
+        let p2 = CGPoint(x: rect.maxX, y: rect.minY)
+        let p3 = CGPoint(x: rect.maxX, y: rect.maxY)
+        let p4 = CGPoint(x: rect.minX, y: rect.maxY)
+        
+        // Start from top-left
+        if corners.contains(.topLeft) {
+            path.move(to: CGPoint(x: p1.x + radius, y: p1.y))
+        } else {
+            path.move(to: p1)
+        }
+        
+        // Top edge to top-right
+        if corners.contains(.topRight) {
+            path.addLine(to: CGPoint(x: p2.x - radius, y: p2.y))
+            path.addArc(center: CGPoint(x: p2.x - radius, y: p2.y + radius), radius: radius, startAngle: Angle(degrees: -90), endAngle: Angle(degrees: 0), clockwise: false)
+        } else {
+            path.addLine(to: p2)
+        }
+        
+        // Right edge to bottom-right
+        if corners.contains(.bottomRight) {
+            path.addLine(to: CGPoint(x: p3.x, y: p3.y - radius))
+            path.addArc(center: CGPoint(x: p3.x - radius, y: p3.y - radius), radius: radius, startAngle: Angle(degrees: 0), endAngle: Angle(degrees: 90), clockwise: false)
+        } else {
+            path.addLine(to: p3)
+        }
+        
+        // Bottom edge to bottom-left
+        if corners.contains(.bottomLeft) {
+            path.addLine(to: CGPoint(x: p4.x + radius, y: p4.y))
+            path.addArc(center: CGPoint(x: p4.x + radius, y: p4.y - radius), radius: radius, startAngle: Angle(degrees: 90), endAngle: Angle(degrees: 180), clockwise: false)
+        } else {
+            path.addLine(to: p4)
+        }
+        
+        // Left edge to top-left
+        if corners.contains(.topLeft) {
+            path.addLine(to: CGPoint(x: p1.x, y: p1.y + radius))
+            path.addArc(center: CGPoint(x: p1.x + radius, y: p1.y + radius), radius: radius, startAngle: Angle(degrees: 180), endAngle: Angle(degrees: 270), clockwise: false)
+        } else {
+            path.addLine(to: p1)
+        }
+        
+        path.closeSubpath()
+        return path
+    }
+}
+
+extension NSBezierPath {
+    // Removed redundant/broken extensions
+}
+
 struct MessageListView: View {
     let messages: [ChatMessage]
     let isSending: Bool
@@ -19,23 +94,61 @@ struct MessageListView: View {
     var body: some View {
         LiquidGlassScrollView(.vertical, showsIndicators: false, scrollToBottomTrigger: scrollToBottomTrigger) {
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(messages) { message in
-                    MessageView(
-                        message: message,
-                        fontSize: fontSize,
-                        fontFamily: fontFamily,
-                        isReasoningHidden: Binding(
-                            get: { hiddenReasoningMessageIds.contains(message.id) },
-                            set: { isHidden in
-                                if isHidden {
-                                    hiddenReasoningMessageIds.insert(message.id)
-                                } else {
-                                    hiddenReasoningMessageIds.remove(message.id)
-                                }
-                            }
-                        )
-                    )
-                        .id(message.id)
+                let displayedMessages = messages.filter { message in
+                    if message.role == .assistant && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (message.reasoning?.isEmpty ?? true) && (message.toolCalls?.isEmpty ?? true) {
+                        return false
+                    }
+                    return true
+                }
+                
+                ForEach(displayedMessages) { message in
+                    let isMessageEmpty = message.role == .assistant && 
+                                        message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && 
+                                        (message.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) && 
+                                        (message.toolCalls?.isEmpty ?? true)
+                    
+                    if isMessageEmpty {
+                        // Skip rendering entirely
+                    } else if message.isToolExecution {
+                        let latestForId = displayedMessages.last { $0.toolCallId == message.toolCallId }
+                        if message.id != latestForId?.id {
+                            EmptyView()
+                        } else {
+                            MessageView(
+                                message: message,
+                                fontSize: fontSize,
+                                fontFamily: fontFamily,
+                                isReasoningHidden: Binding(
+                                    get: { hiddenReasoningMessageIds.contains(message.id) },
+                                    set: { isHidden in
+                                        if isHidden {
+                                            hiddenReasoningMessageIds.insert(message.id)
+                                        } else {
+                                            hiddenReasoningMessageIds.remove(message.id)
+                                        }
+                                    }
+                                )
+                            )
+                            .id(message.id)
+                        }
+                    } else {
+                        MessageView(
+                            message: message,
+                            fontSize: fontSize,
+                            fontFamily: fontFamily,
+                            isReasoningHidden: Binding(
+                                get: { hiddenReasoningMessageIds.contains(message.id) },
+                                    set: { isHidden in
+                                        if isHidden {
+                                            hiddenReasoningMessageIds.insert(message.id)
+                                        } else {
+                                            hiddenReasoningMessageIds.remove(message.id)
+                                        }
+                                    }
+                                )
+                            )
+                            .id(message.id)
+                    }
                 }
 
                 if isSending {
@@ -85,7 +198,12 @@ struct MessageView: View {
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
                 // Tool Execution Message
                 if message.isToolExecution {
-                    VStack(alignment: .leading, spacing: 8) {
+                    // Only show the message if it's the latest for this tool call ID or if it's currently executing
+                    // However, we don't have access to the full message list here.
+                    // Let's assume the parent (MessageListView) handles filtering for consolidation if needed,
+                    // but for now, we'll fix the double box by making it look like a single unit.
+                    
+                    VStack(alignment: .leading, spacing: 0) {
                         // Header (Always Visible)
                         HStack(spacing: 6) {
                             statusIcon
@@ -113,7 +231,7 @@ struct MessageView: View {
                         }
                         .padding(8)
                         .background(statusColor.opacity(0.1))
-                        .cornerRadius(8)
+                        .cornerRadius(8, corners: isExpanded ? [.topLeft, .topRight] : .allCorners)
                         .onTapGesture {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 isExpanded.toggle()
@@ -130,7 +248,7 @@ struct MessageView: View {
                                     .padding(8)
                             }
                             .background(Color(NSColor.textBackgroundColor))
-                            .cornerRadius(8)
+                            .cornerRadius(8, corners: [.bottomLeft, .bottomRight])
                             .transition(.opacity)
                         }
                     }
@@ -138,12 +256,18 @@ struct MessageView: View {
                 } 
                 // Standard Chat Message
                 else {
-                    VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
-                        Text(message.role == .user ? "You" : "Assistant")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    let isMessageEmpty = message.role == .assistant && 
+                                        message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && 
+                                        (message.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) && 
+                                        (message.toolCalls?.isEmpty ?? true)
+                    
+                    if !isMessageEmpty {
+                        VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
+                            Text(message.role == .user ? "You" : "Assistant")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
 
-                        if message.role == .assistant, let reasoning = message.reasoning, !reasoning.isEmpty, !isReasoningHidden {
+                            if message.role == .assistant, let reasoning = message.reasoning, !reasoning.isEmpty, !isReasoningHidden {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "brain")
@@ -238,6 +362,7 @@ struct MessageView: View {
                                         Image(systemName: "doc.on.doc")
                                     }
                                 }
+                            }
                         }
                     }
                 }
