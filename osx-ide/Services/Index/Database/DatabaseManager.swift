@@ -35,13 +35,16 @@ public class DatabaseManager: @unchecked Sendable {
         let rootPrefix = rootPath.hasSuffix("/") ? rootPath : (rootPath + "/")
 
         let extPredicates = allowedExtensions
-            .map { "LOWER(path) LIKE '%.\($0)'" }
+            .map { _ in "LOWER(path) LIKE ?" }
             .sorted()
             .joined(separator: " OR ")
 
-        let escapedPrefix = rootPrefix.replacingOccurrences(of: "'", with: "''")
-        let sql = "SELECT COUNT(*) FROM resources WHERE ai_enriched = 1 AND path LIKE '\(escapedPrefix)%' AND (\(extPredicates));"
-        return try scalarInt(sql: sql)
+        let sql = "SELECT COUNT(*) FROM resources WHERE ai_enriched = 1 AND path LIKE ? AND (\(extPredicates));"
+        
+        var parameters: [Any] = [rootPrefix + "%"]
+        parameters.append(contentsOf: allowedExtensions.sorted().map { "%.\($0)" })
+        
+        return try scalarInt(sql: sql, parameters: parameters)
     }
 
     public func getAverageAIQualityScoreScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Double {
@@ -49,13 +52,16 @@ public class DatabaseManager: @unchecked Sendable {
         let rootPrefix = rootPath.hasSuffix("/") ? rootPath : (rootPath + "/")
 
         let extPredicates = allowedExtensions
-            .map { "LOWER(path) LIKE '%.\($0)'" }
+            .map { _ in "LOWER(path) LIKE ?" }
             .sorted()
             .joined(separator: " OR ")
 
-        let escapedPrefix = rootPrefix.replacingOccurrences(of: "'", with: "''")
-        let sql = "SELECT AVG(COALESCE(quality_score, 0)) FROM resources WHERE ai_enriched = 1 AND path LIKE '\(escapedPrefix)%' AND (\(extPredicates));"
-        return try scalarDouble(sql: sql)
+        let sql = "SELECT AVG(COALESCE(quality_score, 0)) FROM resources WHERE ai_enriched = 1 AND path LIKE ? AND (\(extPredicates));"
+        
+        var parameters: [Any] = [rootPrefix + "%"]
+        parameters.append(contentsOf: allowedExtensions.sorted().map { "%.\($0)" })
+        
+        return try scalarDouble(sql: sql, parameters: parameters)
     }
     
     deinit {
@@ -154,21 +160,30 @@ public class DatabaseManager: @unchecked Sendable {
     public func saveMemory(_ memory: MemoryEntry) throws {
         let sql = """
         INSERT INTO memories (id, tier, content, category, timestamp, protection_level)
-        VALUES ('\(memory.id)', '\(memory.tier.rawValue)', '\(memory.content)', '\(memory.category)', \(memory.timestamp.timeIntervalSince1970), \(memory.protectionLevel))
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
-            tier = '\(memory.tier.rawValue)',
-            content = '\(memory.content)',
-            category = '\(memory.category)',
-            timestamp = \(memory.timestamp.timeIntervalSince1970),
-            protection_level = \(memory.protectionLevel);
+            tier = excluded.tier,
+            content = excluded.content,
+            category = excluded.category,
+            timestamp = excluded.timestamp,
+            protection_level = excluded.protection_level;
         """
-        try execute(sql: sql)
+        try execute(sql: sql, parameters: [
+            memory.id,
+            memory.tier.rawValue,
+            memory.content,
+            memory.category,
+            memory.timestamp.timeIntervalSince1970,
+            memory.protectionLevel
+        ])
     }
     
     public func getMemories(tier: MemoryTier? = nil) throws -> [MemoryEntry] {
         var sql = "SELECT id, tier, content, category, timestamp, protection_level FROM memories"
+        var parameters: [Any] = []
         if let tier = tier {
-            sql += " WHERE tier = '\(tier.rawValue)'"
+            sql += " WHERE tier = ?"
+            parameters.append(tier.rawValue)
         }
         sql += " ORDER BY timestamp DESC;"
         
@@ -181,6 +196,10 @@ public class DatabaseManager: @unchecked Sendable {
             }
             
             defer { sqlite3_finalize(statement) }
+            
+            for (index, parameter) in parameters.enumerated() {
+                try bindParameter(statement: statement!, index: Int32(index + 1), value: parameter)
+            }
             
             while sqlite3_step(statement) == SQLITE_ROW {
                 let id = String(cString: sqlite3_column_text(statement, 0))
@@ -208,8 +227,8 @@ public class DatabaseManager: @unchecked Sendable {
     }
     
     public func deleteMemory(id: String) throws {
-        let sql = "DELETE FROM memories WHERE id = '\(id)';"
-        try execute(sql: sql)
+        let sql = "DELETE FROM memories WHERE id = ?;"
+        try execute(sql: sql, parameters: [id])
     }
 
     public func saveSymbols(_ symbols: [Symbol]) throws {
@@ -256,8 +275,8 @@ public class DatabaseManager: @unchecked Sendable {
     }
     
     public func deleteSymbols(for resourceId: String) throws {
-        let sql = "DELETE FROM symbols WHERE resource_id = '\(resourceId)';"
-        try execute(sql: sql)
+        let sql = "DELETE FROM symbols WHERE resource_id = ?;"
+        try execute(sql: sql, parameters: [resourceId])
     }
 
     public func listResourcePaths(matching query: String?, limit: Int, offset: Int) throws -> [String] {
@@ -265,11 +284,13 @@ public class DatabaseManager: @unchecked Sendable {
         let hasQuery = !(trimmed?.isEmpty ?? true)
 
         let sql: String
+        let parameters: [Any]
         if hasQuery {
-            let escaped = trimmed!.replacingOccurrences(of: "'", with: "''")
-            sql = "SELECT path FROM resources WHERE LOWER(path) LIKE LOWER('%\(escaped)%') ORDER BY path LIMIT \(limit) OFFSET \(offset);"
+            sql = "SELECT path FROM resources WHERE LOWER(path) LIKE LOWER(?) ORDER BY path LIMIT ? OFFSET ?;"
+            parameters = ["%\(trimmed!)%", limit, offset]
         } else {
-            sql = "SELECT path FROM resources ORDER BY path LIMIT \(limit) OFFSET \(offset);"
+            sql = "SELECT path FROM resources ORDER BY path LIMIT ? OFFSET ?;"
+            parameters = [limit, offset]
         }
 
         var results: [String] = []
@@ -279,6 +300,10 @@ public class DatabaseManager: @unchecked Sendable {
                 throw DatabaseError.prepareFailed
             }
             defer { sqlite3_finalize(statement) }
+
+            for (index, parameter) in parameters.enumerated() {
+                try bindParameter(statement: statement!, index: Int32(index + 1), value: parameter)
+            }
 
             while sqlite3_step(statement) == SQLITE_ROW {
                 if let ptr = sqlite3_column_text(statement, 0) {
@@ -291,8 +316,7 @@ public class DatabaseManager: @unchecked Sendable {
     }
 
     public func hasResourcePath(_ absolutePath: String) throws -> Bool {
-        let escaped = absolutePath.replacingOccurrences(of: "'", with: "''")
-        let sql = "SELECT 1 FROM resources WHERE path = '\(escaped)' LIMIT 1;"
+        let sql = "SELECT 1 FROM resources WHERE path = ? LIMIT 1;"
         var found = false
 
         try syncOnQueue {
@@ -301,6 +325,8 @@ public class DatabaseManager: @unchecked Sendable {
                 throw DatabaseError.prepareFailed
             }
             defer { sqlite3_finalize(statement) }
+            
+            sqlite3_bind_text(statement, 1, (absolutePath as NSString).utf8String, -1, nil)
 
             if sqlite3_step(statement) == SQLITE_ROW {
                 found = true
@@ -314,8 +340,7 @@ public class DatabaseManager: @unchecked Sendable {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return [] }
 
-        let escaped = trimmed.replacingOccurrences(of: "'", with: "''")
-        let sql = "SELECT path, ai_enriched, quality_score FROM resources WHERE LOWER(path) LIKE LOWER('%\(escaped)%') ORDER BY path LIMIT \(limit);"
+        let sql = "SELECT path, ai_enriched, quality_score FROM resources WHERE LOWER(path) LIKE LOWER(?) ORDER BY path LIMIT ?;"
 
         var results: [IndexedFileMatch] = []
         try syncOnQueue {
@@ -324,6 +349,9 @@ public class DatabaseManager: @unchecked Sendable {
                 throw DatabaseError.prepareFailed
             }
             defer { sqlite3_finalize(statement) }
+
+            sqlite3_bind_text(statement, 1, "%\(trimmed)%", -1, nil)
+            sqlite3_bind_int(statement, 2, Int32(limit))
 
             while sqlite3_step(statement) == SQLITE_ROW {
                 guard let pathPtr = sqlite3_column_text(statement, 0) else { continue }
@@ -341,8 +369,7 @@ public class DatabaseManager: @unchecked Sendable {
     }
 
     public func getResourceLastModified(resourceId: String) throws -> Double? {
-        let escapedId = resourceId.replacingOccurrences(of: "'", with: "''")
-        let sql = "SELECT last_modified FROM resources WHERE id = '\(escapedId)' LIMIT 1;"
+        let sql = "SELECT last_modified FROM resources WHERE id = ? LIMIT 1;"
         var result: Double?
 
         try syncOnQueue {
@@ -351,6 +378,8 @@ public class DatabaseManager: @unchecked Sendable {
                 throw DatabaseError.prepareFailed
             }
             defer { sqlite3_finalize(statement) }
+            
+            sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, nil)
 
             if sqlite3_step(statement) == SQLITE_ROW {
                 result = sqlite3_column_double(statement, 0)
@@ -361,8 +390,7 @@ public class DatabaseManager: @unchecked Sendable {
     }
 
     public func getResourceContentHash(resourceId: String) throws -> String? {
-        let escapedId = resourceId.replacingOccurrences(of: "'", with: "''")
-        let sql = "SELECT content_hash FROM resources WHERE id = '\(escapedId)' LIMIT 1;"
+        let sql = "SELECT content_hash FROM resources WHERE id = ? LIMIT 1;"
         var result: String?
 
         try syncOnQueue {
@@ -371,6 +399,8 @@ public class DatabaseManager: @unchecked Sendable {
                 throw DatabaseError.prepareFailed
             }
             defer { sqlite3_finalize(statement) }
+            
+            sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, nil)
 
             if sqlite3_step(statement) == SQLITE_ROW {
                 if let ptr = sqlite3_column_text(statement, 0) {
@@ -383,8 +413,7 @@ public class DatabaseManager: @unchecked Sendable {
     }
 
     public func isResourceAIEnriched(resourceId: String) throws -> Bool {
-        let escapedId = resourceId.replacingOccurrences(of: "'", with: "''")
-        let sql = "SELECT ai_enriched FROM resources WHERE id = '\(escapedId)' LIMIT 1;"
+        let sql = "SELECT ai_enriched FROM resources WHERE id = ? LIMIT 1;"
         var result = false
 
         try syncOnQueue {
@@ -393,6 +422,8 @@ public class DatabaseManager: @unchecked Sendable {
                 throw DatabaseError.prepareFailed
             }
             defer { sqlite3_finalize(statement) }
+            
+            sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, nil)
 
             if sqlite3_step(statement) == SQLITE_ROW {
                 result = sqlite3_column_int(statement, 0) != 0
@@ -403,8 +434,7 @@ public class DatabaseManager: @unchecked Sendable {
     }
 
     public func searchSymbols(nameLike query: String, limit: Int = 50) throws -> [Symbol] {
-        let escaped = query.replacingOccurrences(of: "'", with: "''")
-        let sql = "SELECT id, resource_id, name, kind, line_start, line_end, description FROM symbols WHERE name LIKE '%\(escaped)%' ORDER BY name LIMIT \(limit);"
+        let sql = "SELECT id, resource_id, name, kind, line_start, line_end, description FROM symbols WHERE name LIKE ? ORDER BY name LIMIT ?;"
 
         var results: [Symbol] = []
         try syncOnQueue {
@@ -413,6 +443,9 @@ public class DatabaseManager: @unchecked Sendable {
                 throw DatabaseError.prepareFailed
             }
             defer { sqlite3_finalize(statement) }
+            
+            sqlite3_bind_text(statement, 1, "%\(query)%", -1, nil)
+            sqlite3_bind_int(statement, 2, Int32(limit))
 
             while sqlite3_step(statement) == SQLITE_ROW {
                 let id = String(cString: sqlite3_column_text(statement, 0))
@@ -444,31 +477,26 @@ public class DatabaseManager: @unchecked Sendable {
         let rootPrefix = rootPath.hasSuffix("/") ? rootPath : (rootPath + "/")
 
         let extPredicates = allowedExtensions
-            .map { "LOWER(path) LIKE '%.\($0)'" }
+            .map { _ in "LOWER(path) LIKE ?" }
             .sorted()
             .joined(separator: " OR ")
 
-        let escapedPrefix = rootPrefix.replacingOccurrences(of: "'", with: "''")
-        let sql = "SELECT COUNT(*) FROM resources WHERE path LIKE '\(escapedPrefix)%' AND (\(extPredicates));"
-        return try scalarInt(sql: sql)
+        let sql = "SELECT COUNT(*) FROM resources WHERE path LIKE ? AND (\(extPredicates));"
+        
+        var parameters: [Any] = [rootPrefix + "%"]
+        parameters.append(contentsOf: allowedExtensions.sorted().map { "%.\($0)" })
+        
+        return try scalarInt(sql: sql, parameters: parameters)
     }
 
     public func updateQualityScore(resourceId: String, score: Double) throws {
-        let escapedId = resourceId.replacingOccurrences(of: "'", with: "''")
-        let sql = "UPDATE resources SET quality_score = \(score) WHERE id = '\(escapedId)';"
-        try execute(sql: sql)
+        let sql = "UPDATE resources SET quality_score = ? WHERE id = ?;"
+        try execute(sql: sql, parameters: [score, resourceId])
     }
 
     public func markAIEnriched(resourceId: String, score: Double, summary: String?) throws {
-        let escapedId = resourceId.replacingOccurrences(of: "'", with: "''")
-        let sql: String
-        if let summary = summary {
-            let escapedSummary = summary.replacingOccurrences(of: "'", with: "''")
-            sql = "UPDATE resources SET ai_enriched = 1, quality_score = \(score), summary = '\(escapedSummary)' WHERE id = '\(escapedId)';"
-        } else {
-            sql = "UPDATE resources SET ai_enriched = 1, quality_score = \(score) WHERE id = '\(escapedId)';"
-        }
-        try execute(sql: sql)
+        let sql = "UPDATE resources SET ai_enriched = 1, quality_score = ?, summary = ? WHERE id = ?;"
+        try execute(sql: sql, parameters: [score, summary as Any, resourceId])
     }
 
     public func getSymbolKindCounts() throws -> [String: Int] {
@@ -498,9 +526,8 @@ public class DatabaseManager: @unchecked Sendable {
     public func getAIEnrichedSummaries(projectRoot: URL, limit: Int = 20) throws -> [(path: String, summary: String)] {
         let rootPath = projectRoot.standardizedFileURL.path
         let rootPrefix = rootPath.hasSuffix("/") ? rootPath : (rootPath + "/")
-        let escapedPrefix = rootPrefix.replacingOccurrences(of: "'", with: "''")
         
-        let sql = "SELECT path, summary FROM resources WHERE ai_enriched = 1 AND path LIKE '\(escapedPrefix)%' AND summary IS NOT NULL AND summary != '' ORDER BY quality_score DESC LIMIT \(limit);"
+        let sql = "SELECT path, summary FROM resources WHERE ai_enriched = 1 AND path LIKE ? AND summary IS NOT NULL AND summary != '' ORDER BY quality_score DESC LIMIT ?;"
         
         var results: [(path: String, summary: String)] = []
         try syncOnQueue {
@@ -509,6 +536,9 @@ public class DatabaseManager: @unchecked Sendable {
                 throw DatabaseError.prepareFailed
             }
             defer { sqlite3_finalize(statement) }
+
+            sqlite3_bind_text(statement, 1, rootPrefix + "%", -1, nil)
+            sqlite3_bind_int(statement, 2, Int32(limit))
             
             while sqlite3_step(statement) == SQLITE_ROW {
                 if let pathPtr = sqlite3_column_text(statement, 0),
@@ -521,13 +551,12 @@ public class DatabaseManager: @unchecked Sendable {
     }
 
     public func searchFTS(query: String, limit: Int) throws -> [(path: String, snippet: String)] {
-        let escaped = query.replacingOccurrences(of: "'", with: "''")
         let sql = """
         SELECT path, snippet(resources_fts, 1, '', '', '...', 64) as match_snippet 
         FROM resources_fts 
-        WHERE resources_fts MATCH '\(escaped)' 
+        WHERE resources_fts MATCH ? 
         ORDER BY rank 
-        LIMIT \(limit);
+        LIMIT ?;
         """
         
         var results: [(path: String, snippet: String)] = []
@@ -537,6 +566,9 @@ public class DatabaseManager: @unchecked Sendable {
                 throw DatabaseError.prepareFailed
             }
             defer { sqlite3_finalize(statement) }
+
+            sqlite3_bind_text(statement, 1, query, -1, nil)
+            sqlite3_bind_int(statement, 2, Int32(limit))
             
             while sqlite3_step(statement) == SQLITE_ROW {
                 if let pathPtr = sqlite3_column_text(statement, 0),
@@ -557,20 +589,37 @@ public class DatabaseManager: @unchecked Sendable {
             defer { sqlite3_finalize(statement) }
             
             for (index, parameter) in parameters.enumerated() {
-                let bindIndex = Int32(index + 1)
-                if let string = parameter as? String {
-                    sqlite3_bind_text(statement, bindIndex, (string as NSString).utf8String, -1, nil)
-                } else if let int = parameter as? Int {
-                    sqlite3_bind_int(statement, bindIndex, Int32(int))
-                } else if let double = parameter as? Double {
-                    sqlite3_bind_double(statement, bindIndex, double)
-                } else {
-                    sqlite3_bind_null(statement, bindIndex)
-                }
+                try bindParameter(statement: statement!, index: Int32(index + 1), value: parameter)
             }
             
             if sqlite3_step(statement) != SQLITE_DONE {
                 throw DatabaseError.stepFailed
+            }
+        }
+    }
+    
+    private func bindParameter(statement: OpaquePointer, index: Int32, value: Any) throws {
+        if let string = value as? String {
+            sqlite3_bind_text(statement, index, (string as NSString).utf8String, -1, nil)
+        } else if let int = value as? Int {
+            sqlite3_bind_int(statement, index, Int32(int))
+        } else if let double = value as? Double {
+            sqlite3_bind_double(statement, index, double)
+        } else if let int32 = value as? Int32 {
+            sqlite3_bind_int(statement, index, int32)
+        } else if let int64 = value as? Int64 {
+            sqlite3_bind_int64(statement, index, int64)
+        } else if value is NSNull {
+            sqlite3_bind_null(statement, index)
+        } else if (value as? Optional<Any>) == nil {
+            sqlite3_bind_null(statement, index)
+        } else {
+            // Fallback for other types or Optional wrappers
+            let mirror = Mirror(reflecting: value)
+            if mirror.displayStyle == .optional && mirror.children.isEmpty {
+                sqlite3_bind_null(statement, index)
+            } else {
+                sqlite3_bind_text(statement, index, ("\(value)" as NSString).utf8String, -1, nil)
             }
         }
     }
@@ -594,7 +643,7 @@ public class DatabaseManager: @unchecked Sendable {
         }
     }
 
-    private func scalarInt(sql: String) throws -> Int {
+    private func scalarInt(sql: String, parameters: [Any] = []) throws -> Int {
         var result: Int = 0
         try syncOnQueue {
             var statement: OpaquePointer?
@@ -602,6 +651,10 @@ public class DatabaseManager: @unchecked Sendable {
                 throw DatabaseError.prepareFailed
             }
             defer { sqlite3_finalize(statement) }
+
+            for (index, parameter) in parameters.enumerated() {
+                try bindParameter(statement: statement!, index: Int32(index + 1), value: parameter)
+            }
 
             guard sqlite3_step(statement) == SQLITE_ROW else {
                 throw DatabaseError.stepFailed
@@ -611,7 +664,7 @@ public class DatabaseManager: @unchecked Sendable {
         return result
     }
 
-    private func scalarDouble(sql: String) throws -> Double {
+    private func scalarDouble(sql: String, parameters: [Any] = []) throws -> Double {
         var result: Double = 0
         try syncOnQueue {
             var statement: OpaquePointer?
@@ -619,6 +672,10 @@ public class DatabaseManager: @unchecked Sendable {
                 throw DatabaseError.prepareFailed
             }
             defer { sqlite3_finalize(statement) }
+
+            for (index, parameter) in parameters.enumerated() {
+                try bindParameter(statement: statement!, index: Int32(index + 1), value: parameter)
+            }
 
             guard sqlite3_step(statement) == SQLITE_ROW else {
                 throw DatabaseError.stepFailed

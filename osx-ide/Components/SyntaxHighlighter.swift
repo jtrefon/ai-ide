@@ -19,7 +19,21 @@ final class SyntaxHighlighter {
     /// Returns an attributed string with syntax highlighting applied for the given language.
     /// This method uses a robust, always-on high-level highlighting approach.
     func highlight(_ code: String, language: String = "text", font: NSFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)) -> NSAttributedString {
-        let lang = language.lowercased()
+        let langStr = normalizeLanguageIdentifier(language)
+
+        #if DEBUG
+        print("[Highlighter] highlight raw=\(language) normalized=\(langStr) len=\((code as NSString).length)")
+        #endif
+        
+        // Try to use modular language support if enabled
+        if let module = LanguageModuleManager.shared.getModule(forExtension: langStr) ??
+            LanguageModuleManager.shared.getModule(for: CodeLanguage(rawValue: langStr) ?? .unknown) {
+            #if DEBUG
+            print("[Highlighter] using module id=\(module.id.rawValue) extensions=\(module.fileExtensions)")
+            #endif
+            return module.highlight(code, font: font)
+        }
+
         let attributed = NSMutableAttributedString(string: code)
         let fullRange = NSRange(location: 0, length: (code as NSString).length)
 
@@ -29,26 +43,60 @@ final class SyntaxHighlighter {
             .foregroundColor: NSColor.labelColor
         ], range: fullRange)
 
-        switch lang {
-        case "swift":
+        // Built-in always-on fallback highlighting (when no module is registered/enabled)
+        let fallbackLanguage = CodeLanguage(rawValue: langStr) ?? .unknown
+        #if DEBUG
+        print("[Highlighter] using fallback language=\(fallbackLanguage.rawValue)")
+        #endif
+
+        switch fallbackLanguage {
+        case .swift:
             applySwiftHighlighting(in: attributed, code: code)
-        case "javascript", "js":
+        case .javascript:
             applyJavaScriptHighlighting(in: attributed, code: code)
-        case "typescript", "ts":
+        case .typescript:
             applyTypeScriptHighlighting(in: attributed, code: code)
-        case "python", "py":
+        case .python:
             applyPythonHighlighting(in: attributed, code: code)
-        case "html":
+        case .html:
             applyHTMLHighlighting(in: attributed, code: code)
-        case "css":
+        case .css:
             applyCSSHighlighting(in: attributed, code: code)
-        case "json":
+        case .json:
             applyJSONHighlighting(in: attributed, code: code)
         default:
             break
         }
 
         return attributed
+    }
+
+    private func normalizeLanguageIdentifier(_ raw: String) -> String {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        // Common forms:
+        // - "LANGUAGE_SWIFT" -> "swift"
+        // - "language_swift" -> "swift"
+        // - ".swift" -> "swift"
+        // - "swift" -> "swift"
+        if s.hasPrefix("language_") {
+            s.removeFirst("language_".count)
+        }
+        if s.hasPrefix(".") {
+            s.removeFirst()
+        }
+
+        // Some callers may provide file extensions like "ts"/"js"; map common aliases.
+        switch s {
+        case "js":
+            return "javascript"
+        case "ts":
+            return "typescript"
+        case "py":
+            return "python"
+        default:
+            return s
+        }
     }
 
     // MARK: - Language Highlighting
@@ -103,12 +151,31 @@ final class SyntaxHighlighter {
     }
 
     private func applyCSSHighlighting(in attr: NSMutableAttributedString, code: String) {
-        applyGenericHighlighting(in: attr, code: code)
-        // Property names (rough heuristic)
-        applyRegex("(?<=\\{)[^}]*?(?=:)", color: NSColor.systemTeal, in: attr, code: code)
-        // Numbers and units
-        applyRegex("\\b\\d+(?:\\.\\d+)?(px|em|rem|%|vh|vw)?\\b", color: NSColor.systemOrange, in: attr, code: code)
-        // Comments
+        // Match the stronger CSS scheme used by CSSModule so fallback stays consistent.
+        // 1. Selectors - Blue
+        applyRegex("(?m)^[ \t]*[.#]?[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=\\{)", color: NSColor.systemBlue, in: attr, code: code)
+        applyRegex("(?<=[\\s\\};])[.#]?[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=\\{)", color: NSColor.systemBlue, in: attr, code: code)
+
+        // 2. Braces - Cyan
+        applyRegex("[\\{\\}]", color: NSColor.systemCyan, in: attr, code: code)
+
+        // 3. Property Keys - Teal
+        applyRegex("(?<=[\\{\\s;])[a-zA-Z-][a-zA-Z0-9-]*\\s*(?=:)", color: NSColor.systemTeal, in: attr, code: code)
+
+        // 4. Property Values - Pink
+        applyRegex("(?<=:)[^;\\}]+", color: NSColor.systemPink, in: attr, code: code)
+
+        // 5. Quotes / quoted strings
+        applyRegex("['\"]", color: NSColor.systemOrange, in: attr, code: code)
+        applyRegex("(['\"])(?:\\\\.|[^\\1])*?\\1", color: NSColor.systemPurple, in: attr, code: code)
+
+        // 6. Numbers and Units
+        applyRegex("\\b-?\\d+(?:\\.\\d+)?(px|em|rem|%|vh|vw|s|ms|deg)?\\b", color: NSColor.systemOrange, in: attr, code: code)
+
+        // 7. Hex colors
+        applyRegex("#[0-9a-fA-F]{3,8}\\b", color: NSColor.systemOrange, in: attr, code: code)
+
+        // 8. Comments
         applyRegex("/\\*[\\s\\S]*?\\*/", color: NSColor.systemGreen, in: attr, code: code)
     }
 

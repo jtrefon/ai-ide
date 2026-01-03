@@ -74,6 +74,16 @@ final class CorePlugin {
             Task { await appState.fileEditor.saveFileAs() }
         }
         
+        commandRegistry.register(command: .editorFormat) { _ in
+            let content = appState.fileEditor.editorContent
+            let languageStr = appState.fileEditor.editorLanguage
+            let language = CodeLanguage(rawValue: languageStr) ?? .unknown
+            if let module = await LanguageModuleManager.shared.getModule(for: language) {
+                let formatted = module.format(content)
+                appState.fileEditor.editorContent = formatted
+            }
+        }
+        
         print("[CorePlugin] Initialized core UI components and commands")
     }
 }

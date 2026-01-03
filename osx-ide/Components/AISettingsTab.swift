@@ -148,10 +148,50 @@ struct AISettingsTab: View {
                             .toggleStyle(.switch)
                     }
                 }
+
+                LanguageModulesSection()
             }
             .padding(.top, 4)
             .onAppear {
                 Task { await viewModel.loadModels() }
+            }
+        }
+    }
+}
+
+struct LanguageModulesSection: View {
+    @ObservedObject var moduleManager = LanguageModuleManager.shared
+    
+    var body: some View {
+        SettingsCard(
+            title: "Language Modules",
+            subtitle: "Enable or disable language-specific features for better performance."
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(moduleManager.availableLanguages, id: \.self) { language in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(language.rawValue.capitalized)
+                                .font(.headline)
+                            Text("Syntax coloring, symbol extraction, and IntelliSense.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Toggle("", isOn: Binding(
+                            get: { moduleManager.isEnabled(language) },
+                            set: { enabled in moduleManager.toggleModule(language, enabled: enabled) }
+                        ))
+                        .toggleStyle(.switch)
+                    }
+                    
+                    if language != moduleManager.availableLanguages.last {
+                        Divider()
+                            .opacity(0.1)
+                    }
+                }
             }
         }
     }
