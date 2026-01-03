@@ -18,6 +18,6 @@ extension CommandID {
     public static let fileSave: CommandID = "file.save"
     public static let fileSaveAs: CommandID = "file.saveAs"
     
-    // MARK: - Application
-    public static let appSettings: CommandID = "app.settings"
+    // MARK: - Editor Operations
+    public static let editorFormat: CommandID = "editor.format"
 }

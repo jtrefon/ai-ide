@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CryptoKit
 
 public actor IndexerActor {
     private let database: DatabaseManager
@@ -48,35 +49,28 @@ public actor IndexerActor {
         
         let sql = """
         INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-        VALUES ('\(resourceId)', '\(url.path)', '\(language.rawValue)', \(timestamp), '\(contentHash)', 0.0)
+        VALUES (?, ?, ?, ?, ?, 0.0)
         ON CONFLICT(id) DO UPDATE SET
-            last_modified = \(timestamp),
-            content_hash = '\(contentHash)',
-            language = '\(language.rawValue)';
+            last_modified = excluded.last_modified,
+            content_hash = excluded.content_hash,
+            language = excluded.language;
         """
         
-        try database.execute(sql: sql)
+        try database.execute(sql: sql, parameters: [resourceId, url.path, language.rawValue, timestamp, contentHash])
         
         // Populate FTS table for full-text search
-        let ftsDeleteSql = "DELETE FROM resources_fts WHERE content_id = '\(resourceId)';"
+        let ftsDeleteSql = "DELETE FROM resources_fts WHERE content_id = ?;"
         let ftsInsertSql = "INSERT INTO resources_fts (path, content, content_id) VALUES (?, ?, ?);"
         try database.transaction {
-            try database.execute(sql: ftsDeleteSql)
+            try database.execute(sql: ftsDeleteSql, parameters: [resourceId])
             try database.execute(sql: ftsInsertSql, parameters: [url.path, content, resourceId])
         }
         
         // Extract symbols if supported language
         let symbols: [Symbol]
-        switch language {
-        case .swift:
-            symbols = SwiftParser.parse(content: content, resourceId: resourceId)
-        case .javascript:
-            symbols = JavaScriptParser.parse(content: content, resourceId: resourceId)
-        case .typescript:
-            symbols = TypeScriptParser.parse(content: content, resourceId: resourceId)
-        case .python:
-            symbols = PythonParser.parse(content: content, resourceId: resourceId)
-        default:
+        if let module = await LanguageModuleManager.shared.getModule(for: language) {
+            symbols = module.parseSymbols(content: content, resourceId: resourceId)
+        } else {
             symbols = []
         }
 
@@ -89,38 +83,37 @@ public actor IndexerActor {
     
     public func removeFile(at url: URL) async throws {
         let resourceId = url.absoluteString
-        let sql = "DELETE FROM resources WHERE id = '\(resourceId)';"
-        try database.execute(sql: sql)
+        let sql = "DELETE FROM resources WHERE id = ?;"
+        try database.execute(sql: sql, parameters: [resourceId])
         // Cascade delete should handle symbols, but let's be safe if we didn't enable foreign keys
         try database.deleteSymbols(for: resourceId)
     }
     
     private func computeHash(for content: String) -> String {
-        // Simple hash for now, avoiding CryptoKit dependency for simplicity in this phase
-        return String(content.hashValue)
+        guard let data = content.data(using: .utf8) else { return "" }
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
     
     private func shouldExclude(_ url: URL) -> Bool {
         let path = url.standardizedFileURL.path.replacingOccurrences(of: "\\", with: "/")
-        let components = path.split(separator: "/").map(String.init)
+        let relativePath: String
+        
+        // Try to get a relative path if possible for better matching
+        // In a real scenario, we'd pass the project root here.
+        // For now, we'll use the last component or the full path if not possible.
+        relativePath = path
 
         for pattern in config.excludePatterns {
-            let p = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
-            if p.isEmpty { continue }
-
-            if p.contains("*") {
-                let needle = p.replacingOccurrences(of: "*", with: "")
-                if !needle.isEmpty, path.contains(needle) { return true }
-                continue
+            if GlobMatcher.match(path: relativePath, pattern: pattern) {
+                return true
             }
-
-            if p.contains("/") {
-                let needle = p.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                if !needle.isEmpty, path.contains(needle) { return true }
-                continue
+            
+            // Also check components for simple directory names
+            let components = relativePath.split(separator: "/").map(String.init)
+            if components.contains(pattern) {
+                return true
             }
-
-            if components.contains(p) { return true }
         }
 
         return false

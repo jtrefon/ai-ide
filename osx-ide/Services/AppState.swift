@@ -254,6 +254,25 @@ class AppState: ObservableObject {
              .store(in: &cancellables)
     }
 
+    /// Standardized method to resolve relative path from project root.
+    func relativePath(for url: URL) -> String? {
+        guard let projectRoot = workspace.currentDirectory?.standardizedFileURL else { return nil }
+        let standardizedURL = url.standardizedFileURL
+        
+        if standardizedURL.path.hasPrefix(projectRoot.path) {
+            var relative = String(standardizedURL.path.dropFirst(projectRoot.path.count))
+            if relative.hasPrefix("/") { relative.removeFirst() }
+            return relative.isEmpty ? "." : relative
+        }
+        return nil
+    }
+
+    /// Standardized method to resolve absolute URL from relative path.
+    func absoluteURL(for relativePath: String) -> URL? {
+        return workspace.currentDirectory?.appendingPathComponent(relativePath)
+    }
+
+
     private func loadProjectSession(for projectRoot: URL) async {
         isRestoringSession = true
         defer { isRestoringSession = false }
@@ -319,15 +338,8 @@ class AppState: ObservableObject {
         let windowFrame = window.map { ProjectSession.WindowFrame(rect: $0.frame) }
         let lastOpenRelative: String?
         if let selectedPath = fileEditor.selectedFile {
-            let selectedURL = URL(fileURLWithPath: selectedPath).standardizedFileURL
-            let rootURL = projectRoot.standardizedFileURL
-            if selectedURL.path.hasPrefix(rootURL.path) {
-                var relative = String(selectedURL.path.dropFirst(rootURL.path.count))
-                if relative.hasPrefix("/") { relative.removeFirst() }
-                lastOpenRelative = relative.isEmpty ? nil : relative
-            } else {
-                lastOpenRelative = nil
-            }
+            let selectedURL = URL(fileURLWithPath: selectedPath)
+            lastOpenRelative = relativePath(for: selectedURL)
         } else {
             lastOpenRelative = nil
         }

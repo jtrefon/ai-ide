@@ -147,6 +147,11 @@ struct osx_ideApp: App {
 
                 Divider()
 
+                Button("Format Document") {
+                    Task { try? await CommandRegistry.shared.execute(.editorFormat) }
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+
                 Button("Reindex Project Now") {
                     DependencyContainer.shared.reindexProjectNow()
                 }

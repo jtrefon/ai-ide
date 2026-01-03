@@ -326,9 +326,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
             .filter { Self.isAIEnrichableFile($0) }
             .count
 
-        let allowed: Set<String> = [
-            "swift", "js", "ts", "py", "html", "css", "json", "yaml", "yml", "md", "markdown"
-        ]
+        let allowed = AppConstants.Indexing.allowedExtensions
         let scopedIndexedCount = (try? databaseManager.getIndexedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowed)) ?? counts.indexedResourceCount
 
         let scopedAIEnrichedCount = (try? databaseManager.getAIEnrichedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowed)) ?? 0
@@ -417,29 +415,13 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     private static func isIndexableFile(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
         if ext.isEmpty { return false }
-        let allowed: Set<String> = [
-            "swift",
-            "js", "jsx",
-            "ts", "tsx",
-            "py",
-            "html", "css",
-            "json", "yaml", "yml",
-            "md", "markdown"
-        ]
-        return allowed.contains(ext)
+        return AppConstants.Indexing.allowedExtensions.contains(ext)
     }
 
     private static func isAIEnrichableFile(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
         if ext.isEmpty { return false }
-        let allowed: Set<String> = [
-            "swift",
-            "js", "jsx",
-            "ts", "tsx",
-            "py",
-            "html", "css"
-        ]
-        return allowed.contains(ext)
+        return AppConstants.Indexing.aiEnrichableExtensions.contains(ext)
     }
 
     private static func resolveIndexDirectory(projectRoot: URL) -> URL {

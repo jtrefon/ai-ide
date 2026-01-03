@@ -28,6 +28,7 @@ class UIStateManager: ObservableObject {
     @Published var minimapVisible: Bool = false
     @Published var fontSize: Double = AppConstants.Editor.defaultFontSize
     @Published var fontFamily: String = "SF Mono"
+    @Published var indentationStyle: IndentationStyle = .tabs
     
     // MARK: - Theme State
     
@@ -135,6 +136,11 @@ class UIStateManager: ObservableObject {
         fontFamily = family
         uiService.setFontFamily(family)
     }
+
+    func setIndentationStyle(_ style: IndentationStyle) {
+        indentationStyle = style
+        uiService.setIndentationStyle(style)
+    }
     
     // MARK: - Theme Management
     
@@ -167,6 +173,7 @@ class UIStateManager: ObservableObject {
         selectedTheme = settings.selectedTheme
         fontSize = settings.fontSize
         fontFamily = settings.fontFamily
+        indentationStyle = settings.indentationStyle
         showLineNumbers = settings.showLineNumbers
         wordWrap = settings.wordWrap
         minimapVisible = settings.minimapVisible
@@ -192,6 +199,7 @@ class UIStateManager: ObservableObject {
         minimapVisible = false
         fontSize = AppConstants.Editor.defaultFontSize
         fontFamily = "SF Mono"
+        indentationStyle = .tabs
         selectedTheme = .system
         
         updateTheme()

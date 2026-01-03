@@ -27,6 +27,11 @@ struct SettingsView: View {
                         .tabItem {
                             Label("AI", systemImage: "sparkles")
                         }
+                    
+                    LanguageModulesTab()
+                        .tabItem {
+                            Label("Modules", systemImage: "puzzlepiece")
+                        }
                 }
             }
             .padding(24)
