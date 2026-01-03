@@ -350,8 +350,8 @@ public class DatabaseManager: @unchecked Sendable {
             }
             defer { sqlite3_finalize(statement) }
 
-            sqlite3_bind_text(statement, 1, "%\(trimmed)%", -1, nil)
-            sqlite3_bind_int(statement, 2, Int32(limit))
+            try bindParameter(statement: statement!, index: 1, value: "%\(trimmed)%")
+            try bindParameter(statement: statement!, index: 2, value: limit)
 
             while sqlite3_step(statement) == SQLITE_ROW {
                 guard let pathPtr = sqlite3_column_text(statement, 0) else { continue }
@@ -600,7 +600,7 @@ public class DatabaseManager: @unchecked Sendable {
     
     private func bindParameter(statement: OpaquePointer, index: Int32, value: Any) throws {
         if let string = value as? String {
-            sqlite3_bind_text(statement, index, (string as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statement, index, (string as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
         } else if let int = value as? Int {
             sqlite3_bind_int(statement, index, Int32(int))
         } else if let double = value as? Double {
@@ -611,16 +611,12 @@ public class DatabaseManager: @unchecked Sendable {
             sqlite3_bind_int64(statement, index, int64)
         } else if value is NSNull {
             sqlite3_bind_null(statement, index)
-        } else if (value as? Optional<Any>) == nil {
+        } else if let opt = value as? Optional<Any>, opt == nil {
             sqlite3_bind_null(statement, index)
         } else {
-            // Fallback for other types or Optional wrappers
-            let mirror = Mirror(reflecting: value)
-            if mirror.displayStyle == .optional && mirror.children.isEmpty {
-                sqlite3_bind_null(statement, index)
-            } else {
-                sqlite3_bind_text(statement, index, ("\(value)" as NSString).utf8String, -1, nil)
-            }
+            // Fallback for other types
+            let stringValue = "\(value)"
+            sqlite3_bind_text(statement, index, (stringValue as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
         }
     }
     
