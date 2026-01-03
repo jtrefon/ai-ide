@@ -43,9 +43,9 @@ final class DatabaseManagerTests: XCTestCase {
             let id = UUID().uuidString
             let sql = """
             INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-            VALUES ('\(id)', '\(path)', 'swift', 0.0, 'hash', 7.5);
+            VALUES (?, ?, ?, ?, ?, ?);
             """
-            try dbManager.execute(sql: sql)
+            try dbManager.execute(sql: sql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
         }
 
         let results = try dbManager.listResourcePaths(matching: nil, limit: 10, offset: 0)
@@ -65,9 +65,9 @@ final class DatabaseManagerTests: XCTestCase {
             let id = UUID().uuidString
             let sql = """
             INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-            VALUES ('\(id)', '\(path)', 'swift', 0.0, 'hash', 7.5);
+            VALUES (?, ?, ?, ?, ?, ?);
             """
-            try dbManager.execute(sql: sql)
+            try dbManager.execute(sql: sql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
         }
 
         let results = try dbManager.listResourcePaths(matching: "swift", limit: 10, offset: 0)
@@ -80,9 +80,9 @@ final class DatabaseManagerTests: XCTestCase {
         let path = "src/main.swift"
         let sql = """
         INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-        VALUES ('\(id)', '\(path)', 'swift', 0.0, 'hash', 7.5);
+        VALUES (?, ?, ?, ?, ?, ?);
         """
-        try dbManager.execute(sql: sql)
+        try dbManager.execute(sql: sql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
 
         XCTAssertTrue(try dbManager.hasResourcePath(path))
         XCTAssertFalse(try dbManager.hasResourcePath("src/nonexistent.swift"))
@@ -99,9 +99,9 @@ final class DatabaseManagerTests: XCTestCase {
             let id = UUID().uuidString
             let sql = """
             INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-            VALUES ('\(id)', '\(path)', 'swift', 0.0, 'hash', 7.5);
+            VALUES (?, ?, ?, ?, ?, ?);
             """
-            try dbManager.execute(sql: sql)
+            try dbManager.execute(sql: sql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
         }
 
         let results = try dbManager.findResourceMatches(query: "swift", limit: 10)
@@ -116,9 +116,9 @@ final class DatabaseManagerTests: XCTestCase {
         let path = "src/ai_enriched.swift"
         let sql = """
         INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score, ai_enriched)
-        VALUES ('\(id)', '\(path)', 'swift', 0.0, 'hash', 9.2, 1);
+        VALUES (?, ?, ?, ?, ?, ?, 1);
         """
-        try dbManager.execute(sql: sql)
+        try dbManager.execute(sql: sql, parameters: [id, path, "swift", 0.0, "hash", 9.2])
 
         let results = try dbManager.findResourceMatches(query: "ai_enriched", limit: 10)
         XCTAssertEqual(results.count, 1)
@@ -131,9 +131,9 @@ final class DatabaseManagerTests: XCTestCase {
         let path = "src/main.swift"
         let insertSql = """
         INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-        VALUES ('\(id)', '\(path)', 'swift', 0.0, 'hash', 7.5);
+        VALUES (?, ?, ?, ?, ?, ?);
         """
-        try dbManager.execute(sql: insertSql)
+        try dbManager.execute(sql: insertSql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
 
         try dbManager.updateQualityScore(resourceId: id, score: 8.8)
 
@@ -146,9 +146,9 @@ final class DatabaseManagerTests: XCTestCase {
         let path = "src/main.swift"
         let insertSql = """
         INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-        VALUES ('\(id)', '\(path)', 'swift', 0.0, 'hash', 7.5);
+        VALUES (?, ?, ?, ?, ?, ?);
         """
-        try dbManager.execute(sql: insertSql)
+        try dbManager.execute(sql: insertSql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
 
         try dbManager.markAIEnriched(resourceId: id, score: 9.1, summary: "Test summary")
 
