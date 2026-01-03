@@ -83,6 +83,23 @@ struct GeneralSettingsTab: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+
+                    SettingsRow(
+                        title: "Indentation",
+                        subtitle: "Choose tabs or spaces.",
+                        systemImage: "arrow.right.to.line"
+                    ) {
+                        Picker("", selection: indentationStyleBinding) {
+                            ForEach(IndentationStyle.allCases, id: \.self) { style in
+                                Text(style.displayName)
+                                    .tag(style)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 220)
+                        .accessibilityIdentifier("Settings.IndentationStyle")
+                    }
                     
                     SettingsRow(
                         title: "Line numbers",
@@ -181,6 +198,13 @@ struct GeneralSettingsTab: View {
         Binding(
             get: { appState.ui.fontFamily },
             set: { appState.ui.updateFontFamily($0) }
+        )
+    }
+
+    private var indentationStyleBinding: Binding<IndentationStyle> {
+        Binding(
+            get: { appState.ui.indentationStyle },
+            set: { appState.ui.setIndentationStyle($0) }
         )
     }
     

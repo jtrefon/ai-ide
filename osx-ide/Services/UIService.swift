@@ -40,6 +40,12 @@ final class UIService: UIServiceProtocol {
     func setFontFamily(_ family: String) {
         userDefaults.set(family, forKey: AppConstants.Storage.fontFamilyKey)
     }
+
+    // MARK: - Indentation
+
+    func setIndentationStyle(_ style: IndentationStyle) {
+        userDefaults.set(style.rawValue, forKey: AppConstants.Storage.indentationStyleKey)
+    }
     
     // MARK: - Editor Settings
     
@@ -91,11 +97,14 @@ final class UIService: UIServiceProtocol {
         let showLineNumbers: Bool = true
         let wordWrap: Bool = false
         let minimapVisible: Bool = false
+
+        let indentationStyle = IndentationStyle.current(userDefaults: userDefaults)
         
         return UISettings(
             selectedTheme: storedTheme,
             fontSize: fontSize,
             fontFamily: userDefaults.string(forKey: AppConstants.Storage.fontFamilyKey) ?? "SF Mono",
+            indentationStyle: indentationStyle,
             showLineNumbers: showLineNumbers,
             wordWrap: wordWrap,
             minimapVisible: minimapVisible,
@@ -110,6 +119,7 @@ final class UIService: UIServiceProtocol {
         setTheme(settings.selectedTheme)
         setFontSize(settings.fontSize)
         setFontFamily(settings.fontFamily)
+        setIndentationStyle(settings.indentationStyle)
         setShowLineNumbers(settings.showLineNumbers)
         setWordWrap(settings.wordWrap)
         setMinimapVisible(settings.minimapVisible)
@@ -122,7 +132,8 @@ final class UIService: UIServiceProtocol {
     func resetToDefaults() {
         let keys = [
             AppConstants.Storage.fontSizeKey,
-            AppConstants.Storage.fontFamilyKey
+            AppConstants.Storage.fontFamilyKey,
+            AppConstants.Storage.indentationStyleKey
         ]
         keys.forEach { userDefaults.removeObject(forKey: $0) }
     }
@@ -133,6 +144,7 @@ final class UIService: UIServiceProtocol {
         return [
             "fontSize": settings.fontSize,
             "fontFamily": settings.fontFamily,
+            "indentationStyle": settings.indentationStyle.rawValue,
             "showLineNumbers": settings.showLineNumbers,
             "wordWrap": settings.wordWrap,
             "minimapVisible": settings.minimapVisible,
@@ -155,6 +167,11 @@ final class UIService: UIServiceProtocol {
         
         if let family = settings["fontFamily"] as? String {
             setFontFamily(family)
+        }
+
+        if let raw = settings["indentationStyle"] as? String,
+           let style = IndentationStyle(rawValue: raw) {
+            setIndentationStyle(style)
         }
         
         if let show = settings["showLineNumbers"] as? Bool {
@@ -187,6 +204,7 @@ struct UISettings {
     let selectedTheme: AppTheme
     let fontSize: Double
     let fontFamily: String
+    let indentationStyle: IndentationStyle
     let showLineNumbers: Bool
     let wordWrap: Bool
     let minimapVisible: Bool

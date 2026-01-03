@@ -32,6 +32,7 @@ protocol UIServiceProtocol {
     func setTheme(_ theme: AppTheme)
     func setFontSize(_ size: Double)
     func setFontFamily(_ family: String)
+    func setIndentationStyle(_ style: IndentationStyle)
     func setShowLineNumbers(_ show: Bool)
     func setWordWrap(_ wrap: Bool)
     func setMinimapVisible(_ visible: Bool)

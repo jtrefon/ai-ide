@@ -157,24 +157,12 @@ struct FileExplorerView: View {
     }
 
     private func syncSelectionFromAppState() {
-        guard let rootURL = appState.workspace.currentDirectory?.standardizedFileURL ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL as URL? else {
-            selectedRelativePath = nil
-            return
-        }
         guard let selectedFilePath = appState.fileEditor.selectedFile else {
             selectedRelativePath = nil
             return
         }
-        let selectedURL = URL(fileURLWithPath: selectedFilePath).standardizedFileURL
-        let rootPath = rootURL.path
-        let selectedPath = selectedURL.path
-        guard selectedPath.hasPrefix(rootPath) else {
-            selectedRelativePath = nil
-            return
-        }
-        var relative = String(selectedPath.dropFirst(rootPath.count))
-        if relative.hasPrefix("/") { relative.removeFirst() }
-        selectedRelativePath = relative.isEmpty ? nil : relative
+        let selectedURL = URL(fileURLWithPath: selectedFilePath)
+        selectedRelativePath = appState.relativePath(for: selectedURL)
     }
 
     private func createNewFile() {
