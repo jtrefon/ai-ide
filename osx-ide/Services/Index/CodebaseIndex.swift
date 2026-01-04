@@ -24,6 +24,7 @@ public protocol CodebaseIndexProtocol: Sendable {
     func searchIndexedText(pattern: String, limit: Int) async throws -> [String]
 
     func searchSymbols(nameLike query: String, limit: Int) throws -> [Symbol]
+    func searchSymbolsWithPaths(nameLike query: String, limit: Int) throws -> [SymbolSearchResult]
     func getSummaries(projectRoot: URL, limit: Int) throws -> [(path: String, summary: String)]
     func getMemories(tier: MemoryTier?) throws -> [MemoryEntry]
     func getStats() throws -> IndexStats
@@ -173,17 +174,61 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         let needle = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
         if needle.isEmpty { return [] }
 
-        let results = try databaseManager.searchFTS(query: needle, limit: limit)
-        
-        return results.map { result in
-            let rel: String
-            if result.path.hasPrefix(projectRoot.path + "/") {
-                rel = String(result.path.dropFirst(projectRoot.path.count + 1))
-            } else {
-                rel = result.path
+        let boundedLimit = max(1, min(500, limit))
+
+        func relPath(_ absPath: String) -> String {
+            if absPath.hasPrefix(projectRoot.path + "/") {
+                return String(absPath.dropFirst(projectRoot.path.count + 1))
             }
-            return "\(rel): \(result.snippet)"
+            return absPath
         }
+
+        // Candidate narrowing via FTS: split into identifier-like tokens and search those.
+        // If we can't produce a meaningful token query (e.g. mostly punctuation), fall back
+        // to scanning a bounded number of indexed files.
+        let tokens = needle
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "_" })
+            .map(String.init)
+            .filter { $0.count >= 3 }
+            .sorted { $0.count > $1.count }
+
+        let ftsQuery = tokens.prefix(3).joined(separator: " AND ")
+        let maxCandidateFiles = min(800, max(50, boundedLimit * 20))
+
+        let candidatePaths: [String]
+        if !ftsQuery.isEmpty {
+            candidatePaths = (try? databaseManager.candidatePathsForFTS(query: ftsQuery, limit: maxCandidateFiles)) ?? []
+        } else {
+            candidatePaths = (try? databaseManager.listResourcePaths(matching: nil, limit: maxCandidateFiles, offset: 0)) ?? []
+        }
+
+        if candidatePaths.isEmpty { return [] }
+
+        var output: [String] = []
+        output.reserveCapacity(min(boundedLimit, 50))
+
+        for absPath in candidatePaths {
+            if output.count >= boundedLimit { break }
+
+            let fileURL = URL(fileURLWithPath: absPath)
+            guard FileManager.default.fileExists(atPath: fileURL.path) else { continue }
+
+            // Stream-ish scan line-by-line to get true line numbers without expensive indexing.
+            guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
+            let lines = content.components(separatedBy: .newlines)
+
+            for (idx, line) in lines.enumerated() {
+                if output.count >= boundedLimit { break }
+                guard line.contains(needle) else { continue }
+
+                let lineNo = idx + 1
+                let snippetMax = 240
+                let snippet = line.count > snippetMax ? String(line.prefix(snippetMax)) + "…" : line
+                output.append("\(relPath(absPath)):\(lineNo): \(snippet)")
+            }
+        }
+
+        return output
     }
 
     public convenience init(eventBus: EventBusProtocol) throws {
@@ -211,7 +256,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
 
         if aiEnrichmentEnabled {
             aiEnrichmentAfterIndexCancellable?.cancel()
-            aiEnrichmentAfterIndexCancellable = eventBus.subscribe(to: IndexingCompletedEvent.self) { [weak self] _ in
+            aiEnrichmentAfterIndexCancellable = eventBus.subscribe(to: ProjectReindexCompletedEvent.self) { [weak self] _ in
                 guard let self else { return }
                 self.aiEnrichmentAfterIndexCancellable?.cancel()
                 self.aiEnrichmentAfterIndexCancellable = nil
@@ -309,6 +354,10 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
 
     public func searchSymbols(nameLike query: String, limit: Int = 50) throws -> [Symbol] {
         try queryService.searchSymbols(nameLike: query, limit: limit)
+    }
+
+    public func searchSymbolsWithPaths(nameLike query: String, limit: Int = 50) throws -> [SymbolSearchResult] {
+        try queryService.searchSymbolsWithPaths(nameLike: query, limit: limit)
     }
 
     public func getSummaries(projectRoot: URL, limit: Int = 20) throws -> [(path: String, summary: String)] {

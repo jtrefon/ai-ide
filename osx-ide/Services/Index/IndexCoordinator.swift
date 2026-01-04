@@ -64,6 +64,7 @@ public class IndexCoordinator {
             let duration = Date().timeIntervalSince(start)
             await IndexLogger.shared.log("Reindex completed: \(processed)/\(total) files in \(String(format: "%.2f", duration))s")
             await eventBus.publish(IndexingCompletedEvent(indexedCount: processed, duration: duration))
+            await eventBus.publish(ProjectReindexCompletedEvent(indexedCount: processed, duration: duration))
         }
     }
     

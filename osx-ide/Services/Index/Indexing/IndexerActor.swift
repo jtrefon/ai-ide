@@ -35,8 +35,55 @@ public actor IndexerActor {
         if let fileModTime,
            let existingModTime,
            abs(existingModTime - fileModTime) < 0.000_001 {
-            // Already indexed for this exact file version; skip.
-            await IndexLogger.shared.log("IndexerActor: File \(url.lastPathComponent) already indexed, skipping")
+            // Modtimes can have limited resolution; verify hash before skipping.
+            let content = try String(contentsOf: url, encoding: .utf8)
+            let currentHash = computeHash(for: content)
+            let existingHash = (try? database.getResourceContentHash(resourceId: resourceId)) ?? nil
+
+            if let existingHash, !existingHash.isEmpty, existingHash == currentHash {
+                await IndexLogger.shared.log("IndexerActor: File \(url.lastPathComponent) already indexed (hash match), skipping")
+                return
+            }
+
+            // If hash differs (or missing), continue indexing using the content we already loaded.
+            await IndexLogger.shared.log("IndexerActor: File \(url.lastPathComponent) modtime matched but hash differs; reindexing")
+
+            await IndexLogger.shared.log("IndexerActor: Indexing \(url.lastPathComponent) (Language: \(language.rawValue))")
+            let timestamp = fileModTime
+
+            let sql = """
+            INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
+            VALUES (?, ?, ?, ?, ?, 0.0)
+            ON CONFLICT(id) DO UPDATE SET
+                last_modified = excluded.last_modified,
+                content_hash = excluded.content_hash,
+                language = excluded.language;
+            """
+
+            try database.execute(sql: sql, parameters: [resourceId, url.path, language.rawValue, timestamp, currentHash])
+
+            // Populate FTS table for full-text search
+            let ftsDeleteSql = "DELETE FROM resources_fts WHERE content_id = ?;"
+            let ftsInsertSql = "INSERT INTO resources_fts (path, content, content_id) VALUES (?, ?, ?);"
+            try database.transaction {
+                try database.execute(sql: ftsDeleteSql, parameters: [resourceId])
+                try database.execute(sql: ftsInsertSql, parameters: [url.path, content, resourceId])
+            }
+
+            // Extract symbols if supported language
+            let symbols: [Symbol]
+            if let module = await LanguageModuleManager.shared.getModule(for: language) {
+                symbols = module.parseSymbols(content: content, resourceId: resourceId)
+            } else {
+                symbols = []
+            }
+
+            if !symbols.isEmpty {
+                await IndexLogger.shared.log("IndexerActor: Extracted \(symbols.count) symbols from \(url.lastPathComponent)")
+                try database.deleteSymbols(for: resourceId)
+                try database.saveSymbols(symbols)
+            }
+
             return
         }
 
