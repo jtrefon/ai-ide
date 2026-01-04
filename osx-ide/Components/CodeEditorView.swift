@@ -128,8 +128,10 @@ struct TextViewRepresentable: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
         let resolvedFont = resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize)
+        var needsRehighlight = false
         if textView.font != resolvedFont {
             textView.font = resolvedFont
+            needsRehighlight = true
         }
 
         if let ruler = scrollView.verticalRulerView as? ModernLineNumberRulerView {
@@ -150,6 +152,11 @@ struct TextViewRepresentable: NSViewRepresentable {
             context.coordinator.isProgrammaticUpdate = false
 
             context.coordinator.performAsyncHighlight(for: text, in: textView, language: language, font: resolvedFont)
+        } else if needsRehighlight {
+            // Some AppKit updates (notably changing `textView.font`) can implicitly reset
+            // existing text storage attributes, which will wipe syntax colors.
+            // Ensure the highlighter runs again even when the underlying text is unchanged.
+            context.coordinator.performAsyncHighlight(for: current, in: textView, language: language, font: resolvedFont)
         }
         
         

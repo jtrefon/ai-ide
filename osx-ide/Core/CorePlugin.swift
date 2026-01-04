@@ -81,7 +81,10 @@ final class CorePlugin {
             if let module = await LanguageModuleManager.shared.getModule(for: language) {
                 let formatted = module.format(content)
                 appState.fileEditor.editorContent = formatted
+                return
             }
+
+            appState.fileEditor.editorContent = CodeFormatter.format(content, language: language)
         }
         
         print("[CorePlugin] Initialized core UI components and commands")
