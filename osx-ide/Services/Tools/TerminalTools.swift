@@ -10,6 +10,13 @@ import Darwin
 
 /// Run a shell command
 struct RunCommandTool: AITool {
+    private final class AtomicBool: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: Bool
+        init(_ value: Bool) { self.value = value }
+        func set(_ newValue: Bool) { lock.lock(); defer { lock.unlock() }; value = newValue }
+        func get() -> Bool { lock.lock(); defer { lock.unlock() }; return value }
+    }
     let name = "run_command"
     let description = "Execute a shell command in the terminal."
     var parameters: [String: Any] {
@@ -65,6 +72,17 @@ struct RunCommandTool: AITool {
         guard let command = arguments["command"] as? String else {
             throw AppError.aiServiceError("Missing 'command' argument for run_command")
         }
+
+        let toolCallId = arguments["toolCallId"] as? String ?? UUID().uuidString
+        let isCancelled = AtomicBool(false)
+        
+        let observer = NotificationCenter.default.addObserver(forName: NSNotification.Name("CancelToolExecution"), object: nil, queue: nil) { notification in
+            if let targetId = notification.userInfo?["toolCallId"] as? String, targetId == toolCallId {
+                isCancelled.set(true)
+            }
+        }
+        
+        defer { NotificationCenter.default.removeObserver(observer) }
 
         let timeoutSecondsRaw = arguments["timeout_seconds"] as? Double
         let timeoutSeconds = timeoutSecondsRaw ?? 30
@@ -123,10 +141,13 @@ struct RunCommandTool: AITool {
             let didExitBeforeTimeout: Bool = await withTaskGroup(of: Bool.self) { group in
                 group.addTask {
                     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            process.waitUntilExit()
-                            continuation.resume()
+                        let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
+                            if !process.isRunning || isCancelled.get() {
+                                timer.invalidate()
+                                continuation.resume()
+                            }
                         }
+                        RunLoop.main.add(timer, forMode: .common)
                     }
                     return true
                 }
@@ -137,19 +158,27 @@ struct RunCommandTool: AITool {
                 }
 
                 let first = await group.next() ?? false
+                
+                if isCancelled.get() {
+                    process.terminate()
+                    return false
+                }
+                
                 group.cancelAll()
                 return first
             }
 
-            if !didExitBeforeTimeout {
-                await AIToolTraceLogger.shared.log(type: "terminal.run_command_timeout", data: [
+            if isCancelled.get() || !didExitBeforeTimeout {
+                await AIToolTraceLogger.shared.log(type: isCancelled.get() ? "terminal.run_command_cancelled" : "terminal.run_command_timeout", data: [
                     "cwd": workingDirectoryURL.path,
                     "commandLength": command.count,
                     "commandPreview": commandPreview,
                     "timeoutSeconds": timeoutSeconds
                 ])
 
-                process.terminate()
+                if process.isRunning {
+                    process.terminate()
+                }
 
                 // Give it a short grace period, then SIGKILL if still running.
                 try? await Task.sleep(nanoseconds: 500_000_000)
@@ -167,9 +196,14 @@ struct RunCommandTool: AITool {
             await AIToolTraceLogger.shared.log(type: "terminal.run_command_result", data: [
                 "exitCode": Int(process.terminationStatus),
                 "outputLength": output.count,
-                "timedOut": !didExitBeforeTimeout
+                "timedOut": !didExitBeforeTimeout,
+                "cancelled": isCancelled.get()
             ])
             
+            if isCancelled.get() {
+                return "Command cancelled by user.\nPartial Output:\n\(output)"
+            }
+
             return """
             Exit Code: \(process.terminationStatus)
             Timed Out: \(!didExitBeforeTimeout)

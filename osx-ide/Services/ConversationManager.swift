@@ -14,7 +14,8 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published var isSending: Bool = false
     @Published var error: String? = nil
     @Published var currentMode: AIMode = .chat
-
+    @Published var cancelledToolCallIds: Set<String> = []
+    
     private let conversationId: String
     
     private let historyManager: ChatHistoryManager
@@ -357,6 +358,13 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
     
     func clearConversation() {
         historyManager.clear()
+        cancelledToolCallIds.removeAll()
+    }
+    
+    func cancelToolCall(id: String) {
+        cancelledToolCallIds.insert(id)
+        // Find the specific tool execution message and mark it as failed/cancelled
+        historyManager.updateMessageStatus(toolCallId: id, status: .failed, content: "Cancelled by user")
     }
     
     func explainCode(_ code: String) {

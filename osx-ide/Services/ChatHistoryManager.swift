@@ -35,6 +35,16 @@ public class ChatHistoryManager: ObservableObject {
     }
     
     public func append(_ message: ChatMessage) {
+        // Skip empty assistant messages at the source
+        let isAssistant = message.role == MessageRole.assistant
+        let isContentEmpty = message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty
+        let isReasoningEmpty = (message.reasoning?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty ?? true)
+        let isToolCallsEmpty = (message.toolCalls?.isEmpty ?? true)
+        
+        if isAssistant && isContentEmpty && isReasoningEmpty && isToolCallsEmpty {
+            return
+        }
+        
         messages.append(message)
         saveHistory()
     }
@@ -53,6 +63,24 @@ public class ChatHistoryManager: ObservableObject {
             content: "Conversation cleared. How can I assist you now?"
         ))
         saveHistory()
+    }
+
+    public func updateMessageStatus(toolCallId: String, status: ToolExecutionStatus, content: String? = nil) {
+        if let index = messages.lastIndex(where: { $0.toolCallId == toolCallId }) {
+            let oldMessage = messages[index]
+            messages[index] = ChatMessage(
+                role: oldMessage.role,
+                content: content ?? oldMessage.content,
+                reasoning: oldMessage.reasoning,
+                codeContext: oldMessage.codeContext,
+                toolName: oldMessage.toolName,
+                toolStatus: status,
+                targetFile: oldMessage.targetFile,
+                toolCallId: oldMessage.toolCallId,
+                toolCalls: oldMessage.toolCalls
+            )
+            saveHistory()
+        }
     }
     
     public func saveHistory() {
