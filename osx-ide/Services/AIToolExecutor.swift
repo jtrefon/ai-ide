@@ -36,7 +36,12 @@ public class AIToolExecutor {
         var results: [ChatMessage] = []
         
         for toolCall in toolCalls {
-            let targetFile = toolCall.arguments["path"] as? String
+            let targetFile: String?
+            if toolCall.name == "run_command" {
+                targetFile = toolCall.arguments["command"] as? String
+            } else {
+                targetFile = toolCall.arguments["path"] as? String
+            }
 
             Task {
                 await AppLogger.shared.info(category: .tool, message: "tool.execute_start", metadata: [

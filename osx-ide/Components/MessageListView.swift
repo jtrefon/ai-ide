@@ -224,6 +224,19 @@ struct MessageView: View {
                             
                             Spacer()
                             
+                            if message.toolStatus == .executing {
+                                Button {
+                                    // Handle cancellation - this requires passing an action down
+                                    NotificationCenter.default.post(name: NSNotification.Name("CancelToolExecution"), object: nil, userInfo: ["toolCallId": message.toolCallId ?? ""])
+                                } label: {
+                                    Image(systemName: "stop.circle.fill")
+                                        .foregroundColor(.red)
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Cancel execution")
+                            }
+                            
                             // Chevron for expansion
                             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                 .font(.caption2)

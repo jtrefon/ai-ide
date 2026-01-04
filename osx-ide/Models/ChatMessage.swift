@@ -30,9 +30,9 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
     
     // Tool execution properties
     public let toolName: String?
-    public let toolStatus: ToolExecutionStatus?
-    public let targetFile: String?
-    public let toolCallId: String? // For Tool Output messages (referencing the call)
+    public var toolStatus: ToolExecutionStatus?
+    public var targetFile: String?
+    public var toolCallId: String? // For Tool Output messages (referencing the call)
     public let toolCalls: [AIToolCall]? // For Assistant messages (the calls themselves)
     
     public init(role: MessageRole, content: String, reasoning: String? = nil, codeContext: String? = nil, toolName: String? = nil, toolStatus: ToolExecutionStatus? = nil, targetFile: String? = nil, toolCallId: String? = nil, toolCalls: [AIToolCall]? = nil) {
