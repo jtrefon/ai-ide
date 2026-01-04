@@ -134,7 +134,10 @@ actor OpenRouterAIService: AIService {
             systemContent += "\n\n**IMPORTANT CONTEXT:**\nProject Root: `\(projectRoot.path)`\nPlatform: macOS\nAll file paths must be relative to the project root or validated absolute paths within it. Never use Linux-style paths like /home."
         }
 
-        if settings.reasoningEnabled {
+        // Reasoning blocks are intended for interactive chat/agent output.
+        // For internal pipelines (e.g. index enrichment) we typically pass mode == nil and
+        // require strict machine-readable output (JSON). Avoid injecting formatting constraints.
+        if settings.reasoningEnabled, mode != nil {
             systemContent += "\n\n## Reasoning\nWhen responding, include a structured reasoning block enclosed in <ide_reasoning>...</ide_reasoning>. This block will be shown in a separate, foldable UI panel.\n\nRequirements:\n- ALWAYS include all four sections in this exact order: Analyze, Research, Plan, Reflect.\n- If a section is not applicable, write 'N/A' (do not omit the section).\n- Keep it concise and actionable; use short bullets or short sentences.\n- Do NOT include code blocks in <ide_reasoning>.\n- After </ide_reasoning>, provide the normal user-facing answer as usual (markdown allowed).\n\nFormat example:\n<ide_reasoning>\nAnalyze: ...\nResearch: ...\nPlan: ...\nReflect: ...\n</ide_reasoning>"
         }
         

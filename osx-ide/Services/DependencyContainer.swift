@@ -80,7 +80,7 @@ class DependencyContainer {
     }
 
     func reindexProjectNow() {
-        _projectCoordinator.reindexProject(aiEnrichment: isAIEnrichmentIndexingEnabled)
+        _projectCoordinator.rebuildIndex(overwriteDB: true, aiEnrichment: isAIEnrichmentIndexingEnabled)
     }
 
     var isAIEnrichmentIndexingEnabled: Bool {

@@ -220,6 +220,7 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
     var shouldThrowReadFileError = false
 
     func start() {}
+    func stop() {}
     func setEnabled(_ enabled: Bool) {}
     func reindexProject() {}
     func reindexProject(aiEnrichmentEnabled: Bool) {}
