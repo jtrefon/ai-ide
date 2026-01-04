@@ -152,31 +152,45 @@ final class SyntaxHighlighter {
 
     private func applyCSSHighlighting(in attr: NSMutableAttributedString, code: String) {
         // Match the stronger CSS scheme used by CSSModule so fallback stays consistent.
-        // 1. Selectors - Blue
-        applyRegex("(?m)^[ \t]*[.#]?[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=\\{)", color: NSColor.systemBlue, in: attr, code: code)
-        applyRegex("(?<=[\\s\\};])[.#]?[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=\\{)", color: NSColor.systemBlue, in: attr, code: code)
+        // 1. Selectors (Classes, IDs, Tags, Pseudo-elements)
+        applyRegex("(?m)^[ \t]*:root\\b", color: NSColor.systemGreen, in: attr, code: code)
+        applyRegex("(?m)^[ \t]*@[-a-zA-Z]+", color: NSColor.systemGreen, in: attr, code: code)
+        applyRegex("(?m)^[ \t]*[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
+        applyRegex("(?m)^[ \t]*\\.[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
+        applyRegex("(?m)^[ \t]*#[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
+        applyRegex("(?m)^[ \t]*:{1,2}[a-zA-Z-]+\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
 
-        // 2. Braces - Cyan
-        applyRegex("[\\{\\}]", color: NSColor.systemCyan, in: attr, code: code)
+        // 2. Braces / punctuation
+        applyRegex("[\\{\\}\\[\\]\\(\\);:,]", color: NSColor.systemMint, in: attr, code: code)
 
-        // 3. Property Keys - Teal
-        applyRegex("(?<=[\\{\\s;])[a-zA-Z-][a-zA-Z0-9-]*\\s*(?=:)", color: NSColor.systemTeal, in: attr, code: code)
+        // 3. Property Keys (including custom properties: --foo)
+        applyRegex("(?<=[\\{\\s;])(--[a-zA-Z0-9-]+|[a-zA-Z-][a-zA-Z0-9-]*)\\s*(?=:)", color: NSColor.systemBlue, in: attr, code: code, captureGroup: 1)
 
-        // 4. Property Values - Pink
-        applyRegex("(?<=:)[^;\\}]+", color: NSColor.systemPink, in: attr, code: code)
+        // 4. Custom property references
+        applyRegex("--[a-zA-Z0-9-]+", color: NSColor.systemBlue, in: attr, code: code)
 
-        // 5. Quotes / quoted strings
-        applyRegex("['\"]", color: NSColor.systemOrange, in: attr, code: code)
-        applyRegex("(['\"])(?:\\\\.|[^\\1])*?\\1", color: NSColor.systemPurple, in: attr, code: code)
+        // 5. Functions
+        applyRegex("\\b[a-zA-Z-]+\\s*(?=\\()", color: NSColor.systemBrown, in: attr, code: code)
 
-        // 6. Numbers and Units
-        applyRegex("\\b-?\\d+(?:\\.\\d+)?(px|em|rem|%|vh|vw|s|ms|deg)?\\b", color: NSColor.systemOrange, in: attr, code: code)
-
-        // 7. Hex colors
+        // 6. Hex colors
         applyRegex("#[0-9a-fA-F]{3,8}\\b", color: NSColor.systemOrange, in: attr, code: code)
 
-        // 8. Comments
-        applyRegex("/\\*[\\s\\S]*?\\*/", color: NSColor.systemGreen, in: attr, code: code)
+        // 7. Numbers and Units
+        applyRegex("\\b-?\\d+(?:\\.\\d+)?(px|em|rem|%|vh|vw|s|ms|deg)?\\b", color: NSColor.systemYellow, in: attr, code: code)
+
+        // 8. Quoted values (inside)
+        applyRegex("\"([^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"", color: NSColor.systemCyan, in: attr, code: code, captureGroup: 1)
+        applyRegex("'([^'\\\\]*(?:\\\\.[^'\\\\]*)*)'", color: NSColor.systemCyan, in: attr, code: code, captureGroup: 1)
+
+        // 9. Quotes
+        applyRegex("\"", color: NSColor.systemIndigo, in: attr, code: code)
+        applyRegex("'", color: NSColor.systemBrown, in: attr, code: code)
+
+        // 10. Bare identifiers in values
+        applyRegex("(?<=:)\\s*([a-zA-Z_-][a-zA-Z0-9_-]*)\\b", color: NSColor.systemCyan, in: attr, code: code, captureGroup: 1)
+
+        // 11. Comments
+        applyRegex("/\\*[\\s\\S]*?\\*/", color: NSColor.tertiaryLabelColor, in: attr, code: code)
     }
 
     private func applyJSONHighlighting(in attr: NSMutableAttributedString, code: String) {
