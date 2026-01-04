@@ -17,6 +17,10 @@ public final class QueryService {
         try database.searchSymbols(nameLike: query, limit: limit)
     }
 
+    public func searchSymbolsWithPaths(nameLike query: String, limit: Int = 50) throws -> [SymbolSearchResult] {
+        try database.searchSymbolsWithPaths(nameLike: query, limit: limit)
+    }
+
     public func getMemories(tier: MemoryTier? = nil) throws -> [MemoryEntry] {
         try database.getMemories(tier: tier)
     }

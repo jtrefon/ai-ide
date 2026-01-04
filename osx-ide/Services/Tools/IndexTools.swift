@@ -198,13 +198,17 @@ struct IndexSearchSymbolsTool: AITool {
         }
         let limit = max(1, min(200, arguments["limit"] as? Int ?? 50))
 
-        let symbols = try await index.searchSymbols(nameLike: query, limit: limit)
-        if symbols.isEmpty {
+        let results = try await index.searchSymbolsWithPaths(nameLike: query, limit: limit)
+        if results.isEmpty {
             return "No symbols found."
         }
 
-        let lines = symbols.map { s in
-            "[\(s.kind.rawValue)] \(s.name) (lines \(s.lineStart)-\(s.lineEnd)) :: \(s.resourceId)"
+        let lines = results.map { result in
+            let s = result.symbol
+            if let path = result.filePath {
+                return "[\(s.kind.rawValue)] \(s.name) (\(path):\(s.lineStart)-\(s.lineEnd))"
+            }
+            return "[\(s.kind.rawValue)] \(s.name) (lines \(s.lineStart)-\(s.lineEnd))"
         }
         return lines.joined(separator: "\n")
     }
