@@ -175,9 +175,15 @@ final class IndexToolsTests: XCTestCase {
     }
 
     func testIndexSearchSymbolsTool_success() async throws {
-        codebaseIndex.mockSearchSymbolsResult = [
-            Symbol(id: UUID().uuidString, resourceId: "res1", name: "MyClass", kind: .class, lineStart: 1, lineEnd: 10),
-            Symbol(id: UUID().uuidString, resourceId: "res1", name: "hello", kind: .function, lineStart: 4, lineEnd: 6)
+        codebaseIndex.mockSearchSymbolsWithPathsResult = [
+            SymbolSearchResult(
+                symbol: Symbol(id: UUID().uuidString, resourceId: "res1", name: "MyClass", kind: .class, lineStart: 1, lineEnd: 10),
+                filePath: "src/main.swift"
+            ),
+            SymbolSearchResult(
+                symbol: Symbol(id: UUID().uuidString, resourceId: "res1", name: "hello", kind: .function, lineStart: 4, lineEnd: 6),
+                filePath: "src/main.swift"
+            )
         ]
 
         let result = try await indexSearchSymbolsTool.execute(arguments: [
@@ -191,7 +197,7 @@ final class IndexToolsTests: XCTestCase {
     }
 
     func testIndexSearchSymbolsTool_noMatches() async throws {
-        codebaseIndex.mockSearchSymbolsResult = []
+        codebaseIndex.mockSearchSymbolsWithPathsResult = []
 
         let result = try await indexSearchSymbolsTool.execute(arguments: [
             "query": "Nonexistent",
@@ -210,6 +216,7 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
     var mockReadFileResult: String = ""
     var mockSearchTextResult: [String] = []
     var mockSearchSymbolsResult: [Symbol] = []
+    var mockSearchSymbolsWithPathsResult: [SymbolSearchResult] = []
     var shouldThrowReadFileError = false
 
     func start() {}
@@ -263,6 +270,10 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
 
     func searchSymbols(nameLike query: String, limit: Int) throws -> [Symbol] {
         return mockSearchSymbolsResult
+    }
+
+    func searchSymbolsWithPaths(nameLike query: String, limit: Int) throws -> [SymbolSearchResult] {
+        return mockSearchSymbolsWithPathsResult
     }
 
     var isIndexing: Bool = false

@@ -72,6 +72,13 @@ public class DatabaseManager: @unchecked Sendable {
         if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) != SQLITE_OK {
             throw DatabaseError.openFailed
         }
+
+        // Performance + integrity pragmas.
+        // WAL significantly improves concurrent read/write behavior for an interactive IDE.
+        // foreign_keys ensures ON DELETE CASCADE works for symbols/resources.
+        try execute(sql: "PRAGMA journal_mode = WAL;")
+        try execute(sql: "PRAGMA synchronous = NORMAL;")
+        try execute(sql: "PRAGMA foreign_keys = ON;")
     }
     
     private func close() {
@@ -315,6 +322,98 @@ public class DatabaseManager: @unchecked Sendable {
         return results
     }
 
+    public func searchSymbolsWithPaths(nameLike query: String, limit: Int = 50) throws -> [SymbolSearchResult] {
+        let sql = """
+        SELECT
+            s.id,
+            s.resource_id,
+            s.name,
+            s.kind,
+            s.line_start,
+            s.line_end,
+            s.description,
+            r.path
+        FROM symbols s
+        LEFT JOIN resources r ON r.id = s.resource_id
+        WHERE s.name LIKE ?
+        ORDER BY s.name
+        LIMIT ?;
+        """
+
+        var results: [SymbolSearchResult] = []
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            sqlite3_bind_text(statement, 1, "%\(query)%", -1, nil)
+            sqlite3_bind_int(statement, 2, Int32(limit))
+
+            while sqlite3_step(statement) == SQLITE_ROW {
+                let id = String(cString: sqlite3_column_text(statement, 0))
+                let resourceId = String(cString: sqlite3_column_text(statement, 1))
+                let name = String(cString: sqlite3_column_text(statement, 2))
+                let kindRaw = String(cString: sqlite3_column_text(statement, 3))
+                let lineStart = Int(sqlite3_column_int(statement, 4))
+                let lineEnd = Int(sqlite3_column_int(statement, 5))
+                let descriptionPtr = sqlite3_column_text(statement, 6)
+                let description = descriptionPtr != nil ? String(cString: descriptionPtr!) : nil
+
+                let pathPtr = sqlite3_column_text(statement, 7)
+                let path = pathPtr != nil ? String(cString: pathPtr!) : nil
+
+                let kind = SymbolKind(rawValue: kindRaw) ?? .unknown
+                let symbol = Symbol(
+                    id: id,
+                    resourceId: resourceId,
+                    name: name,
+                    kind: kind,
+                    lineStart: lineStart,
+                    lineEnd: lineEnd,
+                    description: description
+                )
+                results.append(SymbolSearchResult(symbol: symbol, filePath: path))
+            }
+        }
+
+        return results
+    }
+
+    public func candidatePathsForFTS(query: String, limit: Int) throws -> [String] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if q.isEmpty { return [] }
+
+        let sql = """
+        SELECT path
+        FROM resources_fts
+        WHERE resources_fts MATCH ?
+        ORDER BY rank
+        LIMIT ?;
+        """
+
+        var paths: [String] = []
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            sqlite3_bind_text(statement, 1, q, -1, nil)
+            sqlite3_bind_int(statement, 2, Int32(limit))
+
+            while sqlite3_step(statement) == SQLITE_ROW {
+                if let pathPtr = sqlite3_column_text(statement, 0) {
+                    paths.append(String(cString: pathPtr))
+                }
+            }
+        }
+
+        return paths
+    }
+
     public func hasResourcePath(_ absolutePath: String) throws -> Bool {
         let sql = "SELECT 1 FROM resources WHERE path = ? LIMIT 1;"
         var found = false
@@ -496,7 +595,8 @@ public class DatabaseManager: @unchecked Sendable {
 
     public func markAIEnriched(resourceId: String, score: Double, summary: String?) throws {
         let sql = "UPDATE resources SET ai_enriched = 1, quality_score = ?, summary = ? WHERE id = ?;"
-        try execute(sql: sql, parameters: [score, summary as Any, resourceId])
+        let summaryValue: Any = summary ?? NSNull()
+        try execute(sql: sql, parameters: [score, summaryValue, resourceId])
     }
 
     public func getSymbolKindCounts() throws -> [String: Int] {
@@ -610,8 +710,6 @@ public class DatabaseManager: @unchecked Sendable {
         } else if let int64 = value as? Int64 {
             sqlite3_bind_int64(statement, index, int64)
         } else if value is NSNull {
-            sqlite3_bind_null(statement, index)
-        } else if let opt = value as? Optional<Any>, opt == nil {
             sqlite3_bind_null(statement, index)
         } else {
             // Fallback for other types

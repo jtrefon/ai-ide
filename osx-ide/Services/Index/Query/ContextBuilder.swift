@@ -7,6 +7,15 @@ public enum ContextBuilder {
     public static func buildContext(userInput: String, explicitContext: String?, index: CodebaseIndexProtocol?, projectRoot: URL?) -> String? {
         var parts: [String] = []
 
+        func relPath(_ absPath: String) -> String {
+            guard let projectRoot else { return absPath }
+            let root = projectRoot.standardizedFileURL.path
+            if absPath.hasPrefix(root + "/") {
+                return String(absPath.dropFirst(root.count + 1))
+            }
+            return absPath
+        }
+
         if let explicitContext, !explicitContext.isEmpty {
             parts.append(explicitContext)
         }
@@ -19,7 +28,7 @@ public enum ContextBuilder {
         if let root = projectRoot,
            let summaries = try? (index as? CodebaseIndex)?.getSummaries(projectRoot: root, limit: 10),
            !summaries.isEmpty {
-            let summaryLines = summaries.map { "- \($0.path): \($0.summary)" }
+            let summaryLines = summaries.map { "- \(relPath($0.path)): \($0.summary)" }
             parts.append("PROJECT OVERVIEW (Key Files):\n" + summaryLines.joined(separator: "\n"))
         }
 
@@ -31,18 +40,24 @@ public enum ContextBuilder {
 
         let uniqueTokens = Array(Set(tokens)).prefix(5)
 
-        var symbolResults: [Symbol] = []
-        for token in uniqueTokens {
-            if let found = try? index.searchSymbols(nameLike: token, limit: 10) {
-                symbolResults.append(contentsOf: found)
+        if let concreteIndex = index as? CodebaseIndex {
+            var symbolResults: [SymbolSearchResult] = []
+            for token in uniqueTokens {
+                if let found = try? concreteIndex.searchSymbolsWithPaths(nameLike: token, limit: 10) {
+                    symbolResults.append(contentsOf: found)
+                }
             }
-        }
 
-        if !symbolResults.isEmpty {
-            let lines = symbolResults.prefix(25).map { symbol in
-                "- [\(symbol.kind.rawValue)] \(symbol.name) (resourceId: \(symbol.resourceId), lines \(symbol.lineStart)-\(symbol.lineEnd))"
+            if !symbolResults.isEmpty {
+                let lines = symbolResults.prefix(25).map { result in
+                    let symbol = result.symbol
+                    if let filePath = result.filePath {
+                        return "- [\(symbol.kind.rawValue)] \(symbol.name) (\(relPath(filePath)):\(symbol.lineStart)-\(symbol.lineEnd))"
+                    }
+                    return "- [\(symbol.kind.rawValue)] \(symbol.name) (lines \(symbol.lineStart)-\(symbol.lineEnd))"
+                }
+                parts.append("CODEBASE INDEX (matching symbols):\n" + lines.joined(separator: "\n"))
             }
-            parts.append("CODEBASE INDEX (matching symbols):\n" + lines.joined(separator: "\n"))
         }
 
         // 3. Project Memory

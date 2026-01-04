@@ -1,0 +1,28 @@
+{
+  "aiModeRawValue" : "Agent",
+  "chatPanelWidth" : 300,
+  "fileTreeExpandedRelativePaths" : [
+    ".ide",
+    ".ide\/chat",
+    ".ide\/index",
+    ".ide\/logs",
+    "src"
+  ],
+  "isAIChatVisible" : true,
+  "isSidebarVisible" : true,
+  "isTerminalVisible" : true,
+  "lastOpenFileRelativePath" : "run.sh",
+  "minimapVisible" : false,
+  "selectedThemeRawValue" : "system",
+  "showHiddenFilesInFileTree" : true,
+  "showLineNumbers" : true,
+  "sidebarWidth" : 250,
+  "terminalHeight" : 200,
+  "windowFrame" : {
+    "height" : 948,
+    "width" : 1512,
+    "x" : 0,
+    "y" : 0
+  },
+  "wordWrap" : false
+}
