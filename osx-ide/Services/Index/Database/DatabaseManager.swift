@@ -67,6 +67,12 @@ public class DatabaseManager: @unchecked Sendable {
     deinit {
         close()
     }
+
+    public func shutdown() {
+        queue.sync {
+            close()
+        }
+    }
     
     private func open() throws {
         if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) != SQLITE_OK {
@@ -96,7 +102,8 @@ public class DatabaseManager: @unchecked Sendable {
             language TEXT NOT NULL,
             last_modified REAL NOT NULL,
             content_hash TEXT,
-            quality_score REAL
+            quality_score REAL,
+            quality_details TEXT
         );
         
         CREATE VIRTUAL TABLE IF NOT EXISTS resources_fts USING fts5(
@@ -135,7 +142,12 @@ public class DatabaseManager: @unchecked Sendable {
         
         try execute(sql: sql)
 
-        // Lightweight migration: add ai_enriched flag if missing.
+        // Lightweight migrations: allow evolving the schema without blowing away the index.
+        // NOTE: SQLite can't add NOT NULL without DEFAULT reliably for existing rows.
+        // Keep defaults here so older DBs upgrade safely.
+        try ensureColumnExists(table: "resources", column: "content_hash", columnDefinition: "TEXT")
+        try ensureColumnExists(table: "resources", column: "quality_score", columnDefinition: "REAL NOT NULL DEFAULT 0")
+        try ensureColumnExists(table: "resources", column: "quality_details", columnDefinition: "TEXT")
         try ensureColumnExists(table: "resources", column: "ai_enriched", columnDefinition: "INTEGER NOT NULL DEFAULT 0")
         try ensureColumnExists(table: "resources", column: "summary", columnDefinition: "TEXT")
     }
@@ -593,10 +605,37 @@ public class DatabaseManager: @unchecked Sendable {
         try execute(sql: sql, parameters: [score, resourceId])
     }
 
+    public func updateQualityDetails(resourceId: String, details: String?) throws {
+        let sql = "UPDATE resources SET quality_details = ? WHERE id = ?;"
+        let detailsValue: Any = details ?? NSNull()
+        try execute(sql: sql, parameters: [detailsValue, resourceId])
+    }
+
+    public func getQualityScore(resourceId: String) throws -> Double? {
+        let sql = "SELECT quality_score FROM resources WHERE id = ? LIMIT 1;"
+        var result: Double? = nil
+
+        try syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            sqlite3_bind_text(statement, 1, resourceId, -1, nil)
+            if sqlite3_step(statement) == SQLITE_ROW {
+                result = sqlite3_column_double(statement, 0)
+            }
+        }
+
+        return result
+    }
+
     public func markAIEnriched(resourceId: String, score: Double, summary: String?) throws {
-        let sql = "UPDATE resources SET ai_enriched = 1, quality_score = ?, summary = ? WHERE id = ?;"
+        // Preserve heuristic scores: an AI score of 0 means "unknown" and must not clobber an existing score.
+        let sql = "UPDATE resources SET ai_enriched = 1, quality_score = CASE WHEN ? > 0 THEN ? ELSE quality_score END, summary = ? WHERE id = ?;"
         let summaryValue: Any = summary ?? NSNull()
-        try execute(sql: sql, parameters: [score, summaryValue, resourceId])
+        try execute(sql: sql, parameters: [score, score, summaryValue, resourceId])
     }
 
     public func getSymbolKindCounts() throws -> [String: Int] {
