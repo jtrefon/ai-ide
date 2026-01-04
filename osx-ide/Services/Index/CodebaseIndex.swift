@@ -12,6 +12,7 @@ import SQLite3
 @MainActor
 public protocol CodebaseIndexProtocol: Sendable {
     func start()
+    func stop()
 
     func setEnabled(_ enabled: Bool)
     func reindexProject()
@@ -44,6 +45,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     private let excludePatterns: [String]
     private var isEnabled: Bool
     private var aiEnrichmentAfterIndexCancellable: AnyCancellable?
+    private var aiEnrichmentTask: Task<Void, Never>?
     
     init(eventBus: EventBusProtocol, projectRoot: URL, aiService: AIService, config: IndexConfiguration = .default) throws {
         self.eventBus = eventBus
@@ -241,6 +243,16 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         print("CodebaseIndex service started")
     }
 
+    public func stop() {
+        isEnabled = false
+        aiEnrichmentAfterIndexCancellable?.cancel()
+        aiEnrichmentAfterIndexCancellable = nil
+        aiEnrichmentTask?.cancel()
+        aiEnrichmentTask = nil
+        coordinator.stop()
+        databaseManager.shutdown()
+    }
+
     public func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
         coordinator.setEnabled(enabled)
@@ -271,7 +283,9 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
             return 
         }
 
-        Task { @MainActor in
+        aiEnrichmentTask?.cancel()
+        aiEnrichmentTask = Task { @MainActor in
+            let scoringEngine = QualityScoringEngine(projectRoot: projectRoot, scorers: [SwiftHeuristicScorer()])
             let start = Date()
             await IndexLogger.shared.log("AI Enrichment started")
             await eventBus.publish(AIEnrichmentStartedEvent())
@@ -283,6 +297,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
 
             var processed = 0
             for file in files {
+                if Task.isCancelled { break }
                 if !isEnabled { 
                     await IndexLogger.shared.log("AI Enrichment aborted: Indexing disabled during process")
                     break 
@@ -307,6 +322,30 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
 
                 do {
                     let content = try String(contentsOf: file, encoding: .utf8)
+
+                    // Heuristic scoring first (deterministic, traceable; does not depend on AI model).
+                    // Persist score + details so the UI "Q" metric is always meaningful.
+                    let language = LanguageDetector.detect(at: file)
+                    let relPath: String
+                    if file.path.hasPrefix(self.projectRoot.path + "/") {
+                        relPath = String(file.path.dropFirst(self.projectRoot.path.count + 1))
+                    } else {
+                        relPath = file.path
+                    }
+
+                    let assessment = await scoringEngine.score(language: language, path: relPath, content: content)
+                    let heuristicScore = max(0, min(100, assessment.score))
+
+                    do {
+                        let jsonData = try JSONEncoder().encode(assessment)
+                        let json = String(data: jsonData, encoding: .utf8)
+                        try databaseManager.updateQualityScore(resourceId: file.absoluteString, score: heuristicScore)
+                        try databaseManager.updateQualityDetails(resourceId: file.absoluteString, details: json)
+                        await IndexLogger.shared.log("QualityScore: \(String(format: "%.0f", heuristicScore)) for \(relPath)")
+                    } catch {
+                        await IndexLogger.shared.log("QualityScore: Failed to persist quality details for \(relPath): \(error)")
+                    }
+
                     let prompt = Self.makeEnrichmentPrompt(path: file.path, content: content)
                     
                     // Use a timeout for the AI call to prevent getting stuck
@@ -330,6 +369,8 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
                 await eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
             }
 
+            if Task.isCancelled { return }
+
             let duration = Date().timeIntervalSince(start)
             await IndexLogger.shared.log("AI Enrichment completed in \(String(format: "%.2f", duration))s")
             await eventBus.publish(AIEnrichmentCompletedEvent(processedCount: processed, duration: duration))
@@ -345,7 +386,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
                 try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
                 throw AppError.aiServiceError("AI request timed out after \(seconds)s")
             }
-            
+
             let result = try await group.next()!
             group.cancelAll()
             return result
@@ -475,7 +516,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         return AppConstants.Indexing.aiEnrichableExtensions.contains(ext)
     }
 
-    private static func resolveIndexDirectory(projectRoot: URL) -> URL {
+    static func resolveIndexDirectory(projectRoot: URL) -> URL {
         let fileManager = FileManager.default
         let ideDir = projectRoot.appendingPathComponent(".ide")
         let indexDir = ideDir.appendingPathComponent("index")
@@ -493,5 +534,10 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
             try? fileManager.createDirectory(at: fallbackRoot, withIntermediateDirectories: true)
             return fallbackRoot
         }
+    }
+
+    static func indexDatabaseURL(projectRoot: URL) -> URL {
+        let dir = resolveIndexDirectory(projectRoot: projectRoot)
+        return dir.appendingPathComponent("codebase.sqlite")
     }
 }
