@@ -45,6 +45,18 @@ public struct ProjectSession: Codable, Sendable {
 
     public var lastOpenFileRelativePath: String?
 
+    public var openTabRelativePaths: [String]
+    public var activeTabRelativePath: String?
+
+    public var isSplitEditor: Bool
+    public var splitAxisRawValue: String
+    public var focusedEditorPaneRawValue: String
+
+    public var primaryOpenTabRelativePaths: [String]
+    public var primaryActiveTabRelativePath: String?
+    public var secondaryOpenTabRelativePaths: [String]
+    public var secondaryActiveTabRelativePath: String?
+
     public var fileTreeExpandedRelativePaths: [String]
 
     private enum CodingKeys: String, CodingKey {
@@ -62,6 +74,17 @@ public struct ProjectSession: Codable, Sendable {
         case showHiddenFilesInFileTree
         case aiModeRawValue
         case lastOpenFileRelativePath
+        case openTabRelativePaths
+        case activeTabRelativePath
+
+        case isSplitEditor
+        case splitAxisRawValue
+        case focusedEditorPaneRawValue
+        case primaryOpenTabRelativePaths
+        case primaryActiveTabRelativePath
+        case secondaryOpenTabRelativePaths
+        case secondaryActiveTabRelativePath
+
         case fileTreeExpandedRelativePaths
     }
 
@@ -80,6 +103,17 @@ public struct ProjectSession: Codable, Sendable {
         showHiddenFilesInFileTree: Bool,
         aiModeRawValue: String,
         lastOpenFileRelativePath: String?,
+        openTabRelativePaths: [String],
+        activeTabRelativePath: String?,
+
+        isSplitEditor: Bool,
+        splitAxisRawValue: String,
+        focusedEditorPaneRawValue: String,
+        primaryOpenTabRelativePaths: [String],
+        primaryActiveTabRelativePath: String?,
+        secondaryOpenTabRelativePaths: [String],
+        secondaryActiveTabRelativePath: String?,
+
         fileTreeExpandedRelativePaths: [String]
     ) {
         self.windowFrame = windowFrame
@@ -96,6 +130,17 @@ public struct ProjectSession: Codable, Sendable {
         self.showHiddenFilesInFileTree = showHiddenFilesInFileTree
         self.aiModeRawValue = aiModeRawValue
         self.lastOpenFileRelativePath = lastOpenFileRelativePath
+        self.openTabRelativePaths = openTabRelativePaths
+        self.activeTabRelativePath = activeTabRelativePath
+
+        self.isSplitEditor = isSplitEditor
+        self.splitAxisRawValue = splitAxisRawValue
+        self.focusedEditorPaneRawValue = focusedEditorPaneRawValue
+        self.primaryOpenTabRelativePaths = primaryOpenTabRelativePaths
+        self.primaryActiveTabRelativePath = primaryActiveTabRelativePath
+        self.secondaryOpenTabRelativePaths = secondaryOpenTabRelativePaths
+        self.secondaryActiveTabRelativePath = secondaryActiveTabRelativePath
+
         self.fileTreeExpandedRelativePaths = fileTreeExpandedRelativePaths
     }
 
@@ -123,6 +168,18 @@ public struct ProjectSession: Codable, Sendable {
         aiModeRawValue = try c.decodeIfPresent(String.self, forKey: .aiModeRawValue) ?? AIMode.chat.rawValue
 
         lastOpenFileRelativePath = try c.decodeIfPresent(String.self, forKey: .lastOpenFileRelativePath)
+        openTabRelativePaths = try c.decodeIfPresent([String].self, forKey: .openTabRelativePaths) ?? []
+        activeTabRelativePath = try c.decodeIfPresent(String.self, forKey: .activeTabRelativePath)
+
+        isSplitEditor = try c.decodeIfPresent(Bool.self, forKey: .isSplitEditor) ?? false
+        splitAxisRawValue = try c.decodeIfPresent(String.self, forKey: .splitAxisRawValue) ?? "vertical"
+        focusedEditorPaneRawValue = try c.decodeIfPresent(String.self, forKey: .focusedEditorPaneRawValue) ?? "primary"
+
+        primaryOpenTabRelativePaths = try c.decodeIfPresent([String].self, forKey: .primaryOpenTabRelativePaths) ?? []
+        primaryActiveTabRelativePath = try c.decodeIfPresent(String.self, forKey: .primaryActiveTabRelativePath)
+        secondaryOpenTabRelativePaths = try c.decodeIfPresent([String].self, forKey: .secondaryOpenTabRelativePaths) ?? []
+        secondaryActiveTabRelativePath = try c.decodeIfPresent(String.self, forKey: .secondaryActiveTabRelativePath)
+
         fileTreeExpandedRelativePaths = try c.decodeIfPresent([String].self, forKey: .fileTreeExpandedRelativePaths) ?? []
     }
 }

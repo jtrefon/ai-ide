@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 /// The "Default Plugin" that registers the core UI components of the IDE.
 /// In the future, these components could be fully separated into their own modules.
@@ -85,6 +86,108 @@ final class CorePlugin {
             }
 
             appState.fileEditor.editorContent = CodeFormatter.format(content, language: language)
+        }
+
+        commandRegistry.register(command: .editorTabsCloseActive) { _ in
+            appState.fileEditor.closeActiveTab()
+        }
+
+        commandRegistry.register(command: .editorTabsCloseAll) { _ in
+            appState.fileEditor.closeAllTabs()
+        }
+
+        commandRegistry.register(command: .editorTabsNext) { _ in
+            appState.fileEditor.activateNextTab()
+        }
+
+        commandRegistry.register(command: .editorTabsPrevious) { _ in
+            appState.fileEditor.activatePreviousTab()
+        }
+
+        commandRegistry.register(command: .editorSplitRight) { _ in
+            appState.fileEditor.toggleSplit(axis: .vertical)
+        }
+
+        commandRegistry.register(command: .editorSplitDown) { _ in
+            appState.fileEditor.toggleSplit(axis: .horizontal)
+        }
+
+        commandRegistry.register(command: .editorFocusNextGroup) { _ in
+            appState.fileEditor.focusNextPane()
+        }
+
+        commandRegistry.register(command: .editorFind) { _ in
+            let item = NSMenuItem()
+            item.tag = Int(NSTextFinder.Action.showFindInterface.rawValue)
+            NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: nil, from: item)
+        }
+
+        commandRegistry.register(command: .editorReplace) { _ in
+            let item = NSMenuItem()
+            item.tag = Int(NSTextFinder.Action.showReplaceInterface.rawValue)
+            NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: nil, from: item)
+        }
+
+        commandRegistry.register(command: .explorerOpenSelection) { args in
+            guard let path = args["path"] as? String else { return }
+            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+            do {
+                let url = try PathValidator(projectRoot: root).validateAndResolve(path)
+                let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                if !isDirectory {
+                    appState.loadFile(from: url)
+                }
+            } catch {
+                appState.lastError = error.localizedDescription
+            }
+        }
+
+        commandRegistry.register(command: .explorerDeleteSelection) { args in
+            guard let path = args["path"] as? String else { return }
+            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+            do {
+                let url = try PathValidator(projectRoot: root).validateAndResolve(path)
+                appState.workspaceService.deleteItem(at: url)
+
+                appState.fileEditor.closeTab(filePath: url.path)
+                appState.workspace.removeOpenFile(url)
+            } catch {
+                appState.lastError = error.localizedDescription
+            }
+        }
+
+        commandRegistry.register(command: .explorerRenameSelection) { args in
+            guard let path = args["path"] as? String else { return }
+            guard let newName = args["newName"] as? String else { return }
+            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+            do {
+                let url = try PathValidator(projectRoot: root).validateAndResolve(path)
+
+                if appState.fileEditor.isFileOpenAndDirty(filePath: url.path) {
+                    appState.lastError = "Save changes before renaming an open file."
+                    return
+                }
+
+                guard let newURL = appState.workspaceService.renameItem(at: url, to: newName) else { return }
+
+                appState.fileEditor.renameTab(oldPath: url.path, newPath: newURL.path)
+
+                appState.workspace.removeOpenFile(url)
+                appState.workspace.addOpenFile(newURL)
+            } catch {
+                appState.lastError = error.localizedDescription
+            }
+        }
+
+        commandRegistry.register(command: .explorerRevealInFinder) { args in
+            guard let path = args["path"] as? String else { return }
+            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+            do {
+                let url = try PathValidator(projectRoot: root).validateAndResolve(path)
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } catch {
+                appState.lastError = error.localizedDescription
+            }
         }
         
         print("[CorePlugin] Initialized core UI components and commands")
