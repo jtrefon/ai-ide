@@ -94,23 +94,23 @@ This is a living backlog for our AI-enabled macOS IDE. Checked items are shipped
   - **Behavior**: find next/previous; highlight; replace.
   - **Acceptance**: works in large files, doesn’t hang UI.
   - **Acceptance**: find/replace works with large files and preserves selection/scroll.
-- [ ] Global search (Cmd+Shift+F) with preview results
+- [x] Global search (Cmd+Shift+F) with preview results
   - **Primary surface**: left “Search” panel or modal panel with results list + preview.
   - **Command IDs**: `search.findInWorkspace` (Cmd+Shift+F).
   - **Behavior**: search across project; results grouped by file; click jumps to line; support replace-in-files with preview and per-file selection.
   - **Implementation note**: use CodebaseIndex when enabled; fallback to ripgrep-style scan with cancellation.
   - **Acceptance**: search is cancelable, returns line numbers, and opens the correct file/line reliably.
-- [ ] Quick Open (Cmd+P) + fuzzy file search (use CodebaseIndex when available)
+- [x] Quick Open (Cmd+P) + fuzzy file search (use CodebaseIndex when available)
   - **Primary surface**: Quick Open overlay.
   - **Command IDs**: `workbench.quickOpen` (Cmd+P).
   - **Behavior**: fuzzy match file names/paths; supports `path:line` suffix; shows recent + pinned; Enter opens, Cmd+Enter opens to side (split).
   - **Acceptance**: opens correct file instantly on large repos; never blocks UI.
-- [ ] Command palette (Cmd+Shift+P) wired to `CommandRegistry`
+- [x] Command palette (Cmd+Shift+P) wired to `CommandRegistry`
   - **Primary surface**: command palette overlay (search + list).
   - **Command IDs**: `workbench.commandPalette` (Cmd+Shift+P).
   - **Behavior**: shows all registered commands with optional keybinding hints; fuzzy search; runs selected command; supports “>” prefix (optional) for command-only.
   - **Acceptance**: any implemented feature is discoverable and runnable from the palette (no dead commands).
-- [ ] Symbol navigation: outline pane, “Go to Symbol…” (Cmd+T)
+- [x] Symbol navigation: outline pane, “Go to Symbol…” (Cmd+T)
   - **Primary surface**: outline sidebar for current file + quick symbol picker.
   - **Command IDs**: `workbench.goToSymbol` (Cmd+T).
   - **Behavior**: show symbols for current file; search symbols; selecting navigates to definition line.

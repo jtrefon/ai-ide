@@ -91,117 +91,160 @@ struct ContentView: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            WindowAccessor { window in
-                DependencyContainer.shared.windowProvider.setWindow(window)
-                appState.attachWindow(window)
-                // Modern macOS v26 window styling
-                window.titleVisibility = .hidden
-                window.titlebarAppearsTransparent = true
-                window.isMovableByWindowBackground = true
-                window.isOpaque = false
-                window.backgroundColor = .clear
-                window.hasShadow = true
-                window.styleMask.insert(.fullSizeContentView)
-                window.styleMask.insert(.unifiedTitleAndToolbar)
-            }
-            .frame(width: 0, height: 0)
-
-            HSplitView {
-                // Left sidebar
-                // Left sidebar
-                if appState.ui.isSidebarVisible, let view = registry.views(for: .sidebarLeft).first?.content {
-                    view.frame(minWidth: 200, maxWidth: 300)
+        ZStack {
+            VStack(spacing: 0) {
+                WindowAccessor { window in
+                    DependencyContainer.shared.windowProvider.setWindow(window)
+                    appState.attachWindow(window)
+                    // Modern macOS v26 window styling
+                    window.titleVisibility = .hidden
+                    window.titlebarAppearsTransparent = true
+                    window.isMovableByWindowBackground = true
+                    window.isOpaque = false
+                    window.backgroundColor = .clear
+                    window.hasShadow = true
+                    window.styleMask.insert(.fullSizeContentView)
+                    window.styleMask.insert(.unifiedTitleAndToolbar)
                 }
-                
-                // Main content area
-                HSplitView {
-                    // Editor and terminal area
-                    VSplitView {
-                        // Main editor area
-                        Group {
-                            if appState.fileEditor.isSplitEditor {
-                                if appState.fileEditor.splitAxis == .vertical {
-                                    HSplitView {
-                                        EditorPaneView(
-                                            pane: appState.fileEditor.primaryPane,
-                                            isFocused: appState.fileEditor.focusedPane == .primary,
-                                            onFocus: { appState.fileEditor.focus(.primary) },
-                                            selectionContext: appState.selectionContext,
-                                            showLineNumbers: appState.showLineNumbers,
-                                            wordWrap: appState.wordWrap,
-                                            fontSize: appState.fontSize,
-                                            fontFamily: appState.fontFamily
-                                        )
+                .frame(width: 0, height: 0)
 
-                                        EditorPaneView(
-                                            pane: appState.fileEditor.secondaryPane,
-                                            isFocused: appState.fileEditor.focusedPane == .secondary,
-                                            onFocus: { appState.fileEditor.focus(.secondary) },
-                                            selectionContext: appState.selectionContext,
-                                            showLineNumbers: appState.showLineNumbers,
-                                            wordWrap: appState.wordWrap,
-                                            fontSize: appState.fontSize,
-                                            fontFamily: appState.fontFamily
-                                        )
+                HSplitView {
+                    // Left sidebar
+                    if appState.ui.isSidebarVisible, let view = registry.views(for: .sidebarLeft).first?.content {
+                        view.frame(minWidth: 200, maxWidth: 300)
+                    }
+
+                    // Main content area
+                    HSplitView {
+                        // Editor and terminal area
+                        VSplitView {
+                            // Main editor area
+                            Group {
+                                if appState.fileEditor.isSplitEditor {
+                                    if appState.fileEditor.splitAxis == .vertical {
+                                        HSplitView {
+                                            EditorPaneView(
+                                                pane: appState.fileEditor.primaryPane,
+                                                isFocused: appState.fileEditor.focusedPane == .primary,
+                                                onFocus: { appState.fileEditor.focus(.primary) },
+                                                selectionContext: appState.selectionContext,
+                                                showLineNumbers: appState.showLineNumbers,
+                                                wordWrap: appState.wordWrap,
+                                                fontSize: appState.fontSize,
+                                                fontFamily: appState.fontFamily
+                                            )
+
+                                            EditorPaneView(
+                                                pane: appState.fileEditor.secondaryPane,
+                                                isFocused: appState.fileEditor.focusedPane == .secondary,
+                                                onFocus: { appState.fileEditor.focus(.secondary) },
+                                                selectionContext: appState.selectionContext,
+                                                showLineNumbers: appState.showLineNumbers,
+                                                wordWrap: appState.wordWrap,
+                                                fontSize: appState.fontSize,
+                                                fontFamily: appState.fontFamily
+                                            )
+                                        }
+                                    } else {
+                                        VSplitView {
+                                            EditorPaneView(
+                                                pane: appState.fileEditor.primaryPane,
+                                                isFocused: appState.fileEditor.focusedPane == .primary,
+                                                onFocus: { appState.fileEditor.focus(.primary) },
+                                                selectionContext: appState.selectionContext,
+                                                showLineNumbers: appState.showLineNumbers,
+                                                wordWrap: appState.wordWrap,
+                                                fontSize: appState.fontSize,
+                                                fontFamily: appState.fontFamily
+                                            )
+
+                                            EditorPaneView(
+                                                pane: appState.fileEditor.secondaryPane,
+                                                isFocused: appState.fileEditor.focusedPane == .secondary,
+                                                onFocus: { appState.fileEditor.focus(.secondary) },
+                                                selectionContext: appState.selectionContext,
+                                                showLineNumbers: appState.showLineNumbers,
+                                                wordWrap: appState.wordWrap,
+                                                fontSize: appState.fontSize,
+                                                fontFamily: appState.fontFamily
+                                            )
+                                        }
                                     }
                                 } else {
-                                    VSplitView {
-                                        EditorPaneView(
-                                            pane: appState.fileEditor.primaryPane,
-                                            isFocused: appState.fileEditor.focusedPane == .primary,
-                                            onFocus: { appState.fileEditor.focus(.primary) },
-                                            selectionContext: appState.selectionContext,
-                                            showLineNumbers: appState.showLineNumbers,
-                                            wordWrap: appState.wordWrap,
-                                            fontSize: appState.fontSize,
-                                            fontFamily: appState.fontFamily
-                                        )
-
-                                        EditorPaneView(
-                                            pane: appState.fileEditor.secondaryPane,
-                                            isFocused: appState.fileEditor.focusedPane == .secondary,
-                                            onFocus: { appState.fileEditor.focus(.secondary) },
-                                            selectionContext: appState.selectionContext,
-                                            showLineNumbers: appState.showLineNumbers,
-                                            wordWrap: appState.wordWrap,
-                                            fontSize: appState.fontSize,
-                                            fontFamily: appState.fontFamily
-                                        )
-                                    }
+                                    EditorPaneView(
+                                        pane: appState.fileEditor.primaryPane,
+                                        isFocused: true,
+                                        onFocus: { appState.fileEditor.focus(.primary) },
+                                        selectionContext: appState.selectionContext,
+                                        showLineNumbers: appState.showLineNumbers,
+                                        wordWrap: appState.wordWrap,
+                                        fontSize: appState.fontSize,
+                                        fontFamily: appState.fontFamily
+                                    )
                                 }
-                            } else {
-                                EditorPaneView(
-                                    pane: appState.fileEditor.primaryPane,
-                                    isFocused: true,
-                                    onFocus: { appState.fileEditor.focus(.primary) },
-                                    selectionContext: appState.selectionContext,
-                                    showLineNumbers: appState.showLineNumbers,
-                                    wordWrap: appState.wordWrap,
-                                    fontSize: appState.fontSize,
-                                    fontFamily: appState.fontFamily
-                                )
+                            }
+                            .frame(minHeight: 100)
+
+                            // Terminal panel
+                            if appState.ui.isTerminalVisible, let view = registry.views(for: .panelBottom).first?.content {
+                                view.frame(minHeight: 100)
                             }
                         }
-                        .frame(minHeight: 100)
-                        
-                        // Terminal panel
-                        // Terminal panel
-                        if appState.ui.isTerminalVisible, let view = registry.views(for: .panelBottom).first?.content {
-                            view.frame(minHeight: 100)
+                        .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
+
+                        // AI Chat Panel
+                        if appState.ui.isAIChatVisible, let view = registry.views(for: .panelRight).first?.content {
+                            view.frame(minWidth: 300)
                         }
                     }
-                    .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
-                    
-                    // AI Chat Panel
-                    // AI Chat Panel
-                    if appState.ui.isAIChatVisible, let view = registry.views(for: .panelRight).first?.content {
-                        view.frame(minWidth: 300)
-                    }
                 }
+
+                IndexStatusBarView()
             }
 
-            IndexStatusBarView()
+            if appState.isGlobalSearchPresented {
+                Color.black.opacity(0.25)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        appState.isGlobalSearchPresented = false
+                    }
+
+                GlobalSearchOverlayView(appState: appState, isPresented: $appState.isGlobalSearchPresented)
+                    .padding(30)
+            }
+
+            if appState.isQuickOpenPresented {
+                Color.black.opacity(0.25)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        appState.isQuickOpenPresented = false
+                    }
+
+                QuickOpenOverlayView(appState: appState, isPresented: $appState.isQuickOpenPresented)
+                    .padding(30)
+            }
+
+            if appState.isCommandPalettePresented {
+                Color.black.opacity(0.25)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        appState.isCommandPalettePresented = false
+                    }
+
+                CommandPaletteOverlayView(isPresented: $appState.isCommandPalettePresented)
+                    .padding(30)
+            }
+
+            if appState.isGoToSymbolPresented {
+                Color.black.opacity(0.25)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        appState.isGoToSymbolPresented = false
+                    }
+
+                GoToSymbolOverlayView(appState: appState, isPresented: $appState.isGoToSymbolPresented)
+                    .padding(30)
+            }
         }
         .background(Color.clear)
         .environment(\.font, .system(size: CGFloat(appState.ui.fontSize)))

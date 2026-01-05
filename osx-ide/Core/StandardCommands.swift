@@ -38,4 +38,11 @@ extension CommandID {
 
     public static let editorFind: CommandID = "editor.find"
     public static let editorReplace: CommandID = "editor.replace"
+
+    // MARK: - Workbench / Search
+    public static let searchFindInWorkspace: CommandID = "search.findInWorkspace"
+    public static let workbenchQuickOpen: CommandID = "workbench.quickOpen"
+
+    public static let workbenchCommandPalette: CommandID = "workbench.commandPalette"
+    public static let workbenchGoToSymbol: CommandID = "workbench.goToSymbol"
 }

@@ -67,6 +67,10 @@ public final class CommandRegistry {
         handlers.removeValue(forKey: command)
         print("[CommandRegistry] Unregistered: \(command)")
     }
+
+    public func registeredCommandIDs() -> [CommandID] {
+        handlers.keys.sorted { $0.value < $1.value }
+    }
     
     public func execute(_ command: CommandID, args: [String: Any] = [:]) async throws {
         guard let handler = handlers[command] else {
