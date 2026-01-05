@@ -24,6 +24,12 @@ class AppState: ObservableObject {
 
     @Published var fileTreeSelectedRelativePath: String? = nil
 
+    @Published var isGlobalSearchPresented: Bool = false
+    @Published var isQuickOpenPresented: Bool = false
+
+    @Published var isCommandPalettePresented: Bool = false
+    @Published var isGoToSymbolPresented: Bool = false
+
      @Published var showHiddenFilesInFileTree: Bool = false
     
     // MARK: - Services
