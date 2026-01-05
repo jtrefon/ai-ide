@@ -1,0 +1,428 @@
+# Feature list to implement
+
+This is a living backlog for our AI-enabled macOS IDE. Checked items are shipped; unchecked items are targets.
+
+## Backlog guardrails (to avoid dead UI + chaos)
+- **Command-first**: Every user action must map to a `CommandID` (so it can be triggered by menu, shortcut, UI buttons, and the agent).
+- **No dead UI**: Never add menu items/toggles/buttons that do nothing. If a feature isn’t implemented, omit it from UI or hide behind a `FeatureFlag` (and default it off).
+- **Single owner surface**: Every feature must name its primary UX surface (e.g., File Tree, Editor, Right Panel, Command Palette).
+- **Deterministic concurrency**: Parallelize reads/search/indexing; serialize writes per-path; keep tool execution ordering deterministic in UI.
+- **Reversible by default**: Any multi-file edit must be reversible (git OR checkpoints). Prefer “diff-first” review before writing.
+- **Project-scoped state**: Anything project-specific lives under `.ide/` (history, plans, logs, checkpoints, staged diffs).
+- **No in-IDE ticketing**: This file is backlog/spec documentation only; do not build an issue tracker/tickets UI inside the IDE.
+
+## Architecture map (where changes go)
+- **Commands**
+  - Define `CommandID` constants in `osx-ide/Core/StandardCommands.swift` (or a new `*Commands.swift` grouped by area).
+  - Register handlers in `osx-ide/Core/CorePlugin.swift` (or a future plugin module).
+  - UI triggers call `CommandRegistry.shared.execute(...)` (no “inline” one-off handlers in views).
+- **Sidebar / File Tree**
+  - Main entry: `osx-ide/Components/FileExplorerView.swift` → `osx-ide/Components/ModernFileTreeView.swift`.
+  - File system actions belong in workspace services (`osx-ide/Services/WorkspaceService.swift`).
+- **Editor**
+  - Main layout: `osx-ide/ContentView.swift`.
+  - Text component: `osx-ide/Components/CodeEditorView.swift` (selection context already available).
+  - File IO/state: `osx-ide/Services/FileEditorService.swift`.
+- **Right panel**
+  - Currently `ContentView` shows a single `.panelRight` view. If adding Inspector/Tasks/etc, prefer a single “RightPanelContainer” that hosts internal tabs (AI/Inspector/Tasks) to avoid competing plugins.
+- **Agent + tools**
+  - Tools live under `osx-ide/Services/Tools/` and conform to `AITool`.
+  - Tool calls are executed by `osx-ide/Services/AIToolExecutor.swift`; keep it deterministic and UI-friendly.
+- **Project persistence**
+  - Chat: `.ide/chat/` (see `osx-ide/Services/ChatHistoryManager.swift`)
+  - Plans: `.ide/plans/` (see `osx-ide/Services/Planning/ConversationPlanStore.swift`)
+  - Logs: `.ide/logs/` + App Support logs (see `osx-ide/Services/Logging/*`)
+  - Session UI state: `.ide/session.json` (see `osx-ide/Services/Session/*`)
+
+## File browser
+- [x] Create file / folder (context menu + dialog)
+- [x] Search by name
+- [x] Show hidden files toggle (Cmd+Shift+.)
+- [x] Open file (double click)
+- [ ] Open file (right click menu)
+  - **Primary surface**: file tree item context menu.
+  - **Command IDs**: `explorer.openSelection` (default action), `explorer.openSelectionInNewTab` (Cmd+Shift+O; depends on tabs).
+  - **Behavior**: for files, open in editor; for folders, toggle expand/collapse; when search is active, opening a result keeps search state unchanged.
+  - **Acceptance**: context menu “Open” works for both normal tree + search results and matches double-click behavior.
+- [ ] Delete (file/folder via context menu, toolbar, Cmd+Delete)
+  - **Primary surface**: file tree context menu + Edit/File menu.
+  - **Command IDs**: `explorer.deleteSelection` (Cmd+Delete).
+  - **Behavior**: move to Trash by default; confirm for non-empty folders; block deletes outside project root; refresh tree and selection deterministically.
+  - **Acceptance**: deleted items disappear immediately; deleting an open file closes its editor tab (prompt if dirty).
+- [ ] Rename (file/folder via context menu, toolbar, keyboard)
+  - **Primary surface**: in-place rename in file tree (recommended) + context menu.
+  - **Command IDs**: `explorer.renameSelection` (F2).
+  - **Behavior**: validate name; preserve extension by default (optional toggle); prevent collisions; update any open tabs that point to the renamed path.
+  - **Acceptance**: rename updates disk + tree + any open editor state without “ghost” paths.
+- [ ] Open file in new tab (context menu, Cmd+Shift+O) — depends on tabs
+  - **Dependencies**: editor tabs.
+  - **Command IDs**: `explorer.openSelectionInNewTab` (Cmd+Shift+O).
+  - **Behavior**: opens file without closing current; if file already has a tab, focus it (no duplicates).
+  - **Acceptance**: opening same file repeatedly never creates duplicate tabs.
+- [ ] Show in Finder (context menu, Cmd+Shift+F)
+  - **Command IDs**: `explorer.revealInFinder` (Cmd+Shift+F).
+  - **Behavior**: reveal selected file/folder using `NSWorkspace.shared.activateFileViewerSelecting([url])`.
+  - **Acceptance**: Finder opens with the exact selection highlighted.
+- [ ] Drag & drop move/copy (incl. between folders)
+  - **Primary surface**: file tree drag-and-drop.
+  - **Behavior**: move on drop by default; hold Option to copy; show insertion highlight; forbid drops outside project root; refresh tree + keep expanded state stable.
+  - **Acceptance**: move/copy works reliably for files and folders and updates git decorations/watchers.
+- [ ] File-system watcher (auto-refresh on disk changes)
+  - **Goal**: the tree reflects edits made outside the app (git checkout, CLI edits, file generators).
+  - **Behavior**: observe project root via FSEvents (preferred) with debounce; invalidate caches and reload tree without collapsing expanded folders.
+  - **Acceptance**: creating/deleting/renaming files on disk updates the tree within ~250ms without manual refresh.
+- [ ] Git decorations (M/A/D/ignored/untracked)
+  - **Primary surface**: file tree row badges + subtle tinting.
+  - **Behavior**: derive from `git status --porcelain=v1` (or libgit2 later); cache results; update on watcher events + after agent applies patches.
+  - **Acceptance**: decorations match `git status` for common states and never block UI.
+
+## Code viewer
+- [ ] Tabs (no duplicates, close per tab, icon/name/close affordances, context menu)
+  - **Primary surface**: tab strip in the editor header.
+  - **Command IDs**: `editor.tabs.closeActive` (Cmd+W), `editor.tabs.closeAll`, `editor.tabs.next` (Ctrl+Tab), `editor.tabs.previous` (Ctrl+Shift+Tab).
+  - **State**: each tab owns `{fileURL, isDirty, cursor/selection, scroll position}`.
+  - **Behavior**: opening a file focuses existing tab (no duplicates); closing dirty tab prompts; tab title shows dirty dot.
+  - **Persistence**: store open tabs + active tab in `.ide/session.json` (ProjectSession).
+  - **Acceptance**: can open/close/switch tabs without losing editor state; no duplicate tabs for same file.
+- [ ] Split editor (vertical/horizontal) + tab groups
+  - **Primary surface**: editor layout controls + drag tab to edge to split.
+  - **Command IDs**: `editor.splitRight` (Cmd+\\), `editor.splitDown`, `editor.focusNextGroup`.
+  - **Behavior**: each split is a tab group; “open file” targets the focused group; closing last tab collapses group.
+  - **Persistence**: store split layout + active group in `.ide/session.json`.
+  - **Acceptance**: two editors can show different files simultaneously; focus and commands operate on the active group.
+- [ ] Find in file (Cmd+F) + replace + regex
+  - **Primary surface**: inline find bar (like Xcode/VSCode).
+  - **Command IDs**: `editor.find` (Cmd+F), `editor.replace` (Cmd+Option+F), `editor.findNext` (Return), `editor.findPrevious` (Shift+Return).
+  - **Behavior**: highlight matches; show match count; toggles for case/whole-word/regex; replace/replace-all with confirmation when large.
+  - **Implementation note**: prefer `NSTextFinder`/`NSTextView` find support for correctness.
+  - **Acceptance**: find/replace works with large files and preserves selection/scroll.
+- [ ] Global search (Cmd+Shift+F) with preview results
+  - **Primary surface**: left “Search” panel or modal panel with results list + preview.
+  - **Command IDs**: `search.findInWorkspace` (Cmd+Shift+F).
+  - **Behavior**: search across project; results grouped by file; click jumps to line; support replace-in-files with preview and per-file selection.
+  - **Implementation note**: use CodebaseIndex when enabled; fallback to ripgrep-style scan with cancellation.
+  - **Acceptance**: search is cancelable, returns line numbers, and opens the correct file/line reliably.
+- [ ] Quick Open (Cmd+P) + fuzzy file search (use CodebaseIndex when available)
+  - **Primary surface**: Quick Open overlay.
+  - **Command IDs**: `workbench.quickOpen` (Cmd+P).
+  - **Behavior**: fuzzy match file names/paths; supports `path:line` suffix; shows recent + pinned; Enter opens, Cmd+Enter opens to side (split).
+  - **Acceptance**: opens correct file instantly on large repos; never blocks UI.
+- [ ] Command palette (Cmd+Shift+P) wired to `CommandRegistry`
+  - **Primary surface**: command palette overlay (search + list).
+  - **Command IDs**: `workbench.commandPalette` (Cmd+Shift+P).
+  - **Behavior**: shows all registered commands with optional keybinding hints; fuzzy search; runs selected command; supports “>” prefix (optional) for command-only.
+  - **Acceptance**: any implemented feature is discoverable and runnable from the palette (no dead commands).
+- [ ] Symbol navigation: outline pane, “Go to Symbol…” (Cmd+T)
+  - **Primary surface**: outline sidebar for current file + quick symbol picker.
+  - **Command IDs**: `workbench.goToSymbol` (Cmd+T).
+  - **Behavior**: show symbols for current file; search symbols; selecting navigates to definition line.
+  - **Implementation note**: use CodebaseIndex symbol tables where available; fall back to lightweight parsing.
+  - **Acceptance**: symbol picker navigates accurately and is fast for Swift/JS/TS/Python.
+- [ ] Go to definition / find references / rename symbol (LSP-backed; fallback to index heuristics)
+  - **Primary surface**: editor context menu + shortcuts.
+  - **Command IDs**: `editor.goToDefinition`, `editor.findReferences`, `editor.renameSymbol`.
+  - **Behavior**: when LSP is configured, use it; otherwise provide best-effort via index; if neither is available, show a clear “not available” message (no silent failure).
+  - **Acceptance**: never navigates to the wrong file silently; ambiguous results must present a picker.
+- [ ] Diagnostics surface + clickable build errors (terminal ↔ editor)
+  - **Primary surface**: problems list + inline squiggles (later) + terminal links.
+  - **Command IDs**: `view.toggleProblems`, `problems.next`, `problems.previous`.
+  - **Behavior**: parse build/test output (start with Swift/Xcodebuild) into file:line diagnostics; clicking jumps to location.
+  - **Acceptance**: running build/tests produces actionable, clickable errors; diagnostics persist until next run.
+- [ ] Code folding, minimap, multi-cursor, block selection
+  - **Scope**: treat as three deliverables; do not half-ship.
+  - **Folding**: fold by indentation / braces (MVP), later language-aware.
+  - **Minimap**: optional (default off) due to complexity; must not regress editor perf.
+  - **Multi-cursor**: add next occurrence, add cursor above/below, rectangular selection (block).
+  - **Acceptance**: features are consistent with macOS text behaviors and don’t introduce selection bugs.
+- [ ] Syntax-aware AI support (Cmd+I) for analyze/fix/enrich current buffer
+  - **Primary surface**: editor action + AI panel.
+  - **Command IDs**: `ai.analyzeFile` (Cmd+I).
+  - **Behavior**: sends current file (and optional selection) as context; returns either (a) explanation/suggestions or (b) a proposed patch set (see Milestone 3).
+  - **Acceptance**: AI never edits disk directly; it proposes changes with preview unless “Auto-apply” is explicitly enabled.
+- [ ] Inline AI chat (Cmd+Shift+I) scoped to current file/selection
+  - **Primary surface**: inline popover anchored to cursor/selection.
+  - **Command IDs**: `ai.inlineChat` (Cmd+Shift+I).
+  - **Behavior**: conversation scoped to the current file; can propose edits only within that file by default; “expand scope” requires explicit user action.
+  - **Acceptance**: inline chat does not pollute global conversation unless user chooses to promote it.
+- [ ] Inline code actions (cursor/selection): explain, refactor, tests, fix diagnostics
+  - **Primary surface**: context menu + lightbulb affordance (optional) + shortcut.
+  - **Command IDs**: `ai.codeActions` (Cmd+.).
+  - **Behavior**: actions are deterministic presets (Explain / Refactor / Generate tests / Fix diagnostics) with predictable context.
+  - **Acceptance**: each action clearly states scope (selection/file/project) and produces either a response or a proposed patch set.
+- [ ] Diff-first apply flow for AI edits (per-hunk accept/reject, rollback)
+  - **Primary surface**: AI “Proposed Changes” + Diff viewer.
+  - **See**: Milestone 3 (Diff-first) + Milestone 4 (Checkpoints).
+
+## AI Agent & autonomy
+- [ ] Git integration: agent ends each request with a commit + summary (toggleable)
+  - **Primary surface**: AI panel “Review” step + Command palette.
+  - **Command IDs**: `git.commitFromAgent`, `git.showStatus`, `git.showDiff` (names are placeholders; must map to real `CommandID`s).
+  - **Behavior**
+    - If an agent run changed files and user approves apply, show a “Ready to commit” card: changed file list + short diff summary + suggested commit message.
+    - Auto-commit is a **setting**; default off. If on, still show the commit result and how to undo.
+    - Never commit if working tree already has unrelated changes unless user explicitly allows.
+  - **Acceptance**: after a successful agent run, user can create a single atomic commit (or skip) without leaving the IDE.
+- [ ] Conversation tabs/history UI: browse, resume, delete history files
+  - **Primary surface**: AI panel top bar (tabs) + history drawer.
+  - **Persistence**: store per-conversation messages under `.ide/chat/<conversationId>.json` (or evolve from current `history.json`) and list conversations from `.ide/logs/conversations/index.ndjson`.
+  - **Behavior**: create new conversation, switch, resume, delete (deletes files + logs for that conversation).
+  - **Acceptance**: closing/reopening the project restores conversation list and the last active conversation.
+- [ ] Plan UI: pinned plan view + live progress (tool calls ↔ checklist)
+  - **Primary surface**: AI panel “Plan” tab (pinnable) + compact progress in status bar.
+  - **Data source**: `PlannerTool` ↔ `ConversationPlanStore` plus tool-call stream from `ConversationManager`.
+  - **Behavior**: render plan markdown; highlight current step; tool executions update step state; allow user to edit/clear plan manually.
+  - **Acceptance**: plan state survives app restart and stays consistent with executed tool calls.
+- [x] Planner tool (persistent plan storage)
+- [x] Markdown rendering for chat
+- [ ] Streaming responses (SSE) + live tool execution streaming
+  - **Primary surface**: AI message list (typing should be actual stream, not spinner).
+  - **Behavior**: stream tokens into the last assistant message; stream tool call start/complete events as they happen.
+  - **Implementation map**: extend `OpenRouterAIService` + `OpenRouterAPIClient` to support SSE when available; update `ConversationManager` to append partial assistant content without creating extra messages.
+  - **Acceptance**: long responses render progressively; cancelling stops streaming quickly.
+- [ ] Agent verify loop: run tests/build/linters; iterate until green with loop protection
+  - **Primary surface**: AI panel “Verify” step + Task lanes (Milestone 2).
+  - **Behavior**: after apply, run configured commands (default: `./run.sh test`); if failing, feed concise failure into the agent, propose fix, and retry with a hard cap (e.g., 2–3).
+  - **Safety**: verify commands are allowlisted per project; agent can’t add new verify commands without user approval.
+  - **Acceptance**: when enabled, the agent stops only on success or cap and produces a final short summary.
+- [ ] AI self-review + auto-fix pass before final reply
+  - **Behavior**: before responding “done”, the agent must: (1) restate objective, (2) list touched files, (3) confirm verify status, (4) flag any remaining risks/todos.
+  - **Acceptance**: no “done” responses without an explicit review block (brief, consistent).
+- [ ] Project “rules & memory” UI (repo-specific guardrails for the agent)
+  - **Primary surface**: Settings → AI + optional pinned “Rules” panel.
+  - **Persistence**: `.ide/agent/rules.md` + `.ide/agent/memory.json` (or reuse Index memory storage).
+  - **Behavior**: rules are injected into system prompt every request; memory can be appended by explicit user action (“Save as project memory”).
+  - **Acceptance**: user can inspect exactly what rules/memory the agent is using for this repo.
+- [ ] Local/on-device model support (Apple Silicon optimized) + per-task routing (fast vs deep)
+  - **Goal**: latency + privacy wins for lightweight tasks (summaries, embeddings, intent classification).
+  - **Design**: provider abstraction in `AIService` (remote + local) with routing rules (per command/action).
+  - **Acceptance**: user can choose “local-first for summaries/search” without breaking core chat/agent flows.
+- [ ] Safety rails: destructive command gating, path allowlist UI, dry-run mode
+  - **Behavior**
+    - Extend `PathValidator` rules to cover more operations (rename/move, glob patterns).
+    - Gate destructive shell commands (`rm`, `git reset --hard`, etc.) behind explicit confirmation and/or an allowlist.
+    - “Dry-run” mode runs tools that only read; write tools produce a proposed patch set only.
+  - **Acceptance**: agent cannot destroy data silently; the user always sees what will change before it changes.
+- [ ] Diff-aware apply: preview multi-file patch, per-file/hunk accept/reject, one-click rollback
+  - **See**: Milestone 3 (Diff-first) + Milestone 4 (Checkpoints).
+- [ ] Inline execution controls: cancel, pause, step, rerun last tool set
+  - **Primary surface**: AI panel toolbar + Task lanes.
+  - **Behavior**: cancel stops current tool + prevents queued tools; pause stops after current tool; step runs exactly one tool call batch; rerun repeats last batch (with confirmation if it writes).
+  - **Acceptance**: users can safely interrupt and resume agent runs without corrupting state.
+- [ ] Multi-modal context: screenshots/attachments -> text context for the agent
+  - **Primary surface**: AI input supports drag/drop/paste of images/files.
+  - **Persistence**: store attachments under `.ide/attachments/` with references from conversation JSON.
+  - **Behavior**: images are summarized locally (preferred) or sent to model if supported; attachments can be referenced (“use screenshot 3”).
+  - **Acceptance**: attachments are project-scoped, deletable, and never silently uploaded without user control.
+
+## Indexing & context intelligence
+- [ ] CodebaseIndex UX: file/symbol search surfaces in Quick Open/outline
+  - **Primary surface**: Quick Open, Symbol picker, Search panel.
+  - **Behavior**: if CodebaseIndex is enabled, queries should use it by default; if disabled/unavailable, fall back to filesystem scan.
+  - **Acceptance**: Quick Open and Symbol picker remain fast on large repos and don’t depend on network.
+- [ ] Context windows: automatic selection propagation (done), add “send buffer” and “send file” buttons
+  - **Primary surface**: AI panel context header.
+  - **Behavior**: one-click “Add selection”, “Add current file”, “Add open tabs”, with a visible context list and a clear “remove” action.
+  - **Acceptance**: user can see exactly what context will be sent before pressing Send.
+- [ ] Summaries/memories surfaced in chat (per file or folder)
+  - **Behavior**: show “Index Summary” chips (file/folder) that can be inserted into chat context; allow pin/unpin.
+  - **Acceptance**: summaries are cached, quick to load, and clearly marked as generated artifacts.
+- [ ] Semantic search over docs/code (streamed results)
+  - **Behavior**: semantic query returns ranked file/snippet hits; show top N with preview; allow “Add to context”.
+  - **Acceptance**: search is cancelable and deterministic (same query → same ordering with same index).
+- [ ] Knowledge routing: prefer cached summaries; fall back to live reads only when needed
+  - **Rule**: always try: (1) pinned context, (2) cached summaries/memories, (3) index reads, (4) direct file reads; never “guess” file names.
+  - **Acceptance**: agent prompts show consistent context selection and fewer irrelevant reads.
+
+## Collaboration & presence
+- [ ] Live cursor presence + follow mode (future multi-user)
+  - **Scope**: future; only after core editor tabs/splits and a stable document model exist.
+  - **Acceptance (when started)**: presence is opt-in, project-scoped, and never impacts editor latency.
+- [ ] Shareable AI session transcript export (Markdown/HTML)
+  - **Primary surface**: AI panel menu + Command palette.
+  - **Command IDs**: `ai.exportTranscriptMarkdown`, `ai.exportTranscriptHTML`.
+  - **Behavior**: export a single conversation with tool calls and timestamps; allow redacting secrets; output to a user-chosen path.
+  - **Acceptance**: exported transcript is readable outside the IDE and preserves code blocks/diffs.
+- [ ] Commenting on files (inline notes stored under .ide)
+  - **Primary surface**: editor gutter + context menu.
+  - **Persistence**: `.ide/notes/comments.json` keyed by `{filePath, line, id}`.
+  - **Behavior**: add/edit/resolve comments; show comment indicators; searchable via Command palette.
+  - **Acceptance**: comments survive restart and don’t modify source files.
+
+## Performance & UX polish
+- [ ] Low-latency streaming UI with partial rendering for large outputs
+  - **Rule**: rendering must be incremental and bounded (no quadratic re-layout).
+  - **Acceptance**: streaming a 2k-token response stays smooth; scrolling remains responsive.
+- [ ] Background pre-warm of models/tools based on intent
+  - **Behavior**: pre-warm index queries and AI service handshake after project open; do not auto-send user data.
+  - **Acceptance**: first AI request latency decreases without breaking offline mode.
+- [ ] Offline-first behaviors with graceful degradation
+  - **Behavior**: if AI is unavailable, IDE still functions fully; show clear “offline” states; queue optional actions.
+  - **Acceptance**: no feature hard-crashes when network is down; errors are actionable.
+
+## Native macOS differentiators (why we win vs Chromium IDEs)
+- [ ] Quick Look everywhere: Space preview in file tree, search results, git changes, Quick Open
+  - **See**: Milestone 1. Key command: `view.quickLook` (Space).
+- [ ] Pinned Inspector/Preview panel: metadata, labels/tags, thumbnails, Quick Look, “Ask Agent about this”
+  - **See**: Milestone 1. Key command: `panel.toggleInspector`.
+- [ ] APFS-backed checkpoints: instant snapshot + per-file rollback (agent runs + manual)
+  - **See**: Milestone 4. Key commands: `checkpoint.create`, `checkpoint.restore`.
+- [ ] Transactional agent runs: plan → diff → apply → verify → (optional) commit; always reversible
+  - **Primary surface**: AI panel run summary + Task lanes.
+  - **Rule**: any run that would write must produce (or reference) a patch set; apply is explicit and reversible via checkpoint or git.
+  - **Acceptance**: users can always answer “what changed, why, and how do I undo it?” from the UI.
+- [ ] Tool “lanes” + safe parallelism: parallel reads/search/index; serialized writes with path locks; cancel/pause/step
+  - **See**: Milestone 2.
+- [ ] On-device context intelligence: semantic index + “best context pack” selection (fast local compute, remote LLM optional)
+  - **See**: Milestone 5.
+- [ ] System automation hooks: Shortcuts/App Intents + Services menu + global hotkeys (CommandRegistry-backed)
+  - **Primary surface**: macOS Services, Shortcuts, menu items.
+  - **Behavior**: expose a small set of safe, stable commands as App Intents (open project, run tests, ask AI with selected text, create checkpoint).
+  - **Acceptance**: user can automate common workflows without scripting and without granting broad permissions.
+- [ ] First-class privacy: per-project secrets in Keychain, audit log of tool actions, data residency controls
+  - **Persistence**: secrets stored in Keychain scoped by project identifier; audit logs under `.ide/logs/`.
+  - **Behavior**: every tool call and write action is logged with timestamps + paths; UI offers “View audit log” and “Redact & export”.
+  - **Acceptance**: users can prove what the agent did and control what leaves the machine.
+
+## Milestones (top 5, 2–3 weeks each)
+
+### Milestone 1 — Quick Look + Inspector preview (delight + speed)
+- **Goal**: instant “Space to preview” for any file, plus a pinned Inspector for browsing.
+- **Primary surface**: File Tree + Right Panel.
+- **Command IDs**
+  - `view.quickLook`: Space (File Tree focused) toggles transient preview.
+  - `panel.toggleInspector`: shows/hides pinned Inspector panel.
+- **Dependencies**
+  - File selection in tree must be stable (already: `selectedRelativePath`).
+  - Right panel must support multiple tabs/panels (AI + Inspector) without “dead” toggles.
+- **Implementation map**
+  - `osx-ide/Components/ModernFileTreeView.swift`: capture Space when outline view is first responder; resolve selected file URL.
+  - `osx-ide/Components/FileExplorerView.swift`: forward selection + focused state if needed.
+  - `osx-ide/ContentView.swift`: replace “single right panel view” with a container that can show AI and Inspector.
+  - New: `osx-ide/Components/QuickLookPreviewView.swift` (NSViewRepresentable wrapping `QuickLookUI` preview view).
+  - New: `osx-ide/Services/QuickLookService.swift` (shared controller + selection binding).
+- **Acceptance criteria**
+  - Space on a file shows a Quick Look preview; Space again or Esc closes.
+  - Preview never opens for directories.
+  - Pinned Inspector can show the same preview without stealing File Tree focus.
+  - “Ask Agent about this file” injects file path into chat context (no guessing paths).
+- **Out of scope**
+  - Custom rendering for every file type (use system Quick Look).
+  - Voice readout.
+- **Test plan**
+  - Manual: preview text file, image, PDF; verify Esc closes; verify directory no-op.
+
+### Milestone 2 — Tool lanes + safe parallel execution (native performance)
+- **Goal**: UI stays responsive while the agent/index/search run concurrently, with safe cancellation.
+- **Primary surface**: Right panel (Agent) + Status bar + “Tasks” popover.
+- **Core rule set (non-negotiable)**
+  - Read/search/index may run concurrently.
+  - Writes are serialized per absolute path (no two write tools can touch same path in parallel).
+  - Shell commands default to single-flight unless explicitly marked safe-to-parallel.
+  - UI progress order must be deterministic (stable ordering by tool-call index).
+- **Implementation map**
+  - `osx-ide/Services/AIToolExecutor.swift`: introduce a scheduler (actor) that can run safe tool calls concurrently with per-path locks and a max concurrency limit.
+  - `osx-ide/Services/ConversationManager.swift`: propagate cancellations; surface tool lanes/progress events.
+  - New: `osx-ide/Services/ToolScheduler.swift`, `osx-ide/Services/AsyncLockMap.swift`.
+  - New UI: `osx-ide/Components/TaskLanesView.swift` + status bar affordance.
+- **Acceptance criteria**
+  - Multiple read/index tools can run in parallel without UI freezes.
+  - Two write tools targeting same file are never concurrent.
+  - Cancel stops pending work quickly and leaves UI in a consistent state.
+- **Out of scope**
+  - Parallelizing “apply patch” within the same file.
+- **Test plan**
+  - Unit: lock map prevents concurrent writes to same path.
+  - Manual: trigger multiple tool calls; verify progress + cancel behavior.
+
+### Milestone 3 — Diff-first AI edits (trust + control)
+- **Goal**: agent never silently edits disk; it proposes changes as a patch set that the user can review/apply.
+- **Primary surface**: AI panel (“Proposed Changes” tab) + Editor diff viewer.
+- **Design decisions**
+  - “Propose” produces a staged patch under `.ide/staging/` (project-scoped).
+  - “Apply” writes to disk only after user approval (or after explicit “Auto-apply” toggle).
+  - Patch set stores provenance: toolCallId, command, timestamps, and a short rationale string.
+- **Implementation map**
+  - `osx-ide/Services/Tools/FileTools.swift`: add a `mode` argument (`propose|apply`) or introduce parallel “propose_*” tools.
+  - `osx-ide/Services/AIToolExecutor.swift`: treat proposed edits as first-class results with preview UI.
+  - New: `osx-ide/Services/PatchSetStore.swift` (manifest + file blobs).
+  - New: `osx-ide/Components/DiffViewer.swift` (MVP: unified diff + per-file accept/reject).
+- **Acceptance criteria**
+  - Agent can propose multi-file edits; user can apply/reject per file (MVP) before disk writes.
+  - Applying writes exactly what was proposed; rejecting leaves disk untouched.
+  - UI clearly shows “what changed” and “which tool caused it”.
+- **Out of scope**
+  - Perfect per-hunk selection in MVP (start with per-file accept/reject).
+- **Test plan**
+  - Unit: staging manifest encodes/decodes; applying patch writes expected bytes.
+  - Manual: propose change to two files; accept one, reject one.
+
+### Milestone 4 — Checkpoints + rollback (confidence to let agent run wild)
+- **Goal**: one-click rollback of any agent-applied change, even without git.
+- **Primary surface**: AI panel + Command palette (“Restore checkpoint…”).
+- **Scope clarification**
+  - This is **file-level** checkpointing (fast APFS clones when available), not full volume snapshots.
+  - Store checkpoints under `.ide/checkpoints/<checkpointId>/...` + `manifest.json`.
+- **Implementation map**
+  - New: `osx-ide/Services/CheckpointManager.swift` (create/restore/list/delete).
+  - `osx-ide/Services/Tools/FileTools.swift`: before apply, create checkpoint of touched files.
+  - Optional: use `copyfile(…, COPYFILE_CLONE)` when supported; fall back to normal copy.
+- **Acceptance criteria**
+  - Applying a patch set auto-creates a checkpoint of all touched files.
+  - Restore brings back exact prior bytes for each file.
+  - “Restore” is safe: confirm dialog + preview of which files will change.
+- **Out of scope**
+  - Restoring deleted files/folders in MVP (optional follow-up).
+- **Test plan**
+  - Unit: checkpoint manifest roundtrip; restore restores bytes.
+  - Manual: edit file, apply, restore, compare.
+
+### Milestone 5 — On-device context engine (quality boost without latency)
+- **Goal**: faster + higher-quality agent answers via local retrieval and context packing.
+- **Primary surface**: Quick Open, AI “Context” picker, and “Used Context” disclosure per response.
+- **Implementation map**
+  - Extend `osx-ide/Services/Index` to support: semantic search, cached summaries, and “related files”.
+  - New: `osx-ide/Services/ContextPackBuilder.swift` (budgeting + selection rules).
+  - UI: show what files/snippets were included; allow pin/unpin sources.
+- **Acceptance criteria**
+  - User can add/remove context sources explicitly.
+  - Agent shows which context was used (file list + snippet counts).
+  - Context pack builder stays within a configurable budget.
+- **Out of scope**
+  - Full local LLM inference (separate milestone).
+- **Test plan**
+  - Unit: context packing respects budget; deterministic selection order.
+
+## Post-milestone roadmap (future)
+This section is intentionally **deferred** until Milestones 1–5 are shipped. It’s here to capture direction, but it should not spawn placeholder files or UI until it’s promoted into a Milestone with concrete acceptance criteria.
+
+### AI workflow orchestration
+- [ ] Phase 1: Core engine — task graph, loop protection, checkpoints
+  - **Depends on**: Milestones 2–4.
+  - **Acceptance**: a single run has a stable ID, a reproducible plan, deterministic execution, and a reversible apply step.
+- [ ] Phase 2: Orchestration UI — plan/progress, cancel/step controls
+  - **Depends on**: Milestone 2.
+  - **Acceptance**: users can pause/cancel/step and always see “what is happening right now”.
+- [ ] Phase 3: Settings + policy integration — enable/disable features, safety policies, telemetry (optional)
+  - **Acceptance**: behavior is configurable per project without hidden global side-effects.
+
+### Context-Aware Assistance
+- [ ] Phase 1: Persona system (roles + constraints)
+  - **Scope**: extend `AIMode`/settings with “role presets” (e.g., Reviewer, Debugger, Architect) that change tool availability and response format.
+  - **Acceptance**: role selection is visible in UI and changes are auditable (shown in the prompt header/logs).
+- [ ] Phase 2: Knowledge integration (retrieval + memory)
+  - **Depends on**: Milestone 5.
+  - **Acceptance**: context packs are explainable, user-controllable, and consistently improve answer quality.
+- [ ] Phase 3: UI presentation (context + diffs)
+  - **Scope**: improve how we show “used context”, diffs, and references to code locations without overwhelming the user.
+  - **Acceptance**: the user can answer “why did the agent do that?” by inspecting context + diff provenance.
+
+### Accessibility Innovations
+- [ ] Phase 1: Keyboard-first + Voice optional (agent conversation only)
+  - **Rule**: no “voice code editing”; voice is only for high-level agent requests + spoken summaries (optional).
+  - **Acceptance**: full IDE usability via keyboard navigation + VoiceOver labels for all major surfaces.
+- [ ] Phase 2: High-signal UI for focus (reduce cognitive load)
+  - **Scope**: distraction controls, “focus mode”, and progressive disclosure for agent output (collapse/expand reasoning, diffs, logs).
+  - **Acceptance**: large agent outputs remain scannable and don’t flood the UI.
+- [ ] Phase 3: Accessibility suite hardening
+  - **Scope**: audit + fix accessibility identifiers, dynamic type support, contrast, and input methods across the whole app.
+  - **Acceptance**: UI tests cover critical flows with accessibility identifiers (no brittle selectors).
