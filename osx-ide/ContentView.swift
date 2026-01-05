@@ -245,6 +245,28 @@ struct ContentView: View {
                 GoToSymbolOverlayView(appState: appState, isPresented: $appState.isGoToSymbolPresented)
                     .padding(30)
             }
+
+            if appState.isNavigationLocationsPresented {
+                Color.black.opacity(0.25)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        appState.isNavigationLocationsPresented = false
+                    }
+
+                NavigationLocationsOverlayView(appState: appState, isPresented: $appState.isNavigationLocationsPresented)
+                    .padding(30)
+            }
+
+            if appState.isRenameSymbolPresented {
+                Color.black.opacity(0.25)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        appState.isRenameSymbolPresented = false
+                    }
+
+                RenameSymbolOverlayView(appState: appState, isPresented: $appState.isRenameSymbolPresented)
+                    .padding(30)
+            }
         }
         .background(Color.clear)
         .environment(\.font, .system(size: CGFloat(appState.ui.fontSize)))
