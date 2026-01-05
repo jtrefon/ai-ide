@@ -60,6 +60,64 @@ struct osx_ideTests {
         #expect(appState.lastError == nil, "Should have no errors after new")
     }
 
+    @Test func testEditorTabsNoDuplicatesOnRepeatedOpen() async throws {
+        let appState = DependencyContainer.shared.makeAppState()
+
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_tabs_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let file = tempRoot.appendingPathComponent("a.swift")
+        try "print(\"hello\")".write(to: file, atomically: true, encoding: .utf8)
+
+        appState.fileEditor.loadFile(from: file)
+        appState.fileEditor.loadFile(from: file)
+
+        #expect(appState.fileEditor.tabs.count == 1, "Opening same file twice should not create duplicate tabs")
+        #expect(appState.fileEditor.selectedFile == file.path, "Expected selectedFile to be the opened file")
+    }
+
+    @Test func testEditorCloseActiveTabClearsStateWhenLastTab() async throws {
+        let appState = DependencyContainer.shared.makeAppState()
+
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_tabs_close_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let file = tempRoot.appendingPathComponent("a.swift")
+        try "print(\"hello\")".write(to: file, atomically: true, encoding: .utf8)
+
+        appState.fileEditor.loadFile(from: file)
+        #expect(appState.fileEditor.tabs.count == 1)
+
+        appState.fileEditor.closeActiveTab()
+
+        #expect(appState.fileEditor.tabs.isEmpty, "Expected no tabs after closing last tab")
+        #expect(appState.fileEditor.selectedFile == nil, "Expected selectedFile to be nil after closing last tab")
+    }
+
+    @Test func testSplitEditorOpenTargetsFocusedPane() async throws {
+        let appState = DependencyContainer.shared.makeAppState()
+
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_split_focus_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let fileA = tempRoot.appendingPathComponent("a.swift")
+        let fileB = tempRoot.appendingPathComponent("b.swift")
+        try "print(\"a\")".write(to: fileA, atomically: true, encoding: .utf8)
+        try "print(\"b\")".write(to: fileB, atomically: true, encoding: .utf8)
+
+        appState.fileEditor.toggleSplit(axis: .vertical)
+        appState.fileEditor.focus(.secondary)
+
+        appState.fileEditor.loadFile(from: fileB)
+
+        #expect(appState.fileEditor.isSplitEditor == true, "Expected split editor to be enabled")
+        #expect(appState.fileEditor.secondaryPane.tabs.contains(where: { $0.filePath == fileB.path }), "Expected file to open in secondary pane")
+        #expect(!appState.fileEditor.primaryPane.tabs.contains(where: { $0.filePath == fileB.path }), "Expected file not to open in primary pane")
+    }
+
     @Test func testCodeSelectionContext() async throws {
         let context = CodeSelectionContext()
         
@@ -254,8 +312,65 @@ struct osx_ideTests {
         #expect(appState.lastError?.contains("Test error") == true, "Error should be stored")
         
         appState.lastError = nil
-        
         #expect(appState.lastError == nil, "Error should be clearable")
+    }
+
+    @Test func testWorkspaceServiceRenamePublishesEventAndMovesFile() async throws {
+        let errorManager = ErrorManager()
+        let eventBus = EventBus()
+        let workspaceService = WorkspaceService(errorManager: errorManager, eventBus: eventBus)
+
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_workspace_rename_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        workspaceService.currentDirectory = tempRoot
+
+        let file = tempRoot.appendingPathComponent("a.txt")
+        try "hello".write(to: file, atomically: true, encoding: .utf8)
+
+        var capturedOld: URL?
+        var capturedNew: URL?
+        let cancellable = eventBus.subscribe(to: FileRenamedEvent.self) { event in
+            capturedOld = event.oldUrl
+            capturedNew = event.newUrl
+        }
+        _ = cancellable
+
+        let newURL = workspaceService.renameItem(at: file, to: "b.txt")
+        #expect(newURL != nil, "Expected rename to return new URL")
+
+        #expect(!FileManager.default.fileExists(atPath: file.path), "Expected old path to be gone")
+        #expect(FileManager.default.fileExists(atPath: newURL!.path), "Expected new path to exist")
+
+        #expect(capturedOld?.standardizedFileURL.path == file.standardizedFileURL.path, "Expected event oldUrl to match")
+        #expect(capturedNew?.standardizedFileURL.path == newURL!.standardizedFileURL.path, "Expected event newUrl to match")
+    }
+
+    @Test func testWorkspaceServiceDeletePublishesEventAndRemovesFile() async throws {
+        let errorManager = ErrorManager()
+        let eventBus = EventBus()
+        let workspaceService = WorkspaceService(errorManager: errorManager, eventBus: eventBus)
+
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_workspace_delete_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        workspaceService.currentDirectory = tempRoot
+
+        let file = tempRoot.appendingPathComponent("delete_me.txt")
+        try "hello".write(to: file, atomically: true, encoding: .utf8)
+
+        var capturedDeleted: URL?
+        let cancellable = eventBus.subscribe(to: FileDeletedEvent.self) { event in
+            capturedDeleted = event.url
+        }
+        _ = cancellable
+
+        workspaceService.deleteItem(at: file)
+
+        #expect(!FileManager.default.fileExists(atPath: file.path), "Expected file to be removed from original location")
+        #expect(capturedDeleted?.standardizedFileURL.path == file.standardizedFileURL.path, "Expected delete event to reference the removed file")
     }
     
     @Test func testFileOperationsWithCleanup() async throws {

@@ -22,6 +22,8 @@ class AppState: ObservableObject {
     
     @Published var fileTreeExpandedRelativePaths: Set<String> = []
 
+    @Published var fileTreeSelectedRelativePath: String? = nil
+
      @Published var showHiddenFilesInFileTree: Bool = false
     
     // MARK: - Services
@@ -272,6 +274,12 @@ class AppState: ObservableObject {
         return workspace.currentDirectory?.appendingPathComponent(relativePath)
     }
 
+    func selectedFileTreeURL() -> URL? {
+        guard let projectRoot = workspace.currentDirectory?.standardizedFileURL else { return nil }
+        guard let relative = fileTreeSelectedRelativePath, !relative.isEmpty else { return nil }
+        return projectRoot.appendingPathComponent(relative).standardizedFileURL
+    }
+
 
     private func loadProjectSession(for projectRoot: URL) async {
         isRestoringSession = true
@@ -310,7 +318,53 @@ class AppState: ObservableObject {
 
         fileTreeExpandedRelativePaths = Set(session.fileTreeExpandedRelativePaths)
 
-        if let rel = session.lastOpenFileRelativePath {
+        fileEditor.newFile()
+
+        let splitAxis = FileEditorStateManager.SplitAxis(rawValue: session.splitAxisRawValue) ?? .vertical
+        fileEditor.splitAxis = splitAxis
+        fileEditor.isSplitEditor = session.isSplitEditor
+        let focused = FileEditorStateManager.PaneID(rawValue: session.focusedEditorPaneRawValue) ?? .primary
+        fileEditor.focusedPane = focused
+
+        let primaryRelPaths = !session.primaryOpenTabRelativePaths.isEmpty ? session.primaryOpenTabRelativePaths : session.openTabRelativePaths
+        let primaryActiveRel = session.primaryActiveTabRelativePath ?? session.activeTabRelativePath
+
+        if !primaryRelPaths.isEmpty {
+            fileEditor.focus(.primary)
+            for rel in primaryRelPaths {
+                let url = projectRoot.appendingPathComponent(rel)
+                let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                if FileManager.default.fileExists(atPath: url.path), !isDir {
+                    loadFile(from: url)
+                }
+            }
+            if let activeRel = primaryActiveRel {
+                let activeURL = projectRoot.appendingPathComponent(activeRel)
+                fileEditor.activateTab(filePath: activeURL.path)
+            }
+        }
+
+        if session.isSplitEditor {
+            let secondaryRelPaths = session.secondaryOpenTabRelativePaths
+            if !secondaryRelPaths.isEmpty {
+                fileEditor.focus(.secondary)
+                for rel in secondaryRelPaths {
+                    let url = projectRoot.appendingPathComponent(rel)
+                    let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                    if FileManager.default.fileExists(atPath: url.path), !isDir {
+                        loadFile(from: url)
+                    }
+                }
+                if let activeRel = session.secondaryActiveTabRelativePath {
+                    let activeURL = projectRoot.appendingPathComponent(activeRel)
+                    fileEditor.activateTab(filePath: activeURL.path)
+                }
+            }
+        }
+
+        fileEditor.focus(focused)
+
+        if primaryRelPaths.isEmpty, let rel = session.lastOpenFileRelativePath {
             let url = projectRoot.appendingPathComponent(rel)
             let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             if FileManager.default.fileExists(atPath: url.path), !isDir {
@@ -337,11 +391,36 @@ class AppState: ObservableObject {
 
         let windowFrame = window.map { ProjectSession.WindowFrame(rect: $0.frame) }
         let lastOpenRelative: String?
-        if let selectedPath = fileEditor.selectedFile {
-            let selectedURL = URL(fileURLWithPath: selectedPath)
-            lastOpenRelative = relativePath(for: selectedURL)
+        let openTabRelatives: [String]
+        let activeRelative: String?
+
+        let focusedPane = fileEditor.focusedPane
+        let focusedPaneState = fileEditor.focusedPaneState
+
+        if let activeID = focusedPaneState.activeTabID, let activeTab = focusedPaneState.tabs.first(where: { $0.id == activeID }) {
+            activeRelative = relativePath(for: URL(fileURLWithPath: activeTab.filePath))
         } else {
-            lastOpenRelative = nil
+            activeRelative = nil
+        }
+
+        openTabRelatives = focusedPaneState.tabs.compactMap { relativePath(for: URL(fileURLWithPath: $0.filePath)) }
+        lastOpenRelative = activeRelative
+
+        let primaryTabs = fileEditor.primaryPane.tabs.compactMap { relativePath(for: URL(fileURLWithPath: $0.filePath)) }
+        let secondaryTabs = fileEditor.secondaryPane.tabs.compactMap { relativePath(for: URL(fileURLWithPath: $0.filePath)) }
+
+        let primaryActive: String?
+        if let activeID = fileEditor.primaryPane.activeTabID, let tab = fileEditor.primaryPane.tabs.first(where: { $0.id == activeID }) {
+            primaryActive = relativePath(for: URL(fileURLWithPath: tab.filePath))
+        } else {
+            primaryActive = nil
+        }
+
+        let secondaryActive: String?
+        if let activeID = fileEditor.secondaryPane.activeTabID, let tab = fileEditor.secondaryPane.tabs.first(where: { $0.id == activeID }) {
+            secondaryActive = relativePath(for: URL(fileURLWithPath: tab.filePath))
+        } else {
+            secondaryActive = nil
         }
 
         let session = ProjectSession(
@@ -363,6 +442,17 @@ class AppState: ObservableObject {
 
             aiModeRawValue: conversationManager.currentMode.rawValue,
             lastOpenFileRelativePath: lastOpenRelative,
+            openTabRelativePaths: openTabRelatives,
+            activeTabRelativePath: activeRelative,
+
+            isSplitEditor: fileEditor.isSplitEditor,
+            splitAxisRawValue: fileEditor.splitAxis.rawValue,
+            focusedEditorPaneRawValue: focusedPane.rawValue,
+            primaryOpenTabRelativePaths: primaryTabs,
+            primaryActiveTabRelativePath: primaryActive,
+            secondaryOpenTabRelativePaths: secondaryTabs,
+            secondaryActiveTabRelativePath: secondaryActive,
+
             fileTreeExpandedRelativePaths: fileTreeExpandedRelativePaths.sorted()
         )
 

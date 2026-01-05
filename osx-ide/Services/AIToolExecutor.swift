@@ -84,7 +84,14 @@ public class AIToolExecutor {
             let resultMessage: ChatMessage
             if let tool = availableTools.first(where: { $0.name == toolCall.name }) {
                 do {
-                    let result = try await tool.execute(arguments: toolCall.arguments)
+                    var mergedArguments = toolCall.arguments
+                    // Inject tool metadata for internal tools (not part of the model schema).
+                    mergedArguments["_tool_call_id"] = toolCall.id
+                    if let conversationId {
+                        mergedArguments["_conversation_id"] = conversationId
+                    }
+
+                    let result = try await tool.execute(arguments: mergedArguments)
 
                     Task {
                         await AppLogger.shared.info(category: .tool, message: "tool.execute_success", metadata: [

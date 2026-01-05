@@ -10,7 +10,6 @@ import SwiftUI
 struct FileExplorerView: View {
     @ObservedObject var appState: AppState
     @State private var searchQuery: String = ""
-    @State private var selectedRelativePath: String? = nil
     @State private var refreshToken: Int = 0
 
     private var showHiddenFiles: Bool { appState.showHiddenFilesInFileTree }
@@ -72,11 +71,53 @@ struct FileExplorerView: View {
                     get: { appState.fileTreeExpandedRelativePaths },
                     set: { appState.fileTreeExpandedRelativePaths = $0 }
                 ),
-                selectedRelativePath: $selectedRelativePath,
+                selectedRelativePath: $appState.fileTreeSelectedRelativePath,
                 showHiddenFiles: showHiddenFiles,
                 refreshToken: refreshToken,
                 onOpenFile: { url in
-                    appState.loadFile(from: url)
+                    Task {
+                        try? await CommandRegistry.shared.execute(.explorerOpenSelection, args: [
+                            "path": url.path
+                        ])
+                    }
+                },
+                onCreateFile: { directory, name in
+                    appState.workspaceService.createFile(named: name, in: directory)
+                    refreshToken += 1
+                },
+                onCreateFolder: { directory, name in
+                    appState.workspaceService.createFolder(named: name, in: directory)
+                    refreshToken += 1
+                },
+                onDeleteItem: { url in
+                    Task {
+                        try? await CommandRegistry.shared.execute(.explorerDeleteSelection, args: [
+                            "path": url.path
+                        ])
+                        await MainActor.run {
+                            refreshToken += 1
+                            syncSelectionFromAppState()
+                        }
+                    }
+                },
+                onRenameItem: { url, newName in
+                    Task {
+                        try? await CommandRegistry.shared.execute(.explorerRenameSelection, args: [
+                            "path": url.path,
+                            "newName": newName
+                        ])
+                        await MainActor.run {
+                            refreshToken += 1
+                            syncSelectionFromAppState()
+                        }
+                    }
+                },
+                onRevealInFinder: { url in
+                    Task {
+                        try? await CommandRegistry.shared.execute(.explorerRevealInFinder, args: [
+                            "path": url.path
+                        ])
+                    }
                 },
                 fontSize: appState.ui.fontSize,
                 fontFamily: appState.ui.fontFamily
@@ -158,11 +199,11 @@ struct FileExplorerView: View {
 
     private func syncSelectionFromAppState() {
         guard let selectedFilePath = appState.fileEditor.selectedFile else {
-            selectedRelativePath = nil
+            appState.fileTreeSelectedRelativePath = nil
             return
         }
         let selectedURL = URL(fileURLWithPath: selectedFilePath)
-        selectedRelativePath = appState.relativePath(for: selectedURL)
+        appState.fileTreeSelectedRelativePath = appState.relativePath(for: selectedURL)
     }
 
     private func createNewFile() {

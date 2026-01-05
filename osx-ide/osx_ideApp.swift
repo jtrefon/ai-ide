@@ -150,11 +150,98 @@ struct osx_ideApp: App {
                 Button("Format Document") {
                     Task { try? await CommandRegistry.shared.execute(.editorFormat) }
                 }
-                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .keyboardShortcut("f", modifiers: [.command, .option, .shift])
 
                 Button("Reindex Project Now") {
                     DependencyContainer.shared.reindexProjectNow()
                 }
+            }
+
+            CommandMenu("Editor") {
+                Button("Find") {
+                    Task { try? await CommandRegistry.shared.execute(.editorFind) }
+                }
+                .keyboardShortcut("f", modifiers: [.command])
+
+                Button("Replace") {
+                    Task { try? await CommandRegistry.shared.execute(.editorReplace) }
+                }
+                .keyboardShortcut("f", modifiers: [.command, .option])
+
+                Divider()
+
+                Button("Close Tab") {
+                    Task { try? await CommandRegistry.shared.execute(.editorTabsCloseActive) }
+                }
+                .keyboardShortcut("w", modifiers: [.command])
+
+                Button("Close All Tabs") {
+                    Task { try? await CommandRegistry.shared.execute(.editorTabsCloseAll) }
+                }
+                .keyboardShortcut("w", modifiers: [.command, .shift])
+
+                Button("Next Tab") {
+                    Task { try? await CommandRegistry.shared.execute(.editorTabsNext) }
+                }
+                .keyboardShortcut(.tab, modifiers: [.control])
+
+                Button("Previous Tab") {
+                    Task { try? await CommandRegistry.shared.execute(.editorTabsPrevious) }
+                }
+                .keyboardShortcut(.tab, modifiers: [.control, .shift])
+
+                Divider()
+
+                Button("Split Right") {
+                    Task { try? await CommandRegistry.shared.execute(.editorSplitRight) }
+                }
+                .keyboardShortcut("\\", modifiers: [.command])
+
+                Button("Split Down") {
+                    Task { try? await CommandRegistry.shared.execute(.editorSplitDown) }
+                }
+
+                Button("Focus Next Group") {
+                    Task { try? await CommandRegistry.shared.execute(.editorFocusNextGroup) }
+                }
+                .keyboardShortcut("\\", modifiers: [.command, .shift])
+            }
+
+            CommandMenu("Explorer") {
+                Button("Delete", action: {
+                    guard let url = appState.selectedFileTreeURL() else { return }
+                    Task { try? await CommandRegistry.shared.execute(.explorerDeleteSelection, args: ["path": url.path]) }
+                })
+                .keyboardShortcut(.delete, modifiers: [.command])
+
+                Button("Rename", action: {
+                    guard let url = appState.selectedFileTreeURL() else { return }
+                    let alert = NSAlert()
+                    alert.messageText = "Rename"
+                    alert.informativeText = "Enter a new name."
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: "Rename")
+                    alert.addButton(withTitle: "Cancel")
+                    let textField = NSTextField(string: url.lastPathComponent)
+                    textField.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
+                    alert.accessoryView = textField
+                    let response = alert.runModal()
+                    guard response == .alertFirstButtonReturn else { return }
+                    let newName = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !newName.isEmpty else { return }
+                    Task {
+                        try? await CommandRegistry.shared.execute(.explorerRenameSelection, args: [
+                            "path": url.path,
+                            "newName": newName
+                        ])
+                    }
+                })
+
+                Button("Show in Finder", action: {
+                    guard let url = appState.selectedFileTreeURL() else { return }
+                    Task { try? await CommandRegistry.shared.execute(.explorerRevealInFinder, args: ["path": url.path]) }
+                })
+                .keyboardShortcut("f", modifiers: [.command, .shift])
             }
         }
         .windowResizability(.contentMinSize)
