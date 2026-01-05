@@ -27,6 +27,10 @@ extension CommandID {
     // MARK: - Editor Operations
     public static let editorFormat: CommandID = "editor.format"
 
+    public static let editorGoToDefinition: CommandID = "editor.goToDefinition"
+    public static let editorFindReferences: CommandID = "editor.findReferences"
+    public static let editorRenameSymbol: CommandID = "editor.renameSymbol"
+
     public static let editorTabsCloseActive: CommandID = "editor.tabs.closeActive"
     public static let editorTabsCloseAll: CommandID = "editor.tabs.closeAll"
     public static let editorTabsNext: CommandID = "editor.tabs.next"

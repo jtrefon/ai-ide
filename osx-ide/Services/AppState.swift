@@ -30,6 +30,13 @@ class AppState: ObservableObject {
     @Published var isCommandPalettePresented: Bool = false
     @Published var isGoToSymbolPresented: Bool = false
 
+    @Published var isNavigationLocationsPresented: Bool = false
+    @Published var navigationLocationsTitle: String = ""
+    @Published var navigationLocations: [WorkspaceCodeLocation] = []
+
+    @Published var isRenameSymbolPresented: Bool = false
+    @Published var renameSymbolIdentifier: String = ""
+
      @Published var showHiddenFilesInFileTree: Bool = false
     
     // MARK: - Services

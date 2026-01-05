@@ -198,6 +198,36 @@ struct osx_ideTests {
         #expect(foundFoo?.line == expectedLine)
     }
 
+    @Test func testWorkspaceNavigationIdentifierAtCursor() async throws {
+        let text = "let fooBar = 1\nprint(fooBar)\n"
+        let ns = text as NSString
+        let cursor = ns.range(of: "fooBar").location + 2
+        let ident = WorkspaceNavigationService.identifierAtCursor(in: text, cursor: cursor)
+        #expect(ident == "fooBar")
+
+        let cursorOnWhitespace = ns.range(of: "print").location - 1
+        let none = WorkspaceNavigationService.identifierAtCursor(in: text, cursor: cursorOnWhitespace)
+        #expect(none == nil)
+    }
+
+    @Test func testWorkspaceNavigationRenameInCurrentBufferWholeWord() async throws {
+        let content = "let foo = 1\nlet foobar = 2\nfoo = foo + 1\n"
+        let result = try WorkspaceNavigationService.renameInCurrentBuffer(content: content, identifier: "foo", newName: "bar")
+        #expect(result.replacements == 3)
+        #expect(result.updated.contains("let bar = 1"))
+        #expect(result.updated.contains("let foobar = 2"))
+        #expect(result.updated.contains("bar = bar + 1"))
+    }
+
+    @Test func testWorkspaceNavigationRenameRejectsInvalidIdentifier() async throws {
+        do {
+            _ = try WorkspaceNavigationService.renameInCurrentBuffer(content: "let foo = 1", identifier: "foo", newName: "1bad")
+            #expect(false, "Expected rename to throw for invalid identifier")
+        } catch {
+            #expect(error.localizedDescription.lowercased().contains("invalid identifier"))
+        }
+    }
+
     @Test func testCodeSelectionContext() async throws {
         let context = CodeSelectionContext()
         

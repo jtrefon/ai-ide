@@ -116,7 +116,7 @@ This is a living backlog for our AI-enabled macOS IDE. Checked items are shipped
   - **Behavior**: show symbols for current file; search symbols; selecting navigates to definition line.
   - **Implementation note**: use CodebaseIndex symbol tables where available; fall back to lightweight parsing.
   - **Acceptance**: symbol picker navigates accurately and is fast for Swift/JS/TS/Python.
-- [ ] Go to definition / find references / rename symbol (LSP-backed; fallback to index heuristics)
+- [x] Go to definition / find references / rename symbol (LSP-backed; fallback to index heuristics)
   - **Primary surface**: editor context menu + shortcuts.
   - **Command IDs**: `editor.goToDefinition`, `editor.findReferences`, `editor.renameSymbol`.
   - **Behavior**: when LSP is configured, use it; otherwise provide best-effort via index; if neither is available, show a clear “not available” message (no silent failure).

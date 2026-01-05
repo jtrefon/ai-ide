@@ -79,13 +79,136 @@ final class CorePlugin {
             let content = appState.fileEditor.editorContent
             let languageStr = appState.fileEditor.editorLanguage
             let language = CodeLanguage(rawValue: languageStr) ?? .unknown
-            if let module = await LanguageModuleManager.shared.getModule(for: language) {
+            if let module = LanguageModuleManager.shared.getModule(for: language) {
                 let formatted = module.format(content)
                 appState.fileEditor.editorContent = formatted
                 return
             }
 
             appState.fileEditor.editorContent = CodeFormatter.format(content, language: language)
+        }
+
+        commandRegistry.register(command: .editorGoToDefinition) { _ in
+            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+
+            let content = appState.fileEditor.editorContent
+            let selected = appState.selectionContext.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cursor = appState.fileEditor.selectedRange?.location ?? 0
+
+            let identifier: String?
+            if WorkspaceNavigationService.isValidIdentifier(selected) {
+                identifier = selected
+            } else {
+                identifier = WorkspaceNavigationService.identifierAtCursor(in: content, cursor: cursor)
+            }
+
+            guard let identifier else {
+                appState.lastError = "No symbol selected"
+                return
+            }
+
+            let svc = WorkspaceNavigationService(codebaseIndexProvider: { DependencyContainer.shared.codebaseIndex })
+            let locations = svc.findDefinitionLocations(
+                identifier: identifier,
+                projectRoot: root,
+                currentFilePath: appState.fileEditor.selectedFile,
+                currentContent: content,
+                currentLanguage: appState.fileEditor.editorLanguage,
+                limit: 50
+            )
+
+            if locations.isEmpty {
+                appState.lastError = "No definition found for \"\(identifier)\"."
+                return
+            }
+
+            @MainActor
+            func open(_ loc: WorkspaceCodeLocation) {
+                do {
+                    let url = try PathValidator(projectRoot: root).validateAndResolve(loc.relativePath)
+                    appState.loadFile(from: url)
+                    appState.fileEditor.selectLine(loc.line)
+                } catch {
+                    appState.lastError = error.localizedDescription
+                }
+            }
+
+            if locations.count == 1, let only = locations.first {
+                open(only)
+                return
+            }
+
+            appState.navigationLocationsTitle = "Definitions for \"\(identifier)\""
+            appState.navigationLocations = locations
+            appState.isNavigationLocationsPresented = true
+            appState.isQuickOpenPresented = false
+            appState.isGlobalSearchPresented = false
+            appState.isCommandPalettePresented = false
+            appState.isGoToSymbolPresented = false
+            appState.isRenameSymbolPresented = false
+        }
+
+        commandRegistry.register(command: .editorFindReferences) { _ in
+            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+
+            let content = appState.fileEditor.editorContent
+            let selected = appState.selectionContext.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cursor = appState.fileEditor.selectedRange?.location ?? 0
+
+            let identifier: String?
+            if WorkspaceNavigationService.isValidIdentifier(selected) {
+                identifier = selected
+            } else {
+                identifier = WorkspaceNavigationService.identifierAtCursor(in: content, cursor: cursor)
+            }
+
+            guard let identifier else {
+                appState.lastError = "No symbol selected"
+                return
+            }
+
+            let svc = WorkspaceNavigationService(codebaseIndexProvider: { DependencyContainer.shared.codebaseIndex })
+            let locations = await svc.findReferenceLocations(identifier: identifier, projectRoot: root, limit: 500)
+
+            if locations.isEmpty {
+                appState.lastError = "No references found for \"\(identifier)\"."
+                return
+            }
+
+            appState.navigationLocationsTitle = "References for \"\(identifier)\""
+            appState.navigationLocations = locations
+            appState.isNavigationLocationsPresented = true
+            appState.isQuickOpenPresented = false
+            appState.isGlobalSearchPresented = false
+            appState.isCommandPalettePresented = false
+            appState.isGoToSymbolPresented = false
+            appState.isRenameSymbolPresented = false
+        }
+
+        commandRegistry.register(command: .editorRenameSymbol) { _ in
+            let content = appState.fileEditor.editorContent
+            let selected = appState.selectionContext.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cursor = appState.fileEditor.selectedRange?.location ?? 0
+
+            let identifier: String?
+            if WorkspaceNavigationService.isValidIdentifier(selected) {
+                identifier = selected
+            } else {
+                identifier = WorkspaceNavigationService.identifierAtCursor(in: content, cursor: cursor)
+            }
+
+            guard let identifier else {
+                appState.lastError = "No symbol selected"
+                return
+            }
+
+            appState.renameSymbolIdentifier = identifier
+            appState.isRenameSymbolPresented = true
+            appState.isNavigationLocationsPresented = false
+            appState.isQuickOpenPresented = false
+            appState.isGlobalSearchPresented = false
+            appState.isCommandPalettePresented = false
+            appState.isGoToSymbolPresented = false
         }
 
         commandRegistry.register(command: .editorTabsCloseActive) { _ in
