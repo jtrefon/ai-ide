@@ -229,6 +229,23 @@ struct osx_ideApp: App {
                     Task { try? await CommandRegistry.shared.execute(.workbenchGoToSymbol) }
                 }
                 .keyboardShortcut("t", modifiers: [.command])
+
+                Divider()
+
+                Button("Go to Definition") {
+                    Task { try? await CommandRegistry.shared.execute(.editorGoToDefinition) }
+                }
+                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF12FunctionKey)!)), modifiers: [])
+
+                Button("Find References") {
+                    Task { try? await CommandRegistry.shared.execute(.editorFindReferences) }
+                }
+                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF12FunctionKey)!)), modifiers: [.shift])
+
+                Button("Rename Symbol") {
+                    Task { try? await CommandRegistry.shared.execute(.editorRenameSymbol) }
+                }
+                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF2FunctionKey)!)), modifiers: [])
             }
 
             CommandMenu("Explorer") {
