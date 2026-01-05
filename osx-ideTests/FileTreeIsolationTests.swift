@@ -111,7 +111,12 @@ final class FileTreeIsolationTests: XCTestCase {
         let coordinator = ModernCoordinator(
             expandedRelativePaths: expanded,
             selectedRelativePath: selected,
-            onOpenFile: { _ in }
+            onOpenFile: { _ in },
+            onCreateFile: { _, _ in },
+            onCreateFolder: { _, _ in },
+            onDeleteItem: { _ in },
+            onRenameItem: { _, _ in },
+            onRevealInFinder: { _ in }
         )
 
         let outlineView = NSOutlineView()
@@ -154,7 +159,12 @@ final class FileTreeIsolationTests: XCTestCase {
         let coordinator = ModernCoordinator(
             expandedRelativePaths: expanded,
             selectedRelativePath: selected,
-            onOpenFile: { _ in }
+            onOpenFile: { _ in },
+            onCreateFile: { _, _ in },
+            onCreateFolder: { _, _ in },
+            onDeleteItem: { _ in },
+            onRenameItem: { _, _ in },
+            onRevealInFinder: { _ in }
         )
 
         let dataSource = coordinator.dataSource
@@ -170,7 +180,7 @@ final class FileTreeIsolationTests: XCTestCase {
         var childCount = 0
         let deadline = Date().addingTimeInterval(3.0)
         while Date() < deadline {
-            childCount = coordinator.dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil)
+            childCount = coordinator.dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil as Any?)
             if childCount > 0 { break }
             RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         }

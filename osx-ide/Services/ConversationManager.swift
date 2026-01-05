@@ -54,6 +54,9 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
         tools.append(ReplaceInFileTool(fileSystemService: fileSystemService, pathValidator: validator))
         tools.append(RunCommandTool(projectRoot: projectRoot, pathValidator: validator))
 
+        tools.append(ArchitectAdvisorTool(aiService: aiService, index: codebaseIndex, projectRoot: projectRoot))
+        tools.append(PlannerTool())
+
         return tools
     }
     
@@ -131,6 +134,7 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
             await AppLogger.shared.setProjectRoot(newRoot)
             await ConversationLogStore.shared.setProjectRoot(newRoot)
             await ConversationIndexStore.shared.setProjectRoot(newRoot)
+            await ConversationPlanStore.shared.setProjectRoot(newRoot)
             await AppLogger.shared.info(category: .app, message: "logging.project_root_set", metadata: [
                 "projectRoot": newRoot.path
             ])
@@ -287,6 +291,20 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     )
                 }
 
+                if ChatPromptBuilder.isLowQualityReasoning(text: currentResponse.content ?? "") {
+                    let correctionSystem = ChatMessage(
+                        role: .system,
+                        content: "Your <ide_reasoning> block is too vague (placeholders like '...' are not allowed). Provide concise, concrete bullet points for EACH section: Analyze, Research, Plan, Reflect. If unknown, write 'N/A' and state what information is needed."
+                    )
+                    currentResponse = try await sendMessageWithRetry(
+                        messages: self.messages + [correctionSystem],
+                        context: context,
+                        tools: availableTools,
+                        mode: currentMode,
+                        projectRoot: projectRoot
+                    )
+                }
+
                 let splitFinal = ChatPromptBuilder.splitReasoning(from: currentResponse.content ?? "No response received.")
                 historyManager.append(ChatMessage(role: .assistant, content: splitFinal.content, reasoning: splitFinal.reasoning))
 
@@ -342,7 +360,7 @@ class ConversationManager: ObservableObject, ConversationManagerProtocol {
         for attempt in 1...maxAttempts {
             do {
                 let augmentedContext = ContextBuilder.buildContext(
-                    userInput: messages.last?.content ?? "",
+                    userInput: messages.last(where: { $0.role == .user })?.content ?? "",
                     explicitContext: context,
                     index: codebaseIndex,
                     projectRoot: projectRoot

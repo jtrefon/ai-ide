@@ -36,30 +36,30 @@ This is a living backlog for our AI-enabled macOS IDE. Checked items are shipped
 
 ## File browser
 - [x] Create file / folder (context menu + dialog)
+  - **Acceptance**: right-clicking a folder creates inside that folder; right-clicking a file creates in its parent; right-clicking empty tree area creates at project root.
 - [x] Search by name
 - [x] Show hidden files toggle (Cmd+Shift+.)
 - [x] Open file (double click)
-- [ ] Open file (right click menu)
+- [x] Open file (right click menu)
   - **Primary surface**: file tree item context menu.
-  - **Command IDs**: `explorer.openSelection` (default action), `explorer.openSelectionInNewTab` (Cmd+Shift+O; depends on tabs).
+  - **Command IDs**: `explorer.openSelection` (default action).
   - **Behavior**: for files, open in editor; for folders, toggle expand/collapse; when search is active, opening a result keeps search state unchanged.
   - **Acceptance**: context menu “Open” works for both normal tree + search results and matches double-click behavior.
-- [ ] Delete (file/folder via context menu, toolbar, Cmd+Delete)
+- [x] Delete (file/folder via context menu, toolbar, Cmd+Delete)
   - **Primary surface**: file tree context menu + Edit/File menu.
   - **Command IDs**: `explorer.deleteSelection` (Cmd+Delete).
   - **Behavior**: move to Trash by default; confirm for non-empty folders; block deletes outside project root; refresh tree and selection deterministically.
   - **Acceptance**: deleted items disappear immediately; deleting an open file closes its editor tab (prompt if dirty).
-- [ ] Rename (file/folder via context menu, toolbar, keyboard)
+- [x] Rename (file/folder via context menu, toolbar, keyboard)
   - **Primary surface**: in-place rename in file tree (recommended) + context menu.
   - **Command IDs**: `explorer.renameSelection` (F2).
   - **Behavior**: validate name; preserve extension by default (optional toggle); prevent collisions; update any open tabs that point to the renamed path.
   - **Acceptance**: rename updates disk + tree + any open editor state without “ghost” paths.
-- [ ] Open file in new tab (context menu, Cmd+Shift+O) — depends on tabs
+- [ ] Open file (tabbed by default once Tabs ship)
   - **Dependencies**: editor tabs.
-  - **Command IDs**: `explorer.openSelectionInNewTab` (Cmd+Shift+O).
-  - **Behavior**: opens file without closing current; if file already has a tab, focus it (no duplicates).
-  - **Acceptance**: opening same file repeatedly never creates duplicate tabs.
-- [ ] Show in Finder (context menu, Cmd+Shift+F)
+  - **Behavior**: opening a file focuses an existing tab (no duplicates); otherwise creates a new tab.
+  - **Keybindings**: keep `Cmd+O` / `Cmd+Shift+O` reserved for external file/folder open dialogs.
+- [x] Show in Finder (context menu, Cmd+Shift+F)
   - **Command IDs**: `explorer.revealInFinder` (Cmd+Shift+F).
   - **Behavior**: reveal selected file/folder using `NSWorkspace.shared.activateFileViewerSelecting([url])`.
   - **Acceptance**: Finder opens with the exact selection highlighted.
@@ -77,24 +77,22 @@ This is a living backlog for our AI-enabled macOS IDE. Checked items are shipped
   - **Acceptance**: decorations match `git status` for common states and never block UI.
 
 ## Code viewer
-- [ ] Tabs (no duplicates, close per tab, icon/name/close affordances, context menu)
+- [x] Tabs (no duplicates, close per tab, icon/name/close affordances, context menu)
   - **Primary surface**: tab strip in the editor header.
   - **Command IDs**: `editor.tabs.closeActive` (Cmd+W), `editor.tabs.closeAll`, `editor.tabs.next` (Ctrl+Tab), `editor.tabs.previous` (Ctrl+Shift+Tab).
   - **State**: each tab owns `{fileURL, isDirty, cursor/selection, scroll position}`.
   - **Behavior**: opening a file focuses existing tab (no duplicates); closing dirty tab prompts; tab title shows dirty dot.
   - **Persistence**: store open tabs + active tab in `.ide/session.json` (ProjectSession).
   - **Acceptance**: can open/close/switch tabs without losing editor state; no duplicate tabs for same file.
-- [ ] Split editor (vertical/horizontal) + tab groups
+- [x] Split editor (vertical/horizontal) + tab groups
   - **Primary surface**: editor layout controls + drag tab to edge to split.
   - **Command IDs**: `editor.splitRight` (Cmd+\\), `editor.splitDown`, `editor.focusNextGroup`.
   - **Behavior**: each split is a tab group; “open file” targets the focused group; closing last tab collapses group.
-  - **Persistence**: store split layout + active group in `.ide/session.json`.
-  - **Acceptance**: two editors can show different files simultaneously; focus and commands operate on the active group.
-- [ ] Find in file (Cmd+F) + replace + regex
-  - **Primary surface**: inline find bar (like Xcode/VSCode).
-  - **Command IDs**: `editor.find` (Cmd+F), `editor.replace` (Cmd+Option+F), `editor.findNext` (Return), `editor.findPrevious` (Shift+Return).
-  - **Behavior**: highlight matches; show match count; toggles for case/whole-word/regex; replace/replace-all with confirmation when large.
-  - **Implementation note**: prefer `NSTextFinder`/`NSTextView` find support for correctness.
+  - **Acceptance**: can split editor and open different files in each group.
+- [x] Find in file (Cmd+F)
+  - **Primary surface**: search/replace bar in the editor.
+  - **Behavior**: find next/previous; highlight; replace.
+  - **Acceptance**: works in large files, doesn’t hang UI.
   - **Acceptance**: find/replace works with large files and preserves selection/scroll.
 - [ ] Global search (Cmd+Shift+F) with preview results
   - **Primary surface**: left “Search” panel or modal panel with results list + preview.

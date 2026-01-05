@@ -51,6 +51,63 @@ class ChatPromptBuilder {
         return required.contains(where: { !r.contains($0) })
     }
 
+    /// Checks if the reasoning block is present but low-quality (placeholders like "..." or no concrete content).
+    /// This helps auto-retry with a stricter instruction.
+    static func isLowQualityReasoning(text: String) -> Bool {
+        let split = splitReasoning(from: text)
+        guard let reasoning = split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines), !reasoning.isEmpty else {
+            return false
+        }
+
+        // If the model literally copied placeholder example text, treat as low quality.
+        if reasoning.contains("Analyze:...") || reasoning.contains("Research:...") || reasoning.contains("Plan:...") || reasoning.contains("Reflect:...") {
+            return true
+        }
+
+        let sections = extractReasoningSections(reasoning)
+        guard sections.isEmpty == false else { return true }
+
+        let badTokens = Set(["...", "…", "n/a", "na", "none", "nil"])
+        var concreteCount = 0
+
+        for (_, value) in sections {
+            let normalized = value
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+
+            if normalized.isEmpty { continue }
+            if badTokens.contains(normalized) { continue }
+            if normalized.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\n", with: "") == "..." {
+                continue
+            }
+
+            // Heuristic: require some actual text beyond a couple of characters.
+            if normalized.count >= 6 {
+                concreteCount += 1
+            }
+        }
+
+        // Require at least 2 sections with concrete content.
+        return concreteCount < 2
+    }
+
+    private static func extractReasoningSections(_ reasoning: String) -> [(key: String, value: String)] {
+        // Parse lines like "Analyze: ..."; tolerate leading/trailing whitespace.
+        let lines = reasoning.split(whereSeparator: \.isNewline).map { String($0) }
+        let keys = ["Analyze:", "Research:", "Plan:", "Reflect:"]
+        var results: [(String, String)] = []
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let key = keys.first(where: { trimmed.lowercased().hasPrefix($0.lowercased()) }) {
+                let value = String(trimmed.dropFirst(key.count))
+                results.append((key, value))
+            }
+        }
+
+        return results
+    }
+
     /// Determines if the AI's response indicates it should have emitted tool calls but didn't.
     /// - Parameter content: The AI response content.
     /// - Returns: True if a tool followup should be forced.
