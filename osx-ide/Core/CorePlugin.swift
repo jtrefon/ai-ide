@@ -128,6 +128,32 @@ final class CorePlugin {
             NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: nil, from: item)
         }
 
+        commandRegistry.register(command: .searchFindInWorkspace) { _ in
+            appState.isGlobalSearchPresented = true
+            appState.isQuickOpenPresented = false
+        }
+
+        commandRegistry.register(command: .workbenchQuickOpen) { _ in
+            appState.isQuickOpenPresented = true
+            appState.isGlobalSearchPresented = false
+            appState.isCommandPalettePresented = false
+            appState.isGoToSymbolPresented = false
+        }
+
+        commandRegistry.register(command: .workbenchCommandPalette) { _ in
+            appState.isCommandPalettePresented = true
+            appState.isQuickOpenPresented = false
+            appState.isGlobalSearchPresented = false
+            appState.isGoToSymbolPresented = false
+        }
+
+        commandRegistry.register(command: .workbenchGoToSymbol) { _ in
+            appState.isGoToSymbolPresented = true
+            appState.isQuickOpenPresented = false
+            appState.isGlobalSearchPresented = false
+            appState.isCommandPalettePresented = false
+        }
+
         commandRegistry.register(command: .explorerOpenSelection) { args in
             guard let path = args["path"] as? String else { return }
             guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }

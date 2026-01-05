@@ -118,6 +118,86 @@ struct osx_ideTests {
         #expect(!appState.fileEditor.primaryPane.tabs.contains(where: { $0.filePath == fileB.path }), "Expected file not to open in primary pane")
     }
 
+    @Test func testQuickOpenParseQuerySupportsLineSuffix() async throws {
+        let parsed1 = QuickOpenOverlayView.parseQuery("Sources/Foo.swift:12")
+        #expect(parsed1.fileQuery == "Sources/Foo.swift")
+        #expect(parsed1.line == 12)
+
+        let parsed2 = QuickOpenOverlayView.parseQuery("Foo.swift")
+        #expect(parsed2.fileQuery == "Foo.swift")
+        #expect(parsed2.line == nil)
+    }
+
+    @Test func testWorkspaceSearchParseIndexedMatchLine() async throws {
+        let m = WorkspaceSearchService.parseIndexedMatchLine("src/main.swift:42: print(\"hi\")")
+        #expect(m?.relativePath == "src/main.swift")
+        #expect(m?.line == 42)
+        #expect(m?.snippet == "print(\"hi\")")
+    }
+
+    @Test func testWorkspaceSearchFallbackFindsMatches() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_global_search_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let file = tempRoot.appendingPathComponent("a.swift")
+        try "let x = 1\nlet y = 2\nprint(\"needle\")\n".write(to: file, atomically: true, encoding: .utf8)
+
+        let svc = WorkspaceSearchService(codebaseIndexProvider: { nil })
+        let results = await svc.search(pattern: "needle", projectRoot: tempRoot, limit: 20)
+        let found = results.first(where: { $0.relativePath == "a.swift" })
+        #expect(found != nil)
+        #expect(found?.line == 3)
+    }
+
+    @Test func testCommandPaletteScoring() async throws {
+        let exact = CommandPaletteScoring.score(candidate: "workbench.quickOpen", query: "workbench.quickOpen")
+        let prefix = CommandPaletteScoring.score(candidate: "workbench.quickOpen", query: "work")
+        let contains = CommandPaletteScoring.score(candidate: "workbench.quickOpen", query: "quick")
+        let miss = CommandPaletteScoring.score(candidate: "workbench.quickOpen", query: "nope")
+
+        #expect(exact > prefix)
+        #expect(prefix > contains)
+        #expect(contains > 0)
+        #expect(miss == 0)
+    }
+
+    @Test func testGoToSymbolFallbackParsesSwift() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_goto_symbol_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let file = tempRoot.appendingPathComponent("a.swift")
+        let content = """
+        import Foundation
+
+        class Foo {
+            func bar() {}
+        }
+
+        struct Baz {}
+        """
+        try content.write(to: file, atomically: true, encoding: .utf8)
+
+        let svc = WorkspaceSymbolSearchService(codebaseIndexProvider: { nil })
+        let results = svc.search(
+            query: "Foo",
+            projectRoot: tempRoot,
+            currentFilePath: file.path,
+            currentContent: content,
+            currentLanguage: "swift",
+            limit: 20
+        )
+
+        let foundFoo = results.first(where: { $0.name == "Foo" })
+        #expect(foundFoo != nil)
+        #expect(foundFoo?.relativePath == "a.swift")
+
+        let lines = content.components(separatedBy: "\n")
+        let expectedLine = (lines.firstIndex(where: { $0.contains("class Foo") }) ?? 0) + 1
+        #expect(foundFoo?.line == expectedLine)
+    }
+
     @Test func testCodeSelectionContext() async throws {
         let context = CodeSelectionContext()
         

@@ -207,6 +207,30 @@ struct osx_ideApp: App {
                 .keyboardShortcut("\\", modifiers: [.command, .shift])
             }
 
+            CommandMenu("Search") {
+                Button("Find in Workspace") {
+                    Task { try? await CommandRegistry.shared.execute(.searchFindInWorkspace) }
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+
+                Button("Command Palette") {
+                    Task { try? await CommandRegistry.shared.execute(.workbenchCommandPalette) }
+                }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+            }
+
+            CommandMenu("Go") {
+                Button("Quick Open") {
+                    Task { try? await CommandRegistry.shared.execute(.workbenchQuickOpen) }
+                }
+                .keyboardShortcut("p", modifiers: [.command])
+
+                Button("Go to Symbol") {
+                    Task { try? await CommandRegistry.shared.execute(.workbenchGoToSymbol) }
+                }
+                .keyboardShortcut("t", modifiers: [.command])
+            }
+
             CommandMenu("Explorer") {
                 Button("Delete", action: {
                     guard let url = appState.selectedFileTreeURL() else { return }

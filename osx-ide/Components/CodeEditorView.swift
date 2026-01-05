@@ -167,6 +167,7 @@ struct TextViewRepresentable: NSViewRepresentable {
             context.coordinator.isProgrammaticSelectionUpdate = true
             defer { context.coordinator.isProgrammaticSelectionUpdate = false }
             textView.setSelectedRange(range)
+            textView.scrollRangeToVisible(range)
         }
 
         let shouldShowRuler = showLineNumbers
