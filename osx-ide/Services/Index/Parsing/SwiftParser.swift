@@ -9,10 +9,15 @@ import Foundation
 
 public struct SwiftParser {
     public static func parse(content: String, resourceId: String) -> [Symbol] {
+        return SwiftRegexParser.parse(content: content, resourceId: resourceId)
+    }
+}
+
+private enum SwiftRegexParser {
+    static func parse(content: String, resourceId: String) -> [Symbol] {
         var symbols: [Symbol] = []
         let lines = content.components(separatedBy: .newlines)
-        
-        // Regex patterns for different symbol types
+
         let patterns: [(kind: SymbolKind, pattern: String)] = [
             (.class, #"^\s*(?:final\s+|public\s+|private\s+|open\s+|internal\s+)*class\s+([A-Z][a-zA-Z0-9_]*)"#),
             (.struct, #"^\s*(?:public\s+|private\s+|internal\s+)*struct\s+([A-Z][a-zA-Z0-9_]*)"#),
@@ -23,48 +28,44 @@ public struct SwiftParser {
             (.initializer, #"^\s*(?:public\s+|private\s+|internal\s+)*init\s*(?:\?|\!)?\s*\("#),
             (.variable, #"^\s*(?:public\s+|private\s+|internal\s+|static\s+|class\s+|let\s+|var\s+)+(?:var|let)\s+([a-zA-Z0-9_]+)"#)
         ]
-        
+
         for (i, line) in lines.enumerated() {
             let lineNum = i + 1
-            
+
             for (kind, pattern) in patterns {
                 if let match = matchRegex(pattern, in: line) {
                     let name = (kind == .initializer) ? "init" : match
                     let id = "\(resourceId):\(lineNum):\(name)"
-                    
-                    // Simple heuristic for line end: assume single line for now, 
-                    // or look for matching braces in future iterations.
-                    // For now, we'll just mark it as 1 line length.
-                    
+
                     let symbol = Symbol(
                         id: id,
                         resourceId: resourceId,
                         name: name,
                         kind: kind,
                         lineStart: lineNum,
-                        lineEnd: lineNum, // TODO: Implement scope parsing for accurate end lines
+                        lineEnd: lineNum,
                         description: nil
                     )
                     symbols.append(symbol)
-                    break // Found a match for this line
+                    break
                 }
             }
         }
-        
+
         return symbols
     }
-    
+
     private static func matchRegex(_ pattern: String, in text: String) -> String? {
         do {
             let regex = try NSRegularExpression(pattern: pattern, options: [])
             let nsString = text as NSString
             let results = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
-            
+
             if let result = results.first {
                 if result.numberOfRanges > 1 {
                     return nsString.substring(with: result.range(at: 1))
                 }
-                return "" // Match found but no capture group (e.g. init)
+                return ""
             }
         } catch {
             print("Invalid regex: \(pattern)")

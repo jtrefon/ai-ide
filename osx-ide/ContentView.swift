@@ -6,10 +6,22 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
-    @ObservedObject var appState: AppState
-    @ObservedObject private var registry = UIRegistry.shared
+    let appState: AppState
+    @ObservedObject private var fileEditor: FileEditorStateManager
+    @ObservedObject private var workspace: WorkspaceStateManager
+    @ObservedObject private var ui: UIStateManager
+    @ObservedObject private var registry: UIRegistry
+
+    init(appState: AppState) {
+        self.appState = appState
+        self._fileEditor = ObservedObject(wrappedValue: appState.fileEditor)
+        self._workspace = ObservedObject(wrappedValue: appState.workspace)
+        self._ui = ObservedObject(wrappedValue: appState.ui)
+        self._registry = ObservedObject(wrappedValue: appState.uiRegistry)
+    }
 
     private struct EditorPaneView: View {
         @ObservedObject var pane: EditorPaneStateManager
@@ -18,6 +30,7 @@ struct ContentView: View {
         let selectionContext: CodeSelectionContext
         let showLineNumbers: Bool
         let wordWrap: Bool
+        let minimapVisible: Bool
         let fontSize: Double
         let fontFamily: String
 
@@ -67,215 +80,232 @@ struct ContentView: View {
                 .frame(height: 34)
                 .background(Color(NSColor.windowBackgroundColor))
 
-                CodeEditorView(
-                    text: $pane.editorContent,
-                    language: pane.editorLanguage,
-                    selectedRange: $pane.selectedRange,
-                    selectionContext: selectionContext,
-                    showLineNumbers: showLineNumbers,
-                    wordWrap: wordWrap,
-                    fontSize: fontSize,
-                    fontFamily: fontFamily
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(
-                    Rectangle()
-                        .stroke(isFocused ? Color.accentColor.opacity(0.35) : Color.clear, lineWidth: 2)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onFocus()
+                HStack(spacing: 0) {
+                    CodeEditorView(
+                        text: $pane.editorContent,
+                        language: pane.editorLanguage,
+                        selectedRange: $pane.selectedRange,
+                        selectionContext: selectionContext,
+                        showLineNumbers: showLineNumbers,
+                        wordWrap: wordWrap,
+                        fontSize: fontSize,
+                        fontFamily: fontFamily
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(
+                        Rectangle()
+                            .stroke(isFocused ? Color.accentColor.opacity(0.35) : Color.clear, lineWidth: 2)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onFocus()
+                    }
+
+                    if minimapVisible {
+                        Divider()
+                        MinimapView(
+                            text: $pane.editorContent,
+                            selectedRange: $pane.selectedRange,
+                            fontFamily: fontFamily
+                        )
+                    }
                 }
             }
         }
     }
     
     var body: some View {
+        rootView
+    }
+
+    private var rootView: some View {
         ZStack {
-            VStack(spacing: 0) {
-                WindowAccessor { window in
-                    DependencyContainer.shared.windowProvider.setWindow(window)
-                    appState.attachWindow(window)
-                    // Modern macOS v26 window styling
-                    window.titleVisibility = .hidden
-                    window.titlebarAppearsTransparent = true
-                    window.isMovableByWindowBackground = true
-                    window.isOpaque = false
-                    window.backgroundColor = .clear
-                    window.hasShadow = true
-                    window.styleMask.insert(.fullSizeContentView)
-                    window.styleMask.insert(.unifiedTitleAndToolbar)
-                }
-                .frame(width: 0, height: 0)
-
-                HSplitView {
-                    // Left sidebar
-                    if appState.ui.isSidebarVisible, let view = registry.views(for: .sidebarLeft).first?.content {
-                        view.frame(minWidth: 200, maxWidth: 300)
-                    }
-
-                    // Main content area
-                    HSplitView {
-                        // Editor and terminal area
-                        VSplitView {
-                            // Main editor area
-                            Group {
-                                if appState.fileEditor.isSplitEditor {
-                                    if appState.fileEditor.splitAxis == .vertical {
-                                        HSplitView {
-                                            EditorPaneView(
-                                                pane: appState.fileEditor.primaryPane,
-                                                isFocused: appState.fileEditor.focusedPane == .primary,
-                                                onFocus: { appState.fileEditor.focus(.primary) },
-                                                selectionContext: appState.selectionContext,
-                                                showLineNumbers: appState.showLineNumbers,
-                                                wordWrap: appState.wordWrap,
-                                                fontSize: appState.fontSize,
-                                                fontFamily: appState.fontFamily
-                                            )
-
-                                            EditorPaneView(
-                                                pane: appState.fileEditor.secondaryPane,
-                                                isFocused: appState.fileEditor.focusedPane == .secondary,
-                                                onFocus: { appState.fileEditor.focus(.secondary) },
-                                                selectionContext: appState.selectionContext,
-                                                showLineNumbers: appState.showLineNumbers,
-                                                wordWrap: appState.wordWrap,
-                                                fontSize: appState.fontSize,
-                                                fontFamily: appState.fontFamily
-                                            )
-                                        }
-                                    } else {
-                                        VSplitView {
-                                            EditorPaneView(
-                                                pane: appState.fileEditor.primaryPane,
-                                                isFocused: appState.fileEditor.focusedPane == .primary,
-                                                onFocus: { appState.fileEditor.focus(.primary) },
-                                                selectionContext: appState.selectionContext,
-                                                showLineNumbers: appState.showLineNumbers,
-                                                wordWrap: appState.wordWrap,
-                                                fontSize: appState.fontSize,
-                                                fontFamily: appState.fontFamily
-                                            )
-
-                                            EditorPaneView(
-                                                pane: appState.fileEditor.secondaryPane,
-                                                isFocused: appState.fileEditor.focusedPane == .secondary,
-                                                onFocus: { appState.fileEditor.focus(.secondary) },
-                                                selectionContext: appState.selectionContext,
-                                                showLineNumbers: appState.showLineNumbers,
-                                                wordWrap: appState.wordWrap,
-                                                fontSize: appState.fontSize,
-                                                fontFamily: appState.fontFamily
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    EditorPaneView(
-                                        pane: appState.fileEditor.primaryPane,
-                                        isFocused: true,
-                                        onFocus: { appState.fileEditor.focus(.primary) },
-                                        selectionContext: appState.selectionContext,
-                                        showLineNumbers: appState.showLineNumbers,
-                                        wordWrap: appState.wordWrap,
-                                        fontSize: appState.fontSize,
-                                        fontFamily: appState.fontFamily
-                                    )
-                                }
-                            }
-                            .frame(minHeight: 100)
-
-                            // Terminal panel
-                            if appState.ui.isTerminalVisible, let view = registry.views(for: .panelBottom).first?.content {
-                                view.frame(minHeight: 100)
-                            }
-                        }
-                        .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
-
-                        // AI Chat Panel
-                        if appState.ui.isAIChatVisible, let view = registry.views(for: .panelRight).first?.content {
-                            view.frame(minWidth: 300)
-                        }
-                    }
-                }
-
-                IndexStatusBarView()
-            }
-
-            if appState.isGlobalSearchPresented {
-                Color.black.opacity(0.25)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        appState.isGlobalSearchPresented = false
-                    }
-
-                GlobalSearchOverlayView(appState: appState, isPresented: $appState.isGlobalSearchPresented)
-                    .padding(30)
-            }
-
-            if appState.isQuickOpenPresented {
-                Color.black.opacity(0.25)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        appState.isQuickOpenPresented = false
-                    }
-
-                QuickOpenOverlayView(appState: appState, isPresented: $appState.isQuickOpenPresented)
-                    .padding(30)
-            }
-
-            if appState.isCommandPalettePresented {
-                Color.black.opacity(0.25)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        appState.isCommandPalettePresented = false
-                    }
-
-                CommandPaletteOverlayView(isPresented: $appState.isCommandPalettePresented)
-                    .padding(30)
-            }
-
-            if appState.isGoToSymbolPresented {
-                Color.black.opacity(0.25)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        appState.isGoToSymbolPresented = false
-                    }
-
-                GoToSymbolOverlayView(appState: appState, isPresented: $appState.isGoToSymbolPresented)
-                    .padding(30)
-            }
-
-            if appState.isNavigationLocationsPresented {
-                Color.black.opacity(0.25)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        appState.isNavigationLocationsPresented = false
-                    }
-
-                NavigationLocationsOverlayView(appState: appState, isPresented: $appState.isNavigationLocationsPresented)
-                    .padding(30)
-            }
-
-            if appState.isRenameSymbolPresented {
-                Color.black.opacity(0.25)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        appState.isRenameSymbolPresented = false
-                    }
-
-                RenameSymbolOverlayView(appState: appState, isPresented: $appState.isRenameSymbolPresented)
-                    .padding(30)
-            }
+            mainLayout
+            OverlayHostView(appState: appState)
         }
         .background(Color.clear)
-        .environment(\.font, .system(size: CGFloat(appState.ui.fontSize)))
+        .environment(\.font, .system(size: CGFloat(ui.fontSize)))
         .preferredColorScheme(appState.selectedTheme.colorScheme)
         .accessibilityIdentifier("AppRootView")
         .accessibilityValue("theme=\(appState.selectedTheme.rawValue)")
     }
+
+    private var mainLayout: some View {
+        VStack(spacing: 0) {
+            WindowSetupView(appState: appState)
+            workspaceLayout
+            IndexStatusBarView(codebaseIndexProvider: { appState.codebaseIndex }, eventBus: appState.eventBus)
+        }
+    }
+
+    private var workspaceLayout: some View {
+        HSplitView {
+            if ui.isSidebarVisible, let pluginView = registry.views(for: .sidebarLeft).first {
+                pluginView.makeView().frame(minWidth: 200, maxWidth: 300)
+            }
+
+            HSplitView {
+                editorAndTerminal
+
+                if ui.isAIChatVisible, let pluginView = registry.views(for: .panelRight).first {
+                    pluginView.makeView().frame(minWidth: 240, maxWidth: 340)
+                }
+            }
+        }
+    }
+
+    private var editorAndTerminal: some View {
+        VSplitView {
+            editorArea
+                .frame(minHeight: 100)
+
+            if ui.isTerminalVisible {
+                terminalPanel
+            }
+        }
+        .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var editorArea: some View {
+        if fileEditor.isSplitEditor {
+            if fileEditor.splitAxis == .vertical {
+                HSplitView {
+                    editorPane(.primary)
+                    editorPane(.secondary)
+                }
+            } else {
+                VSplitView {
+                    editorPane(.primary)
+                    editorPane(.secondary)
+                }
+            }
+        } else {
+            EditorPaneView(
+                pane: fileEditor.primaryPane,
+                isFocused: true,
+                onFocus: { fileEditor.focus(.primary) },
+                selectionContext: appState.selectionContext,
+                showLineNumbers: ui.showLineNumbers,
+                wordWrap: ui.wordWrap,
+                minimapVisible: ui.minimapVisible,
+                fontSize: ui.fontSize,
+                fontFamily: ui.fontFamily
+            )
+        }
+    }
+
+    private func editorPane(_ pane: FileEditorStateManager.PaneID) -> some View {
+        let manager = (pane == .primary) ? fileEditor.primaryPane : fileEditor.secondaryPane
+        let focused = (pane == .primary) ? fileEditor.focusedPane == .primary : fileEditor.focusedPane == .secondary
+
+        return EditorPaneView(
+            pane: manager,
+            isFocused: focused,
+            onFocus: { fileEditor.focus(pane) },
+            selectionContext: appState.selectionContext,
+            showLineNumbers: ui.showLineNumbers,
+            wordWrap: ui.wordWrap,
+            minimapVisible: ui.minimapVisible,
+            fontSize: ui.fontSize,
+            fontFamily: ui.fontFamily
+        )
+    }
+
+    @ViewBuilder
+    private var terminalPanel: some View {
+        let bottomViews = registry.views(for: .panelBottom)
+
+        if bottomViews.count == 1, let pluginView = bottomViews.first {
+            pluginView.makeView().frame(minHeight: 100)
+        } else if bottomViews.count > 1 {
+            TabView(selection: $ui.bottomPanelSelectedName) {
+                ForEach(bottomViews) { v in
+                    v.makeView()
+                        .tabItem {
+                            if let icon = v.iconName {
+                                Image(systemName: icon)
+                            }
+                            Text(v.name.replacingOccurrences(of: "Internal.", with: ""))
+                        }
+                        .tag(v.name)
+                }
+            }
+            .frame(minHeight: 100)
+        }
+    }
+}
+
+private struct WindowSetupView: View {
+    @ObservedObject var appState: AppState
+
+    var body: some View {
+        WindowAccessor { window in
+            appState.windowProvider.setWindow(window)
+            appState.attachWindow(window)
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.isMovableByWindowBackground = true
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = true
+            window.styleMask.insert(.fullSizeContentView)
+            window.styleMask.insert(.unifiedTitleAndToolbar)
+        }
+        .frame(width: 0, height: 0)
+    }
+}
+
+private struct OverlayHostView: View {
+    @ObservedObject var appState: AppState
+
+    var body: some View {
+        ZStack {
+            OverlayContainer(
+                isPresented: $appState.isGlobalSearchPresented,
+                onDismiss: { appState.isGlobalSearchPresented = false }
+            ) {
+                GlobalSearchOverlayView(appState: appState, isPresented: $appState.isGlobalSearchPresented)
+            }
+
+            OverlayContainer(
+                isPresented: $appState.isQuickOpenPresented,
+                onDismiss: { appState.isQuickOpenPresented = false }
+            ) {
+                QuickOpenOverlayView(appState: appState, isPresented: $appState.isQuickOpenPresented)
+            }
+
+            OverlayContainer(
+                isPresented: $appState.isCommandPalettePresented,
+                onDismiss: { appState.isCommandPalettePresented = false }
+            ) {
+                CommandPaletteOverlayView(commandRegistry: appState.commandRegistry, isPresented: $appState.isCommandPalettePresented)
+            }
+
+            OverlayContainer(
+                isPresented: $appState.isGoToSymbolPresented,
+                onDismiss: { appState.isGoToSymbolPresented = false }
+            ) {
+                GoToSymbolOverlayView(appState: appState, isPresented: $appState.isGoToSymbolPresented)
+            }
+
+            OverlayContainer(
+                isPresented: $appState.isNavigationLocationsPresented,
+                onDismiss: { appState.isNavigationLocationsPresented = false }
+            ) {
+                NavigationLocationsOverlayView(appState: appState, isPresented: $appState.isNavigationLocationsPresented)
+            }
+
+            OverlayContainer(
+                isPresented: $appState.isRenameSymbolPresented,
+                onDismiss: { appState.isRenameSymbolPresented = false }
+            ) {
+                RenameSymbolOverlayView(appState: appState, isPresented: $appState.isRenameSymbolPresented)
+            }
+        }
+    }
 }
 
 #Preview {
-    ContentView(appState: DependencyContainer.shared.makeAppState())
+    ContentView(appState: DependencyContainer().makeAppState())
 }

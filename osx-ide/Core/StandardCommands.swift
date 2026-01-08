@@ -7,6 +7,24 @@
 
 import Foundation
 
+public struct ExplorerPathArgs: Codable, Sendable {
+    public let path: String
+
+    public init(path: String) {
+        self.path = path
+    }
+}
+
+public struct ExplorerRenameArgs: Codable, Sendable {
+    public let path: String
+    public let newName: String
+
+    public init(path: String, newName: String) {
+        self.path = path
+        self.newName = newName
+    }
+}
+
 /// Defines the standard set of commands that the IDE supports.
 /// Plugins can intercept these or the UI can trigger them.
 extension CommandID {
@@ -26,6 +44,17 @@ extension CommandID {
     
     // MARK: - Editor Operations
     public static let editorFormat: CommandID = "editor.format"
+
+    public static let editorToggleFold: CommandID = "editor.toggleFold"
+    public static let editorUnfoldAll: CommandID = "editor.unfoldAll"
+
+    public static let editorAddNextOccurrence: CommandID = "editor.addNextOccurrence"
+    public static let editorAddCursorAbove: CommandID = "editor.addCursorAbove"
+    public static let editorAddCursorBelow: CommandID = "editor.addCursorBelow"
+
+    public static let editorAIInlineAssist: CommandID = "editor.aiInlineAssist"
+
+    public static let viewToggleMinimap: CommandID = "view.toggleMinimap"
 
     public static let editorGoToDefinition: CommandID = "editor.goToDefinition"
     public static let editorFindReferences: CommandID = "editor.findReferences"
@@ -47,6 +76,21 @@ extension CommandID {
     public static let searchFindInWorkspace: CommandID = "search.findInWorkspace"
     public static let workbenchQuickOpen: CommandID = "workbench.quickOpen"
 
+    // MARK: - Problems / Diagnostics
+    public static let viewToggleProblems: CommandID = "view.toggleProblems"
+    public static let problemsNext: CommandID = "problems.next"
+    public static let problemsPrevious: CommandID = "problems.previous"
+
     public static let workbenchCommandPalette: CommandID = "workbench.commandPalette"
     public static let workbenchGoToSymbol: CommandID = "workbench.goToSymbol"
+}
+
+extension TypedCommand where Args == ExplorerPathArgs {
+    public static let explorerOpenSelection = TypedCommand(.explorerOpenSelection)
+    public static let explorerDeleteSelection = TypedCommand(.explorerDeleteSelection)
+    public static let explorerRevealInFinder = TypedCommand(.explorerRevealInFinder)
+}
+
+extension TypedCommand where Args == ExplorerRenameArgs {
+    public static let explorerRenameSelection = TypedCommand(.explorerRenameSelection)
 }

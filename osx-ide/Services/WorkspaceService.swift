@@ -12,23 +12,25 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
     
     private let errorManager: ErrorManagerProtocol
     private let eventBus: EventBusProtocol
+    private let settingsStore: SettingsStore
     
     init(errorManager: ErrorManagerProtocol, eventBus: EventBusProtocol) {
         self.errorManager = errorManager
         self.eventBus = eventBus
-        self.currentDirectory = Self.restoreCurrentDirectoryFromUserDefaults()
+        self.settingsStore = SettingsStore(userDefaults: .standard)
+        self.currentDirectory = Self.restoreCurrentDirectoryFromUserDefaults(settingsStore: settingsStore)
     }
 
     private func saveCurrentDirectoryToUserDefaults(_ url: URL?) {
         guard let url else {
-            UserDefaults.standard.removeObject(forKey: AppConstants.Storage.lastWorkspacePathKey)
+            settingsStore.removeObject(forKey: AppConstants.Storage.lastWorkspacePathKey)
             return
         }
-        UserDefaults.standard.set(url.standardizedFileURL.path, forKey: AppConstants.Storage.lastWorkspacePathKey)
+        settingsStore.set(url.standardizedFileURL.path, forKey: AppConstants.Storage.lastWorkspacePathKey)
     }
 
-    private static func restoreCurrentDirectoryFromUserDefaults() -> URL? {
-        guard let path = UserDefaults.standard.string(forKey: AppConstants.Storage.lastWorkspacePathKey), !path.isEmpty else {
+    private static func restoreCurrentDirectoryFromUserDefaults(settingsStore: SettingsStore) -> URL? {
+        guard let path = settingsStore.string(forKey: AppConstants.Storage.lastWorkspacePathKey), !path.isEmpty else {
             return nil
         }
         var isDirectory: ObjCBool = false
@@ -49,103 +51,147 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
         case creationFailed(String, underlying: Error)
     }
 
-     func deleteItem(at url: URL) {
-         do {
-             let standardized = url.standardizedFileURL
-             let fileManager = FileManager.default
+    func deleteItem(at url: URL) {
+        switch deleteItemResult(at: url) {
+        case .success:
+            break
+        case .failure(let error):
+            handleError(error)
+        }
+    }
 
-             if !fileManager.fileExists(atPath: standardized.path) {
-                 throw AppError.fileNotFound(standardized.path)
-             }
-
-             let isDirectory = (try? standardized.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-
-             if isDirectory {
-                 let enumerator = fileManager.enumerator(
-                     at: standardized,
-                     includingPropertiesForKeys: nil,
-                     options: [],
-                     errorHandler: nil
-                 )
-                 while let next = enumerator?.nextObject() as? URL {
-                     eventBus.publish(FileDeletedEvent(url: next.standardizedFileURL))
-                 }
-             }
-
-             var resultingURL: NSURL?
-             do {
-                 try fileManager.trashItem(at: standardized, resultingItemURL: &resultingURL)
-             } catch {
-                 try fileManager.removeItem(at: standardized)
-             }
-
-             eventBus.publish(FileDeletedEvent(url: standardized))
-         } catch {
-             handleError(.fileOperationFailed("delete", underlying: error))
-         }
-     }
-
-     func renameItem(at url: URL, to newName: String) -> URL? {
-         do {
-             let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-             if trimmedName.isEmpty {
-                 throw AppError.invalidFilePath("New name is empty")
-             }
-             if trimmedName.contains("/") || trimmedName.contains("..") {
-                 throw AppError.invalidFilePath("Invalid name: \(trimmedName)")
-             }
-
-             let standardized = url.standardizedFileURL
-             let fileManager = FileManager.default
-
-             if !fileManager.fileExists(atPath: standardized.path) {
-                 throw AppError.fileNotFound(standardized.path)
-             }
-
-             let destination = standardized.deletingLastPathComponent().appendingPathComponent(trimmedName)
-             if fileManager.fileExists(atPath: destination.path) {
-                 throw AppError.fileOperationFailed("rename", underlying: WorkspaceError.alreadyExists(trimmedName))
-             }
-
-             try fileManager.moveItem(at: standardized, to: destination)
-             eventBus.publish(FileRenamedEvent(oldUrl: standardized, newUrl: destination.standardizedFileURL))
-             return destination.standardizedFileURL
-         } catch {
-             handleError(.fileOperationFailed("rename", underlying: error))
-             return nil
-         }
-     }
+    func renameItem(at url: URL, to newName: String) -> URL? {
+        switch renameItemResult(at: url, to: newName) {
+        case .success(let newUrl):
+            return newUrl
+        case .failure(let error):
+            handleError(error)
+            return nil
+        }
+    }
     
     /// Create a new file in the specified directory
     func createFile(named name: String, in directory: URL) {
-        do {
-            let newFileURL = directory.appendingPathComponent(name)
-            let fileManager = FileManager.default
-            
-            if fileManager.fileExists(atPath: newFileURL.path) {
-                throw AppError.fileOperationFailed("create file", underlying: WorkspaceError.alreadyExists(name))
-            }
-            
-            try "".write(to: newFileURL, atomically: true, encoding: .utf8)
+        switch createFileResult(named: name, in: directory) {
+        case .success(let newFileURL):
             eventBus.publish(FileCreatedEvent(url: newFileURL))
-        } catch {
-            handleError(.fileOperationFailed("create file", underlying: error))
+        case .failure(let error):
+            handleError(error)
         }
     }
     
     /// Create a new folder in the specified directory
     func createFolder(named name: String, in directory: URL) {
-        do {
-            let newFolderURL = directory.appendingPathComponent(name)
+        switch createFolderResult(named: name, in: directory) {
+        case .success:
+            break
+        case .failure(let error):
+            handleError(error)
+        }
+    }
+
+    private func deleteItemResult(at url: URL) -> Result<Void, AppError> {
+        Result {
+            let standardized = url.standardizedFileURL
             let fileManager = FileManager.default
-            
-            if fileManager.fileExists(atPath: newFolderURL.path) {
-                throw AppError.fileOperationFailed("create folder", underlying: WorkspaceError.alreadyExists(name))
+
+            if !fileManager.fileExists(atPath: standardized.path) {
+                throw AppError.fileNotFound(standardized.path)
             }
-            
+
+            let isDirectory = (try? standardized.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDirectory {
+                let enumerator = fileManager.enumerator(
+                    at: standardized,
+                    includingPropertiesForKeys: nil,
+                    options: [],
+                    errorHandler: nil
+                )
+                while let next = enumerator?.nextObject() as? URL {
+                    eventBus.publish(FileDeletedEvent(url: next.standardizedFileURL))
+                }
+            }
+
+            var resultingURL: NSURL?
+            do {
+                try fileManager.trashItem(at: standardized, resultingItemURL: &resultingURL)
+            } catch {
+                try fileManager.removeItem(at: standardized)
+            }
+
+            eventBus.publish(FileDeletedEvent(url: standardized))
+        }
+        .mapError { error in
+            if let appError = error as? AppError { return appError }
+            return AppError.fileOperationFailed("delete", underlying: error)
+        }
+    }
+
+    private func renameItemResult(at url: URL, to newName: String) -> Result<URL, AppError> {
+        Result {
+            let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedName.isEmpty {
+                throw AppError.invalidFilePath("New name is empty")
+            }
+            if trimmedName.contains("/") || trimmedName.contains("..") {
+                throw AppError.invalidFilePath("Invalid name: \(trimmedName)")
+            }
+
+            let standardized = url.standardizedFileURL
+            let fileManager = FileManager.default
+
+            if !fileManager.fileExists(atPath: standardized.path) {
+                throw AppError.fileNotFound(standardized.path)
+            }
+
+            let destination = standardized.deletingLastPathComponent().appendingPathComponent(trimmedName)
+            if fileManager.fileExists(atPath: destination.path) {
+                throw WorkspaceError.alreadyExists(trimmedName)
+            }
+
+            try fileManager.moveItem(at: standardized, to: destination)
+            let standardizedDestination = destination.standardizedFileURL
+            eventBus.publish(FileRenamedEvent(oldUrl: standardized, newUrl: standardizedDestination))
+            return standardizedDestination
+        }
+        .mapError { error in
+            if let appError = error as? AppError { return appError }
+            return AppError.fileOperationFailed("rename", underlying: error)
+        }
+    }
+
+    private func createFileResult(named name: String, in directory: URL) -> Result<URL, AppError> {
+        Result {
+            let newFileURL = directory.appendingPathComponent(name).standardizedFileURL
+            let fileManager = FileManager.default
+
+            if fileManager.fileExists(atPath: newFileURL.path) {
+                throw WorkspaceError.alreadyExists(name)
+            }
+
+            try "".write(to: newFileURL, atomically: true, encoding: .utf8)
+            return newFileURL
+        }
+        .mapError { error in
+            if let appError = error as? AppError { return appError }
+            return AppError.fileOperationFailed("create file", underlying: error)
+        }
+    }
+
+    private func createFolderResult(named name: String, in directory: URL) -> Result<Void, AppError> {
+        Result {
+            let newFolderURL = directory.appendingPathComponent(name).standardizedFileURL
+            let fileManager = FileManager.default
+
+            if fileManager.fileExists(atPath: newFolderURL.path) {
+                throw WorkspaceError.alreadyExists(name)
+            }
+
             try fileManager.createDirectory(at: newFolderURL, withIntermediateDirectories: false, attributes: nil)
-        } catch {
-            handleError(.fileOperationFailed("create folder", underlying: error))
+        }
+        .mapError { error in
+            if let appError = error as? AppError { return appError }
+            return AppError.fileOperationFailed("create folder", underlying: error)
         }
     }
     
@@ -178,5 +224,14 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
         let _ = URL(fileURLWithPath: path)
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+    }
+
+    func makePathValidator(projectRoot: URL) -> PathValidator {
+        PathValidator(projectRoot: projectRoot.standardizedFileURL)
+    }
+
+    func makePathValidatorForCurrentDirectory() -> PathValidator? {
+        guard let root = currentDirectory?.standardizedFileURL else { return nil }
+        return makePathValidator(projectRoot: root)
     }
 }

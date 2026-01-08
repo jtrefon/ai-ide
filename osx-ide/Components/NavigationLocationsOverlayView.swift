@@ -3,7 +3,16 @@ import AppKit
 
 struct NavigationLocationsOverlayView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject private var workspace: WorkspaceStateManager
+    @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
+
+    init(appState: AppState, isPresented: Binding<Bool>) {
+        self.appState = appState
+        self._workspace = ObservedObject(wrappedValue: appState.workspace)
+        self._fileEditor = ObservedObject(wrappedValue: appState.fileEditor)
+        self._isPresented = isPresented
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -37,28 +46,28 @@ struct NavigationLocationsOverlayView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .frame(minWidth: 820, minHeight: 460)
+            .frame(minWidth: AppConstants.Overlay.wideListMinWidth, minHeight: AppConstants.Overlay.wideListMinHeight)
         }
-        .padding(16)
+        .padding(AppConstants.Overlay.containerPadding)
         .background(.regularMaterial)
-        .cornerRadius(12)
-        .shadow(radius: 30)
+        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
+        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onExitCommand {
             close()
         }
     }
 
     private func open(_ loc: WorkspaceCodeLocation, openToSide: Bool) {
-        guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+        guard let root = workspace.currentDirectory?.standardizedFileURL else { return }
 
         do {
-            let url = try PathValidator(projectRoot: root).validateAndResolve(loc.relativePath)
+            let url = try appState.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(loc.relativePath)
             if openToSide {
-                appState.fileEditor.openInOtherPane(from: url)
+                fileEditor.openInOtherPane(from: url)
             } else {
                 appState.loadFile(from: url)
             }
-            appState.fileEditor.selectLine(loc.line)
+            fileEditor.selectLine(loc.line)
             close()
         } catch {
             appState.lastError = error.localizedDescription

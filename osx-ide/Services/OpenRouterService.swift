@@ -24,7 +24,7 @@ struct OpenRouterSettings: Equatable {
 }
 
 final class OpenRouterSettingsStore {
-    private let userDefaults = UserDefaults.standard
+    private let settingsStore = SettingsStore(userDefaults: .standard)
     private let apiKeyKey = "OpenRouterAPIKey"
     private let modelKey = "OpenRouterModel"
     private let baseURLKey = "OpenRouterBaseURL"
@@ -33,20 +33,20 @@ final class OpenRouterSettingsStore {
     
     func load() -> OpenRouterSettings {
         OpenRouterSettings(
-            apiKey: userDefaults.string(forKey: apiKeyKey) ?? "",
-            model: userDefaults.string(forKey: modelKey) ?? "",
-            baseURL: userDefaults.string(forKey: baseURLKey) ?? OpenRouterSettings.empty.baseURL,
-            systemPrompt: userDefaults.string(forKey: systemPromptKey) ?? "",
-            reasoningEnabled: userDefaults.object(forKey: reasoningEnabledKey) as? Bool ?? true
+            apiKey: settingsStore.string(forKey: apiKeyKey) ?? "",
+            model: settingsStore.string(forKey: modelKey) ?? "",
+            baseURL: settingsStore.string(forKey: baseURLKey) ?? OpenRouterSettings.empty.baseURL,
+            systemPrompt: settingsStore.string(forKey: systemPromptKey) ?? "",
+            reasoningEnabled: settingsStore.bool(forKey: reasoningEnabledKey, default: true)
         )
     }
     
     func save(_ settings: OpenRouterSettings) {
-        userDefaults.set(settings.apiKey, forKey: apiKeyKey)
-        userDefaults.set(settings.model, forKey: modelKey)
-        userDefaults.set(settings.baseURL, forKey: baseURLKey)
-        userDefaults.set(settings.systemPrompt, forKey: systemPromptKey)
-        userDefaults.set(settings.reasoningEnabled, forKey: reasoningEnabledKey)
+        settingsStore.set(settings.apiKey, forKey: apiKeyKey)
+        settingsStore.set(settings.model, forKey: modelKey)
+        settingsStore.set(settings.baseURL, forKey: baseURLKey)
+        settingsStore.set(settings.systemPrompt, forKey: systemPromptKey)
+        settingsStore.set(settings.reasoningEnabled, forKey: reasoningEnabledKey)
     }
 }
 
@@ -92,7 +92,7 @@ enum OpenRouterServiceError: LocalizedError {
 actor OpenRouterAPIClient {
     private let urlSession: URLSession
     
-    init(urlSession: URLSession = .shared) {
+    init(urlSession: URLSession = URLSession(configuration: .default)) {
         self.urlSession = urlSession
     }
     

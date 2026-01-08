@@ -25,6 +25,8 @@ final class ConversationManagerTests: XCTestCase {
         manager = ConversationManager(
             aiService: mockAIService,
             errorManager: mockErrorManager,
+            workspaceService: WorkspaceService(errorManager: mockErrorManager, eventBus: EventBus()),
+            eventBus: EventBus(),
             projectRoot: URL(fileURLWithPath: "/tmp")
         )
     }

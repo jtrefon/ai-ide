@@ -60,6 +60,7 @@ struct WriteFileTool: AITool {
     
     let fileSystemService: FileSystemService
     let pathValidator: PathValidator
+    let eventBus: EventBusProtocol
     
     func execute(arguments: [String: Any]) async throws -> String {
         guard let path = arguments["path"] as? String else {
@@ -77,9 +78,9 @@ struct WriteFileTool: AITool {
         try fileSystemService.writeFile(content: content, to: url)
         Task { @MainActor in
             if existed {
-                EventBus.shared.publish(FileModifiedEvent(url: url))
+                eventBus.publish(FileModifiedEvent(url: url))
             } else {
-                EventBus.shared.publish(FileCreatedEvent(url: url))
+                eventBus.publish(FileCreatedEvent(url: url))
             }
         }
         return "Successfully wrote to \(pathValidator.relativePath(for: url))"
@@ -119,6 +120,7 @@ struct WriteFilesTool: AITool {
 
     let fileSystemService: FileSystemService
     let pathValidator: PathValidator
+    let eventBus: EventBusProtocol
 
     func execute(arguments: [String: Any]) async throws -> String {
         guard let files = arguments["files"] as? [[String: Any]] else {
@@ -154,9 +156,9 @@ struct WriteFilesTool: AITool {
 
             Task { @MainActor in
                 if existed {
-                    EventBus.shared.publish(FileModifiedEvent(url: url))
+                    eventBus.publish(FileModifiedEvent(url: url))
                 } else {
-                    EventBus.shared.publish(FileCreatedEvent(url: url))
+                    eventBus.publish(FileCreatedEvent(url: url))
                 }
             }
 
@@ -188,6 +190,7 @@ struct CreateFileTool: AITool {
         ]
     }
     let pathValidator: PathValidator
+    let eventBus: EventBusProtocol
     
     func execute(arguments: [String: Any]) async throws -> String {
         guard let path = arguments["path"] as? String else {
@@ -207,7 +210,7 @@ struct CreateFileTool: AITool {
         try fileManager.createDirectory(at: parent, withIntermediateDirectories: true, attributes: nil)
         try "".write(to: url, atomically: true, encoding: .utf8)
         Task { @MainActor in
-            EventBus.shared.publish(FileCreatedEvent(url: url))
+            eventBus.publish(FileCreatedEvent(url: url))
         }
         return "Successfully created file at \(pathValidator.relativePath(for: url))"
     }
@@ -259,6 +262,7 @@ struct DeleteFileTool: AITool {
         ]
     }
     let pathValidator: PathValidator
+    let eventBus: EventBusProtocol
     
     func execute(arguments: [String: Any]) async throws -> String {
         guard let path = arguments["path"] as? String else {
@@ -271,7 +275,7 @@ struct DeleteFileTool: AITool {
         }
         try fileManager.removeItem(at: url)
         Task { @MainActor in
-            EventBus.shared.publish(FileDeletedEvent(url: url))
+            eventBus.publish(FileDeletedEvent(url: url))
         }
         return "Successfully deleted file at \(pathValidator.relativePath(for: url))"
     }
@@ -304,6 +308,7 @@ struct ReplaceInFileTool: AITool {
     
     let fileSystemService: FileSystemService
     let pathValidator: PathValidator
+    let eventBus: EventBusProtocol
     
     func execute(arguments: [String: Any]) async throws -> String {
         guard let path = arguments["path"] as? String else {
@@ -326,7 +331,7 @@ struct ReplaceInFileTool: AITool {
         let newContent = content.replacingOccurrences(of: oldText, with: newText)
         try fileSystemService.writeFile(content: newContent, to: url)
         Task { @MainActor in
-            EventBus.shared.publish(FileModifiedEvent(url: url))
+            eventBus.publish(FileModifiedEvent(url: url))
         }
         
         return "Successfully replaced content in \(pathValidator.relativePath(for: url))"

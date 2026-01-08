@@ -129,11 +129,11 @@ struct AIChatPanel: View {
 #Preview {
     Group {
         let ctx = CodeSelectionContext()
-        let container = DependencyContainer.shared
+        let container = DependencyContainer()
         AIChatPanel(
             selectionContext: ctx,
             conversationManager: container.conversationManager,
-            ui: UIStateManager(uiService: UIService(errorManager: ErrorManager()))
+            ui: UIStateManager(uiService: UIService(errorManager: ErrorManager(), eventBus: EventBus()), eventBus: EventBus())
         )
     }
 }

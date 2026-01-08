@@ -21,3 +21,56 @@ public protocol AIService: Sendable {
     func generateCode(_ prompt: String) async throws -> String
     func fixCode(_ code: String, error: String) async throws -> String
 }
+
+public extension AIService {
+    func sendMessageResult(
+        _ message: String,
+        context: String?,
+        tools: [AITool]?,
+        mode: AIMode?
+    ) async -> Result<AIServiceResponse, AppError> {
+        do {
+            let response = try await sendMessage(message, context: context, tools: tools, mode: mode)
+            return .success(response)
+        } catch {
+            return .failure(Self.mapToAppError(error))
+        }
+    }
+
+    func sendMessageResult(
+        _ message: String,
+        context: String?,
+        tools: [AITool]?,
+        mode: AIMode?,
+        projectRoot: URL?
+    ) async -> Result<AIServiceResponse, AppError> {
+        do {
+            let response = try await sendMessage(message, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
+            return .success(response)
+        } catch {
+            return .failure(Self.mapToAppError(error))
+        }
+    }
+
+    func sendMessageResult(
+        _ messages: [ChatMessage],
+        context: String?,
+        tools: [AITool]?,
+        mode: AIMode?,
+        projectRoot: URL?
+    ) async -> Result<AIServiceResponse, AppError> {
+        do {
+            let response = try await sendMessage(messages, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
+            return .success(response)
+        } catch {
+            return .failure(Self.mapToAppError(error))
+        }
+    }
+
+    private static func mapToAppError(_ error: Error) -> AppError {
+        if let appError = error as? AppError {
+            return appError
+        }
+        return .aiServiceError(error.localizedDescription)
+    }
+}

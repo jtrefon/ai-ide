@@ -58,6 +58,7 @@ final class EditorPaneStateManager: ObservableObject {
     @Published var editorContent: String = "" {
         didSet {
             if !isLoadingFile {
+                detectLanguageForUntitledBufferIfNeeded(newContent: editorContent)
                 isDirty = true
                 updateActiveTabFromEditor()
             }
@@ -73,6 +74,20 @@ final class EditorPaneStateManager: ObservableObject {
     init(fileEditorService: FileEditorServiceProtocol, fileDialogService: FileDialogServiceProtocol) {
         self.fileEditorService = fileEditorService
         self.fileDialogService = fileDialogService
+    }
+
+    private func detectLanguageForUntitledBufferIfNeeded(newContent: String) {
+        guard selectedFile == nil else { return }
+        guard editorLanguage == "swift" || editorLanguage == "text" else { return }
+
+        let trimmed = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard trimmed.first == "{" || trimmed.first == "[" else { return }
+
+        guard let data = trimmed.data(using: .utf8) else { return }
+        guard (try? JSONSerialization.jsonObject(with: data, options: [])) != nil else { return }
+
+        editorLanguage = "json"
     }
     
     // MARK: - File Operations
@@ -113,8 +128,12 @@ final class EditorPaneStateManager: ObservableObject {
     /// Save file to new location
     func saveFileAs() async {
         syncServiceState()
-        let defaultName = selectedFile != nil ?
-            URL(fileURLWithPath: selectedFile!).lastPathComponent : "Untitled.swift"
+        let defaultName: String
+        if let selectedFile {
+            defaultName = URL(fileURLWithPath: selectedFile).lastPathComponent
+        } else {
+            defaultName = "Untitled.swift"
+        }
         guard let url = await fileDialogService.saveFile(defaultFileName: defaultName, allowedContentTypes: [.swiftSource, .plainText]) else {
             return
         }
@@ -331,8 +350,10 @@ final class EditorPaneStateManager: ObservableObject {
     
     /// Get current file name for display
     var displayName: String {
-        return selectedFile != nil ? 
-            URL(fileURLWithPath: selectedFile!).lastPathComponent : "Untitled"
+        if let selectedFile {
+            return URL(fileURLWithPath: selectedFile).lastPathComponent
+        }
+        return "Untitled"
     }
     
     // MARK: - Language Detection

@@ -82,9 +82,6 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
         #if DEBUG
         print(logMessage)
         #endif
-        
-        // In production, you might send to crash reporting service
-        // TODO: Integrate with crashlytics or similar service
     }
 }
 

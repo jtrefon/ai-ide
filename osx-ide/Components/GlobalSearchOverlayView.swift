@@ -2,14 +2,31 @@ import SwiftUI
 
 struct GlobalSearchOverlayView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject private var workspace: WorkspaceStateManager
+    @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
+
+    private struct SearchResultGroup: Identifiable {
+        let file: String
+        let matches: [WorkspaceSearchMatch]
+
+        var id: String { file }
+    }
 
     @State private var query: String = ""
     @State private var isSearching: Bool = false
-    @State private var resultsByFile: [(file: String, matches: [WorkspaceSearchMatch])] = []
+    @State private var resultsByFile: [SearchResultGroup] = []
     @State private var searchTask: Task<Void, Never>?
 
-    private let searchService = WorkspaceSearchService(codebaseIndexProvider: { DependencyContainer.shared.codebaseIndex })
+    private let searchService: WorkspaceSearchService
+
+    init(appState: AppState, isPresented: Binding<Bool>) {
+        self.appState = appState
+        self._workspace = ObservedObject(wrappedValue: appState.workspace)
+        self._fileEditor = ObservedObject(wrappedValue: appState.fileEditor)
+        self._isPresented = isPresented
+        self.searchService = WorkspaceSearchService(codebaseIndexProvider: { appState.codebaseIndex })
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -18,7 +35,7 @@ struct GlobalSearchOverlayView: View {
                     .font(.headline)
                 TextField("Find in workspace", text: $query)
                     .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 420)
+                    .frame(minWidth: AppConstants.Overlay.searchFieldMinWidth)
                     .onSubmit {
                         triggerSearch()
                     }
@@ -34,7 +51,7 @@ struct GlobalSearchOverlayView: View {
             }
 
             List {
-                ForEach(resultsByFile, id: \.file) { group in
+                ForEach(resultsByFile) { group in
                     Section(group.file) {
                         ForEach(group.matches) { match in
                             Button(action: {
@@ -57,12 +74,12 @@ struct GlobalSearchOverlayView: View {
                     }
                 }
             }
-            .frame(minWidth: 760, minHeight: 420)
+            .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
-        .padding(16)
+        .padding(AppConstants.Overlay.containerPadding)
         .background(.regularMaterial)
-        .cornerRadius(12)
-        .shadow(radius: 30)
+        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
+        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             if query.isEmpty {
                 query = ""
@@ -85,7 +102,7 @@ struct GlobalSearchOverlayView: View {
     }
 
     private func triggerSearch() {
-        guard let root = appState.workspace.currentDirectory?.standardizedFileURL else {
+        guard let root = workspace.currentDirectory?.standardizedFileURL else {
             resultsByFile = []
             return
         }
@@ -107,16 +124,16 @@ struct GlobalSearchOverlayView: View {
     }
 
     private func open(match: WorkspaceSearchMatch, openToSide: Bool) {
-        guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+        guard let root = workspace.currentDirectory?.standardizedFileURL else { return }
 
         do {
-            let url = try PathValidator(projectRoot: root).validateAndResolve(match.relativePath)
+            let url = try appState.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(match.relativePath)
             if openToSide {
-                appState.fileEditor.openInOtherPane(from: url)
+                fileEditor.openInOtherPane(from: url)
             } else {
                 appState.loadFile(from: url)
             }
-            appState.fileEditor.selectLine(match.line)
+            fileEditor.selectLine(match.line)
             close()
         } catch {
             appState.lastError = error.localizedDescription
@@ -131,12 +148,12 @@ struct GlobalSearchOverlayView: View {
         resultsByFile = []
     }
 
-    private static func group(_ matches: [WorkspaceSearchMatch]) -> [(file: String, matches: [WorkspaceSearchMatch])] {
+    private static func group(_ matches: [WorkspaceSearchMatch]) -> [SearchResultGroup] {
         let grouped = Dictionary(grouping: matches, by: { $0.relativePath })
         let sortedKeys = grouped.keys.sorted()
         return sortedKeys.map { key in
             let sorted = (grouped[key] ?? []).sorted { $0.line < $1.line }
-            return (file: key, matches: sorted)
+            return SearchResultGroup(file: key, matches: sorted)
         }
     }
 }

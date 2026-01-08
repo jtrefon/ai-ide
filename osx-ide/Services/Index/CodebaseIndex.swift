@@ -19,23 +19,105 @@ public protocol CodebaseIndexProtocol: Sendable {
     func reindexProject(aiEnrichmentEnabled: Bool)
     func runAIEnrichment()
 
-    func listIndexedFiles(matching query: String?, limit: Int, offset: Int) throws -> [String]
-    func findIndexedFiles(query: String, limit: Int) throws -> [IndexedFileMatch]
+    func listIndexedFiles(matching query: String?, limit: Int, offset: Int) async throws -> [String]
+    func findIndexedFiles(query: String, limit: Int) async throws -> [IndexedFileMatch]
     func readIndexedFile(path: String, startLine: Int?, endLine: Int?) throws -> String
     func searchIndexedText(pattern: String, limit: Int) async throws -> [String]
 
-    func searchSymbols(nameLike query: String, limit: Int) throws -> [Symbol]
-    func searchSymbolsWithPaths(nameLike query: String, limit: Int) throws -> [SymbolSearchResult]
-    func getSummaries(projectRoot: URL, limit: Int) throws -> [(path: String, summary: String)]
-    func getMemories(tier: MemoryTier?) throws -> [MemoryEntry]
-    func getStats() throws -> IndexStats
+    func searchSymbols(nameLike query: String, limit: Int) async throws -> [Symbol]
+    func searchSymbolsWithPaths(nameLike query: String, limit: Int) async throws -> [SymbolSearchResult]
+    func getSummaries(projectRoot: URL, limit: Int) async throws -> [(path: String, summary: String)]
+    func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry]
+    func getStats() async throws -> IndexStats
+}
+
+@MainActor
+public extension CodebaseIndexProtocol {
+    func listIndexedFilesResult(matching query: String?, limit: Int, offset: Int) async -> Result<[String], AppError> {
+        do {
+            return .success(try await listIndexedFiles(matching: query, limit: limit, offset: offset))
+        } catch {
+            return .failure(mapToAppError(error, context: "listIndexedFiles"))
+        }
+    }
+
+    func findIndexedFilesResult(query: String, limit: Int) async -> Result<[IndexedFileMatch], AppError> {
+        do {
+            return .success(try await findIndexedFiles(query: query, limit: limit))
+        } catch {
+            return .failure(mapToAppError(error, context: "findIndexedFiles"))
+        }
+    }
+
+    func readIndexedFileResult(path: String, startLine: Int?, endLine: Int?) -> Result<String, AppError> {
+        do {
+            return .success(try readIndexedFile(path: path, startLine: startLine, endLine: endLine))
+        } catch {
+            return .failure(mapToAppError(error, context: "readIndexedFile"))
+        }
+    }
+
+    func searchIndexedTextResult(pattern: String, limit: Int) async -> Result<[String], AppError> {
+        do {
+            return .success(try await searchIndexedText(pattern: pattern, limit: limit))
+        } catch {
+            return .failure(mapToAppError(error, context: "searchIndexedText"))
+        }
+    }
+
+    func searchSymbolsResult(nameLike query: String, limit: Int) async -> Result<[Symbol], AppError> {
+        do {
+            return .success(try await searchSymbols(nameLike: query, limit: limit))
+        } catch {
+            return .failure(mapToAppError(error, context: "searchSymbols"))
+        }
+    }
+
+    func searchSymbolsWithPathsResult(nameLike query: String, limit: Int) async -> Result<[SymbolSearchResult], AppError> {
+        do {
+            return .success(try await searchSymbolsWithPaths(nameLike: query, limit: limit))
+        } catch {
+            return .failure(mapToAppError(error, context: "searchSymbolsWithPaths"))
+        }
+    }
+
+    func getSummariesResult(projectRoot: URL, limit: Int) async -> Result<[(path: String, summary: String)], AppError> {
+        do {
+            return .success(try await getSummaries(projectRoot: projectRoot, limit: limit))
+        } catch {
+            return .failure(mapToAppError(error, context: "getSummaries"))
+        }
+    }
+
+    func getMemoriesResult(tier: MemoryTier?) async -> Result<[MemoryEntry], AppError> {
+        do {
+            return .success(try await getMemories(tier: tier))
+        } catch {
+            return .failure(mapToAppError(error, context: "getMemories"))
+        }
+    }
+
+    func getStatsResult() async -> Result<IndexStats, AppError> {
+        do {
+            return .success(try await getStats())
+        } catch {
+            return .failure(mapToAppError(error, context: "getStats"))
+        }
+    }
+
+    private func mapToAppError(_ error: Error, context: String) -> AppError {
+        if let appError = error as? AppError {
+            return appError
+        }
+        return .unknown("CodebaseIndex.\(context) failed: \(error.localizedDescription)")
+    }
 }
 
 @MainActor
 public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     private let eventBus: EventBusProtocol
     private let coordinator: IndexCoordinator
-    private let databaseManager: DatabaseManager
+    private let database: DatabaseStore
     private let indexer: IndexerActor
     private let memoryManager: MemoryManager
     private let queryService: QueryService
@@ -60,15 +142,15 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         let resolved = Self.resolveIndexDirectory(projectRoot: projectRoot)
         self.dbPath = resolved.appendingPathComponent("codebase.sqlite").path
         
-        self.databaseManager = try DatabaseManager(path: dbPath)
-        self.indexer = IndexerActor(database: databaseManager, config: resolvedConfig)
-        self.memoryManager = MemoryManager(database: databaseManager, eventBus: eventBus)
-        self.queryService = QueryService(database: databaseManager)
+        self.database = try DatabaseStore(path: dbPath)
+        self.indexer = IndexerActor(database: database, config: resolvedConfig)
+        self.memoryManager = MemoryManager(database: database, eventBus: eventBus)
+        self.queryService = QueryService(database: database)
         self.coordinator = IndexCoordinator(eventBus: eventBus, indexer: indexer, config: resolvedConfig, projectRoot: projectRoot)
     }
 
-    public func listIndexedFiles(matching query: String?, limit: Int = 50, offset: Int = 0) throws -> [String] {
-        let absPaths = try databaseManager.listResourcePaths(matching: query, limit: limit, offset: offset)
+    public func listIndexedFiles(matching query: String?, limit: Int = 50, offset: Int = 0) async throws -> [String] {
+        let absPaths = try await database.listResourcePaths(matching: query, limit: limit, offset: offset)
         return absPaths.map { absPath in
             if absPath.hasPrefix(projectRoot.path + "/") {
                 return String(absPath.dropFirst(projectRoot.path.count + 1))
@@ -77,8 +159,8 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         }
     }
 
-    public func findIndexedFiles(query: String, limit: Int = 50) throws -> [IndexedFileMatch] {
-        let raw = try databaseManager.findResourceMatches(query: query, limit: max(1, min(500, limit)))
+    public func findIndexedFiles(query: String, limit: Int = 50) async throws -> [IndexedFileMatch] {
+        let raw = try await database.findResourceMatches(query: query, limit: max(1, min(500, limit)))
         if raw.isEmpty { return [] }
 
         func relPath(_ absPath: String) -> String {
@@ -199,9 +281,9 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
 
         let candidatePaths: [String]
         if !ftsQuery.isEmpty {
-            candidatePaths = (try? databaseManager.candidatePathsForFTS(query: ftsQuery, limit: maxCandidateFiles)) ?? []
+            candidatePaths = (try? await database.candidatePathsForFTS(query: ftsQuery, limit: maxCandidateFiles)) ?? []
         } else {
-            candidatePaths = (try? databaseManager.listResourcePaths(matching: nil, limit: maxCandidateFiles, offset: 0)) ?? []
+            candidatePaths = (try? await database.listResourcePaths(matching: nil, limit: maxCandidateFiles, offset: 0)) ?? []
         }
 
         if candidatePaths.isEmpty { return [] }
@@ -250,7 +332,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         aiEnrichmentTask?.cancel()
         aiEnrichmentTask = nil
         coordinator.stop()
-        databaseManager.shutdown()
+        Task { await database.shutdown() }
     }
 
     public func setEnabled(_ enabled: Bool) {
@@ -308,12 +390,12 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
 
                 let fileModTime = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
 
-                let existingModTime: Double? = (try? databaseManager.getResourceLastModified(resourceId: file.absoluteString)) ?? nil
+                let existingModTime: Double? = (try? await database.getResourceLastModified(resourceId: file.absoluteString)) ?? nil
 
                 if let fileModTime,
                    let existingModTime,
                    abs(existingModTime - fileModTime) < 0.000_001,
-                   (try? databaseManager.isResourceAIEnriched(resourceId: file.absoluteString)) == true {
+                   (try? await database.isResourceAIEnriched(resourceId: file.absoluteString)) == true {
                     await IndexLogger.shared.log("Skipping \(file.lastPathComponent) (already enriched)")
                     processed += 1
                     await eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
@@ -339,15 +421,15 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
                     do {
                         let jsonData = try JSONEncoder().encode(assessment)
                         let json = String(data: jsonData, encoding: .utf8)
-                        try databaseManager.updateQualityScore(resourceId: file.absoluteString, score: heuristicScore)
-                        try databaseManager.updateQualityDetails(resourceId: file.absoluteString, details: json)
+                        try await database.updateQualityScore(resourceId: file.absoluteString, score: heuristicScore)
+                        try await database.updateQualityDetails(resourceId: file.absoluteString, details: json)
                         await IndexLogger.shared.log("QualityScore: \(String(format: "%.0f", heuristicScore)) for \(relPath)")
                     } catch {
                         await IndexLogger.shared.log("QualityScore: Failed to persist quality details for \(relPath): \(error)")
                     }
 
                     let prompt = Self.makeEnrichmentPrompt(path: file.path, content: content)
-                    
+
                     // Use a timeout for the AI call to prevent getting stuck
                     let response = try await withTimeout(seconds: 45) {
                         try await self.aiService.sendMessage(prompt, context: nil, tools: nil, mode: nil, projectRoot: self.projectRoot)
@@ -359,7 +441,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
                     
                     await IndexLogger.shared.log("IndexerActor: AI suggested score \(score) for \(file.lastPathComponent)")
                     
-                    try databaseManager.markAIEnriched(resourceId: file.absoluteString, score: Double(score), summary: summary)
+                    try await database.markAIEnriched(resourceId: file.absoluteString, score: Double(score), summary: summary)
                     await IndexLogger.shared.log("Successfully enriched \(file.lastPathComponent) (Score: \(score))")
                 } catch {
                     await IndexLogger.shared.log("Failed to enrich \(file.lastPathComponent): \(error)")
@@ -393,24 +475,24 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         }
     }
 
-    public func searchSymbols(nameLike query: String, limit: Int = 50) throws -> [Symbol] {
-        try queryService.searchSymbols(nameLike: query, limit: limit)
+    public func searchSymbols(nameLike query: String, limit: Int = 50) async throws -> [Symbol] {
+        try await queryService.searchSymbols(nameLike: query, limit: limit)
     }
 
-    public func searchSymbolsWithPaths(nameLike query: String, limit: Int = 50) throws -> [SymbolSearchResult] {
-        try queryService.searchSymbolsWithPaths(nameLike: query, limit: limit)
+    public func searchSymbolsWithPaths(nameLike query: String, limit: Int = 50) async throws -> [SymbolSearchResult] {
+        try await queryService.searchSymbolsWithPaths(nameLike: query, limit: limit)
     }
 
-    public func getSummaries(projectRoot: URL, limit: Int = 20) throws -> [(path: String, summary: String)] {
-        try databaseManager.getAIEnrichedSummaries(projectRoot: projectRoot, limit: limit)
+    public func getSummaries(projectRoot: URL, limit: Int = 20) async throws -> [(path: String, summary: String)] {
+        try await database.getAIEnrichedSummaries(projectRoot: projectRoot, limit: limit)
     }
 
-    public func getMemories(tier: MemoryTier? = nil) throws -> [MemoryEntry] {
-        try queryService.getMemories(tier: tier)
+    public func getMemories(tier: MemoryTier? = nil) async throws -> [MemoryEntry] {
+        try await queryService.getMemories(tier: tier)
     }
 
-    public func getStats() throws -> IndexStats {
-        let counts = try databaseManager.getIndexStatsCounts()
+    public func getStats() async throws -> IndexStats {
+        let counts = try await database.getIndexStatsCounts()
         let totalProjectFileCount = IndexCoordinator.enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns).count
 
         let aiEnrichableProjectFileCount = IndexCoordinator
@@ -419,13 +501,13 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
             .count
 
         let allowed = AppConstants.Indexing.allowedExtensions
-        let scopedIndexedCount = (try? databaseManager.getIndexedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowed)) ?? counts.indexedResourceCount
+        let scopedIndexedCount = (try? await database.getIndexedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowed)) ?? counts.indexedResourceCount
 
-        let scopedAIEnrichedCount = (try? databaseManager.getAIEnrichedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowed)) ?? 0
-        let avgAIQuality = (try? databaseManager.getAverageAIQualityScoreScoped(projectRoot: projectRoot, allowedExtensions: allowed)) ?? 0
+        let scopedAIEnrichedCount = (try? await database.getAIEnrichedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowed)) ?? 0
+        let avgAIQuality = (try? await database.getAverageAIQualityScoreScoped(projectRoot: projectRoot, allowedExtensions: allowed)) ?? 0
 
-        let kindCounts = try databaseManager.getSymbolKindCounts()
-        let avgQuality = try databaseManager.getAverageQualityScore()
+        let kindCounts = try await database.getSymbolKindCounts()
+        let avgQuality = try await database.getAverageQualityScore()
         let sizeBytes: Int64
         do {
             let attrs = try FileManager.default.attributesOfItem(atPath: dbPath)

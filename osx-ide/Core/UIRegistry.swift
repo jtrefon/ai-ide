@@ -11,14 +11,14 @@ import Combine
 /// A type-erased view provider to allow heterogeneous collections.
 public struct PluginView: Identifiable {
     public let id = UUID()
-    public let content: AnyView
+    public let makeView: () -> AnyView
     public let name: String
     public let iconName: String?
     
-    public init<V: View>(name: String, iconName: String? = nil, view: V) {
+    public init<V: View>(name: String, iconName: String? = nil, makeView: @escaping () -> V) {
         self.name = name
         self.iconName = iconName
-        self.content = AnyView(view)
+        self.makeView = { AnyView(makeView()) }
     }
 }
 
@@ -26,8 +26,6 @@ public struct PluginView: Identifiable {
 /// Plugins register their views here, and the ContentView renders them dynamically.
 @MainActor
 public final class UIRegistry: ObservableObject {
-    public static let shared = UIRegistry()
-    
     @Published private var extensions: [ExtensionPoint: [PluginView]] = [:]
     
     public init() {}
@@ -39,10 +37,25 @@ public final class UIRegistry: ObservableObject {
     ///   - icon: An optional system image name.
     ///   - view: The SwiftUI view to render.
     public func register<V: View>(point: ExtensionPoint, name: String, icon: String? = nil, view: V) {
+        register(point: point, name: name, icon: icon, makeView: { view })
+    }
+
+    /// Registers a lazily-created view for a specific extension point.
+    /// - Parameters:
+    ///   - point: The location to inject the view.
+    ///   - name: A display name for the extension (e.g. for tabs).
+    ///   - icon: An optional system image name.
+    ///   - makeView: A view factory used to create the view at render time.
+    public func register<V: View>(
+        point: ExtensionPoint,
+        name: String,
+        icon: String? = nil,
+        makeView: @escaping () -> V
+    ) {
         if extensions[point] == nil {
             extensions[point] = []
         }
-        let pluginView = PluginView(name: name, iconName: icon, view: view)
+        let pluginView = PluginView(name: name, iconName: icon, makeView: makeView)
         extensions[point]?.append(pluginView)
         
         print("[UIRegistry] Registered '\(name)' at \(point.rawValue)")

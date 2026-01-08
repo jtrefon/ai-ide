@@ -48,35 +48,36 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
         isLoadingFile = true
         defer { isLoadingFile = false }
         
-        do {
-            let content = try fileSystemService.readFile(at: url)
+        switch fileSystemService.readFileResult(at: url) {
+        case .success(let content):
             self.selectedFile = url.path
             self.editorContent = content
             self.editorLanguage = Self.languageForFileExtension(url.pathExtension)
             self.isDirty = false
-        } catch {
-            errorManager.handle(.fileOperationFailed("load file", underlying: error))
+        case .failure(let error):
+            errorManager.handle(error)
         }
     }
     
     /// Save current content to selected file
     func saveFile() {
         guard let filePath = selectedFile else { return }
-        
-        do {
-            try fileSystemService.writeFile(content: editorContent, toPath: filePath)
+
+        switch fileSystemService.writeFileResult(content: editorContent, toPath: filePath) {
+        case .success:
             isDirty = false
             eventBus.publish(FileModifiedEvent(url: URL(fileURLWithPath: filePath)))
-        } catch {
-            errorManager.handle(.fileOperationFailed("save file", underlying: error))
+        case .failure(let error):
+            errorManager.handle(error)
         }
     }
     
     /// Save file to new location
     func saveFileAs(to url: URL) {
         let oldPath = selectedFile
-        do {
-            try fileSystemService.writeFile(content: editorContent, to: url)
+
+        switch fileSystemService.writeFileResult(content: editorContent, to: url) {
+        case .success:
             selectedFile = url.path
             editorLanguage = Self.languageForFileExtension(url.pathExtension)
             isDirty = false
@@ -86,8 +87,8 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
                 eventBus.publish(FileCreatedEvent(url: url))
             }
             eventBus.publish(FileModifiedEvent(url: url))
-        } catch {
-            errorManager.handle(.fileOperationFailed("save file as", underlying: error))
+        case .failure(let error):
+            errorManager.handle(error)
         }
     }
     
@@ -119,7 +120,9 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
     
     /// Get current file name for display
     var displayName: String {
-        return selectedFile != nil ? 
-            URL(fileURLWithPath: selectedFile!).lastPathComponent : "Untitled"
+        if let selectedFile {
+            return URL(fileURLWithPath: selectedFile).lastPathComponent
+        }
+        return "Untitled"
     }
 }

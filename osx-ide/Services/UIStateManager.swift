@@ -17,6 +17,7 @@ class UIStateManager: ObservableObject {
     @Published var isSidebarVisible: Bool = true
     @Published var isTerminalVisible: Bool = true
     @Published var isAIChatVisible: Bool = true
+    @Published var bottomPanelSelectedName: String = AppConstants.UI.internalTerminalPanelName
     @Published var sidebarWidth: Double = AppConstants.Layout.defaultSidebarWidth
     @Published var terminalHeight: Double = AppConstants.Layout.defaultTerminalHeight
     @Published var chatPanelWidth: Double = AppConstants.Layout.defaultChatPanelWidth
@@ -27,7 +28,7 @@ class UIStateManager: ObservableObject {
     @Published var wordWrap: Bool = false
     @Published var minimapVisible: Bool = false
     @Published var fontSize: Double = AppConstants.Editor.defaultFontSize
-    @Published var fontFamily: String = "SF Mono"
+    @Published var fontFamily: String = AppConstants.Editor.defaultFontFamily
     @Published var indentationStyle: IndentationStyle = .tabs
     
     // MARK: - Theme State
@@ -38,25 +39,27 @@ class UIStateManager: ObservableObject {
     // MARK: - Services
     
     private let uiService: UIServiceProtocol
+    private let eventBus: EventBusProtocol
     private var cancellables = Set<AnyCancellable>()
     
-    init(uiService: UIServiceProtocol) {
+    init(uiService: UIServiceProtocol, eventBus: EventBusProtocol) {
         self.uiService = uiService
+        self.eventBus = eventBus
         loadSettings()
         updateTheme()
         setupEventSubscriptions()
     }
     
     private func setupEventSubscriptions() {
-        EventBus.shared.subscribe(to: SidebarWidthChangedEvent.self) { [weak self] event in
+        eventBus.subscribe(to: SidebarWidthChangedEvent.self) { [weak self] event in
             self?.sidebarWidth = event.width
         }.store(in: &cancellables)
         
-        EventBus.shared.subscribe(to: TerminalHeightChangedEvent.self) { [weak self] event in
+        eventBus.subscribe(to: TerminalHeightChangedEvent.self) { [weak self] event in
             self?.terminalHeight = event.height
         }.store(in: &cancellables)
         
-        EventBus.shared.subscribe(to: ChatPanelWidthChangedEvent.self) { [weak self] event in
+        eventBus.subscribe(to: ChatPanelWidthChangedEvent.self) { [weak self] event in
             self?.chatPanelWidth = event.width
         }.store(in: &cancellables)
     }
@@ -198,7 +201,7 @@ class UIStateManager: ObservableObject {
         wordWrap = false
         minimapVisible = false
         fontSize = AppConstants.Editor.defaultFontSize
-        fontFamily = "SF Mono"
+        fontFamily = AppConstants.Editor.defaultFontFamily
         indentationStyle = .tabs
         selectedTheme = .system
         

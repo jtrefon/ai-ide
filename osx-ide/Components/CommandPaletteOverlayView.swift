@@ -29,6 +29,7 @@ enum CommandPaletteScoring {
 }
 
 struct CommandPaletteOverlayView: View {
+    let commandRegistry: CommandRegistry
     @Binding var isPresented: Bool
 
     @State private var query: String = ""
@@ -42,7 +43,7 @@ struct CommandPaletteOverlayView: View {
 
                 TextField("Type a command…", text: $query)
                     .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 520)
+                    .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
                     .onSubmit {
                         runFirstMatch()
                     }
@@ -69,12 +70,12 @@ struct CommandPaletteOverlayView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .frame(minWidth: 760, minHeight: 420)
+            .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
-        .padding(16)
+        .padding(AppConstants.Overlay.containerPadding)
         .background(.regularMaterial)
-        .cornerRadius(12)
-        .shadow(radius: 30)
+        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
+        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             query = ""
             refreshItems()
@@ -88,7 +89,7 @@ struct CommandPaletteOverlayView: View {
     }
 
     private func refreshItems() {
-        let all = CommandRegistry.shared.registeredCommandIDs()
+        let all = commandRegistry.registeredCommandIDs()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmed.isEmpty {
@@ -141,7 +142,7 @@ struct CommandPaletteOverlayView: View {
 
     private func run(_ command: CommandID) {
         Task {
-            try? await CommandRegistry.shared.execute(command)
+            try? await commandRegistry.execute(command)
             close()
         }
     }

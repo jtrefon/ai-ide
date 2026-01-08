@@ -14,12 +14,14 @@ public protocol ErrorManagerProtocol: AnyObject {
     func handle(_ error: AppError)
     func handle(_ error: Error, context: String)
     func dismissError()
-    var statePublisher: ObservableObjectPublisher { get }
+    var statePublisher: AnyPublisher<Void, Never> { get }
 }
 
 public extension ErrorManagerProtocol where Self: ObservableObject {
-    var statePublisher: ObservableObjectPublisher {
-        return self.objectWillChange as! ObservableObjectPublisher
+    var statePublisher: AnyPublisher<Void, Never> {
+        objectWillChange
+            .map { _ in () }
+            .eraseToAnyPublisher()
     }
 }
 
@@ -54,13 +56,17 @@ protocol WorkspaceServiceProtocol: AnyObject {
     func navigateToParent()
     func navigateTo(subdirectory: String)
     func isValidPath(_ path: String) -> Bool
+    func makePathValidator(projectRoot: URL) -> PathValidator
+    func makePathValidatorForCurrentDirectory() -> PathValidator?
     func handleError(_ error: AppError)
-    var statePublisher: ObservableObjectPublisher { get }
+    var statePublisher: AnyPublisher<Void, Never> { get }
 }
 
 extension WorkspaceServiceProtocol where Self: ObservableObject {
-    var statePublisher: ObservableObjectPublisher {
-        return self.objectWillChange as! ObservableObjectPublisher
+    var statePublisher: AnyPublisher<Void, Never> {
+        objectWillChange
+            .map { _ in () }
+            .eraseToAnyPublisher()
     }
 }
 
@@ -79,12 +85,14 @@ protocol FileEditorServiceProtocol: AnyObject {
     func saveFileAs(to url: URL)
     func newFile()
     func handleError(_ error: AppError)
-    var statePublisher: ObservableObjectPublisher { get }
+    var statePublisher: AnyPublisher<Void, Never> { get }
 }
 
 extension FileEditorServiceProtocol where Self: ObservableObject {
-    var statePublisher: ObservableObjectPublisher {
-        return self.objectWillChange as! ObservableObjectPublisher
+    var statePublisher: AnyPublisher<Void, Never> {
+        objectWillChange
+            .map { _ in () }
+            .eraseToAnyPublisher()
     }
 }
 
@@ -110,11 +118,13 @@ public protocol ConversationManagerProtocol: AnyObject {
     func sendMessage(context: String?)
     func clearConversation()
     func updateProjectRoot(_ root: URL)
-    var statePublisher: ObservableObjectPublisher { get }
+    var statePublisher: AnyPublisher<Void, Never> { get }
 }
 
 public extension ConversationManagerProtocol where Self: ObservableObject {
-    var statePublisher: ObservableObjectPublisher {
-        return self.objectWillChange as! ObservableObjectPublisher
+    var statePublisher: AnyPublisher<Void, Never> {
+        objectWillChange
+            .map { _ in () }
+            .eraseToAnyPublisher()
     }
 }

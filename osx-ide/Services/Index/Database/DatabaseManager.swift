@@ -16,8 +16,8 @@ public enum DatabaseError: Error {
     case executionFailed(String)
 }
 
-public class DatabaseManager: @unchecked Sendable {
-    public var db: OpaquePointer?
+public class DatabaseManager {
+    private var db: OpaquePointer?
     private let dbPath: String
     private let queue = DispatchQueue(label: "com.osx-ide.database", qos: .userInitiated)
     private let queueKey = DispatchSpecificKey<UUID>()

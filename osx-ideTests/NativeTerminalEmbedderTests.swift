@@ -20,10 +20,11 @@ final class NativeTerminalEmbedderTests: XCTestCase {
 
     func testEnterSendsNewlineToShell() {
         let mockShell = MockShellManager()
-        let embedder = NativeTerminalEmbedder(shellManager: mockShell)
+        let embedder = NativeTerminalEmbedder(shellManager: mockShell, eventBus: EventBus())
 
-        let textView = NSTextView()
-        _ = embedder.textView(textView, doCommandBy: #selector(NSResponder.insertNewline(_:)))
+        let textView = NativeTerminalEmbedder.TerminalTextView()
+        textView.inputDelegate = embedder
+        textView.doCommand(by: #selector(NSResponder.insertNewline(_:)))
 
         XCTAssertEqual(mockShell.sentInputs, ["\n"])
     }

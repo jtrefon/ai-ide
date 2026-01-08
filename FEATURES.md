@@ -34,7 +34,78 @@ This is a living backlog for our AI-enabled macOS IDE. Checked items are shipped
   - Logs: `.ide/logs/` + App Support logs (see `osx-ide/Services/Logging/*`)
   - Session UI state: `.ide/session.json` (see `osx-ide/Services/Session/*`)
 
+## Language support framework (plugin-based; no single-language exceptions)
+
+We support **multiple languages** through a single **capability-based language framework**. No language is allowed to bypass the framework, and we do not introduce architectural exceptions (e.g. “Swift gets special parsing”).
+
+### Purpose
+- Provide a scalable, extendable foundation for **language plugins**.
+- Allow shipping language features incrementally (MVP highlighting → formatting/indentation → indexing/symbols → linting → language help).
+- Keep the core IDE stable and language-neutral while plugins evolve.
+
+### Non-negotiable boundaries
+- No language-specific logic hardcoded into core flows (Editor/Search/Index/Navigation).
+- No third-party/vendor language parsers embedded as required dependencies of the core IDE.
+- Feature parity is driven by declared plugin capabilities; languages may be at different maturity levels, but they still go through the same extension points.
+- When a capability is not implemented for a language, behavior must be:
+  - predictable
+  - explicitly “best-effort”
+  - and must fail with a clear message (never silent incorrect results).
+
+### Core concept: capabilities (not monolith plugins)
+Each language module can implement one or more capabilities. This keeps the system robust and avoids “all or nothing” language support.
+
+- **Language identification**
+  - Map file extension(s) and/or content sniffing to a `CodeLanguage`.
+- **Syntax highlighting**
+  - Provide tokenization/rules used by the syntax highlighter.
+  - Must be fast and safe for large files; fall back to a generic highlighter.
+- **Indentation**
+  - Provide indentation rules (tab/space policy, smart-indent triggers).
+- **Formatting (future)**
+  - Provide formatter integration as an optional capability.
+  - Must be explicit + deterministic (format-on-save is opt-in).
+- **Symbol extraction / outline (index-backed when available)**
+  - Provide a way to extract symbols for outline and search.
+  - Must support fallback behavior when deep parsing is unavailable.
+- **Navigation + refactors (future)**
+  - Go-to-definition, references, rename.
+  - Prefer LSP when configured; fallback to index heuristics where possible.
+- **Linting / diagnostics (future)**
+  - Provide lint + diagnostics integration (LSP, external tool, or internal rules).
+  - Output must map to file/line and feed the Problems/Diagnostics surfaces.
+- **Scaffolding (future)**
+  - Provide scaffold by creating language/framework specific files, folders, and structures (supported by right click menu).
+
+### Architectural implications
+- The index, navigation, and search layers should treat “language support” as an injected dependency (providers/modules), not a special-case branch.
+- Any “fallback” parsing must be explicitly positioned as:
+  - best-effort
+  - language-module-owned
+  - replaceable when a more robust capability implementation is added.
+
+### Current foundation (already in-progress)
+- Language modules + enable/disable list
+- Syntax highlighting pipeline
+- CodebaseIndex symbol tables and indexed search surfaces with graceful fallback
+
+### Out of scope (for now)
+- A full Language Server implementation per language (we integrate with LSP; we don’t build an LSP).
+- Shipping a vendor SDK/parser as a core dependency requirement.
+
 ## File browser
+- [x] File menu: new file / new project
+  - **Primary surface**: File menu + Command palette.
+  - **Command IDs**: `file.new`, `project.new`.
+  - **Purpose**: start a new buffer or create a new project workspace.
+- [x] File menu: open file / open folder
+  - **Primary surface**: File menu.
+  - **Command IDs**: `file.open`, `file.openFolder`.
+  - **Purpose**: open a file or choose a workspace root.
+- [x] File menu: save / save as
+  - **Primary surface**: File menu.
+  - **Command IDs**: `file.save`, `file.saveAs`.
+  - **Purpose**: persist editor buffers to disk deterministically.
 - [x] Create file / folder (context menu + dialog)
   - **Acceptance**: right-clicking a folder creates inside that folder; right-clicking a file creates in its parent; right-clicking empty tree area creates at project root.
 - [x] Search by name
@@ -84,9 +155,14 @@ This is a living backlog for our AI-enabled macOS IDE. Checked items are shipped
   - **Behavior**: opening a file focuses existing tab (no duplicates); closing dirty tab prompts; tab title shows dirty dot.
   - **Persistence**: store open tabs + active tab in `.ide/session.json` (ProjectSession).
   - **Acceptance**: can open/close/switch tabs without losing editor state; no duplicate tabs for same file.
+- [x] Format document
+  - **Primary surface**: editor.
+  - **Command IDs**: `editor.format`.
+  - **Behavior**: format the current buffer using the active language module when available, otherwise fall back to the built-in formatter.
+  - **Acceptance**: formatting is deterministic and does not lose selection/cursor.
 - [x] Split editor (vertical/horizontal) + tab groups
   - **Primary surface**: editor layout controls + drag tab to edge to split.
-  - **Command IDs**: `editor.splitRight` (Cmd+\\), `editor.splitDown`, `editor.focusNextGroup`.
+  - **Command IDs**: `editor.splitRight` (Cmd+\), `editor.splitDown`, `editor.focusNextGroup`.
   - **Behavior**: each split is a tab group; “open file” targets the focused group; closing last tab collapses group.
   - **Acceptance**: can split editor and open different files in each group.
 - [x] Find in file (Cmd+F)
@@ -121,17 +197,50 @@ This is a living backlog for our AI-enabled macOS IDE. Checked items are shipped
   - **Command IDs**: `editor.goToDefinition`, `editor.findReferences`, `editor.renameSymbol`.
   - **Behavior**: when LSP is configured, use it; otherwise provide best-effort via index; if neither is available, show a clear “not available” message (no silent failure).
   - **Acceptance**: never navigates to the wrong file silently; ambiguous results must present a picker.
-- [ ] Diagnostics surface + clickable build errors (terminal ↔ editor)
+- [x] Diagnostics surface + clickable build errors (terminal ↔ editor)
   - **Primary surface**: problems list + inline squiggles (later) + terminal links.
   - **Command IDs**: `view.toggleProblems`, `problems.next`, `problems.previous`.
   - **Behavior**: parse build/test output (start with Swift/Xcodebuild) into file:line diagnostics; clicking jumps to location.
   - **Acceptance**: running build/tests produces actionable, clickable errors; diagnostics persist until next run.
-- [ ] Code folding, minimap, multi-cursor, block selection
-  - **Scope**: treat as three deliverables; do not half-ship.
-  - **Folding**: fold by indentation / braces (MVP), later language-aware.
-  - **Minimap**: optional (default off) due to complexity; must not regress editor perf.
-  - **Multi-cursor**: add next occurrence, add cursor above/below, rectangular selection (block).
-  - **Acceptance**: features are consistent with macOS text behaviors and don’t introduce selection bugs.
+- [x] Code folding
+  - **Primary surface**: editor.
+  - **Command IDs**: `editor.toggleFold`, `editor.unfoldAll`.
+  - **Behavior**: fold/unfold at cursor; unfold all.
+  - **Acceptance**: folding is fast and does not corrupt selections.
+- [x] Minimap
+  - **Primary surface**: editor.
+  - **Command IDs**: `view.toggleMinimap`.
+  - **Behavior**: toggle minimap visibility.
+  - **Acceptance**: minimap toggle works and does not regress editor performance.
+- [x] Multi-cursor
+  - **Primary surface**: editor.
+  - **Command IDs**: `editor.addNextOccurrence`, `editor.addCursorAbove`, `editor.addCursorBelow`.
+  - **Behavior**: add next occurrence; add cursor above/below.
+  - **Acceptance**: multi-cursor operations are predictable and consistent.
+- [ ] Block (rectangular) selection
+  - **Primary surface**: editor.
+  - **Acceptance**: rectangular selection works without breaking normal selection behavior.
+
+## Settings & preferences
+- [x] Settings UI (General + AI)
+  - **Primary surface**: Settings window.
+  - **Purpose**: single place to configure global UI preferences and AI provider settings.
+- [x] Editor preferences (font size, font family, indentation style)
+  - **Primary surface**: Settings → General.
+  - **Purpose**: persist editor UX preferences (font + indentation).
+- [x] AI provider settings (OpenRouter)
+  - **Primary surface**: Settings → AI.
+  - **Purpose**: configure API key, model, base URL, and reasoning toggle.
+
+## Terminal
+- [x] Native terminal panel
+  - **Primary surface**: bottom panel.
+  - **Purpose**: run build/test commands and view output inside the IDE.
+- [x] Inline AI assist (send current selection/buffer to AI)
+  - **Primary surface**: editor + AI panel.
+  - **Command IDs**: `editor.aiInlineAssist`.
+  - **Behavior**: opens the AI panel (if hidden) and sends the current selection if present; otherwise sends the current buffer.
+  - **Acceptance**: always makes the scope explicit (selection vs buffer) and never silently writes to disk.
 - [ ] Syntax-aware AI support (Cmd+I) for analyze/fix/enrich current buffer
   - **Primary surface**: editor action + AI panel.
   - **Command IDs**: `ai.analyzeFile` (Cmd+I).
@@ -172,11 +281,21 @@ This is a living backlog for our AI-enabled macOS IDE. Checked items are shipped
   - **Acceptance**: plan state survives app restart and stays consistent with executed tool calls.
 - [x] Planner tool (persistent plan storage)
 - [x] Markdown rendering for chat
+- [x] Project-scoped chat history persistence
+  - **Primary surface**: AI panel.
+  - **Persistence**: `.ide/chat/history.json`.
+  - **Purpose**: preserve conversation across app restarts per project.
 - [ ] Streaming responses (SSE) + live tool execution streaming
   - **Primary surface**: AI message list (typing should be actual stream, not spinner).
   - **Behavior**: stream tokens into the last assistant message; stream tool call start/complete events as they happen.
   - **Implementation map**: extend `OpenRouterAIService` + `OpenRouterAPIClient` to support SSE when available; update `ConversationManager` to append partial assistant content without creating extra messages.
   - **Acceptance**: long responses render progressively; cancelling stops streaming quickly.
+
+## Project session & layout persistence
+- [x] Project session persistence (window/layout/open tabs)
+  - **Primary surface**: whole app.
+  - **Persistence**: `.ide/session.json`.
+  - **Purpose**: restore window frame, sidebar/terminal/AI visibility, split state, open tabs, and file tree expansion state.
 - [ ] Agent verify loop: run tests/build/linters; iterate until green with loop protection
   - **Primary surface**: AI panel “Verify” step + Task lanes (Milestone 2).
   - **Behavior**: after apply, run configured commands (default: `./run.sh test`); if failing, feed concise failure into the agent, propose fix, and retry with a hard cap (e.g., 2–3).
@@ -213,6 +332,10 @@ This is a living backlog for our AI-enabled macOS IDE. Checked items are shipped
   - **Acceptance**: attachments are project-scoped, deletable, and never silently uploaded without user control.
 
 ## Indexing & context intelligence
+- [x] CodebaseIndex core (local index for files, symbols, and retrieval)
+  - **Primary surface**: internal service used by Quick Open, Go to Symbol, and Search.
+  - **Purpose**: enable fast file/text/symbol lookup on large projects with graceful fallback when disabled.
+  - **Acceptance**: enabling/disabling index never breaks core features; it only changes performance/quality.
 - [ ] CodebaseIndex UX: file/symbol search surfaces in Quick Open/outline
   - **Primary surface**: Quick Open, Symbol picker, Search panel.
   - **Behavior**: if CodebaseIndex is enabled, queries should use it by default; if disabled/unavailable, fall back to filesystem scan.
