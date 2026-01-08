@@ -3,10 +3,17 @@ import Foundation
 
 struct RenameSymbolOverlayView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
 
     @State private var newName: String = ""
     @State private var previewReplacements: Int = 0
+
+    init(appState: AppState, isPresented: Binding<Bool>) {
+        self.appState = appState
+        self._fileEditor = ObservedObject(wrappedValue: appState.fileEditor)
+        self._isPresented = isPresented
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -23,7 +30,7 @@ struct RenameSymbolOverlayView: View {
 
             TextField("New name", text: $newName)
                 .textFieldStyle(.roundedBorder)
-                .frame(minWidth: 520)
+                .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
                 .onSubmit {
                     applyRename()
                 }
@@ -41,10 +48,10 @@ struct RenameSymbolOverlayView: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(16)
+        .padding(AppConstants.Overlay.containerPadding)
         .background(.regularMaterial)
-        .cornerRadius(12)
-        .shadow(radius: 30)
+        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
+        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             newName = appState.renameSymbolIdentifier
             previewReplacements = computePreviewReplacements()
@@ -62,7 +69,7 @@ struct RenameSymbolOverlayView: View {
         if old.isEmpty { return 0 }
         if !WorkspaceNavigationService.isValidIdentifier(newName.trimmingCharacters(in: .whitespacesAndNewlines)) { return 0 }
 
-        let content = appState.fileEditor.editorContent
+        let content = fileEditor.editorContent
         let escaped = NSRegularExpression.escapedPattern(for: old)
         let pattern = "\\b\(escaped)\\b"
         let regex = try? NSRegularExpression(pattern: pattern)
@@ -73,11 +80,11 @@ struct RenameSymbolOverlayView: View {
     private func applyRename() {
         do {
             let result = try WorkspaceNavigationService.renameInCurrentBuffer(
-                content: appState.fileEditor.editorContent,
+                content: fileEditor.editorContent,
                 identifier: appState.renameSymbolIdentifier,
                 newName: newName
             )
-            appState.fileEditor.editorContent = result.updated
+            fileEditor.editorContent = result.updated
             close()
         } catch {
             appState.lastError = error.localizedDescription

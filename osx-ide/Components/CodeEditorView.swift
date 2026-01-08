@@ -5,12 +5,14 @@
 //  Created by AI Assistant on 25/08/2025.
 //
 
-// TODO: Enable selection passing to the AI chat panel for context-aware code actions.
-
 import SwiftUI
 import AppKit
 
 // CodeSelectionContext moved to Services/CodeSelectionContext.swift
+
+private extension Notification.Name {
+    static let editorHighlightDiagnosticsUpdated = Notification.Name("EditorHighlightDiagnosticsUpdated")
+}
 
 struct CodeEditorView: View {
     @Binding var text: String
@@ -20,7 +22,8 @@ struct CodeEditorView: View {
     var showLineNumbers: Bool = true
     var wordWrap: Bool = false
     var fontSize: Double = AppConstants.Editor.defaultFontSize
-    var fontFamily: String = "SF Mono"
+    var fontFamily: String = AppConstants.Editor.defaultFontFamily
+    @ObservedObject private var highlightDiagnostics = EditorHighlightDiagnosticsStore.shared
     
     var body: some View {
         GeometryReader { geometry in
@@ -36,6 +39,18 @@ struct CodeEditorView: View {
                 fontFamily: fontFamily
             )
             .frame(width: geometry.size.width, height: geometry.size.height)
+            .overlay(
+                Group {
+                    if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
+                        Text(highlightDiagnostics.diagnostics)
+                            .font(.system(size: 1))
+                            .foregroundColor(.clear)
+                            .accessibilityIdentifier("EditorHighlightDiagnostics")
+                            .accessibilityLabel(highlightDiagnostics.diagnostics)
+                            .accessibilityValue(highlightDiagnostics.diagnostics)
+                    }
+                }
+            )
         }
     }
 }
@@ -244,9 +259,6 @@ struct TextViewRepresentable: NSViewRepresentable {
             if isProgrammaticUpdate { return true }
             guard let replacementString else { return true }
 
-            #if DEBUG
-            print("[Editor] shouldChangeTextIn replacement=\(String(describing: replacementString)) range=\(affectedCharRange) selected=\(textView.selectedRange)")
-            #endif
 
             // Only apply behaviors for simple insertions (typing). Let multi-char replacements go through.
             if replacementString.count != 1 { return true }
@@ -508,13 +520,29 @@ struct TextViewRepresentable: NSViewRepresentable {
                     // Apply attribute runs from the highlighter output.
                     // This keeps the underlying characters intact while allowing modules to define styling.
                     attributedString.enumerateAttributes(in: applyRange, options: []) { attrs, range, _ in
-                        var merged = attrs
-                        // Enforce editor font consistently
-                        merged[.font] = font
-                        textStorage.setAttributes(merged, range: range)
+                        var merged: [NSAttributedString.Key: Any] = [
+                            .font: font
+                        ]
+
+                        // Only override foreground color when the highlighter provided one.
+                        if let fg = attrs[.foregroundColor] {
+                            merged[.foregroundColor] = fg
+                        }
+
+                        // Use addAttributes so we don't wipe base attributes for runs that don't specify fg.
+                        textStorage.addAttributes(merged, range: range)
                     }
 
                     textStorage.endEditing()
+                }
+
+                if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
+                    let diagnostics = Self.buildHighlightDiagnostics(from: attributedString, language: language)
+                    NotificationCenter.default.post(
+                        name: .editorHighlightDiagnosticsUpdated,
+                        object: nil,
+                        userInfo: ["diagnostics": diagnostics]
+                    )
                 }
                 
                 // Restore selection after update
@@ -537,6 +565,75 @@ struct TextViewRepresentable: NSViewRepresentable {
                     scrollView.tile()
                 }
             }
+        }
+
+        private static func buildHighlightDiagnostics(from attributed: NSAttributedString, language: String) -> String {
+            let fullRange = NSRange(location: 0, length: attributed.length)
+            var unique: Set<String> = []
+
+            func normalizeLanguage(_ raw: String) -> String {
+                var s = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if s.hasPrefix("language_") {
+                    s.removeFirst("language_".count)
+                }
+                if s.hasPrefix(".") {
+                    s.removeFirst()
+                }
+                switch s {
+                case "js": return "javascript"
+                case "ts": return "typescript"
+                case "py": return "python"
+                default: return s
+                }
+            }
+
+            func rgbaKey(for color: NSColor) -> String? {
+                guard let rgb = color.usingColorSpace(.deviceRGB) else { return nil }
+                return "\(rgb.redComponent),\(rgb.greenComponent),\(rgb.blueComponent),\(rgb.alphaComponent)"
+            }
+
+            attributed.enumerateAttribute(.foregroundColor, in: fullRange, options: []) { value, _, _ in
+                guard let c = value as? NSColor else { return }
+                if let key = rgbaKey(for: c) {
+                    unique.insert(key)
+                }
+            }
+
+            func containsColor(_ target: NSColor) -> Bool {
+                guard let targetKey = rgbaKey(for: target) else { return false }
+                return unique.contains(targetKey)
+            }
+
+            let normalized = normalizeLanguage(language)
+
+            let languageEnum = CodeLanguage(rawValue: normalized) ?? .unknown
+            let module = LanguageModuleManager.shared.getModule(for: languageEnum)
+            let moduleId = module?.id.rawValue ?? "none"
+
+            if let provider = module as? HighlightDiagnosticsPaletteProviding {
+                var parts: [String] = [
+                    "lang=\(normalized)",
+                    "module=\(moduleId)",
+                    "unique=\(unique.count)"
+                ]
+
+                for swatch in provider.highlightDiagnosticsPalette {
+                    parts.append("\(swatch.name)=\(containsColor(swatch.color))")
+                }
+
+                return parts.joined(separator: ";")
+            }
+
+            // Fallback: expose a few known system colors to help debug non-module highlighting.
+            let hasIndigo = containsColor(.systemIndigo)
+            let hasTeal = containsColor(.systemTeal)
+            let hasYellow = containsColor(.systemYellow)
+            let hasPink = containsColor(.systemPink)
+            let hasOrange = containsColor(.systemOrange)
+            let hasBlue = containsColor(.systemBlue)
+            let hasGray = containsColor(.systemGray)
+
+            return "lang=\(normalized);module=\(moduleId);unique=\(unique.count);indigo=\(hasIndigo);teal=\(hasTeal);yellow=\(hasYellow);pink=\(hasPink);orange=\(hasOrange);blue=\(hasBlue);gray=\(hasGray)"
         }
 
         @MainActor
@@ -622,7 +719,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         showLineNumbers: true,
         wordWrap: false,
         fontSize: AppConstants.Editor.defaultFontSize,
-        fontFamily: "SF Mono"
+        fontFamily: AppConstants.Editor.defaultFontFamily
     )
     .frame(height: 300)
 }

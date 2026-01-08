@@ -3,6 +3,27 @@ import Foundation
 /// Service for interacting with the local file system.
 public final class FileSystemService: Sendable {
     public init() {}
+
+    public func readFileResult(at url: URL) -> Result<String, AppError> {
+        Result {
+            try readFile(at: url)
+        }
+        .mapError { AppError.fileOperationFailed("read file", underlying: $0) }
+    }
+
+    public func writeFileResult(content: String, to url: URL) -> Result<Void, AppError> {
+        Result {
+            try writeFile(content: content, to: url)
+        }
+        .mapError { AppError.fileOperationFailed("write file", underlying: $0) }
+    }
+
+    public func writeFileResult(content: String, toPath path: String) -> Result<Void, AppError> {
+        Result {
+            try writeFile(content: content, toPath: path)
+        }
+        .mapError { AppError.fileOperationFailed("write file", underlying: $0) }
+    }
     
     /// Reads the content of a file at the specified URL.
     public func readFile(at url: URL) throws -> String {

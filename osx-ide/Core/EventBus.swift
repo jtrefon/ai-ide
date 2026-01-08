@@ -27,8 +27,6 @@ public protocol EventBusProtocol: Sendable {
 /// This acts as the central nervous system of the IDE.
 @MainActor
 public final class EventBus: EventBusProtocol {
-    public static let shared = EventBus()
-    
     // We store PassthroughSubjects for each Event type name.
     // Using String keys (type name) allows decoupled storage.
     private var subjects: [String: Any] = [:]

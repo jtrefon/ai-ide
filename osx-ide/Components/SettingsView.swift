@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @ObservedObject var appState: AppState
+    @ObservedObject var ui: UIStateManager
     @StateObject private var openRouterViewModel = OpenRouterSettingsViewModel()
     
     var body: some View {
@@ -18,7 +18,7 @@ struct SettingsView: View {
             
             VStack(spacing: 16) {
                 TabView {
-                    GeneralSettingsTab(appState: appState)
+                    GeneralSettingsTab(ui: ui)
                         .tabItem {
                             Label("General", systemImage: "gearshape")
                         }
@@ -70,5 +70,5 @@ private struct SettingsBackgroundView: View {
 }
 
 #Preview {
-    SettingsView(appState: DependencyContainer.shared.makeAppState())
+    SettingsView(ui: DependencyContainer().makeAppState().ui)
 }

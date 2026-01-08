@@ -22,6 +22,18 @@ public struct CommandID: Hashable, ExpressibleByStringLiteral, CustomStringConve
     public var description: String { value }
 }
 
+public struct EmptyCommandArgs: Codable, Sendable {
+    public init() {}
+}
+
+public struct TypedCommand<Args: Codable & Sendable>: Hashable, Sendable {
+    public let id: CommandID
+
+    public init(_ id: CommandID) {
+        self.id = id
+    }
+}
+
 /// Protocol for any handler that can execute a command.
 @MainActor
 public protocol CommandHandler {
@@ -46,8 +58,6 @@ public final class ClosureCommandHandler: CommandHandler {
 /// This allows plugins to register behavior and the UI to trigger it blindly.
 @MainActor
 public final class CommandRegistry {
-    public static let shared = CommandRegistry()
-    
     private var handlers: [CommandID: CommandHandler] = [:]
     
     public init() {}
@@ -62,6 +72,16 @@ public final class CommandRegistry {
     public func register(command: CommandID, action: @escaping @MainActor @Sendable ([String: Any]) async throws -> Void) {
         register(command: command, handler: ClosureCommandHandler(action))
     }
+
+    public func register<Args: Codable & Sendable>(
+        command: TypedCommand<Args>,
+        action: @escaping @MainActor @Sendable (Args) async throws -> Void
+    ) {
+        register(command: command.id) { dict in
+            let args = try Self.decode(Args.self, from: dict)
+            try await action(args)
+        }
+    }
     
     public func unregister(command: CommandID) {
         handlers.removeValue(forKey: command)
@@ -75,11 +95,58 @@ public final class CommandRegistry {
     public func execute(_ command: CommandID, args: [String: Any] = [:]) async throws {
         guard let handler = handlers[command] else {
             print("[CommandRegistry] Error: Command not found: \(command)")
-            // TODO: Throw a proper error type
-            return
+            throw AppError.commandNotFound(command.value)
         }
         
         print("[CommandRegistry] Executing: \(command)")
         try await handler.execute(args: args)
+    }
+
+    public func execute<Args: Codable & Sendable>(_ command: TypedCommand<Args>, args: Args) async throws {
+        try await execute(command.id, args: Self.encode(args))
+    }
+
+    public func execute(_ command: TypedCommand<EmptyCommandArgs>) async throws {
+        try await execute(command.id)
+    }
+
+    private static func decode<T: Decodable>(_ type: T.Type, from dict: [String: Any]) throws -> T {
+        let data = try JSONSerialization.data(withJSONObject: dict, options: [])
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    private static func encode<T: Encodable>(_ value: T) throws -> [String: Any] {
+        let data = try JSONEncoder().encode(value)
+        let json = try JSONSerialization.jsonObject(with: data, options: [])
+        if let dict = json as? [String: Any] {
+            return dict
+        }
+        return [:]
+    }
+}
+
+public extension CommandRegistry {
+    func executeResult(_ command: CommandID, args: [String: Any] = [:]) async -> Result<Void, AppError> {
+        do {
+            try await execute(command, args: args)
+            return .success(())
+        } catch {
+            if let appError = error as? AppError {
+                return .failure(appError)
+            }
+            return .failure(.unknown("CommandRegistry.execute failed: \(error.localizedDescription)"))
+        }
+    }
+
+    func executeResult<Args: Codable & Sendable>(_ command: TypedCommand<Args>, args: Args) async -> Result<Void, AppError> {
+        do {
+            try await execute(command, args: args)
+            return .success(())
+        } catch {
+            if let appError = error as? AppError {
+                return .failure(appError)
+            }
+            return .failure(.unknown("CommandRegistry.execute failed: \(error.localizedDescription)"))
+        }
     }
 }

@@ -15,6 +15,7 @@ class ProjectCoordinator {
     private let errorManager: ErrorManagerProtocol
     private let eventBus: EventBusProtocol
     private let conversationManager: ConversationManagerProtocol
+    private let settingsStore: SettingsStore
     private var currentProjectRoot: URL?
     
     private(set) var codebaseIndex: CodebaseIndexProtocol?
@@ -30,6 +31,7 @@ class ProjectCoordinator {
         self.errorManager = errorManager
         self.eventBus = eventBus
         self.conversationManager = conversationManager
+        self.settingsStore = SettingsStore(userDefaults: .standard)
     }
     
     func configureProject(root: URL) {
@@ -51,7 +53,7 @@ class ProjectCoordinator {
             self.codebaseIndex = index
             index.start()
             
-            let isIndexEnabled = UserDefaults.standard.object(forKey: "CodebaseIndexEnabled") as? Bool ?? true
+            let isIndexEnabled = settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true)
             index.setEnabled(isIndexEnabled)
             
             if isIndexEnabled {
@@ -112,7 +114,7 @@ class ProjectCoordinator {
             self.codebaseIndex = index
             index.start()
 
-            let isIndexEnabled = UserDefaults.standard.object(forKey: "CodebaseIndexEnabled") as? Bool ?? true
+            let isIndexEnabled = settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true)
             index.setEnabled(isIndexEnabled)
 
             if let cm = conversationManager as? ConversationManager {
@@ -132,7 +134,7 @@ class ProjectCoordinator {
     }
     
     func setIndexEnabled(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: "CodebaseIndexEnabled")
+        settingsStore.set(enabled, forKey: AppConstants.Storage.codebaseIndexEnabledKey)
         codebaseIndex?.setEnabled(enabled)
         if enabled {
             reindexProject(aiEnrichment: false)
@@ -145,7 +147,7 @@ class ProjectCoordinator {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard let self = self else { return }
             
-            let aiEnrichmentEnabled = UserDefaults.standard.object(forKey: "CodebaseIndexAIEnrichmentEnabled") as? Bool ?? false
+            let aiEnrichmentEnabled = settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, default: false)
             self.reindexProject(aiEnrichment: aiEnrichmentEnabled)
         }
     }

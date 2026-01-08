@@ -14,15 +14,15 @@ public enum MemoryError: Error {
 }
 
 public actor MemoryManager {
-    private let database: DatabaseManager
+    private let database: DatabaseStore
     private let eventBus: EventBusProtocol
     
-    public init(database: DatabaseManager, eventBus: EventBusProtocol) {
+    public init(database: DatabaseStore, eventBus: EventBusProtocol) {
         self.database = database
         self.eventBus = eventBus
     }
     
-    public func addMemory(content: String, tier: MemoryTier, category: String) throws -> MemoryEntry {
+    public func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
         let entry = MemoryEntry(
             tier: tier,
             content: content,
@@ -41,7 +41,7 @@ public actor MemoryManager {
             protectionLevel: protection
         )
         
-        try database.saveMemory(protectedEntry)
+        try await database.saveMemory(protectedEntry)
         Task { @MainActor in
             eventBus.publish(MemoryCapturedEvent(tier: tier.rawValue, content: content))
         }
@@ -49,9 +49,9 @@ public actor MemoryManager {
         return protectedEntry
     }
     
-    public func updateMemory(id: String, newContent: String, force: Bool = false) throws -> MemoryEntry {
+    public func updateMemory(id: String, newContent: String, force: Bool = false) async throws -> MemoryEntry {
         // First retrieve existing
-        let memories = try database.getMemories()
+        let memories = try await database.getMemories()
         guard let entry = memories.first(where: { $0.id == id }) else {
             throw MemoryError.notFound
         }
@@ -86,12 +86,12 @@ public actor MemoryManager {
             protectionLevel: newProtection
         )
         
-        try database.saveMemory(finalEntry)
+        try await database.saveMemory(finalEntry)
         return finalEntry
     }
     
-    public func deleteMemory(id: String, force: Bool = false) throws {
-        let memories = try database.getMemories()
+    public func deleteMemory(id: String, force: Bool = false) async throws {
+        let memories = try await database.getMemories()
         guard let entry = memories.first(where: { $0.id == id }) else {
             throw MemoryError.notFound
         }
@@ -105,10 +105,10 @@ public actor MemoryManager {
             }
         }
         
-        try database.deleteMemory(id: id)
+        try await database.deleteMemory(id: id)
     }
     
-    public func getMemories(tier: MemoryTier? = nil) throws -> [MemoryEntry] {
-        return try database.getMemories(tier: tier)
+    public func getMemories(tier: MemoryTier? = nil) async throws -> [MemoryEntry] {
+        return try await database.getMemories(tier: tier)
     }
 }

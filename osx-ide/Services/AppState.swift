@@ -12,7 +12,7 @@ import AppKit
 
 /// Main application state coordinator that manages interaction between specialized state managers
 @MainActor
-class AppState: ObservableObject {
+class AppState: ObservableObject, IDEContext {
     
     // MARK: - State Managers (Dependency Inversion)
     
@@ -48,11 +48,66 @@ class AppState: ObservableObject {
     let conversationManager: ConversationManagerProtocol
     let fileDialogService: FileDialogServiceProtocol
     let fileSystemService: FileSystemService
-    
-    private let projectSessionStore = ProjectSessionStore()
-    private weak var window: NSWindow?
-    private var saveSessionTask: Task<Void, Never>?
-    private var isRestoringSession: Bool = false
+
+    let eventBus: EventBusProtocol
+    let commandRegistry: CommandRegistry
+    let uiRegistry: UIRegistry
+    let diagnosticsStore: DiagnosticsStore
+
+    let windowProvider: WindowProvider
+    private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
+    private let configureCodebaseIndex: (URL) -> Void
+    private let setCodebaseIndexEnabledImpl: (Bool) -> Void
+    private let setAIEnrichmentIndexingEnabledImpl: (Bool) -> Void
+    private let reindexProjectNowImpl: () -> Void
+
+    private lazy var projectSessionCoordinator = ProjectSessionCoordinator(
+        workspace: workspace,
+        ui: ui,
+        fileEditor: fileEditor,
+        conversationManager: conversationManager,
+        getFileTreeExpandedRelativePaths: { [weak self] in
+            self?.fileTreeExpandedRelativePaths ?? []
+        },
+        setFileTreeExpandedRelativePaths: { [weak self] value in
+            self?.fileTreeExpandedRelativePaths = value
+        },
+        getShowHiddenFilesInFileTree: { [weak self] in
+            self?.showHiddenFilesInFileTree ?? false
+        },
+        setShowHiddenFilesInFileTree: { [weak self] value in
+            self?.showHiddenFilesInFileTree = value
+        },
+        relativePathForURL: { [weak self] url in
+            self?.relativePath(for: url)
+        },
+        loadFileFromURL: { [weak self] url in
+            self?.loadFile(from: url)
+        }
+    )
+
+    private lazy var workspaceLifecycleCoordinator = WorkspaceLifecycleCoordinator(
+        conversationManager: conversationManager,
+        configureCodebaseIndex: { projectRoot in
+            self.configureCodebaseIndex(projectRoot)
+        },
+        loadProjectSession: { [weak self] projectRoot in
+            await self?.projectSessionCoordinator.loadProjectSession(for: projectRoot)
+        }
+    )
+
+    private lazy var stateObservationCoordinator = StateObservationCoordinator(
+        fileEditor: fileEditor,
+        workspace: workspace,
+        ui: ui,
+        conversationManager: conversationManager,
+        onWorkspaceRootChange: { [weak self] newRoot in
+            self?.workspaceLifecycleCoordinator.workspaceRootDidChange(to: newRoot)
+        },
+        onPersistenceRelevantChange: { [weak self] in
+            self?.scheduleSaveProjectSession()
+        }
+    )
     
     // MARK: - Shared Contexts
     
@@ -80,7 +135,17 @@ class AppState: ObservableObject {
         fileEditorService: FileEditorServiceProtocol,
         conversationManager: ConversationManagerProtocol,
         fileDialogService: FileDialogServiceProtocol,
-        fileSystemService: FileSystemService
+        fileSystemService: FileSystemService,
+        eventBus: EventBusProtocol,
+        commandRegistry: CommandRegistry,
+        uiRegistry: UIRegistry,
+        diagnosticsStore: DiagnosticsStore,
+        windowProvider: WindowProvider,
+        codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
+        configureCodebaseIndex: @escaping (URL) -> Void,
+        setCodebaseIndexEnabled: @escaping (Bool) -> Void,
+        setAIEnrichmentIndexingEnabled: @escaping (Bool) -> Void,
+        reindexProjectNow: @escaping () -> Void
     ) {
         self.errorManager = errorManager
         self.uiService = uiService
@@ -89,6 +154,18 @@ class AppState: ObservableObject {
         self.conversationManager = conversationManager
         self.fileDialogService = fileDialogService
         self.fileSystemService = fileSystemService
+
+        self.eventBus = eventBus
+        self.commandRegistry = commandRegistry
+        self.uiRegistry = uiRegistry
+        self.diagnosticsStore = diagnosticsStore
+
+        self.windowProvider = windowProvider
+        self.codebaseIndexProvider = codebaseIndexProvider
+        self.configureCodebaseIndex = configureCodebaseIndex
+        self.setCodebaseIndexEnabledImpl = setCodebaseIndexEnabled
+        self.setAIEnrichmentIndexingEnabledImpl = setAIEnrichmentIndexingEnabled
+        self.reindexProjectNowImpl = reindexProjectNow
         
         // Initialize specialized state managers
         self.fileEditor = FileEditorStateManager(
@@ -99,35 +176,34 @@ class AppState: ObservableObject {
             workspaceService: workspaceService,
             fileDialogService: fileDialogService
         )
-        self.ui = UIStateManager(uiService: uiService)
+        self.ui = UIStateManager(uiService: uiService, eventBus: eventBus)
         
-        // Set up state observation
-        setupStateObservation()
+        stateObservationCoordinator.startObserving(
+            fileTreeExpandedRelativePathsPublisher: $fileTreeExpandedRelativePaths,
+            showHiddenFilesInFileTreePublisher: $showHiddenFilesInFileTree
+        )
 
-        if let root = self.workspace.currentDirectory {
-            Task { [weak self] in
-                await self?.loadProjectSession(for: root)
-            }
-        }
+        projectSessionCoordinator.loadProjectSessionIfAvailable()
     }
     
     func attachWindow(_ window: NSWindow) {
-        guard self.window !== window else { return }
-        self.window = window
+        projectSessionCoordinator.attachWindow(window)
+    }
 
-        NotificationCenter.default.publisher(for: NSWindow.didMoveNotification, object: window)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.scheduleSaveProjectSession()
-            }
-            .store(in: &cancellables)
+    var codebaseIndex: CodebaseIndexProtocol? {
+        codebaseIndexProvider()
+    }
 
-        NotificationCenter.default.publisher(for: NSWindow.didResizeNotification, object: window)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.scheduleSaveProjectSession()
-            }
-            .store(in: &cancellables)
+    func setCodebaseIndexEnabled(_ enabled: Bool) {
+        setCodebaseIndexEnabledImpl(enabled)
+    }
+
+    func setAIEnrichmentIndexingEnabled(_ enabled: Bool) {
+        setAIEnrichmentIndexingEnabledImpl(enabled)
+    }
+
+    func reindexProjectNow() {
+        reindexProjectNowImpl()
     }
     
     // MARK: - State Coordination Methods (Keep high-level orchestration)
@@ -210,65 +286,6 @@ class AppState: ObservableObject {
         return FileEditorStateManager.languageForFileExtension(fileExtension)
     }
 
-    // MARK: - Private Methods
-    private func setupStateObservation() {
-        // Observe file editor changes
-        fileEditor.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-        
-        // Observe workspace changes
-        workspace.$currentDirectory
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] newDir in
-                self?.objectWillChange.send()
-                guard let self else { return }
-                guard let newDir else { return }
-                self.conversationManager.updateProjectRoot(newDir)
-                DependencyContainer.shared.configureCodebaseIndex(projectRoot: newDir)
-
-                Task { [weak self] in
-                    await self?.loadProjectSession(for: newDir)
-                }
-            }
-            .store(in: &cancellables)
-        
-        // Observe UI changes
-        ui.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-                self?.scheduleSaveProjectSession()
-            }
-            .store(in: &cancellables)
-        
-        // Observe conversation changes
-        conversationManager.statePublisher
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-                self?.scheduleSaveProjectSession()
-            }
-            .store(in: &cancellables)
-
-        $fileTreeExpandedRelativePaths
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.scheduleSaveProjectSession()
-            }
-            .store(in: &cancellables)
-
-         $showHiddenFilesInFileTree
-             .receive(on: DispatchQueue.main)
-             .sink { [weak self] _ in
-                 self?.scheduleSaveProjectSession()
-             }
-             .store(in: &cancellables)
-    }
-
     /// Standardized method to resolve relative path from project root.
     func relativePath(for url: URL) -> String? {
         guard let projectRoot = workspace.currentDirectory?.standardizedFileURL else { return nil }
@@ -294,186 +311,7 @@ class AppState: ObservableObject {
     }
 
 
-    private func loadProjectSession(for projectRoot: URL) async {
-        isRestoringSession = true
-        defer { isRestoringSession = false }
-
-        await projectSessionStore.setProjectRoot(projectRoot)
-
-        guard let session = try? await projectSessionStore.load() else {
-            scheduleSaveProjectSession()
-            return
-        }
-
-        if let frame = session.windowFrame?.rect, let window {
-            window.setFrame(frame, display: true)
-        }
-
-        ui.isSidebarVisible = session.isSidebarVisible
-        ui.isTerminalVisible = session.isTerminalVisible
-        ui.isAIChatVisible = session.isAIChatVisible
-        ui.sidebarWidth = session.sidebarWidth
-        ui.terminalHeight = session.terminalHeight
-        ui.chatPanelWidth = session.chatPanelWidth
-
-         if let theme = AppTheme(rawValue: session.selectedThemeRawValue) {
-             ui.selectedTheme = theme
-         }
-         ui.showLineNumbers = session.showLineNumbers
-         ui.wordWrap = session.wordWrap
-         ui.minimapVisible = session.minimapVisible
-
-         showHiddenFilesInFileTree = session.showHiddenFilesInFileTree
-
-        if let mode = AIMode(rawValue: session.aiModeRawValue) {
-            conversationManager.currentMode = mode
-        }
-
-        fileTreeExpandedRelativePaths = Set(session.fileTreeExpandedRelativePaths)
-
-        fileEditor.newFile()
-
-        let splitAxis = FileEditorStateManager.SplitAxis(rawValue: session.splitAxisRawValue) ?? .vertical
-        fileEditor.splitAxis = splitAxis
-        fileEditor.isSplitEditor = session.isSplitEditor
-        let focused = FileEditorStateManager.PaneID(rawValue: session.focusedEditorPaneRawValue) ?? .primary
-        fileEditor.focusedPane = focused
-
-        let primaryRelPaths = !session.primaryOpenTabRelativePaths.isEmpty ? session.primaryOpenTabRelativePaths : session.openTabRelativePaths
-        let primaryActiveRel = session.primaryActiveTabRelativePath ?? session.activeTabRelativePath
-
-        if !primaryRelPaths.isEmpty {
-            fileEditor.focus(.primary)
-            for rel in primaryRelPaths {
-                let url = projectRoot.appendingPathComponent(rel)
-                let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-                if FileManager.default.fileExists(atPath: url.path), !isDir {
-                    loadFile(from: url)
-                }
-            }
-            if let activeRel = primaryActiveRel {
-                let activeURL = projectRoot.appendingPathComponent(activeRel)
-                fileEditor.activateTab(filePath: activeURL.path)
-            }
-        }
-
-        if session.isSplitEditor {
-            let secondaryRelPaths = session.secondaryOpenTabRelativePaths
-            if !secondaryRelPaths.isEmpty {
-                fileEditor.focus(.secondary)
-                for rel in secondaryRelPaths {
-                    let url = projectRoot.appendingPathComponent(rel)
-                    let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-                    if FileManager.default.fileExists(atPath: url.path), !isDir {
-                        loadFile(from: url)
-                    }
-                }
-                if let activeRel = session.secondaryActiveTabRelativePath {
-                    let activeURL = projectRoot.appendingPathComponent(activeRel)
-                    fileEditor.activateTab(filePath: activeURL.path)
-                }
-            }
-        }
-
-        fileEditor.focus(focused)
-
-        if primaryRelPaths.isEmpty, let rel = session.lastOpenFileRelativePath {
-            let url = projectRoot.appendingPathComponent(rel)
-            let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if FileManager.default.fileExists(atPath: url.path), !isDir {
-                loadFile(from: url)
-            }
-        }
-    }
-
     private func scheduleSaveProjectSession() {
-        guard !isRestoringSession else { return }
-        saveSessionTask?.cancel()
-        saveSessionTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                self.saveProjectSessionNow()
-            }
-        }
+        projectSessionCoordinator.scheduleSaveProjectSession()
     }
-
-    private func saveProjectSessionNow() {
-        guard !isRestoringSession else { return }
-        guard let projectRoot = workspace.currentDirectory else { return }
-
-        let windowFrame = window.map { ProjectSession.WindowFrame(rect: $0.frame) }
-        let lastOpenRelative: String?
-        let openTabRelatives: [String]
-        let activeRelative: String?
-
-        let focusedPane = fileEditor.focusedPane
-        let focusedPaneState = fileEditor.focusedPaneState
-
-        if let activeID = focusedPaneState.activeTabID, let activeTab = focusedPaneState.tabs.first(where: { $0.id == activeID }) {
-            activeRelative = relativePath(for: URL(fileURLWithPath: activeTab.filePath))
-        } else {
-            activeRelative = nil
-        }
-
-        openTabRelatives = focusedPaneState.tabs.compactMap { relativePath(for: URL(fileURLWithPath: $0.filePath)) }
-        lastOpenRelative = activeRelative
-
-        let primaryTabs = fileEditor.primaryPane.tabs.compactMap { relativePath(for: URL(fileURLWithPath: $0.filePath)) }
-        let secondaryTabs = fileEditor.secondaryPane.tabs.compactMap { relativePath(for: URL(fileURLWithPath: $0.filePath)) }
-
-        let primaryActive: String?
-        if let activeID = fileEditor.primaryPane.activeTabID, let tab = fileEditor.primaryPane.tabs.first(where: { $0.id == activeID }) {
-            primaryActive = relativePath(for: URL(fileURLWithPath: tab.filePath))
-        } else {
-            primaryActive = nil
-        }
-
-        let secondaryActive: String?
-        if let activeID = fileEditor.secondaryPane.activeTabID, let tab = fileEditor.secondaryPane.tabs.first(where: { $0.id == activeID }) {
-            secondaryActive = relativePath(for: URL(fileURLWithPath: tab.filePath))
-        } else {
-            secondaryActive = nil
-        }
-
-        let session = ProjectSession(
-            windowFrame: windowFrame,
-            isSidebarVisible: ui.isSidebarVisible,
-            isTerminalVisible: ui.isTerminalVisible,
-            isAIChatVisible: ui.isAIChatVisible,
-            sidebarWidth: ui.sidebarWidth,
-            terminalHeight: ui.terminalHeight,
-            chatPanelWidth: ui.chatPanelWidth,
-
-             selectedThemeRawValue: ui.selectedTheme.rawValue,
-
-             showLineNumbers: ui.showLineNumbers,
-             wordWrap: ui.wordWrap,
-             minimapVisible: ui.minimapVisible,
-
-             showHiddenFilesInFileTree: showHiddenFilesInFileTree,
-
-            aiModeRawValue: conversationManager.currentMode.rawValue,
-            lastOpenFileRelativePath: lastOpenRelative,
-            openTabRelativePaths: openTabRelatives,
-            activeTabRelativePath: activeRelative,
-
-            isSplitEditor: fileEditor.isSplitEditor,
-            splitAxisRawValue: fileEditor.splitAxis.rawValue,
-            focusedEditorPaneRawValue: focusedPane.rawValue,
-            primaryOpenTabRelativePaths: primaryTabs,
-            primaryActiveTabRelativePath: primaryActive,
-            secondaryOpenTabRelativePaths: secondaryTabs,
-            secondaryActiveTabRelativePath: secondaryActive,
-
-            fileTreeExpandedRelativePaths: fileTreeExpandedRelativePaths.sorted()
-        )
-
-        Task {
-            await projectSessionStore.setProjectRoot(projectRoot)
-            try? await projectSessionStore.save(session)
-        }
-    }
-    
-    private var cancellables = Set<AnyCancellable>()
 }

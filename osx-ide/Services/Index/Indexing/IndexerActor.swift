@@ -9,10 +9,10 @@ import Foundation
 import CryptoKit
 
 public actor IndexerActor {
-    private let database: DatabaseManager
+    private let database: DatabaseStore
     private let config: IndexConfiguration
     
-    public init(database: DatabaseManager, config: IndexConfiguration = .default) {
+    public init(database: DatabaseStore, config: IndexConfiguration = .default) {
         self.database = database
         self.config = config
     }
@@ -31,14 +31,14 @@ public actor IndexerActor {
         let resourceId = url.absoluteString // Simple ID for now
         let fileModTime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
 
-        let existingModTime: Double? = (try? database.getResourceLastModified(resourceId: resourceId)) ?? nil
+        let existingModTime: Double? = (try? await database.getResourceLastModified(resourceId: resourceId)) ?? nil
         if let fileModTime,
            let existingModTime,
            abs(existingModTime - fileModTime) < 0.000_001 {
             // Modtimes can have limited resolution; verify hash before skipping.
             let content = try String(contentsOf: url, encoding: .utf8)
             let currentHash = computeHash(for: content)
-            let existingHash = (try? database.getResourceContentHash(resourceId: resourceId)) ?? nil
+            let existingHash = (try? await database.getResourceContentHash(resourceId: resourceId)) ?? nil
 
             if let existingHash, !existingHash.isEmpty, existingHash == currentHash {
                 await IndexLogger.shared.log("IndexerActor: File \(url.lastPathComponent) already indexed (hash match), skipping")
@@ -51,37 +51,27 @@ public actor IndexerActor {
             await IndexLogger.shared.log("IndexerActor: Indexing \(url.lastPathComponent) (Language: \(language.rawValue))")
             let timestamp = fileModTime
 
-            let sql = """
-            INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-            VALUES (?, ?, ?, ?, ?, 0.0)
-            ON CONFLICT(id) DO UPDATE SET
-                last_modified = excluded.last_modified,
-                content_hash = excluded.content_hash,
-                language = excluded.language;
-            """
-
-            try database.execute(sql: sql, parameters: [resourceId, url.path, language.rawValue, timestamp, currentHash])
-
-            // Populate FTS table for full-text search
-            let ftsDeleteSql = "DELETE FROM resources_fts WHERE content_id = ?;"
-            let ftsInsertSql = "INSERT INTO resources_fts (path, content, content_id) VALUES (?, ?, ?);"
-            try database.transaction {
-                try database.execute(sql: ftsDeleteSql, parameters: [resourceId])
-                try database.execute(sql: ftsInsertSql, parameters: [url.path, content, resourceId])
-            }
+            try await database.upsertResourceAndFTS(
+                resourceId: resourceId,
+                path: url.path,
+                language: language.rawValue,
+                timestamp: timestamp,
+                contentHash: currentHash,
+                content: content
+            )
 
             // Extract symbols if supported language
             let symbols: [Symbol]
             if let module = await LanguageModuleManager.shared.getModule(for: language) {
-                symbols = module.parseSymbols(content: content, resourceId: resourceId)
+                symbols = module.symbolExtractor.extractSymbols(content: content, resourceId: resourceId)
             } else {
                 symbols = []
             }
 
             if !symbols.isEmpty {
                 await IndexLogger.shared.log("IndexerActor: Extracted \(symbols.count) symbols from \(url.lastPathComponent)")
-                try database.deleteSymbols(for: resourceId)
-                try database.saveSymbols(symbols)
+                try await database.deleteSymbols(for: resourceId)
+                try await database.saveSymbolsBatched(symbols)
             }
 
             return
@@ -103,37 +93,36 @@ public actor IndexerActor {
             language = excluded.language;
         """
         
-        try database.execute(sql: sql, parameters: [resourceId, url.path, language.rawValue, timestamp, contentHash])
-        
-        // Populate FTS table for full-text search
-        let ftsDeleteSql = "DELETE FROM resources_fts WHERE content_id = ?;"
-        let ftsInsertSql = "INSERT INTO resources_fts (path, content, content_id) VALUES (?, ?, ?);"
-        try database.transaction {
-            try database.execute(sql: ftsDeleteSql, parameters: [resourceId])
-            try database.execute(sql: ftsInsertSql, parameters: [url.path, content, resourceId])
-        }
+        try await database.upsertResourceAndFTS(
+            resourceId: resourceId,
+            path: url.path,
+            language: language.rawValue,
+            timestamp: timestamp,
+            contentHash: contentHash,
+            content: content
+        )
         
         // Extract symbols if supported language
         let symbols: [Symbol]
         if let module = await LanguageModuleManager.shared.getModule(for: language) {
-            symbols = module.parseSymbols(content: content, resourceId: resourceId)
+            symbols = module.symbolExtractor.extractSymbols(content: content, resourceId: resourceId)
         } else {
             symbols = []
         }
 
         if !symbols.isEmpty {
             await IndexLogger.shared.log("IndexerActor: Extracted \(symbols.count) symbols from \(url.lastPathComponent)")
-            try database.deleteSymbols(for: resourceId)
-            try database.saveSymbols(symbols)
+            try await database.deleteSymbols(for: resourceId)
+            try await database.saveSymbolsBatched(symbols)
         }
     }
     
     public func removeFile(at url: URL) async throws {
         let resourceId = url.absoluteString
-        let sql = "DELETE FROM resources WHERE id = ?;"
-        try database.execute(sql: sql, parameters: [resourceId])
+        try await database.deleteResource(resourceId: resourceId)
+
         // Cascade delete should handle symbols, but let's be safe if we didn't enable foreign keys
-        try database.deleteSymbols(for: resourceId)
+        try await database.deleteSymbols(for: resourceId)
     }
     
     private func computeHash(for content: String) -> String {

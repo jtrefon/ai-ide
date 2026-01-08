@@ -4,6 +4,8 @@ import Foundation
 
 struct GoToSymbolOverlayView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject private var workspace: WorkspaceStateManager
+    @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
 
     @State private var query: String = ""
@@ -13,6 +15,13 @@ struct GoToSymbolOverlayView: View {
 
     @State private var searchService: WorkspaceSymbolSearchService?
 
+    init(appState: AppState, isPresented: Binding<Bool>) {
+        self.appState = appState
+        self._workspace = ObservedObject(wrappedValue: appState.workspace)
+        self._fileEditor = ObservedObject(wrappedValue: appState.fileEditor)
+        self._isPresented = isPresented
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 8) {
@@ -21,7 +30,7 @@ struct GoToSymbolOverlayView: View {
 
                 TextField("Type a symbol…", text: $query)
                     .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 520)
+                    .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
                     .onSubmit {
                         openFirst(openToSide: NSEvent.modifierFlags.contains(.command))
                     }
@@ -37,15 +46,15 @@ struct GoToSymbolOverlayView: View {
             }
 
             List {
-                ForEach(results) { item in
+                ForEach(results, id: \.id) { item in
                     Button(action: {
                         open(item: item, openToSide: NSEvent.modifierFlags.contains(.command))
                     }) {
-                        HStack(spacing: 10) {
+                        HStack(spacing: AppConstants.Overlay.listItemSpacing) {
                             Text(item.kind.rawValue)
                                 .font(.system(.caption, design: .monospaced))
                                 .foregroundColor(.secondary)
-                                .frame(width: 70, alignment: .leading)
+                                .frame(width: AppConstants.Overlay.listItemKindWidth, alignment: .leading)
 
                             Text(item.name)
                                 .lineLimit(1)
@@ -61,15 +70,15 @@ struct GoToSymbolOverlayView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .frame(minWidth: 760, minHeight: 420)
+            .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
-        .padding(16)
+        .padding(AppConstants.Overlay.containerPadding)
         .background(.regularMaterial)
-        .cornerRadius(12)
-        .shadow(radius: 30)
+        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
+        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             if searchService == nil {
-                searchService = WorkspaceSymbolSearchService(codebaseIndexProvider: { DependencyContainer.shared.codebaseIndex })
+                searchService = WorkspaceSymbolSearchService(codebaseIndexProvider: { appState.codebaseIndex })
             }
             query = ""
             refreshResults()
@@ -85,13 +94,13 @@ struct GoToSymbolOverlayView: View {
     private func debounceSearch() {
         searchTask?.cancel()
         searchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 150_000_000)
+            try? await Task.sleep(nanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds)
             refreshResults()
         }
     }
 
     private func refreshResults() {
-        guard let root = appState.workspace.currentDirectory?.standardizedFileURL else {
+        guard let root = workspace.currentDirectory?.standardizedFileURL else {
             results = []
             return
         }
@@ -101,23 +110,25 @@ struct GoToSymbolOverlayView: View {
             return
         }
 
-        let currentFilePath = appState.fileEditor.selectedFile
-        let currentLanguage = appState.fileEditor.editorLanguage
-        let currentContent = appState.fileEditor.editorContent
+        let currentFilePath = fileEditor.selectedFile
+        let currentLanguage = fileEditor.editorLanguage
+        let currentContent = fileEditor.editorContent
 
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
 
         isSearching = true
-        defer { isSearching = false }
-
-        results = searchService.search(
-            query: trimmed,
-            projectRoot: root,
-            currentFilePath: currentFilePath,
-            currentContent: currentContent,
-            currentLanguage: currentLanguage,
-            limit: 200
-        )
+        Task { @MainActor in
+            let newResults = await searchService.search(
+                query: trimmed,
+                projectRoot: root,
+                currentFilePath: currentFilePath,
+                currentContent: currentContent,
+                currentLanguage: currentLanguage,
+                limit: 200
+            )
+            self.results = newResults
+            self.isSearching = false
+        }
     }
 
     private func openFirst(openToSide: Bool) {
@@ -126,16 +137,16 @@ struct GoToSymbolOverlayView: View {
     }
 
     private func open(item: WorkspaceSymbolLocation, openToSide: Bool) {
-        guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+        guard let root = workspace.currentDirectory?.standardizedFileURL else { return }
 
         do {
-            let url = try PathValidator(projectRoot: root).validateAndResolve(item.relativePath)
+            let url = try appState.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(item.relativePath)
             if openToSide {
-                appState.fileEditor.openInOtherPane(from: url)
+                fileEditor.openInOtherPane(from: url)
             } else {
                 appState.loadFile(from: url)
             }
-            appState.fileEditor.selectLine(item.line)
+            fileEditor.selectLine(item.line)
             close()
         } catch {
             appState.lastError = error.localizedDescription

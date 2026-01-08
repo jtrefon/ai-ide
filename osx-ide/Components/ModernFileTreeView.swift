@@ -122,7 +122,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
     private var lastSearchQuery: String = ""
     private var lastShowHiddenFiles: Bool = false
     private var fontSize: Double = 13
-    private var fontFamily: String = "SF Mono"
+    private var fontFamily: String = AppConstants.Editor.defaultFontFamily
 
     init(
         expandedRelativePaths: Binding<Set<String>>,

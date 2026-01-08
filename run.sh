@@ -12,8 +12,10 @@ show_help() {
     echo "Commands:"
     echo "  app    Build and launch the application"
     echo "  build  Build the application"
-    echo "  test   Run unit tests"
-    echo "  e2e    Run UI (end-to-end) tests"
+    echo "  test   Run unit tests [optional suite]"
+    echo "         Examples: ./run.sh test | ./run.sh test JSONHighlighterTests | ./run.sh test json"
+    echo "  e2e    Run UI (end-to-end) tests [optional suite]"
+    echo "         Examples: ./run.sh e2e | ./run.sh e2e TerminalEchoUITests | ./run.sh e2e json"
     echo "  clean  Clean build artifacts"
     echo "  help   Show this help message"
 }
@@ -41,23 +43,51 @@ launch_app() {
 }
 
 run_tests() {
+    local suite=$1
     echo "Running unit tests..."
-    xcodebuild -project "$PROJECT_NAME.xcodeproj" \
-               -scheme "$SCHEME" \
-               -configuration Debug \
-               -derivedDataPath "$DERIVED_DATA_PATH" \
-               -destination 'platform=macOS' \
-               test -only-testing:osx-ideTests
+    if [ -n "$suite" ]; then
+        if [ "$suite" = "json" ]; then
+            suite="JSONHighlighterTests"
+        fi
+        echo "Filtering by suite: $suite"
+        xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+                   -scheme "$SCHEME" \
+                   -configuration Debug \
+                   -derivedDataPath "$DERIVED_DATA_PATH" \
+                   -destination 'platform=macOS' \
+                   test -only-testing:osx-ideTests/"$suite"
+    else
+        xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+                   -scheme "$SCHEME" \
+                   -configuration Debug \
+                   -derivedDataPath "$DERIVED_DATA_PATH" \
+                   -destination 'platform=macOS' \
+                   test -only-testing:osx-ideTests
+    fi
 }
 
 run_e2e() {
+    local suite=$1
     echo "Running UI tests..."
-    xcodebuild -project "$PROJECT_NAME.xcodeproj" \
-               -scheme "$SCHEME" \
-               -configuration Debug \
-               -derivedDataPath "$DERIVED_DATA_PATH" \
-               -destination 'platform=macOS' \
-               test -only-testing:osx-ideUITests
+    if [ -n "$suite" ]; then
+        if [ "$suite" = "json" ]; then
+            suite="JSONHighlighterUITests"
+        fi
+        echo "Filtering by suite: $suite"
+        xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+                   -scheme "$SCHEME" \
+                   -configuration Debug \
+                   -derivedDataPath "$DERIVED_DATA_PATH" \
+                   -destination 'platform=macOS' \
+                   test -only-testing:osx-ideUITests/"$suite"
+    else
+        xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+                   -scheme "$SCHEME" \
+                   -configuration Debug \
+                   -derivedDataPath "$DERIVED_DATA_PATH" \
+                   -destination 'platform=macOS' \
+                   test -only-testing:osx-ideUITests
+    fi
 }
 
 clean() {
@@ -79,10 +109,10 @@ case "$COMMAND" in
         build_app
         ;;
     test)
-        run_tests
+        run_tests "$2"
         ;;
     e2e)
-        run_e2e
+        run_e2e "$2"
         ;;
     clean)
         clean

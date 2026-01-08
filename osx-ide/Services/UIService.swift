@@ -12,10 +12,12 @@ import SwiftUI
 @MainActor
 final class UIService: UIServiceProtocol {
     private let errorManager: ErrorManagerProtocol
-    private let userDefaults = UserDefaults.standard
+    private let eventBus: EventBusProtocol
+    private let settingsStore = SettingsStore(userDefaults: .standard)
     
-    init(errorManager: ErrorManagerProtocol) {
+    init(errorManager: ErrorManagerProtocol, eventBus: EventBusProtocol) {
         self.errorManager = errorManager
+        self.eventBus = eventBus
     }
     
     // MARK: - Theme Management
@@ -33,18 +35,18 @@ final class UIService: UIServiceProtocol {
             errorManager.handle(.invalidFilePath("Font size must be between \(AppConstants.Editor.minFontSize) and \(AppConstants.Editor.maxFontSize)"))
             return
         }
-        userDefaults.set(size, forKey: AppConstants.Storage.fontSizeKey)
+        settingsStore.set(size, forKey: AppConstants.Storage.fontSizeKey)
     }
     
     /// Update font family
     func setFontFamily(_ family: String) {
-        userDefaults.set(family, forKey: AppConstants.Storage.fontFamilyKey)
+        settingsStore.set(family, forKey: AppConstants.Storage.fontFamilyKey)
     }
 
     // MARK: - Indentation
 
     func setIndentationStyle(_ style: IndentationStyle) {
-        userDefaults.set(style.rawValue, forKey: AppConstants.Storage.indentationStyleKey)
+        settingsStore.set(style.rawValue, forKey: AppConstants.Storage.indentationStyleKey)
     }
     
     // MARK: - Editor Settings
@@ -68,17 +70,17 @@ final class UIService: UIServiceProtocol {
     
     /// Update sidebar width
     func setSidebarWidth(_ width: Double) {
-        EventBus.shared.publish(SidebarWidthChangedEvent(width: width))
+        eventBus.publish(SidebarWidthChangedEvent(width: width))
     }
     
     /// Update terminal height
     func setTerminalHeight(_ height: Double) {
-        EventBus.shared.publish(TerminalHeightChangedEvent(height: height))
+        eventBus.publish(TerminalHeightChangedEvent(height: height))
     }
     
     /// Update chat panel width
     func setChatPanelWidth(_ width: Double) {
-        EventBus.shared.publish(ChatPanelWidthChangedEvent(width: width))
+        eventBus.publish(ChatPanelWidthChangedEvent(width: width))
     }
     
     // MARK: - Settings Persistence
@@ -87,7 +89,7 @@ final class UIService: UIServiceProtocol {
     func loadSettings() -> UISettings {
         let storedTheme: AppTheme = .system
         
-        let storedFontSize = userDefaults.double(forKey: AppConstants.Storage.fontSizeKey)
+        let storedFontSize = settingsStore.double(forKey: AppConstants.Storage.fontSizeKey)
         let fontSize = storedFontSize == 0 ? AppConstants.Editor.defaultFontSize : storedFontSize
         
         let sidebarWidth = AppConstants.Layout.defaultSidebarWidth
@@ -98,12 +100,12 @@ final class UIService: UIServiceProtocol {
         let wordWrap: Bool = false
         let minimapVisible: Bool = false
 
-        let indentationStyle = IndentationStyle.current(userDefaults: userDefaults)
+        let indentationStyle = IndentationStyle.current(userDefaults: .standard)
         
         return UISettings(
             selectedTheme: storedTheme,
             fontSize: fontSize,
-            fontFamily: userDefaults.string(forKey: AppConstants.Storage.fontFamilyKey) ?? "SF Mono",
+            fontFamily: settingsStore.string(forKey: AppConstants.Storage.fontFamilyKey) ?? AppConstants.Editor.defaultFontFamily,
             indentationStyle: indentationStyle,
             showLineNumbers: showLineNumbers,
             wordWrap: wordWrap,
@@ -135,7 +137,7 @@ final class UIService: UIServiceProtocol {
             AppConstants.Storage.fontFamilyKey,
             AppConstants.Storage.indentationStyleKey
         ]
-        keys.forEach { userDefaults.removeObject(forKey: $0) }
+        keys.forEach { settingsStore.removeObject(forKey: $0) }
     }
     
     /// Export current settings

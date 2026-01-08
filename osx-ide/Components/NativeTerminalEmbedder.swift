@@ -37,12 +37,48 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     private var cursorColumn: Int = 0
     private var currentTextAttributes: [NSAttributedString.Key: Any] = [:]
     private var pendingEraseToEndOfLine: Bool = false
-    
-    init(shellManager: ShellManaging = ShellManager()) {
+
+    private let eventBus: EventBusProtocol
+
+    init(shellManager: ShellManaging = ShellManager(), eventBus: EventBusProtocol) {
         self.shellManager = shellManager
+        self.eventBus = eventBus
         super.init()
         shellManager.delegate = self
     }
+
+    final class TerminalTextView: NSTextView {
+        weak var inputDelegate: NativeTerminalEmbedder?
+
+        override func keyDown(with event: NSEvent) {
+            if let s = event.characters {
+                inputDelegate?.shellManager.sendInput(s)
+            }
+        }
+
+        override func doCommand(by selector: Selector) {
+            guard let inputDelegate else {
+                super.doCommand(by: selector)
+                return
+            }
+
+            if selector == #selector(NSResponder.insertNewline(_:)) {
+                inputDelegate.shellManager.sendInput("\n")
+                return
+            }
+            if selector == #selector(NSResponder.deleteBackward(_:)) {
+                inputDelegate.shellManager.sendInput("\u{7F}")
+                return
+            }
+            if selector == #selector(NSResponder.cancelOperation(_:)) {
+                inputDelegate.shellManager.interrupt()
+                return
+            }
+
+            super.doCommand(by: selector)
+        }
+    }
+    
     
     deinit {
         // Observer cleanup is handled in removeEmbedding
@@ -100,8 +136,9 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         scrollView.backgroundColor = NSColor.black
         scrollView.drawsBackground = true
         
-        let terminalView = NSTextView()
-        terminalView.isEditable = true
+        let terminalView = TerminalTextView()
+        terminalView.inputDelegate = self
+        terminalView.isEditable = false
         terminalView.isSelectable = true
         terminalView.isRichText = false
         terminalView.usesRuler = false
@@ -180,15 +217,28 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     private func appendOutput(_ text: String) {
         guard !isCleaningUp, terminalView != nil else { return }
 
+        eventBus.publish(TerminalOutputProducedEvent(output: text))
+
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let terminalView = self.terminalView, !self.isCleaningUp else { return }
+            let shouldAutoscroll = self.isNearBottom(terminalView)
             self.applyTerminalOutput(text, to: terminalView)
 
-            let range = NSRange(location: terminalView.string.count, length: 0)
-            terminalView.setSelectedRange(range)
-            terminalView.scrollRangeToVisible(range)
-            terminalView.needsDisplay = true
+            if shouldAutoscroll {
+                let range = NSRange(location: terminalView.string.count, length: 0)
+                terminalView.setSelectedRange(range)
+                terminalView.scrollRangeToVisible(range)
+            }
         }
+    }
+
+    private func isNearBottom(_ terminalView: NSTextView) -> Bool {
+        guard let scrollView = terminalView.enclosingScrollView else { return true }
+        let contentHeight = scrollView.contentView.bounds.height
+        let maxY = scrollView.contentView.bounds.maxY
+        let docHeight = scrollView.documentView?.bounds.height ?? 0
+        if contentHeight <= 0 { return true }
+        return (docHeight - maxY) < max(40, contentHeight * 0.15)
     }
 
     private func applyTerminalOutput(_ text: String, to terminalView: NSTextView) {
@@ -617,27 +667,7 @@ extension NativeTerminalEmbedder: ShellManagerDelegate {
 
 // MARK: - NSTextViewDelegate
 extension NativeTerminalEmbedder: NSTextViewDelegate {
-    func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        guard !isCleaningUp else { return false }
-        
-        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-            shellManager.sendInput("\n")
-            return true // Prevent local newline handling
-        } else if commandSelector == #selector(NSResponder.deleteBackward(_:)) {
-            shellManager.sendInput("\u{7F}")
-            return true // Prevent local backspace handling
-        } else if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
-            shellManager.interrupt()
-            return false
-        }
-        
-        return false
-    }
-    
-    func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
-        guard !isCleaningUp, let replacementString = replacementString else { return false }
-        shellManager.sendInput(replacementString)
-        // Return false to prevent local echo - the shell will echo back the input
-        return false
-    }
+    func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool { false }
+
+    func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool { false }
 }

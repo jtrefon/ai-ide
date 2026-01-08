@@ -6,22 +6,22 @@ public struct SymbolSearchResult: Sendable {
     public let filePath: String?
 }
 
-public final class QueryService {
-    private let database: DatabaseManager
+public struct QueryService: Sendable {
+    private let database: DatabaseStore
 
-    public init(database: DatabaseManager) {
+    public init(database: DatabaseStore) {
         self.database = database
     }
 
-    public func searchSymbols(nameLike query: String, limit: Int = 50) throws -> [Symbol] {
-        try database.searchSymbols(nameLike: query, limit: limit)
+    public func searchSymbols(nameLike query: String, limit: Int = 50) async throws -> [Symbol] {
+        try await database.searchSymbols(nameLike: query, limit: limit)
     }
 
-    public func searchSymbolsWithPaths(nameLike query: String, limit: Int = 50) throws -> [SymbolSearchResult] {
-        try database.searchSymbolsWithPaths(nameLike: query, limit: limit)
+    public func searchSymbolsWithPaths(nameLike query: String, limit: Int = 50) async throws -> [SymbolSearchResult] {
+        try await database.searchSymbolsWithPaths(nameLike: query, limit: limit)
     }
 
-    public func getMemories(tier: MemoryTier? = nil) throws -> [MemoryEntry] {
-        try database.getMemories(tier: tier)
+    public func getMemories(tier: MemoryTier? = nil) async throws -> [MemoryEntry] {
+        try await database.getMemories(tier: tier)
     }
 }

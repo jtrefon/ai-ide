@@ -38,7 +38,7 @@ final class TerminalStressTests: XCTestCase {
         try await super.setUp()
         _ = NSApplication.shared
         mockShellManager = NoOpShellManager()
-        embedder = NativeTerminalEmbedder(shellManager: mockShellManager)
+        embedder = NativeTerminalEmbedder(shellManager: mockShellManager, eventBus: EventBus())
         parentView = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
     }
     

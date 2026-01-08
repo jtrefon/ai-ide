@@ -15,7 +15,7 @@ struct CodePreviewView: View {
     var fontFamily: String
     @State private var isCopied = false
     
-    init(code: String, language: String? = nil, title: String = "Code Preview", fontSize: Double = 12, fontFamily: String = "SF Mono") {
+    init(code: String, language: String? = nil, title: String = "Code Preview", fontSize: Double = 12, fontFamily: String = AppConstants.Editor.defaultFontFamily) {
         self.code = code
         self.language = language
         self.title = title
@@ -90,7 +90,7 @@ struct CodePreviewView_Previews: PreviewProvider {
         CodePreviewView(
             code: "func helloWorld() {\n    print(\"Hello, World!\")\n}",
             fontSize: 12,
-            fontFamily: "SF Mono"
+            fontFamily: AppConstants.Editor.defaultFontFamily
         )
         .padding()
     }

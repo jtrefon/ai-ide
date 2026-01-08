@@ -34,10 +34,10 @@ struct SettingsCard<Content: View>: View {
             
             content
         }
-        .padding(16)
-        .nativeGlassBackground(.panel, cornerRadius: 16)
+        .padding(AppConstants.Settings.cardPadding)
+        .nativeGlassBackground(.panel, cornerRadius: AppConstants.Settings.cardCornerRadius)
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: AppConstants.Settings.cardCornerRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.06), lineWidth: 0.8)
         )
     }
@@ -62,11 +62,11 @@ struct SettingsRow<Control: View>: View {
     }
     
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: AppConstants.Settings.rowSpacing) {
             Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: AppConstants.Settings.iconSize, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 24)
+                .frame(width: AppConstants.Settings.iconFrameWidth)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -95,7 +95,7 @@ struct SettingsStatusPill: View {
                 .frame(width: 6, height: 6)
             
             Text(status.message)
-                .font(.caption)
+                .font(.system(size: AppConstants.Settings.statusTextSize))
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 10)

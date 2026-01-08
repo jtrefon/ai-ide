@@ -7,12 +7,12 @@
 
 import SwiftUI
 
-struct FileExplorerView: View {
-    @ObservedObject var appState: AppState
+struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
+    @ObservedObject var context: Context
     @State private var searchQuery: String = ""
     @State private var refreshToken: Int = 0
 
-    private var showHiddenFiles: Bool { appState.showHiddenFilesInFileTree }
+    private var showHiddenFiles: Bool { context.showHiddenFilesInFileTree }
 
     // State for new file/folder creation
     @State private var isShowingNewFileSheet = false
@@ -27,17 +27,17 @@ struct FileExplorerView: View {
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: max(10, appState.ui.fontSize - 2)))
+                        .font(.system(size: max(10, context.ui.fontSize - 2)))
                         .foregroundColor(.secondary)
                     
                     TextField("Search...", text: $searchQuery)
                         .textFieldStyle(.plain)
-                        .font(.system(size: CGFloat(appState.ui.fontSize)))
+                        .font(.system(size: CGFloat(context.ui.fontSize)))
                     
                     if !searchQuery.isEmpty {
                         Button(action: { searchQuery = "" }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: max(10, appState.ui.fontSize - 2)))
+                                .font(.system(size: max(10, context.ui.fontSize - 2)))
                                 .foregroundColor(.secondary)
                         }
                         .buttonStyle(.plain)
@@ -55,7 +55,7 @@ struct FileExplorerView: View {
                     refreshToken += 1
                 }) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: max(10, appState.ui.fontSize - 2))) 
+                        .font(.system(size: max(10, context.ui.fontSize - 2))) 
                 }
                 .buttonStyle(BorderlessButtonStyle())
                 .help("Refresh")
@@ -65,35 +65,34 @@ struct FileExplorerView: View {
             .background(Color(NSColor.windowBackgroundColor))
             // Modern macOS v26 file tree with subtle styling
             ModernFileTreeView(
-                rootURL: appState.workspace.currentDirectory ?? FileManager.default.temporaryDirectory,
+                rootURL: context.workspace.currentDirectory ?? FileManager.default.temporaryDirectory,
                 searchQuery: $searchQuery,
                 expandedRelativePaths: Binding(
-                    get: { appState.fileTreeExpandedRelativePaths },
-                    set: { appState.fileTreeExpandedRelativePaths = $0 }
+                    get: { context.fileTreeExpandedRelativePaths },
+                    set: { context.fileTreeExpandedRelativePaths = $0 }
                 ),
-                selectedRelativePath: $appState.fileTreeSelectedRelativePath,
+                selectedRelativePath: Binding(
+                    get: { context.fileTreeSelectedRelativePath },
+                    set: { context.fileTreeSelectedRelativePath = $0 }
+                ),
                 showHiddenFiles: showHiddenFiles,
                 refreshToken: refreshToken,
                 onOpenFile: { url in
                     Task {
-                        try? await CommandRegistry.shared.execute(.explorerOpenSelection, args: [
-                            "path": url.path
-                        ])
+                        try? await context.commandRegistry.execute(.explorerOpenSelection, args: ExplorerPathArgs(path: url.path))
                     }
                 },
                 onCreateFile: { directory, name in
-                    appState.workspaceService.createFile(named: name, in: directory)
+                    context.workspaceService.createFile(named: name, in: directory)
                     refreshToken += 1
                 },
                 onCreateFolder: { directory, name in
-                    appState.workspaceService.createFolder(named: name, in: directory)
+                    context.workspaceService.createFolder(named: name, in: directory)
                     refreshToken += 1
                 },
                 onDeleteItem: { url in
                     Task {
-                        try? await CommandRegistry.shared.execute(.explorerDeleteSelection, args: [
-                            "path": url.path
-                        ])
+                        try? await context.commandRegistry.execute(.explorerDeleteSelection, args: ExplorerPathArgs(path: url.path))
                         await MainActor.run {
                             refreshToken += 1
                             syncSelectionFromAppState()
@@ -102,10 +101,7 @@ struct FileExplorerView: View {
                 },
                 onRenameItem: { url, newName in
                     Task {
-                        try? await CommandRegistry.shared.execute(.explorerRenameSelection, args: [
-                            "path": url.path,
-                            "newName": newName
-                        ])
+                        try? await context.commandRegistry.execute(.explorerRenameSelection, args: ExplorerRenameArgs(path: url.path, newName: newName))
                         await MainActor.run {
                             refreshToken += 1
                             syncSelectionFromAppState()
@@ -114,13 +110,11 @@ struct FileExplorerView: View {
                 },
                 onRevealInFinder: { url in
                     Task {
-                        try? await CommandRegistry.shared.execute(.explorerRevealInFinder, args: [
-                            "path": url.path
-                        ])
+                        try? await context.commandRegistry.execute(.explorerRevealInFinder, args: ExplorerPathArgs(path: url.path))
                     }
                 },
-                fontSize: appState.ui.fontSize,
-                fontFamily: appState.ui.fontFamily
+                fontSize: context.ui.fontSize,
+                fontFamily: context.ui.fontFamily
             )
             .background(Color(NSColor.windowBackgroundColor))
             .contextMenu {
@@ -188,22 +182,22 @@ struct FileExplorerView: View {
         .onAppear {
             syncSelectionFromAppState()
         }
-        .onChange(of: appState.workspace.currentDirectory) {
+        .onChange(of: context.workspace.currentDirectory) {
             refreshToken += 1
             syncSelectionFromAppState()
         }
-        .onChange(of: appState.fileEditor.selectedFile) {
+        .onChange(of: context.fileEditor.selectedFile) {
             syncSelectionFromAppState()
         }
     }
 
     private func syncSelectionFromAppState() {
-        guard let selectedFilePath = appState.fileEditor.selectedFile else {
-            appState.fileTreeSelectedRelativePath = nil
+        guard let selectedFilePath = context.fileEditor.selectedFile else {
+            context.fileTreeSelectedRelativePath = nil
             return
         }
         let selectedURL = URL(fileURLWithPath: selectedFilePath)
-        appState.fileTreeSelectedRelativePath = appState.relativePath(for: selectedURL)
+        context.fileTreeSelectedRelativePath = context.relativePath(for: selectedURL)
     }
 
     private func createNewFile() {
@@ -211,7 +205,7 @@ struct FileExplorerView: View {
         let trimmedName = newFileName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
         
-        appState.workspace.createFile(named: trimmedName)
+        context.workspace.createFile(named: trimmedName)
         refreshToken += 1
     }
 
@@ -220,12 +214,12 @@ struct FileExplorerView: View {
         let trimmedName = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
         
-        appState.workspace.createFolder(named: trimmedName)
+        context.workspace.createFolder(named: trimmedName)
         refreshToken += 1
     }
 }
 
 #Preview {
-    FileExplorerView(appState: DependencyContainer.shared.makeAppState())
+    FileExplorerView(context: DependencyContainer().makeAppState())
         .frame(width: 250, height: 400)
 }
