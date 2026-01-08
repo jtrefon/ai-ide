@@ -78,6 +78,7 @@ Each language module can implement one or more capabilities. This keeps the syst
   - Provide scaffold by creating language/framework specific files, folders, and structures (supported by right click menu).
 
 ### Architectural implications
+
 - The index, navigation, and search layers should treat “language support” as an injected dependency (providers/modules), not a special-case branch.
 - Any “fallback” parsing must be explicitly positioned as:
   - best-effort
@@ -85,6 +86,7 @@ Each language module can implement one or more capabilities. This keeps the syst
   - replaceable when a more robust capability implementation is added.
 
 ### Current foundation (already in-progress)
+
 - Language modules + enable/disable list
 - Syntax highlighting pipeline
 - CodebaseIndex symbol tables and indexed search surfaces with graceful fallback
@@ -94,6 +96,7 @@ Each language module can implement one or more capabilities. This keeps the syst
 - Shipping a vendor SDK/parser as a core dependency requirement.
 
 ## File browser
+
 - [x] File menu: new file / new project
   - **Primary surface**: File menu + Command palette.
   - **Command IDs**: `file.new`, `project.new`.
