@@ -194,14 +194,48 @@ final class SyntaxHighlighter {
     }
 
     private func applyJSONHighlighting(in attr: NSMutableAttributedString, code: String) {
-        // Keys
-        applyRegex("\"([^\"]+)\"\\s*:(?=\\s)", color: NSColor.systemPurple, in: attr, code: code, captureGroup: 1)
-        // String values
-        applyRegex("\"(?:\\\\.|[^\"\\\\])*\"", color: NSColor.systemRed, in: attr, code: code)
-        // Numbers
-        applyRegex("\\b-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b", color: NSColor.systemOrange, in: attr, code: code)
-        // Booleans and null
-        highlightWholeWords(["true","false","null"], color: NSColor.systemBlue, in: attr, code: code)
+        #if DEBUG
+        print("[Highlighter] applyJSONHighlighting triggered")
+        #endif
+        let palette = (LanguageModuleManager.shared.getModule(for: .json) as? HighlightPaletteProviding)?.highlightPalette
+
+        let keyColor = palette?.color(for: .key) ?? NSColor.systemIndigo
+        let stringValueColor = palette?.color(for: .string) ?? NSColor.systemRed
+        let numberValueColor = palette?.color(for: .number) ?? NSColor.systemOrange
+        let booleanValueColor = palette?.color(for: .boolean) ?? NSColor.systemBlue
+        let nullValueColor = palette?.color(for: .null) ?? NSColor.systemGray
+        let quoteColor = palette?.color(for: .quote) ?? NSColor.systemPink
+        let curlyBraceColor = palette?.color(for: .brace) ?? NSColor.systemTeal
+        let squareBracketColor = palette?.color(for: .bracket) ?? NSColor.systemPurple
+        let commaColor = palette?.color(for: .comma) ?? NSColor.systemBrown
+        let colonColor = palette?.color(for: .colon) ?? NSColor.systemYellow
+
+        // 1. Strings (apply generic string color first - Red)
+        applyRegex("\"(?:\\.|[^\"\\])*\"", color: stringValueColor, in: attr, code: code)
+
+        // 2. Braces, brackets, commas, colons (structural tokens)
+        applyRegex("[\\{\\}]", color: curlyBraceColor, in: attr, code: code)
+        applyRegex("[\\[\\]]", color: squareBracketColor, in: attr, code: code)
+        applyRegex(",", color: commaColor, in: attr, code: code)
+        applyRegex(":", color: colonColor, in: attr, code: code)
+
+        // 3. Keys - override strings with indigo (just the content)
+        applyRegex("\"([^\"]+)\"\\s*:", color: keyColor, in: attr, code: code, captureGroup: 1)
+
+        // 4. String values (content only, after colons) - ensures values stay red
+        applyRegex(":\\s*\"([^\"]+)\"", color: stringValueColor, in: attr, code: code, captureGroup: 1)
+
+        // 5. Numbers
+        applyRegex("\\b-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b", color: numberValueColor, in: attr, code: code)
+
+        // 6. Boolean values
+        highlightWholeWords(["true", "false"], color: booleanValueColor, in: attr, code: code)
+
+        // 7. Null value
+        highlightWholeWords(["null"], color: nullValueColor, in: attr, code: code)
+        
+        // 8. Quotes - color all quotes pink
+        applyRegex("\"", color: quoteColor, in: attr, code: code)
     }
 
     private func applyGenericHighlighting(in attr: NSMutableAttributedString, code: String) {

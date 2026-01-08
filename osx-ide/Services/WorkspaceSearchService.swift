@@ -17,16 +17,18 @@ public struct WorkspaceSearchMatch: Identifiable, Equatable, Sendable {
 @MainActor
 public final class WorkspaceSearchService {
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
+    private let settingsStore: SettingsStore
 
     public init(codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?) {
         self.codebaseIndexProvider = codebaseIndexProvider
+        self.settingsStore = SettingsStore(userDefaults: .standard)
     }
 
     public func search(pattern: String, projectRoot: URL, limit: Int = 200) async -> [WorkspaceSearchMatch] {
         let needle = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
         if needle.isEmpty { return [] }
 
-        if let index = codebaseIndexProvider(), (UserDefaults.standard.object(forKey: "CodebaseIndexEnabled") as? Bool ?? true) {
+        if let index = codebaseIndexProvider(), settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true) {
             if let matches = try? await index.searchIndexedText(pattern: needle, limit: limit) {
                 return matches.compactMap(Self.parseIndexedMatchLine)
             }

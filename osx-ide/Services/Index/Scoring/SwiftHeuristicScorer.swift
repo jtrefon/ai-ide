@@ -8,7 +8,12 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
     public func scoreFile(path: String, content: String, context: QualityScoringContext) async -> QualityAssessment {
         let lines = content.components(separatedBy: .newlines)
         let resourceId = URL(fileURLWithPath: path).absoluteString
-        let symbols = SwiftParser.parse(content: content, resourceId: resourceId)
+        let symbols: [Symbol]
+        if let module = await LanguageModuleManager.shared.getModule(for: .swift) {
+            symbols = module.symbolExtractor.extractSymbols(content: content, resourceId: resourceId)
+        } else {
+            symbols = []
+        }
 
         let typeKinds: Set<SymbolKind> = [.class, .struct, .enum, .protocol, .extension]
         let functionKinds: Set<SymbolKind> = [.function, .initializer]

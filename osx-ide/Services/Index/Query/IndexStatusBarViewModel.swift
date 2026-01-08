@@ -140,7 +140,9 @@ final class IndexStatusBarViewModel: ObservableObject {
 
     private func refreshStats() {
         guard let codebaseIndex = codebaseIndexProvider() else { return }
-        stats = try? codebaseIndex.getStats()
+        Task { @MainActor in
+            self.stats = try? await codebaseIndex.getStats()
+        }
     }
 
     private func formatBytes(_ bytes: Int64) -> String {

@@ -10,9 +10,15 @@ import AppKit
 
 /// Modern terminal view with native zsh shell integration for macOS 26
 struct NativeTerminalView: View {
-    @StateObject private var embedder = NativeTerminalEmbedder()
+    @StateObject private var embedder: NativeTerminalEmbedder
     @Binding var currentDirectory: URL?
     @ObservedObject var ui: UIStateManager
+
+    init(currentDirectory: Binding<URL?>, ui: UIStateManager, eventBus: EventBusProtocol) {
+        self._currentDirectory = currentDirectory
+        self.ui = ui
+        self._embedder = StateObject(wrappedValue: NativeTerminalEmbedder(eventBus: eventBus))
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -145,7 +151,8 @@ struct TerminalContentView: NSViewRepresentable {
 #Preview {
     NativeTerminalView(
         currentDirectory: .constant(nil),
-        ui: UIStateManager(uiService: UIService(errorManager: ErrorManager()))
+        ui: UIStateManager(uiService: UIService(errorManager: ErrorManager(), eventBus: EventBus()), eventBus: EventBus()),
+        eventBus: EventBus()
     )
     .frame(width: 600, height: 400)
 }

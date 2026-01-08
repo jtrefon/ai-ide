@@ -12,28 +12,45 @@ import AppKit
 /// In the future, these components could be fully separated into their own modules.
 @MainActor
 final class CorePlugin {
-    static func initialize(registry: UIRegistry, appState: AppState) {
+    static func initialize<Context: IDEContext & ObservableObject>(registry: UIRegistry, context: Context) {
+
+        _ = context.diagnosticsStore
         
         // Register File Explorer (Sidebar)
         registry.register(
             point: .sidebarLeft,
             name: "Internal.FileExplorer",
             icon: "folder",
-            view: FileExplorerView(appState: appState)
+            view: FileExplorerView(context: context)
         )
         
         // Register Terminal (Bottom Panel)
         registry.register(
             point: .panelBottom,
-            name: "Internal.Terminal",
+            name: AppConstants.UI.internalTerminalPanelName,
             icon: "terminal",
             view: NativeTerminalView(
                 currentDirectory: Binding(
-                    get: { appState.workspace.currentDirectory },
+                    get: { context.workspace.currentDirectory },
                     set: { _ in }
                 ),
-                ui: appState.ui
+                ui: context.ui,
+                eventBus: context.eventBus
             )
+        )
+
+        registry.register(
+            point: .panelBottom,
+            name: "Internal.Logs",
+            icon: "doc.text.magnifyingglass",
+            view: LogsPanelView(ui: context.ui, projectRoot: context.workspace.currentDirectory)
+        )
+
+        registry.register(
+            point: .panelBottom,
+            name: "Internal.Problems",
+            icon: "exclamationmark.triangle",
+            view: ProblemsView(store: context.diagnosticsStore, context: context)
         )
         
         // Register AI Chat (Right Panel)
@@ -42,58 +59,58 @@ final class CorePlugin {
             name: "Internal.AIChat",
             icon: "sparkles",
             view: AIChatPanel(
-                selectionContext: appState.selectionContext, // Use shared context
-                conversationManager: appState.conversationManager,
-                ui: appState.ui
+                selectionContext: context.selectionContext,
+                conversationManager: context.conversationManager,
+                ui: context.ui
             )
         )
         
         // Register Standard Commands
-        let commandRegistry = CommandRegistry.shared
+        let commandRegistry = context.commandRegistry
         
         commandRegistry.register(command: .fileNew) { _ in
-            appState.fileEditor.newFile()
+            context.fileEditor.newFile()
         }
 
         commandRegistry.register(command: .projectNew) { _ in
-            appState.newProject()
+            context.newProject()
         }
 
         commandRegistry.register(command: .fileOpen) { _ in
-            appState.openFile()
+            context.openFile()
         }
         
         commandRegistry.register(command: .fileOpenFolder) { _ in
-            Task { await appState.workspace.openFolder() }
+            Task { await context.workspace.openFolder() }
         }
         
         commandRegistry.register(command: .fileSave) { _ in
-            appState.fileEditor.saveFile()
+            context.fileEditor.saveFile()
         }
         
         commandRegistry.register(command: .fileSaveAs) { _ in
-            Task { await appState.fileEditor.saveFileAs() }
+            Task { await context.fileEditor.saveFileAs() }
         }
         
         commandRegistry.register(command: .editorFormat) { _ in
-            let content = appState.fileEditor.editorContent
-            let languageStr = appState.fileEditor.editorLanguage
+            let content = context.fileEditor.editorContent
+            let languageStr = context.fileEditor.editorLanguage
             let language = CodeLanguage(rawValue: languageStr) ?? .unknown
             if let module = LanguageModuleManager.shared.getModule(for: language) {
                 let formatted = module.format(content)
-                appState.fileEditor.editorContent = formatted
+                context.fileEditor.editorContent = formatted
                 return
             }
 
-            appState.fileEditor.editorContent = CodeFormatter.format(content, language: language)
+            context.fileEditor.editorContent = CodeFormatter.format(content, language: language)
         }
 
         commandRegistry.register(command: .editorGoToDefinition) { _ in
-            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+            guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
 
-            let content = appState.fileEditor.editorContent
-            let selected = appState.selectionContext.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let cursor = appState.fileEditor.selectedRange?.location ?? 0
+            let content = context.fileEditor.editorContent
+            let selected = context.selectionContext.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cursor = context.fileEditor.selectedRange?.location ?? 0
 
             let identifier: String?
             if WorkspaceNavigationService.isValidIdentifier(selected) {
@@ -103,57 +120,59 @@ final class CorePlugin {
             }
 
             guard let identifier else {
-                appState.lastError = "No symbol selected"
+                context.lastError = "No symbol selected"
                 return
             }
 
-            let svc = WorkspaceNavigationService(codebaseIndexProvider: { DependencyContainer.shared.codebaseIndex })
-            let locations = svc.findDefinitionLocations(
-                identifier: identifier,
-                projectRoot: root,
-                currentFilePath: appState.fileEditor.selectedFile,
-                currentContent: content,
-                currentLanguage: appState.fileEditor.editorLanguage,
-                limit: 50
-            )
+            Task { @MainActor in
+                let svc = WorkspaceNavigationService(codebaseIndexProvider: { context.codebaseIndex })
+                let locations = await svc.findDefinitionLocations(
+                    identifier: identifier,
+                    projectRoot: root,
+                    currentFilePath: context.fileEditor.selectedFile,
+                    currentContent: content,
+                    currentLanguage: context.fileEditor.editorLanguage,
+                    limit: 50
+                )
 
-            if locations.isEmpty {
-                appState.lastError = "No definition found for \"\(identifier)\"."
-                return
-            }
+                if locations.isEmpty {
+                    context.lastError = "No definition found for \"\(identifier)\"."
+                    return
+                }
 
             @MainActor
             func open(_ loc: WorkspaceCodeLocation) {
                 do {
-                    let url = try PathValidator(projectRoot: root).validateAndResolve(loc.relativePath)
-                    appState.loadFile(from: url)
-                    appState.fileEditor.selectLine(loc.line)
+                    let url = try context.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(loc.relativePath)
+                    context.loadFile(from: url)
+                    context.fileEditor.selectLine(loc.line)
                 } catch {
-                    appState.lastError = error.localizedDescription
+                    context.lastError = error.localizedDescription
                 }
             }
 
-            if locations.count == 1, let only = locations.first {
-                open(only)
-                return
-            }
+                if locations.count == 1, let only = locations.first {
+                    open(only)
+                    return
+                }
 
-            appState.navigationLocationsTitle = "Definitions for \"\(identifier)\""
-            appState.navigationLocations = locations
-            appState.isNavigationLocationsPresented = true
-            appState.isQuickOpenPresented = false
-            appState.isGlobalSearchPresented = false
-            appState.isCommandPalettePresented = false
-            appState.isGoToSymbolPresented = false
-            appState.isRenameSymbolPresented = false
+                context.navigationLocationsTitle = "Definitions for \"\(identifier)\""
+                context.navigationLocations = locations
+                context.isNavigationLocationsPresented = true
+                context.isQuickOpenPresented = false
+                context.isGlobalSearchPresented = false
+                context.isCommandPalettePresented = false
+                context.isGoToSymbolPresented = false
+                context.isRenameSymbolPresented = false
+            }
         }
 
         commandRegistry.register(command: .editorFindReferences) { _ in
-            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+            guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
 
-            let content = appState.fileEditor.editorContent
-            let selected = appState.selectionContext.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let cursor = appState.fileEditor.selectedRange?.location ?? 0
+            let content = context.fileEditor.editorContent
+            let selected = context.selectionContext.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cursor = context.fileEditor.selectedRange?.location ?? 0
 
             let identifier: String?
             if WorkspaceNavigationService.isValidIdentifier(selected) {
@@ -163,32 +182,32 @@ final class CorePlugin {
             }
 
             guard let identifier else {
-                appState.lastError = "No symbol selected"
+                context.lastError = "No symbol selected"
                 return
             }
 
-            let svc = WorkspaceNavigationService(codebaseIndexProvider: { DependencyContainer.shared.codebaseIndex })
+            let svc = WorkspaceNavigationService(codebaseIndexProvider: { context.codebaseIndex })
             let locations = await svc.findReferenceLocations(identifier: identifier, projectRoot: root, limit: 500)
 
             if locations.isEmpty {
-                appState.lastError = "No references found for \"\(identifier)\"."
+                context.lastError = "No references found for \"\(identifier)\"."
                 return
             }
 
-            appState.navigationLocationsTitle = "References for \"\(identifier)\""
-            appState.navigationLocations = locations
-            appState.isNavigationLocationsPresented = true
-            appState.isQuickOpenPresented = false
-            appState.isGlobalSearchPresented = false
-            appState.isCommandPalettePresented = false
-            appState.isGoToSymbolPresented = false
-            appState.isRenameSymbolPresented = false
+            context.navigationLocationsTitle = "References for \"\(identifier)\""
+            context.navigationLocations = locations
+            context.isNavigationLocationsPresented = true
+            context.isQuickOpenPresented = false
+            context.isGlobalSearchPresented = false
+            context.isCommandPalettePresented = false
+            context.isGoToSymbolPresented = false
+            context.isRenameSymbolPresented = false
         }
 
         commandRegistry.register(command: .editorRenameSymbol) { _ in
-            let content = appState.fileEditor.editorContent
-            let selected = appState.selectionContext.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let cursor = appState.fileEditor.selectedRange?.location ?? 0
+            let content = context.fileEditor.editorContent
+            let selected = context.selectionContext.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cursor = context.fileEditor.selectedRange?.location ?? 0
 
             let identifier: String?
             if WorkspaceNavigationService.isValidIdentifier(selected) {
@@ -198,45 +217,45 @@ final class CorePlugin {
             }
 
             guard let identifier else {
-                appState.lastError = "No symbol selected"
+                context.lastError = "No symbol selected"
                 return
             }
 
-            appState.renameSymbolIdentifier = identifier
-            appState.isRenameSymbolPresented = true
-            appState.isNavigationLocationsPresented = false
-            appState.isQuickOpenPresented = false
-            appState.isGlobalSearchPresented = false
-            appState.isCommandPalettePresented = false
-            appState.isGoToSymbolPresented = false
+            context.renameSymbolIdentifier = identifier
+            context.isRenameSymbolPresented = true
+            context.isNavigationLocationsPresented = false
+            context.isQuickOpenPresented = false
+            context.isGlobalSearchPresented = false
+            context.isCommandPalettePresented = false
+            context.isGoToSymbolPresented = false
         }
 
         commandRegistry.register(command: .editorTabsCloseActive) { _ in
-            appState.fileEditor.closeActiveTab()
+            context.fileEditor.closeActiveTab()
         }
 
         commandRegistry.register(command: .editorTabsCloseAll) { _ in
-            appState.fileEditor.closeAllTabs()
+            context.fileEditor.closeAllTabs()
         }
 
         commandRegistry.register(command: .editorTabsNext) { _ in
-            appState.fileEditor.activateNextTab()
+            context.fileEditor.activateNextTab()
         }
 
         commandRegistry.register(command: .editorTabsPrevious) { _ in
-            appState.fileEditor.activatePreviousTab()
+            context.fileEditor.activatePreviousTab()
         }
 
         commandRegistry.register(command: .editorSplitRight) { _ in
-            appState.fileEditor.toggleSplit(axis: .vertical)
+            context.fileEditor.toggleSplit(axis: .vertical)
         }
 
         commandRegistry.register(command: .editorSplitDown) { _ in
-            appState.fileEditor.toggleSplit(axis: .horizontal)
+            context.fileEditor.toggleSplit(axis: .horizontal)
         }
 
         commandRegistry.register(command: .editorFocusNextGroup) { _ in
-            appState.fileEditor.focusNextPane()
+            context.fileEditor.focusNextPane()
         }
 
         commandRegistry.register(command: .editorFind) { _ in
@@ -251,91 +270,175 @@ final class CorePlugin {
             NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: nil, from: item)
         }
 
+        commandRegistry.register(command: .editorToggleFold) { _ in
+            NSApp.sendAction(#selector(CodeEditorTextView.toggleFoldAtCursor(_:)), to: nil, from: nil)
+        }
+
+        commandRegistry.register(command: .editorUnfoldAll) { _ in
+            NSApp.sendAction(#selector(CodeEditorTextView.unfoldAll(_:)), to: nil, from: nil)
+        }
+
+        commandRegistry.register(command: .editorAddNextOccurrence) { _ in
+            NSApp.sendAction(#selector(CodeEditorTextView.addNextOccurrence(_:)), to: nil, from: nil)
+        }
+
+        commandRegistry.register(command: .editorAddCursorAbove) { _ in
+            NSApp.sendAction(#selector(CodeEditorTextView.addCursorAbove(_:)), to: nil, from: nil)
+        }
+
+        commandRegistry.register(command: .editorAddCursorBelow) { _ in
+            NSApp.sendAction(#selector(CodeEditorTextView.addCursorBelow(_:)), to: nil, from: nil)
+        }
+
+        commandRegistry.register(command: .editorAIInlineAssist) { _ in
+            context.ui.isAIChatVisible = true
+
+            let pane = context.fileEditor.focusedPaneState
+            let selectionContext = EditorAIContextBuilder.build(
+                filePath: pane.selectedFile,
+                language: pane.editorLanguage,
+                buffer: pane.editorContent,
+                selection: pane.selectedRange
+            )
+
+            let userPrompt = "Analyze this code and suggest improvements. If there are any obvious bugs, point them out and propose fixes."
+            context.conversationManager.currentInput = userPrompt
+            context.conversationManager.sendMessage(context: selectionContext)
+        }
+
+        commandRegistry.register(command: .viewToggleMinimap) { _ in
+            context.ui.toggleMinimap()
+        }
+
         commandRegistry.register(command: .searchFindInWorkspace) { _ in
-            appState.isGlobalSearchPresented = true
-            appState.isQuickOpenPresented = false
+            context.isGlobalSearchPresented = true
+            context.isQuickOpenPresented = false
+        }
+
+        @MainActor
+        func openDiagnostic(_ d: Diagnostic) {
+            let root = context.workspace.currentDirectory?.standardizedFileURL
+            let url: URL
+
+            if d.relativePath.hasPrefix("/") {
+                url = URL(fileURLWithPath: d.relativePath)
+            } else if let root {
+                do {
+                    url = try context.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(d.relativePath)
+                } catch {
+                    context.lastError = error.localizedDescription
+                    return
+                }
+            } else {
+                context.lastError = "No workspace open."
+                return
+            }
+
+            context.loadFile(from: url)
+            context.fileEditor.selectLine(d.line)
+        }
+
+        commandRegistry.register(command: .viewToggleProblems) { _ in
+            context.ui.isTerminalVisible = true
+            context.ui.bottomPanelSelectedName = "Internal.Problems"
+        }
+
+        commandRegistry.register(command: .problemsNext) { _ in
+            context.ui.isTerminalVisible = true
+            context.ui.bottomPanelSelectedName = "Internal.Problems"
+            if let d = context.diagnosticsStore.selectNext() {
+                openDiagnostic(d)
+            }
+        }
+
+        commandRegistry.register(command: .problemsPrevious) { _ in
+            context.ui.isTerminalVisible = true
+            context.ui.bottomPanelSelectedName = "Internal.Problems"
+            if let d = context.diagnosticsStore.selectPrevious() {
+                openDiagnostic(d)
+            }
         }
 
         commandRegistry.register(command: .workbenchQuickOpen) { _ in
-            appState.isQuickOpenPresented = true
-            appState.isGlobalSearchPresented = false
-            appState.isCommandPalettePresented = false
-            appState.isGoToSymbolPresented = false
+            context.isQuickOpenPresented = true
+            context.isGlobalSearchPresented = false
+            context.isCommandPalettePresented = false
+            context.isGoToSymbolPresented = false
         }
 
         commandRegistry.register(command: .workbenchCommandPalette) { _ in
-            appState.isCommandPalettePresented = true
-            appState.isQuickOpenPresented = false
-            appState.isGlobalSearchPresented = false
-            appState.isGoToSymbolPresented = false
+            context.isCommandPalettePresented = true
+            context.isQuickOpenPresented = false
+            context.isGlobalSearchPresented = false
+            context.isGoToSymbolPresented = false
         }
 
         commandRegistry.register(command: .workbenchGoToSymbol) { _ in
-            appState.isGoToSymbolPresented = true
-            appState.isQuickOpenPresented = false
-            appState.isGlobalSearchPresented = false
-            appState.isCommandPalettePresented = false
+            context.isGoToSymbolPresented = true
+            context.isQuickOpenPresented = false
+            context.isGlobalSearchPresented = false
+            context.isCommandPalettePresented = false
         }
 
-        commandRegistry.register(command: .explorerOpenSelection) { args in
-            guard let path = args["path"] as? String else { return }
-            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+        commandRegistry.register(command: .explorerOpenSelection) { (args: ExplorerPathArgs) in
+            let path = args.path
+            guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
             do {
-                let url = try PathValidator(projectRoot: root).validateAndResolve(path)
+                let url = try context.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(path)
                 let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
                 if !isDirectory {
-                    appState.loadFile(from: url)
+                    context.loadFile(from: url)
                 }
             } catch {
-                appState.lastError = error.localizedDescription
+                context.lastError = error.localizedDescription
             }
         }
 
-        commandRegistry.register(command: .explorerDeleteSelection) { args in
-            guard let path = args["path"] as? String else { return }
-            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+        commandRegistry.register(command: .explorerDeleteSelection) { (args: ExplorerPathArgs) in
+            let path = args.path
+            guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
             do {
-                let url = try PathValidator(projectRoot: root).validateAndResolve(path)
-                appState.workspaceService.deleteItem(at: url)
+                let url = try context.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(path)
+                context.workspaceService.deleteItem(at: url)
 
-                appState.fileEditor.closeTab(filePath: url.path)
-                appState.workspace.removeOpenFile(url)
+                context.fileEditor.closeTab(filePath: url.path)
+                context.workspace.removeOpenFile(url)
             } catch {
-                appState.lastError = error.localizedDescription
+                context.lastError = error.localizedDescription
             }
         }
 
-        commandRegistry.register(command: .explorerRenameSelection) { args in
-            guard let path = args["path"] as? String else { return }
-            guard let newName = args["newName"] as? String else { return }
-            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+        commandRegistry.register(command: .explorerRenameSelection) { (args: ExplorerRenameArgs) in
+            let path = args.path
+            let newName = args.newName
+            guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
             do {
-                let url = try PathValidator(projectRoot: root).validateAndResolve(path)
+                let url = try context.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(path)
 
-                if appState.fileEditor.isFileOpenAndDirty(filePath: url.path) {
-                    appState.lastError = "Save changes before renaming an open file."
+                if context.fileEditor.isFileOpenAndDirty(filePath: url.path) {
+                    context.lastError = "Save changes before renaming an open file."
                     return
                 }
 
-                guard let newURL = appState.workspaceService.renameItem(at: url, to: newName) else { return }
+                guard let newURL = context.workspaceService.renameItem(at: url, to: newName) else { return }
 
-                appState.fileEditor.renameTab(oldPath: url.path, newPath: newURL.path)
+                context.fileEditor.renameTab(oldPath: url.path, newPath: newURL.path)
 
-                appState.workspace.removeOpenFile(url)
-                appState.workspace.addOpenFile(newURL)
+                context.workspace.removeOpenFile(url)
+                context.workspace.addOpenFile(newURL)
             } catch {
-                appState.lastError = error.localizedDescription
+                context.lastError = error.localizedDescription
             }
         }
 
-        commandRegistry.register(command: .explorerRevealInFinder) { args in
-            guard let path = args["path"] as? String else { return }
-            guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+        commandRegistry.register(command: .explorerRevealInFinder) { (args: ExplorerPathArgs) in
+            let path = args.path
+            guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
             do {
-                let url = try PathValidator(projectRoot: root).validateAndResolve(path)
+                let url = try context.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(path)
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch {
-                appState.lastError = error.localizedDescription
+                context.lastError = error.localizedDescription
             }
         }
         

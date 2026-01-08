@@ -68,6 +68,7 @@ enum AppConstants {
         static let lineNumberWidth: CGFloat = 45
         static let lineHeight: CGFloat = 15
         static let tabWidth: Int = 4
+        static let defaultFontFamily: String = "SF Mono"
     }
     
     // MARK: - Layout Constants
@@ -99,7 +100,51 @@ enum AppConstants {
     enum Time {
         static let errorAutoDismissDelay: TimeInterval = 5.0
         static let searchDebounceDelay: TimeInterval = 0.25
+        static let quickSearchDebounceNanoseconds: UInt64 = 150_000_000
         static let processTerminationTimeout: TimeInterval = 0.5
+    }
+
+    enum UI {
+        static let internalTerminalPanelName: String = "Internal.Terminal"
+    }
+
+    enum Overlay {
+        static let backdropOpacity: Double = 0.25
+        static let containerPadding: CGFloat = 16
+        static let containerCornerRadius: CGFloat = 12
+        static let containerShadowRadius: CGFloat = 30
+        static let hostPadding: CGFloat = 30
+
+        static let listItemSpacing: CGFloat = 8
+        static let listItemKindWidth: CGFloat = 80
+
+        static let listMinWidth: CGFloat = 760
+        static let listMinHeight: CGFloat = 420
+
+        static let wideListMinWidth: CGFloat = 820
+        static let wideListMinHeight: CGFloat = 460
+
+        static let textFieldMinWidth: CGFloat = 520
+        static let searchFieldMinWidth: CGFloat = 420
+    }
+
+    enum Settings {
+        static let cardPadding: CGFloat = 16
+        static let cardCornerRadius: CGFloat = 16
+
+        static let sectionSpacing: CGFloat = 20
+
+        static let pickerWideWidth: CGFloat = 220
+        static let pickerNarrowWidth: CGFloat = 200
+        static let sliderWidth: CGFloat = 180
+
+        static let rowSpacing: CGFloat = 12
+        static let iconSize: CGFloat = 16
+        static let iconFrameWidth: CGFloat = 24
+
+        static let statusTextSize: CGFloat = 12
+
+        static let contentTopPadding: CGFloat = 4
     }
     
     // MARK: - Color Constants
@@ -156,5 +201,8 @@ enum AppConstants {
         static let sidebarWidthKey = "SidebarWidth"
         static let terminalHeightKey = "TerminalHeight"
         static let chatPanelWidthKey = "ChatPanelWidth"
+        static let codebaseIndexEnabledKey = "CodebaseIndexEnabled"
+        static let codebaseIndexAIEnrichmentEnabledKey = "CodebaseIndexAIEnrichmentEnabled"
+        static let enabledLanguageModulesKey = "EnabledLanguageModules"
     }
 }

@@ -16,6 +16,7 @@ public enum AppError: LocalizedError {
     case networkError(String)
     case aiServiceError(String)
     case terminalError(String)
+    case commandNotFound(String)
     case unknown(String)
     
     public var errorDescription: String? {
@@ -34,6 +35,8 @@ public enum AppError: LocalizedError {
             return "AI service error: \(message)"
         case .terminalError(let message):
             return "Terminal error: \(message)"
+        case .commandNotFound(let commandId):
+            return "Command not found: \(commandId)"
         case .unknown(let message):
             return "Unknown error: \(message)"
         }
@@ -55,6 +58,8 @@ public enum AppError: LocalizedError {
             return "Check AI service configuration and try again."
         case .terminalError:
             return "Restart terminal session or check shell configuration."
+        case .commandNotFound:
+            return "Restart the application. If the issue persists, report it as a bug."
         case .unknown:
             return "Restart the application and try again."
         }
@@ -62,7 +67,7 @@ public enum AppError: LocalizedError {
     
     public var severity: ErrorSeverity {
         switch self {
-        case .fileOperationFailed, .invalidFilePath, .fileNotFound:
+        case .fileOperationFailed, .invalidFilePath, .fileNotFound, .commandNotFound:
             return .warning
         case .permissionDenied, .networkError, .aiServiceError, .terminalError:
             return .error

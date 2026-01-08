@@ -1,10 +1,11 @@
 import SwiftUI
 
 struct IndexStatusBarView: View {
-    @StateObject private var viewModel = IndexStatusBarViewModel(
-        codebaseIndexProvider: { DependencyContainer.shared.codebaseIndex },
-        eventBus: EventBus.shared
-    )
+    @StateObject private var viewModel: IndexStatusBarViewModel
+
+    init(codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?, eventBus: EventBusProtocol) {
+        self._viewModel = StateObject(wrappedValue: IndexStatusBarViewModel(codebaseIndexProvider: codebaseIndexProvider, eventBus: eventBus))
+    }
 
     @State private var isShowingMetricsInfo: Bool = false
 

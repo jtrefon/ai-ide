@@ -3,12 +3,21 @@ import AppKit
 
 struct QuickOpenOverlayView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject private var workspace: WorkspaceStateManager
+    @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
 
     @State private var query: String = ""
     @State private var results: [String] = []
     @State private var isSearching: Bool = false
     @State private var searchTask: Task<Void, Never>?
+
+    init(appState: AppState, isPresented: Binding<Bool>) {
+        self.appState = appState
+        self._workspace = ObservedObject(wrappedValue: appState.workspace)
+        self._fileEditor = ObservedObject(wrappedValue: appState.fileEditor)
+        self._isPresented = isPresented
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -18,7 +27,7 @@ struct QuickOpenOverlayView: View {
 
                 TextField("Type a file name…", text: $query)
                     .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 520)
+                    .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
                     .onSubmit {
                         openFirst(openToSide: NSEvent.modifierFlags.contains(.command))
                     }
@@ -54,12 +63,12 @@ struct QuickOpenOverlayView: View {
                     }
                 }
             }
-            .frame(minWidth: 760, minHeight: 420)
+            .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
-        .padding(16)
+        .padding(AppConstants.Overlay.containerPadding)
         .background(.regularMaterial)
-        .cornerRadius(12)
-        .shadow(radius: 30)
+        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
+        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             query = ""
             results = []
@@ -75,13 +84,13 @@ struct QuickOpenOverlayView: View {
     private func debounceSearch() {
         searchTask?.cancel()
         searchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 150_000_000)
+            try? await Task.sleep(nanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds)
             await refreshResults()
         }
     }
 
     private func refreshResults() async {
-        guard let root = appState.workspace.currentDirectory?.standardizedFileURL else {
+        guard let root = workspace.currentDirectory?.standardizedFileURL else {
             results = []
             return
         }
@@ -97,9 +106,10 @@ struct QuickOpenOverlayView: View {
         isSearching = true
         defer { isSearching = false }
 
-        if let index = DependencyContainer.shared.codebaseIndex,
-           (UserDefaults.standard.object(forKey: "CodebaseIndexEnabled") as? Bool ?? true),
-           let matches = try? index.findIndexedFiles(query: trimmed, limit: 50) {
+        let settingsStore = SettingsStore(userDefaults: .standard)
+        if let index = appState.codebaseIndex,
+           settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true),
+           let matches = try? await index.findIndexedFiles(query: trimmed, limit: 50) {
             results = matches.map { $0.path }
             return
         }
@@ -161,11 +171,11 @@ struct QuickOpenOverlayView: View {
     }
 
     private func recentCandidates() -> [String] {
-        guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return [] }
+        guard let root = workspace.currentDirectory?.standardizedFileURL else { return [] }
         var output: [String] = []
         output.reserveCapacity(10)
 
-        for url in appState.workspace.recentlyOpenedFiles {
+        for url in workspace.recentlyOpenedFiles {
             if output.count >= 10 { break }
             guard url.path.hasPrefix(root.path + "/") else { continue }
             output.append(String(url.path.dropFirst(root.path.count + 1)))
@@ -180,18 +190,18 @@ struct QuickOpenOverlayView: View {
     }
 
     private func open(path: String, openToSide: Bool) {
-        guard let root = appState.workspace.currentDirectory?.standardizedFileURL else { return }
+        guard let root = workspace.currentDirectory?.standardizedFileURL else { return }
         let (_, line) = Self.parseQuery(query)
 
         do {
-            let url = try PathValidator(projectRoot: root).validateAndResolve(path)
+            let url = try appState.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(path)
             if openToSide {
-                appState.fileEditor.openInOtherPane(from: url)
+                fileEditor.openInOtherPane(from: url)
             } else {
                 appState.loadFile(from: url)
             }
             if let line {
-                appState.fileEditor.selectLine(line)
+                fileEditor.selectLine(line)
             }
             close()
         } catch {

@@ -11,9 +11,51 @@ import Combine
 /// Dependency injection container for managing service instances
 @MainActor
 class DependencyContainer {
+
+    private let settingsStore: SettingsStore
     
-    /// Shared singleton instance
-    static let shared = DependencyContainer()
+    init() {
+        settingsStore = SettingsStore(userDefaults: .standard)
+        let errorManager = ErrorManager()
+        _errorManager = errorManager
+        _eventBus = EventBus()
+        _commandRegistry = CommandRegistry()
+        _uiRegistry = UIRegistry()
+        _uiService = UIService(errorManager: errorManager, eventBus: _eventBus)
+        _workspaceService = WorkspaceService(errorManager: errorManager, eventBus: _eventBus)
+        _fileSystemService = FileSystemService()
+        _windowProvider = WindowProvider()
+        _fileDialogService = FileDialogService(windowProvider: _windowProvider)
+        _fileEditorService = FileEditorService(
+            errorManager: errorManager,
+            fileSystemService: _fileSystemService,
+            eventBus: _eventBus
+        )
+        _aiService = OpenRouterAIService()
+
+        _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
+
+        _conversationManager = ConversationManager(
+            aiService: _aiService,
+            errorManager: errorManager,
+            fileSystemService: _fileSystemService,
+            workspaceService: _workspaceService,
+            eventBus: _eventBus,
+            codebaseIndex: nil
+        )
+
+        _projectCoordinator = ProjectCoordinator(
+            aiService: _aiService,
+            errorManager: errorManager,
+            eventBus: _eventBus,
+            conversationManager: _conversationManager
+        )
+
+        if let root = _workspaceService.currentDirectory {
+            _conversationManager.updateProjectRoot(root)
+            _projectCoordinator.configureProject(root: root)
+        }
+    }
     
     // MARK: - Public Accessors
     
@@ -30,6 +72,22 @@ class DependencyContainer {
     /// Workspace service instance
     var workspaceService: WorkspaceServiceProtocol {
         return _workspaceService
+    }
+
+    var eventBus: EventBusProtocol {
+        return _eventBus
+    }
+
+    var commandRegistry: CommandRegistry {
+        return _commandRegistry
+    }
+
+    var uiRegistry: UIRegistry {
+        return _uiRegistry
+    }
+
+    var diagnosticsStore: DiagnosticsStore {
+        return _diagnosticsStore
     }
     
     /// File editor service instance
@@ -72,7 +130,7 @@ class DependencyContainer {
     }
 
     var isCodebaseIndexEnabled: Bool {
-        return UserDefaults.standard.object(forKey: "CodebaseIndexEnabled") as? Bool ?? true
+        return settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true)
     }
 
     func setCodebaseIndexEnabled(_ enabled: Bool) {
@@ -84,7 +142,7 @@ class DependencyContainer {
     }
 
     var isAIEnrichmentIndexingEnabled: Bool {
-        return UserDefaults.standard.object(forKey: "CodebaseIndexAIEnrichmentEnabled") as? Bool ?? false
+        return settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, default: false)
     }
 
     func setAIEnrichmentIndexingEnabled(_ enabled: Bool) {
@@ -92,13 +150,13 @@ class DependencyContainer {
             let settings = OpenRouterSettingsStore().load()
             let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
             if model.isEmpty {
-                UserDefaults.standard.set(false, forKey: "CodebaseIndexAIEnrichmentEnabled")
+                settingsStore.set(false, forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey)
                 _errorManager.handle(.aiServiceError("OpenRouter model is not set."))
                 return
             }
         }
 
-        UserDefaults.standard.set(enabled, forKey: "CodebaseIndexAIEnrichmentEnabled")
+        settingsStore.set(enabled, forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey)
         if enabled, isCodebaseIndexEnabled {
             _projectCoordinator.codebaseIndex?.runAIEnrichment()
         }
@@ -106,43 +164,6 @@ class DependencyContainer {
 
     func configureCodebaseIndex(projectRoot: URL) {
         _projectCoordinator.configureProject(root: projectRoot)
-    }
-    
-    // MARK: - Initialization
-    
-    private init() {
-        let errorManager = ErrorManager()
-        _errorManager = errorManager
-        _uiService = UIService(errorManager: errorManager)
-        _workspaceService = WorkspaceService(errorManager: errorManager, eventBus: EventBus.shared)
-        _fileSystemService = FileSystemService()
-        _windowProvider = WindowProvider()
-        _fileDialogService = FileDialogService(windowProvider: _windowProvider)
-        _fileEditorService = FileEditorService(
-            errorManager: errorManager,
-            fileSystemService: _fileSystemService,
-            eventBus: EventBus.shared
-        )
-        _aiService = OpenRouterAIService()
-
-        _conversationManager = ConversationManager(
-            aiService: _aiService,
-            errorManager: errorManager,
-            fileSystemService: _fileSystemService,
-            codebaseIndex: nil
-        )
-
-        _projectCoordinator = ProjectCoordinator(
-            aiService: _aiService,
-            errorManager: errorManager,
-            eventBus: EventBus.shared,
-            conversationManager: _conversationManager
-        )
-
-        if let root = _workspaceService.currentDirectory {
-            _conversationManager.updateProjectRoot(root)
-            _projectCoordinator.configureProject(root: root)
-        }
     }
     
     // MARK: - Factory Methods
@@ -156,7 +177,27 @@ class DependencyContainer {
             fileEditorService: fileEditorService,
             conversationManager: conversationManager,
             fileDialogService: fileDialogService,
-            fileSystemService: fileSystemService
+            fileSystemService: fileSystemService,
+            eventBus: eventBus,
+            commandRegistry: commandRegistry,
+            uiRegistry: uiRegistry,
+            diagnosticsStore: diagnosticsStore,
+            windowProvider: windowProvider,
+            codebaseIndexProvider: { [weak self] in
+                self?.codebaseIndex
+            },
+            configureCodebaseIndex: { [weak self] projectRoot in
+                self?.configureCodebaseIndex(projectRoot: projectRoot)
+            },
+            setCodebaseIndexEnabled: { [weak self] enabled in
+                self?.setCodebaseIndexEnabled(enabled)
+            },
+            setAIEnrichmentIndexingEnabled: { [weak self] enabled in
+                self?.setAIEnrichmentIndexingEnabled(enabled)
+            },
+            reindexProjectNow: { [weak self] in
+                self?.reindexProjectNow()
+            }
         )
     }
     
@@ -173,6 +214,10 @@ class DependencyContainer {
     // MARK: - Stored Services
 
     private let _errorManager: ErrorManagerProtocol
+    private let _eventBus: EventBus
+    private let _commandRegistry: CommandRegistry
+    private let _uiRegistry: UIRegistry
+    private let _diagnosticsStore: DiagnosticsStore
     private let _uiService: UIServiceProtocol
     private let _workspaceService: WorkspaceServiceProtocol
     private let _fileEditorService: FileEditorServiceProtocol
@@ -190,9 +235,7 @@ class DependencyContainer {
 extension DependencyContainer {
     /// Create a container with mock services for testing
     static func makeTestContainer() -> DependencyContainer {
-        let container = DependencyContainer()
-        // Override with mock services in tests
-        return container
+        return DependencyContainer()
     }
 }
 #endif

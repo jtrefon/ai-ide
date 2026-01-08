@@ -31,9 +31,11 @@ public enum WorkspaceNavigationError: LocalizedError {
 @MainActor
 public final class WorkspaceNavigationService {
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
+    private let settingsStore: SettingsStore
 
     public init(codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?) {
         self.codebaseIndexProvider = codebaseIndexProvider
+        self.settingsStore = SettingsStore(userDefaults: .standard)
     }
 
     public func identifierUnderCursor(text: String, cursor: Int) -> String? {
@@ -47,12 +49,12 @@ public final class WorkspaceNavigationService {
         currentContent: String,
         currentLanguage: String,
         limit: Int = 50
-    ) -> [WorkspaceCodeLocation] {
+    ) async -> [WorkspaceCodeLocation] {
         let needle = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         if needle.isEmpty { return [] }
 
-        if let index = codebaseIndexProvider(), (UserDefaults.standard.object(forKey: "CodebaseIndexEnabled") as? Bool ?? true) {
-            if let hits = try? index.searchSymbolsWithPaths(nameLike: needle, limit: limit) {
+        if let index = codebaseIndexProvider(), settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true) {
+            if let hits = try? await index.searchSymbolsWithPaths(nameLike: needle, limit: limit) {
                 let mapped = hits.compactMap { hit -> WorkspaceCodeLocation? in
                     guard let filePath = hit.filePath else { return nil }
                     let rel = Self.relativePath(projectRoot: projectRoot, filePath: filePath)
@@ -74,7 +76,7 @@ public final class WorkspaceNavigationService {
         }
 
         let symbolSearch = WorkspaceSymbolSearchService(codebaseIndexProvider: codebaseIndexProvider)
-        let results = symbolSearch.search(
+        let results = await symbolSearch.search(
             query: needle,
             projectRoot: projectRoot,
             currentFilePath: currentFilePath,

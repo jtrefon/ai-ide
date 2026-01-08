@@ -458,7 +458,7 @@ struct MessageListView_Previews: PreviewProvider {
             ],
             isSending: true,
             fontSize: 12,
-            fontFamily: "SF Mono"
+            fontFamily: AppConstants.Editor.defaultFontFamily
         )
     }
 }

@@ -16,8 +16,10 @@ public final class LanguageModuleManager: ObservableObject {
     
     @Published private(set) var enabledModules: [CodeLanguage: LanguageModule] = [:]
     private var allModules: [CodeLanguage: LanguageModule] = [:]
+    private let settingsStore: SettingsStore
     
     private init() {
+        settingsStore = SettingsStore(userDefaults: .standard)
         // Register default modules
         register(SwiftModule())
         register(JavaScriptModule())
@@ -49,7 +51,7 @@ public final class LanguageModuleManager: ObservableObject {
     }
     
     public func toggleModule(_ language: CodeLanguage, enabled: Bool) {
-        var enabledLangs = UserDefaults.standard.stringArray(forKey: "EnabledLanguageModules") ?? allModules.keys.map { $0.rawValue }
+        var enabledLangs = settingsStore.stringArray(forKey: AppConstants.Storage.enabledLanguageModulesKey) ?? allModules.keys.map { $0.rawValue }
         
         if enabled {
             if !enabledLangs.contains(language.rawValue) {
@@ -59,20 +61,33 @@ public final class LanguageModuleManager: ObservableObject {
             enabledLangs.removeAll { $0 == language.rawValue }
         }
         
-        UserDefaults.standard.set(enabledLangs, forKey: "EnabledLanguageModules")
+        settingsStore.set(enabledLangs, forKey: AppConstants.Storage.enabledLanguageModulesKey)
         updateEnabledModules()
     }
     
     private func setupInitialEnabledState() {
-        if UserDefaults.standard.object(forKey: "EnabledLanguageModules") == nil {
-            let allLangs = allModules.keys.map { $0.rawValue }
-            UserDefaults.standard.set(allLangs, forKey: "EnabledLanguageModules")
+        let allLangs = allModules.keys.map { $0.rawValue }
+        if let stored = settingsStore.stringArray(forKey: AppConstants.Storage.enabledLanguageModulesKey) {
+            // Ensure any newly added modules are also enabled if they weren't in the stored list
+            var updated = stored
+            var changed = false
+            for lang in allLangs {
+                if !updated.contains(lang) {
+                    updated.append(lang)
+                    changed = true
+                }
+            }
+            if changed {
+                settingsStore.set(updated, forKey: AppConstants.Storage.enabledLanguageModulesKey)
+            }
+        } else {
+            settingsStore.set(allLangs, forKey: AppConstants.Storage.enabledLanguageModulesKey)
         }
         updateEnabledModules()
     }
     
     private func updateEnabledModules() {
-        let enabledLangs = UserDefaults.standard.stringArray(forKey: "EnabledLanguageModules") ?? []
+        let enabledLangs = settingsStore.stringArray(forKey: AppConstants.Storage.enabledLanguageModulesKey) ?? allModules.keys.map { $0.rawValue }
         enabledModules = allModules.filter { enabledLangs.contains($0.key.rawValue) }
     }
     

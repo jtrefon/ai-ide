@@ -41,14 +41,12 @@ struct ArchitectAdvisorTool: AITool {
             ? "Constraints:\n\(constraints!)"
             : nil
 
-        let context = await MainActor.run {
-            ContextBuilder.buildContext(
-                userInput: task,
-                explicitContext: explicit,
-                index: index,
-                projectRoot: projectRoot
-            )
-        }
+        let context = await ContextBuilder.buildContext(
+            userInput: task,
+            explicitContext: explicit,
+            index: index,
+            projectRoot: projectRoot
+        )
 
         let system = ChatMessage(
             role: .system,

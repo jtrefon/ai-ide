@@ -8,10 +8,10 @@
 import SwiftUI
 
 struct GeneralSettingsTab: View {
-    @ObservedObject var appState: AppState
+    @ObservedObject var ui: UIStateManager
     
     private let fontFamilies = [
-        "SF Mono",
+        AppConstants.Editor.defaultFontFamily,
         "Menlo",
         "JetBrains Mono",
         "Fira Code",
@@ -21,7 +21,7 @@ struct GeneralSettingsTab: View {
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: AppConstants.Settings.sectionSpacing) {
                 SettingsCard(
                     title: "Appearance",
                     subtitle: "Choose a theme that feels native and calm."
@@ -39,7 +39,7 @@ struct GeneralSettingsTab: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        .frame(width: 220)
+                        .frame(width: AppConstants.Settings.pickerWideWidth)
                         .accessibilityIdentifier("Settings.Theme")
                     }
                 }
@@ -60,7 +60,7 @@ struct GeneralSettingsTab: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 200)
+                        .frame(width: AppConstants.Settings.pickerNarrowWidth)
                         .accessibilityIdentifier("Settings.FontFamily")
                     }
                     
@@ -75,10 +75,10 @@ struct GeneralSettingsTab: View {
                                 in: AppConstants.Editor.minFontSize...AppConstants.Editor.maxFontSize,
                                 step: 1
                             )
-                            .frame(width: 180)
+                            .frame(width: AppConstants.Settings.sliderWidth)
                             .accessibilityIdentifier("Settings.FontSize")
                             
-                            Text("\(Int(appState.ui.fontSize)) pt")
+                            Text("\(Int(ui.fontSize)) pt")
                                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }
@@ -97,7 +97,7 @@ struct GeneralSettingsTab: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        .frame(width: 220)
+                        .frame(width: AppConstants.Settings.pickerWideWidth)
                         .accessibilityIdentifier("Settings.IndentationStyle")
                     }
                     
@@ -169,70 +169,70 @@ struct GeneralSettingsTab: View {
                         Spacer()
                         
                         Button("Reset to Defaults") {
-                            appState.ui.resetToDefaults()
+                            ui.resetToDefaults()
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Color.white.opacity(0.2))
                     }
                 }
             }
-            .padding(.top, 4)
+            .padding(.top, AppConstants.Settings.contentTopPadding)
         }
     }
     
     private var themeBinding: Binding<AppTheme> {
         Binding(
-            get: { appState.ui.selectedTheme },
-            set: { appState.ui.setTheme($0) }
+            get: { ui.selectedTheme },
+            set: { ui.setTheme($0) }
         )
     }
     
     private var fontSizeBinding: Binding<Double> {
         Binding(
-            get: { appState.ui.fontSize },
-            set: { appState.ui.updateFontSize($0) }
+            get: { ui.fontSize },
+            set: { ui.updateFontSize($0) }
         )
     }
     
     private var fontFamilyBinding: Binding<String> {
         Binding(
-            get: { appState.ui.fontFamily },
-            set: { appState.ui.updateFontFamily($0) }
+            get: { ui.fontFamily },
+            set: { ui.updateFontFamily($0) }
         )
     }
 
     private var indentationStyleBinding: Binding<IndentationStyle> {
         Binding(
-            get: { appState.ui.indentationStyle },
-            set: { appState.ui.setIndentationStyle($0) }
+            get: { ui.indentationStyle },
+            set: { ui.setIndentationStyle($0) }
         )
     }
     
     private var showLineNumbersBinding: Binding<Bool> {
         Binding(
-            get: { appState.ui.showLineNumbers },
-            set: { appState.ui.setShowLineNumbers($0) }
+            get: { ui.showLineNumbers },
+            set: { ui.setShowLineNumbers($0) }
         )
     }
     
     private var wordWrapBinding: Binding<Bool> {
         Binding(
-            get: { appState.ui.wordWrap },
-            set: { appState.ui.setWordWrap($0) }
+            get: { ui.wordWrap },
+            set: { ui.setWordWrap($0) }
         )
     }
     
     private var minimapBinding: Binding<Bool> {
         Binding(
-            get: { appState.ui.minimapVisible },
-            set: { appState.ui.setMinimapVisible($0) }
+            get: { ui.minimapVisible },
+            set: { ui.setMinimapVisible($0) }
         )
     }
     
     private var sidebarBinding: Binding<Bool> {
         Binding(
-            get: { appState.ui.isSidebarVisible },
-            set: { appState.ui.setSidebarVisible($0) }
+            get: { ui.isSidebarVisible },
+            set: { ui.setSidebarVisible($0) }
         )
     }
 }

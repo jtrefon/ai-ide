@@ -15,9 +15,19 @@ import Combine
 @MainActor
 struct osx_ideTests {
     private static var testFiles: [URL] = []
+
+    private static func uniqueForegroundColorCount(in attributed: NSAttributedString) -> Int {
+        var unique: Set<String> = []
+        attributed.enumerateAttributes(in: NSRange(location: 0, length: attributed.length), options: []) { attrs, _, _ in
+            guard let c = attrs[.foregroundColor] as? NSColor else { return }
+            let resolved = c.usingColorSpace(.deviceRGB) ?? c
+            unique.insert("\(resolved.redComponent),\(resolved.greenComponent),\(resolved.blueComponent),\(resolved.alphaComponent)")
+        }
+        return unique.count
+    }
     
     @Test func testAppStateInitialization() async throws {
-        let appState = DependencyContainer.shared.makeAppState()
+        let appState = DependencyContainer().makeAppState()
         
         #expect(appState.fileEditor.selectedFile == nil, "Selected file should be nil initially")
         #expect(appState.fileEditor.editorContent.isEmpty, "Editor content should be empty initially")
@@ -47,7 +57,7 @@ struct osx_ideTests {
     }
 
     @Test func testNewFileFunctionality() async throws {
-        let appState = DependencyContainer.shared.makeAppState()
+        let appState = DependencyContainer().makeAppState()
         
         appState.fileEditor.editorContent = "some content"
         // appState.fileEditor.selectedFile and .isDirty are read-only
@@ -61,7 +71,7 @@ struct osx_ideTests {
     }
 
     @Test func testEditorTabsNoDuplicatesOnRepeatedOpen() async throws {
-        let appState = DependencyContainer.shared.makeAppState()
+        let appState = DependencyContainer().makeAppState()
 
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_tabs_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -77,8 +87,62 @@ struct osx_ideTests {
         #expect(appState.fileEditor.selectedFile == file.path, "Expected selectedFile to be the opened file")
     }
 
+    @Test func testOpenJSONFileSetsEditorLanguageToJSON() async throws {
+        let appState = DependencyContainer().makeAppState()
+
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_open_json_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let file = tempRoot.appendingPathComponent("data.json")
+        try "{\"a\": 1, \"b\": true, \"c\": null}".write(to: file, atomically: true, encoding: .utf8)
+
+        appState.fileEditor.loadFile(from: file)
+
+        #expect(appState.fileEditor.selectedFile == file.path)
+        #expect(appState.fileEditor.editorLanguage == "json", "Expected .json files to set editorLanguage=json")
+    }
+
+    @Test func testSyntaxHighlighterJSONProducesMultipleColors() async throws {
+        let code = """
+        {
+          \"key\": \"value\",
+          \"number\": 123,
+          \"bool\": true,
+          \"nullVal\": null,
+          \"arr\": [1, false],
+          \"obj\": {\"nested\": false}
+        }
+        """
+
+        let result = SyntaxHighlighter.shared.highlight(code, language: "json")
+        let unique = Self.uniqueForegroundColorCount(in: result)
+
+        #expect(unique >= 4, "Expected json highlighting to apply multiple colors; got unique=\(unique)")
+    }
+
+    @Test func testUntitledBufferAutoDetectsJSONLanguageOnPaste() async throws {
+        let appState = DependencyContainer().makeAppState()
+
+        appState.fileEditor.newFile()
+        #expect(appState.fileEditor.selectedFile == nil)
+        #expect(appState.fileEditor.editorLanguage == "swift")
+
+        let pasted = """
+        {
+          \"key\": \"value\",
+          \"n\": 1,
+          \"b\": true,
+          \"z\": null
+        }
+        """
+
+        appState.fileEditor.editorContent = pasted
+        #expect(appState.fileEditor.editorLanguage == "json", "Expected pasted JSON in untitled buffer to auto-switch editorLanguage to json")
+    }
+
     @Test func testEditorCloseActiveTabClearsStateWhenLastTab() async throws {
-        let appState = DependencyContainer.shared.makeAppState()
+        let appState = DependencyContainer().makeAppState()
 
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_tabs_close_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -97,7 +161,7 @@ struct osx_ideTests {
     }
 
     @Test func testSplitEditorOpenTargetsFocusedPane() async throws {
-        let appState = DependencyContainer.shared.makeAppState()
+        let appState = DependencyContainer().makeAppState()
 
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_split_focus_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -108,8 +172,8 @@ struct osx_ideTests {
         try "print(\"a\")".write(to: fileA, atomically: true, encoding: .utf8)
         try "print(\"b\")".write(to: fileB, atomically: true, encoding: .utf8)
 
-        appState.fileEditor.toggleSplit(axis: .vertical)
-        appState.fileEditor.focus(.secondary)
+        appState.fileEditor.toggleSplit(axis: FileEditorStateManager.SplitAxis.vertical)
+        appState.fileEditor.focus(FileEditorStateManager.PaneID.secondary)
 
         appState.fileEditor.loadFile(from: fileB)
 
@@ -180,7 +244,7 @@ struct osx_ideTests {
         try content.write(to: file, atomically: true, encoding: .utf8)
 
         let svc = WorkspaceSymbolSearchService(codebaseIndexProvider: { nil })
-        let results = svc.search(
+        let results = await svc.search(
             query: "Foo",
             projectRoot: tempRoot,
             currentFilePath: file.path,
@@ -226,6 +290,94 @@ struct osx_ideTests {
         } catch {
             #expect(error.localizedDescription.lowercased().contains("invalid identifier"))
         }
+    }
+
+    @Test func testDiagnosticsParserParsesXcodebuildErrorLine() async throws {
+        let line = "/Users/me/Project/Foo.swift:42:13: error: Cannot find 'Bar' in scope"
+        let d = DiagnosticsParser.parseXcodebuildLine(line)
+        #expect(d != nil)
+        #expect(d?.relativePath == "/Users/me/Project/Foo.swift")
+        #expect(d?.line == 42)
+        #expect(d?.column == 13)
+        #expect(d?.severity == .error)
+        #expect(d?.message.contains("Cannot find") == true)
+    }
+
+    @Test func testCodeFoldingRangeFinderFindsBraceFoldRangeAtCursor() async throws {
+        let content = """
+        func foo() {
+            print(\"a\")
+            if true {
+                print(\"b\")
+            }
+        }
+        """
+
+        let ns = content as NSString
+        let cursor = ns.range(of: "print(\"b\")").location
+        let r = CodeFoldingRangeFinder.foldRange(at: cursor, in: content)
+        #expect(r != nil)
+        #expect(r?.length ?? 0 > 0)
+
+        // The smallest containing fold should be the inner `if` block, not the outer function.
+        let foldedText = ns.substring(with: r!)
+        #expect(foldedText.contains("print(\"b\")"))
+        #expect(!foldedText.contains("print(\"a\")"))
+    }
+
+    @Test func testCodeFoldingRangeFinderReturnsAllFoldRanges() async throws {
+        let content = """
+        struct A {
+            func foo() {
+                print(\"x\")
+            }
+        }
+        """
+
+        let ranges = CodeFoldingRangeFinder.allFoldRanges(in: content)
+        #expect(ranges.count == 2)
+    }
+
+    @Test func testMultiCursorUtilitiesNextOccurrence() async throws {
+        let text = "foo bar foo baz foo"
+        let r1 = MultiCursorUtilities.nextOccurrenceRange(text: text, needle: "foo", fromIndex: 0)
+        #expect(r1?.location == 0)
+
+        let r2 = MultiCursorUtilities.nextOccurrenceRange(text: text, needle: "foo", fromIndex: 1)
+        #expect(r2?.location == 8)
+    }
+
+    @Test func testMultiCursorUtilitiesCaretMoveVertical() async throws {
+        let text = "abc\n012345\nxyz\n"
+        // caret at column 2 of line 2 (0-based) => '2'
+        let ns = text as NSString
+        let line2Start = ns.range(of: "012345").location
+        let caret = line2Start + 2
+
+        let up = MultiCursorUtilities.caretMovedVertically(text: text, caret: caret, direction: .up)
+        #expect(up == 2)
+
+        let down = MultiCursorUtilities.caretMovedVertically(text: text, caret: caret, direction: .down)
+        let line3Start = ns.range(of: "xyz").location
+        #expect(down == line3Start + 2)
+    }
+
+    @Test func testEditorAIContextBuilderPrefersSelection() async throws {
+        let buffer = "let a = 1\nlet b = 2\n"
+        let ns = buffer as NSString
+        let selection = ns.range(of: "let b = 2")
+        let ctx = EditorAIContextBuilder.build(
+            filePath: "/tmp/test.swift",
+            language: "swift",
+            buffer: buffer,
+            selection: selection
+        )
+
+        #expect(ctx.contains("File: /tmp/test.swift"))
+        #expect(ctx.contains("Language: swift"))
+        #expect(ctx.contains("Selected Code:"))
+        #expect(ctx.contains("let b = 2"))
+        #expect(!ctx.contains("Buffer:\n\n\(buffer)"))
     }
 
     @Test func testCodeSelectionContext() async throws {
@@ -415,11 +567,11 @@ struct osx_ideTests {
     }
 
     @Test func testErrorHandling() async throws {
-        let appState = DependencyContainer.shared.makeAppState()
+        let appState = DependencyContainer().makeAppState()
         
         appState.lastError = "Test error"
         
-        #expect(appState.lastError?.contains("Test error") == true, "Error should be stored")
+        #expect(appState.lastError == "Unknown error: Test error", "Error should be set")
         
         appState.lastError = nil
         #expect(appState.lastError == nil, "Error should be clearable")
@@ -514,7 +666,7 @@ struct osx_ideTests {
         let fileSystemService = FileSystemService()
         let validator = PathValidator(projectRoot: tempRoot)
 
-        let writeFilesTool = WriteFilesTool(fileSystemService: fileSystemService, pathValidator: validator)
+        let writeFilesTool = WriteFilesTool(fileSystemService: fileSystemService, pathValidator: validator, eventBus: EventBus())
         _ = try await writeFilesTool.execute(arguments: [
             "files": [
                 [
@@ -537,7 +689,7 @@ struct osx_ideTests {
         let registerContent = try fileSystemService.readFile(at: registerURL)
         #expect(registerContent.contains("function Register"), "Register.tsx content should match")
 
-        let createFileTool = CreateFileTool(pathValidator: validator)
+        let createFileTool = CreateFileTool(pathValidator: validator, eventBus: EventBus())
         _ = try await createFileTool.execute(arguments: [
             "path": "src/styles/app.css"
         ])
@@ -594,6 +746,33 @@ struct NucleusSuite {
         try await registry.execute(commandID)
         #expect(result == "hijacked", "Last registered handler should win (Hijacking)")
     }
+
+    @Test func typedCommandRegistryExecution() async throws {
+        let registry = CommandRegistry()
+        let cmd = TypedCommand<ExplorerRenameArgs>("test.rename")
+        var seen: ExplorerRenameArgs? = nil
+
+        registry.register(command: cmd) { args in
+            seen = args
+        }
+
+        try await registry.execute(cmd, args: ExplorerRenameArgs(path: "/tmp/a.txt", newName: "b.txt"))
+        #expect(seen?.path == "/tmp/a.txt")
+        #expect(seen?.newName == "b.txt")
+    }
+
+    @Test func typedCommandRegistryCompatibleWithLegacyArgs() async throws {
+        let registry = CommandRegistry()
+        let cmd = TypedCommand<ExplorerPathArgs>("test.path")
+        var seen: String? = nil
+
+        registry.register(command: cmd) { args in
+            seen = args.path
+        }
+
+        try await registry.execute(cmd.id, args: ["path": "/tmp/file.txt"])
+        #expect(seen == "/tmp/file.txt")
+    }
     
     @Test func uiRegistryRegistration() async throws {
         let registry = UIRegistry()
@@ -612,3 +791,4 @@ struct NucleusSuite {
         #expect(views.first?.iconName == "star")
     }
 }
+

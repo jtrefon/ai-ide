@@ -47,6 +47,29 @@ xcodebuild -project osx-ide.xcodeproj -scheme osx-ide -configuration Debug build
 xcodebuild -project osx-ide.xcodeproj -scheme osx-ide -configuration Debug test -destination 'platform=macOS'
 ```
 
+## Troubleshooting
+
+### Xcode/SourceKit “false compile errors”
+
+Sometimes Xcode/SourceKit can show red errors (missing types, failed imports, etc.) while `xcodebuild build` and `xcodebuild test` are green.
+
+Recovery steps (in order):
+
+1. Quit Xcode.
+2. Run `./run.sh clean`.
+3. Delete DerivedData for this project:
+   - In Finder: `~/Library/Developer/Xcode/DerivedData/` (remove the `osx-ide-*` folder)
+4. Re-open `osx-ide.xcodeproj`.
+5. In Xcode: `File > Packages > Reset Package Caches` (if needed).
+6. Build once from Xcode.
+
+If the issue persists but `xcodebuild` is still green, treat `xcodebuild` output as the source of truth and file an issue with:
+
+- Xcode version
+- Steps that reproduce
+- A screenshot of the SourceKit error
+- Relevant `xcodebuild` output
+
 ## Notes
 
 - The embedded terminal uses the system shell (`/bin/zsh` or `/bin/bash`).

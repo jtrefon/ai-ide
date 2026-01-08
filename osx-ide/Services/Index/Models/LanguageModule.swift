@@ -11,6 +11,18 @@ import AppKit
 // Explicitly import required types if they are not being resolved automatically
 // CodeLanguage and Symbol are defined in Services/Index/Models/IndexModels.swift
 
+public struct AnySymbolExtractor: Sendable {
+    private let _extract: @Sendable (_ content: String, _ resourceId: String) -> [Symbol]
+
+    public init(_ extract: @Sendable @escaping (_ content: String, _ resourceId: String) -> [Symbol]) {
+        self._extract = extract
+    }
+
+    public func extractSymbols(content: String, resourceId: String) -> [Symbol] {
+        _extract(content, resourceId)
+    }
+}
+
 /// Defines the capabilities a language-specific module must provide.
 public protocol LanguageModule: Sendable {
     /// Unique identifier for the language.
@@ -27,6 +39,14 @@ public protocol LanguageModule: Sendable {
     
     /// Formats the provided code according to language standards.
     func format(_ code: String) -> String
+}
+
+public extension LanguageModule {
+    var symbolExtractor: AnySymbolExtractor {
+        AnySymbolExtractor { content, resourceId in
+            parseSymbols(content: content, resourceId: resourceId)
+        }
+    }
 }
 
 /// Base class for regex-based language modules to reduce boilerplate.
