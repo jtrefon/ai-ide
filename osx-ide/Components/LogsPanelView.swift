@@ -1,17 +1,23 @@
 import SwiftUI
 import AppKit
+import Combine
 
 struct LogsPanelView: View {
     @ObservedObject var ui: UIStateManager
     let projectRoot: URL?
+    private let eventBus: EventBusProtocol
 
     @State private var selectedSource: LogSource = .app
     @State private var follow: Bool = true
     @StateObject private var tailer: LogFileTailer
+    @State private var followSubscription: AnyCancellable?
+    @State private var sourceSubscription: AnyCancellable?
+    @State private var clearSubscription: AnyCancellable?
 
-    init(ui: UIStateManager, projectRoot: URL?) {
+    init(ui: UIStateManager, projectRoot: URL?, eventBus: EventBusProtocol) {
         self.ui = ui
         self.projectRoot = projectRoot
+        self.eventBus = eventBus
 
         let fileURL = LogsPanelView.resolveURL(source: .app, projectRoot: projectRoot)
         _tailer = StateObject(wrappedValue: LogFileTailer(fileURL: fileURL))
@@ -19,34 +25,6 @@ struct LogsPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Text("Logs")
-                    .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
-                Spacer()
-
-                Toggle("Follow", isOn: $follow)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-
-                Picker("Source", selection: $selectedSource) {
-                    ForEach(LogSource.allCases) { src in
-                        Text(src.title).tag(src)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                Button("Clear") {
-                    tailer.clear()
-                }
-                .buttonStyle(.borderless)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .frame(height: 30)
-            .background(Color(NSColor.controlBackgroundColor))
-
-            Divider()
-
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
@@ -73,9 +51,24 @@ struct LogsPanelView: View {
         .background(Color(NSColor.textBackgroundColor))
         .onAppear {
             tailer.start()
+
+            followSubscription = eventBus.subscribe(to: LogsFollowChangedEvent.self) { event in
+                follow = event.follow
+            }
+            sourceSubscription = eventBus.subscribe(to: LogsSourceChangedEvent.self) { event in
+                if let src = LogSource(rawValue: event.sourceRawValue) {
+                    selectedSource = src
+                }
+            }
+            clearSubscription = eventBus.subscribe(to: LogsClearRequestedEvent.self) { _ in
+                tailer.clear()
+            }
         }
         .onDisappear {
             tailer.stop()
+            followSubscription = nil
+            sourceSubscription = nil
+            clearSubscription = nil
         }
         .onChange(of: selectedSource) { _, newValue in
             tailer.setFileURL(LogsPanelView.resolveURL(source: newValue, projectRoot: projectRoot))

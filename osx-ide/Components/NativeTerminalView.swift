@@ -7,49 +7,25 @@
 
 import SwiftUI
 import AppKit
+import Combine
 
 /// Modern terminal view with native zsh shell integration for macOS 26
 struct NativeTerminalView: View {
     @StateObject private var embedder: NativeTerminalEmbedder
     @Binding var currentDirectory: URL?
     @ObservedObject var ui: UIStateManager
+    private let eventBus: EventBusProtocol
+    @State private var clearSubscription: AnyCancellable?
 
     init(currentDirectory: Binding<URL?>, ui: UIStateManager, eventBus: EventBusProtocol) {
         self._currentDirectory = currentDirectory
         self.ui = ui
+        self.eventBus = eventBus
         self._embedder = StateObject(wrappedValue: NativeTerminalEmbedder(eventBus: eventBus))
     }
     
     var body: some View {
         VStack(spacing: 0) {
-            // Terminal header with Liquid Glass UI
-            HStack {
-                Button(action: {
-                    embedder.clearTerminal()
-                }) {
-                    Image(systemName: "trash")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.borderless)
-                .help("Clear Terminal")
-                
-                Text("Terminal")
-                    .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
-                    .foregroundColor(.primary)
-                
-                Spacer()
-                
-                Text(currentDirectory?.lastPathComponent ?? "Terminal")
-                    .font(.system(size: max(10, ui.fontSize - 3)))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .frame(height: 30)
-            .background(Color(NSColor.controlBackgroundColor))
-            
             // Terminal content area using proper NSViewRepresentable
             TerminalContentView(
                 embedder: embedder,
@@ -58,6 +34,14 @@ struct NativeTerminalView: View {
                 fontFamily: ui.fontFamily
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onAppear {
+            clearSubscription = eventBus.subscribe(to: TerminalClearRequestedEvent.self) { [weak embedder] _ in
+                embedder?.clearTerminal()
+            }
+        }
+        .onDisappear {
+            clearSubscription = nil
         }
         .onChange(of: ui.fontSize) { _, newValue in
             embedder.updateFont(size: newValue, family: ui.fontFamily)
