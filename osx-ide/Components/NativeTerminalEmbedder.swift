@@ -50,6 +50,13 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     final class TerminalTextView: NSTextView {
         weak var inputDelegate: NativeTerminalEmbedder?
 
+        override var acceptsFirstResponder: Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            window?.makeFirstResponder(self)
+            super.mouseDown(with: event)
+        }
+
         override func keyDown(with event: NSEvent) {
             if let s = event.characters {
                 inputDelegate?.shellManager.sendInput(s)
@@ -121,6 +128,17 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         setupTerminalView(in: parentView)
         shellManager.start(in: targetDir)
     }
+
+    func focusTerminal() {
+        guard let terminalView else { return }
+
+        terminalView.window?.makeFirstResponder(terminalView)
+
+        let endLocation = terminalView.string.utf16.count
+        let endRange = NSRange(location: endLocation, length: 0)
+        terminalView.setSelectedRange(endRange)
+        terminalView.scrollRangeToVisible(endRange)
+    }
     
     /// Setup terminal view
     private func setupTerminalView(in parentView: NSView) {
@@ -138,7 +156,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         
         let terminalView = TerminalTextView()
         terminalView.inputDelegate = self
-        terminalView.isEditable = false
+        terminalView.isEditable = true
         terminalView.isSelectable = true
         terminalView.isRichText = false
         terminalView.usesRuler = false
