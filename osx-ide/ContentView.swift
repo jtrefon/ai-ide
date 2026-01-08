@@ -123,7 +123,7 @@ struct ContentView: View {
             mainLayout
             OverlayHostView(appState: appState)
         }
-        .background(Color.clear)
+        .background(Color(NSColor.windowBackgroundColor))
         .environment(\.font, .system(size: CGFloat(ui.fontSize)))
         .preferredColorScheme(appState.selectedTheme.colorScheme)
         .accessibilityIdentifier("AppRootView")
@@ -155,14 +155,13 @@ struct ContentView: View {
     }
 
     private var editorAndTerminal: some View {
-        VSplitView {
-            editorArea
-                .frame(minHeight: 100)
-
-            if ui.isTerminalVisible {
-                terminalPanel
-            }
-        }
+        EditorTerminalSplitView(
+            isTerminalVisible: ui.isTerminalVisible,
+            terminalHeight: ui.terminalHeight,
+            setTerminalHeight: { ui.updateTerminalHeight($0) },
+            editor: { editorArea },
+            terminal: { terminalPanel }
+        )
         .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -217,21 +216,92 @@ struct ContentView: View {
         let bottomViews = registry.views(for: .panelBottom)
 
         if bottomViews.count == 1, let pluginView = bottomViews.first {
-            pluginView.makeView().frame(minHeight: 100)
+            pluginView.makeView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(NSColor.windowBackgroundColor))
+                .frame(minHeight: 100)
         } else if bottomViews.count > 1 {
-            TabView(selection: $ui.bottomPanelSelectedName) {
-                ForEach(bottomViews) { v in
-                    v.makeView()
-                        .tabItem {
-                            if let icon = v.iconName {
-                                Image(systemName: icon)
+            let selectedName = ui.bottomPanelSelectedName
+            let selectedView = bottomViews.first(where: { $0.name == selectedName }) ?? bottomViews[0]
+
+            selectedView.makeView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(NSColor.windowBackgroundColor))
+                .overlay(alignment: .top) {
+                    HStack {
+                        Spacer(minLength: 0)
+                        Picker("Bottom Panel", selection: $ui.bottomPanelSelectedName) {
+                            ForEach(bottomViews) { v in
+                                Text(v.name.replacingOccurrences(of: "Internal.", with: ""))
+                                    .tag(v.name)
                             }
-                            Text(v.name.replacingOccurrences(of: "Internal.", with: ""))
                         }
-                        .tag(v.name)
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(maxWidth: 360)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(height: AppConstants.Layout.headerHeight)
+                    .allowsHitTesting(true)
+                }
+                .frame(minHeight: 100)
+        }
+    }
+}
+
+private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
+    let isTerminalVisible: Bool
+    let terminalHeight: Double
+    let setTerminalHeight: (Double) -> Void
+    let editor: () -> Editor
+    let terminal: () -> Terminal
+
+    @State private var dragStartTerminalHeight: Double?
+
+    private let dividerHeight: CGFloat = 6
+
+    var body: some View {
+        GeometryReader { proxy in
+            let containerHeight = proxy.size.height
+            let minEditorHeight = Double(AppConstants.Layout.minTerminalHeight)
+            let maxAllowedTerminal = max(
+                AppConstants.Layout.minTerminalHeight,
+                min(AppConstants.Layout.maxTerminalHeight, containerHeight - minEditorHeight - Double(dividerHeight))
+            )
+
+            VStack(spacing: 0) {
+                editor()
+                    .frame(maxWidth: .infinity)
+                    .frame(maxHeight: .infinity)
+
+                if isTerminalVisible {
+                    Rectangle()
+                        .fill(Color(NSColor.separatorColor))
+                        .frame(height: dividerHeight)
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    if dragStartTerminalHeight == nil {
+                                        dragStartTerminalHeight = terminalHeight
+                                    }
+
+                                    let start = dragStartTerminalHeight ?? terminalHeight
+                                    let proposed = start - value.translation.height
+                                    let clamped = max(AppConstants.Layout.minTerminalHeight, min(maxAllowedTerminal, proposed))
+                                    setTerminalHeight(clamped)
+                                }
+                                .onEnded { _ in
+                                    dragStartTerminalHeight = nil
+                                }
+                        )
+
+                    terminal()
+                        .frame(maxWidth: .infinity)
+                        .frame(height: terminalHeight)
                 }
             }
-            .frame(minHeight: 100)
         }
     }
 }
@@ -246,8 +316,8 @@ private struct WindowSetupView: View {
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.isMovableByWindowBackground = true
-            window.isOpaque = false
-            window.backgroundColor = .clear
+            window.isOpaque = true
+            window.backgroundColor = NSColor.windowBackgroundColor
             window.hasShadow = true
             window.styleMask.insert(.fullSizeContentView)
             window.styleMask.insert(.unifiedTitleAndToolbar)
@@ -303,6 +373,7 @@ private struct OverlayHostView: View {
                 RenameSymbolOverlayView(appState: appState, isPresented: $appState.isRenameSymbolPresented)
             }
         }
+        .background(Color(NSColor.windowBackgroundColor))
     }
 }
 
