@@ -79,7 +79,11 @@ struct TerminalContentView: NSViewRepresentable {
     var fontFamily: String
     
     func makeNSView(context: Context) -> NSView {
-        let containerView = NSView()
+        let embedderRef = embedder
+        let containerView = FocusForwardingContainerView()
+        containerView.onFocusRequested = {
+            embedderRef.focusTerminal()
+        }
         containerView.wantsLayer = true
 
         context.coordinator.scheduleEmbed(
@@ -94,6 +98,13 @@ struct TerminalContentView: NSViewRepresentable {
     }
     
     func updateNSView(_ nsView: NSView, context: Context) {
+        if let containerView = nsView as? FocusForwardingContainerView {
+            let embedderRef = embedder
+            containerView.onFocusRequested = {
+                embedderRef.focusTerminal()
+            }
+        }
+
         context.coordinator.scheduleEmbed(
             into: nsView,
             directory: currentDirectory,
@@ -105,6 +116,15 @@ struct TerminalContentView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
+    }
+
+    final class FocusForwardingContainerView: NSView {
+        var onFocusRequested: (() -> Void)?
+
+        override func mouseDown(with event: NSEvent) {
+            onFocusRequested?()
+            super.mouseDown(with: event)
+        }
     }
 
     final class Coordinator {
