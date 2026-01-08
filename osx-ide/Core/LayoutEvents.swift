@@ -42,3 +42,31 @@ public struct ChatPanelWidthChangedEvent: Event {
         self.width = width
     }
 }
+
+public struct TerminalClearRequestedEvent: Event {
+    public init() {}
+}
+
+public struct LogsFollowChangedEvent: Event {
+    public let follow: Bool
+
+    public init(follow: Bool) {
+        self.follow = follow
+    }
+}
+
+public struct LogsSourceChangedEvent: Event {
+    public let sourceRawValue: String
+
+    public init(sourceRawValue: String) {
+        self.sourceRawValue = sourceRawValue
+    }
+}
+
+public struct LogsClearRequestedEvent: Event {
+    public init() {}
+}
+
+public struct ProblemsClearRequestedEvent: Event {
+    public init() {}
+}

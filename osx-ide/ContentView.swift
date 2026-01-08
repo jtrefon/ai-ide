@@ -15,6 +15,9 @@ struct ContentView: View {
     @ObservedObject private var ui: UIStateManager
     @ObservedObject private var registry: UIRegistry
 
+    @State private var logsFollow: Bool = true
+    @State private var logsSource: String = LogsPanelView.LogSource.app.rawValue
+
     init(appState: AppState) {
         self.appState = appState
         self._fileEditor = ObservedObject(wrappedValue: appState.fileEditor)
@@ -224,28 +227,100 @@ struct ContentView: View {
             let selectedName = ui.bottomPanelSelectedName
             let selectedView = bottomViews.first(where: { $0.name == selectedName }) ?? bottomViews[0]
 
-            selectedView.makeView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(NSColor.windowBackgroundColor))
-                .overlay(alignment: .top) {
-                    HStack {
-                        Spacer(minLength: 0)
-                        Picker("Bottom Panel", selection: $ui.bottomPanelSelectedName) {
-                            ForEach(bottomViews) { v in
-                                Text(v.name.replacingOccurrences(of: "Internal.", with: ""))
-                                    .tag(v.name)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(maxWidth: 360)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(height: AppConstants.Layout.headerHeight)
-                    .allowsHitTesting(true)
+            VStack(spacing: 0) {
+                bottomPanelHeader(selectedName: selectedName, bottomViews: bottomViews)
+                selectedView.makeView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .background(Color(NSColor.windowBackgroundColor))
+            .frame(minHeight: 100)
+        }
+    }
+
+    private func bottomPanelHeader(selectedName: String, bottomViews: [PluginView]) -> some View {
+        HStack(spacing: 8) {
+            bottomPanelLeadingControls(selectedName: selectedName)
+
+            Spacer(minLength: 0)
+
+            Picker("Bottom Panel", selection: $ui.bottomPanelSelectedName) {
+                ForEach(bottomViews) { v in
+                    Text(v.name.replacingOccurrences(of: "Internal.", with: ""))
+                        .tag(v.name)
                 }
-                .frame(minHeight: 100)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 360)
+
+            Spacer(minLength: 0)
+
+            bottomPanelTrailingControls(selectedName: selectedName)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(height: AppConstants.Layout.headerHeight)
+        .background(Color(NSColor.controlBackgroundColor))
+    }
+
+    @ViewBuilder
+    private func bottomPanelLeadingControls(selectedName: String) -> some View {
+        if selectedName == AppConstants.UI.internalTerminalPanelName {
+            Button(action: {
+                appState.eventBus.publish(TerminalClearRequestedEvent())
+            }) {
+                Image(systemName: "trash")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help("Clear Terminal")
+
+            Text("Terminal")
+                .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
+        } else if selectedName == "Internal.Logs" {
+            Text("Logs")
+                .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
+        } else if selectedName == "Internal.Problems" {
+            Text("Problems")
+                .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
+        }
+    }
+
+    @ViewBuilder
+    private func bottomPanelTrailingControls(selectedName: String) -> some View {
+        if selectedName == AppConstants.UI.internalTerminalPanelName {
+            Text(workspace.currentDirectory?.lastPathComponent ?? "Terminal")
+                .font(.system(size: max(10, ui.fontSize - 3)))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        } else if selectedName == "Internal.Logs" {
+            Toggle("Follow", isOn: $logsFollow)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .onChange(of: logsFollow) { _, newValue in
+                    appState.eventBus.publish(LogsFollowChangedEvent(follow: newValue))
+                }
+
+            Picker("Source", selection: $logsSource) {
+                ForEach(LogsPanelView.LogSource.allCases) { src in
+                    Text(src.title).tag(src.rawValue)
+                }
+            }
+            .pickerStyle(.menu)
+            .onChange(of: logsSource) { _, newValue in
+                appState.eventBus.publish(LogsSourceChangedEvent(sourceRawValue: newValue))
+            }
+
+            Button("Clear") {
+                appState.eventBus.publish(LogsClearRequestedEvent())
+            }
+            .buttonStyle(.borderless)
+        } else if selectedName == "Internal.Problems" {
+            Button("Clear") {
+                appState.eventBus.publish(ProblemsClearRequestedEvent())
+            }
+            .buttonStyle(.borderless)
         }
     }
 }
@@ -280,6 +355,10 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
                         .fill(Color(NSColor.separatorColor))
                         .frame(height: dividerHeight)
                         .contentShape(Rectangle())
+                        .overlay(
+                            ResizeCursorView()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        )
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
@@ -303,6 +382,34 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
                 }
             }
         }
+    }
+}
+
+private struct ResizeCursorView: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        CursorRectNSView(cursor: .resizeUpDown)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+private final class CursorRectNSView: NSView {
+    private let cursor: NSCursor
+
+    init(cursor: NSCursor) {
+        self.cursor = cursor
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: cursor)
     }
 }
 

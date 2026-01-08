@@ -43,7 +43,7 @@ final class CorePlugin {
             point: .panelBottom,
             name: "Internal.Logs",
             icon: "doc.text.magnifyingglass",
-            view: LogsPanelView(ui: context.ui, projectRoot: context.workspace.currentDirectory)
+            view: LogsPanelView(ui: context.ui, projectRoot: context.workspace.currentDirectory, eventBus: context.eventBus)
         )
 
         registry.register(

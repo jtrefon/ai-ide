@@ -1,56 +1,45 @@
 import SwiftUI
 import AppKit
+import Combine
 
 struct ProblemsView<Context: IDEContext>: View {
     @ObservedObject var store: DiagnosticsStore
     let context: Context
+    @State private var clearSubscription: AnyCancellable?
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            List {
-                ForEach(store.diagnostics) { d in
-                    Button {
-                        open(d)
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: d.severity == .error ? "xmark.octagon" : "exclamationmark.triangle")
-                                .foregroundColor(d.severity == .error ? .red : .yellow)
+        List {
+            ForEach(store.diagnostics) { d in
+                Button {
+                    open(d)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: d.severity == .error ? "xmark.octagon" : "exclamationmark.triangle")
+                            .foregroundColor(d.severity == .error ? .red : .yellow)
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(d.message)
-                                    .lineLimit(2)
-                                Text(locationText(d))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer(minLength: 0)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(d.message)
+                                .lineLimit(2)
+                            Text(locationText(d))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
                         }
-                        .padding(.vertical, 2)
+                        Spacer(minLength: 0)
                     }
-                    .buttonStyle(.plain)
+                    .padding(.vertical, 2)
                 }
+                .buttonStyle(.plain)
             }
         }
-    }
-
-    private var header: some View {
-        HStack {
-            Text("Problems")
-                .font(.system(size: max(10, context.ui.fontSize - 2), weight: .medium))
-
-            Spacer()
-
-            Button("Clear") {
+        .onAppear {
+            clearSubscription = context.eventBus.subscribe(to: ProblemsClearRequestedEvent.self) { _ in
                 store.clear()
             }
-            .buttonStyle(.borderless)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .frame(height: 30)
-        .background(Color(NSColor.controlBackgroundColor))
+        .onDisappear {
+            clearSubscription = nil
+        }
     }
 
     @MainActor
