@@ -48,6 +48,20 @@ public class ChatHistoryManager: ObservableObject {
         messages.append(message)
         saveHistory()
     }
+
+    public func upsertToolExecutionMessage(_ message: ChatMessage) {
+        guard message.isToolExecution, let toolCallId = message.toolCallId, !toolCallId.isEmpty else {
+            append(message)
+            return
+        }
+
+        if let index = messages.lastIndex(where: { $0.toolCallId == toolCallId }) {
+            messages[index] = message
+            saveHistory()
+        } else {
+            append(message)
+        }
+    }
     
     public func removeLast() {
         if !messages.isEmpty {

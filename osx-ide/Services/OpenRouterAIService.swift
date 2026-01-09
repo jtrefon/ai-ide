@@ -30,15 +30,17 @@ actor OpenRouterAIService: AIService {
     }
     
     func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        let sanitizedMessages = Self.sanitizeToolCallOrdering(messages)
+
         let validToolCallIds: Set<String> = Set(
-            messages
+            sanitizedMessages
                 .compactMap { $0.toolCalls }
                 .flatMap { $0 }
                 .map { $0.id }
         )
 
         // Convert [ChatMessage] to [OpenRouterChatMessage]
-        var openRouterMessages = messages.compactMap { msg -> OpenRouterChatMessage? in
+        let openRouterMessages = sanitizedMessages.compactMap { msg -> OpenRouterChatMessage? in
             switch msg.role {
             case .user:
                 return OpenRouterChatMessage(role: "user", content: msg.content)
@@ -70,6 +72,92 @@ actor OpenRouterAIService: AIService {
         }
         
         return try await performChatWithHistory(messages: openRouterMessages, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
+    }
+
+    private static func sanitizeToolCallOrdering(_ messages: [ChatMessage]) -> [ChatMessage] {
+        var sanitizer = ToolCallOrderingSanitizer()
+        return sanitizer.sanitize(messages)
+    }
+
+    private struct ToolCallOrderingBlock {
+        let startIndexInOutput: Int
+        let toolCallIds: Set<String>
+    }
+
+    private struct ToolCallOrderingSanitizer {
+        private var output: [ChatMessage] = []
+        private var pending: ToolCallOrderingBlock?
+        private var remainingToolCallIds: Set<String> = []
+
+        mutating func sanitize(_ messages: [ChatMessage]) -> [ChatMessage] {
+            if messages.isEmpty { return [] }
+            output = []
+            output.reserveCapacity(messages.count)
+
+            for msg in messages {
+                handleMessage(msg)
+            }
+
+            if hasPendingResponses {
+                dropPendingBlock()
+            }
+            return output
+        }
+
+        private var hasPendingResponses: Bool {
+            pending != nil && !remainingToolCallIds.isEmpty
+        }
+
+        private mutating func handleMessage(_ msg: ChatMessage) {
+            if msg.role == .assistant {
+                if hasPendingResponses { dropPendingBlock() }
+                startPendingBlock(from: msg)
+                return
+            }
+
+            if msg.role == .tool {
+                acceptToolMessageIfValid(msg)
+                return
+            }
+
+            if hasPendingResponses { dropPendingBlock() }
+            output.append(msg)
+        }
+
+        private mutating func dropPendingBlock() {
+            guard let pendingBlock = pending else { return }
+            if pendingBlock.startIndexInOutput < output.count {
+                output.removeSubrange(pendingBlock.startIndexInOutput..<output.count)
+            }
+            pending = nil
+            remainingToolCallIds.removeAll()
+        }
+
+        private mutating func startPendingBlock(from assistant: ChatMessage) {
+            guard let calls = assistant.toolCalls, !calls.isEmpty else {
+                output.append(assistant)
+                return
+            }
+            let ids = Set(calls.map { $0.id })
+            let start = output.count
+            output.append(assistant)
+            pending = ToolCallOrderingBlock(startIndexInOutput: start, toolCallIds: ids)
+            remainingToolCallIds = ids
+        }
+
+        private mutating func acceptToolMessageIfValid(_ toolMessage: ChatMessage) {
+            if toolMessage.toolStatus == .executing { return }
+            guard let toolCallId = toolMessage.toolCallId, !toolCallId.isEmpty else { return }
+            guard let pendingBlock = pending else { return }
+            guard pendingBlock.toolCallIds.contains(toolCallId) else { return }
+            guard remainingToolCallIds.contains(toolCallId) else { return }
+
+            output.append(toolMessage)
+            remainingToolCallIds.remove(toolCallId)
+            if remainingToolCallIds.isEmpty {
+                pending = nil
+            }
+        }
     }
     
     func explainCode(_ code: String) async throws -> String {

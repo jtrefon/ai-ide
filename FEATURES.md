@@ -53,6 +53,7 @@ We support **multiple languages** through a single **capability-based language f
   - and must fail with a clear message (never silent incorrect results).
 
 ### Core concept: capabilities (not monolith plugins)
+
 Each language module can implement one or more capabilities. This keeps the system robust and avoids “all or nothing” language support.
 
 - **Language identification**
@@ -92,6 +93,7 @@ Each language module can implement one or more capabilities. This keeps the syst
 - CodebaseIndex symbol tables and indexed search surfaces with graceful fallback
 
 ### Out of scope (for now)
+
 - A full Language Server implementation per language (we integrate with LSP; we don’t build an LSP).
 - Shipping a vendor SDK/parser as a core dependency requirement.
 
@@ -277,13 +279,312 @@ Each language module can implement one or more capabilities. This keeps the syst
   - **See**: Milestone 3 (Diff-first) + Milestone 4 (Checkpoints).
 
 ## AI Agent & autonomy
+
+### Agent workflow architecture (spec)
+
+We treat the “agent” as a deterministic workflow composed of specialized roles.
+
+#### Goals
+
+- **Autonomy with control**: plan → propose → review → apply → verify → summarize.
+- **Deterministic behavior**: stable tool ordering and reproducible outcomes.
+- **Reversibility**: every write is undoable (git or checkpoints).
+- **Context correctness**: prefer local index; never guess paths.
+
+#### Non-negotiable rules
+
+- **Command-first**: user-facing actions map to `CommandID`.
+- **Explicit scope**: selection/file/project scope is stated before acting.
+- **No guessed paths**: discover via index tools (`index_find_files`, `index_list_files`) before reading/writing.
+- **Prefer propose-first**: generate patch sets before applying writes (Milestone 3).
+- **Loop protection**: all self-iterations are capped; final status must be explicit.
+
+### Multi-role agent model
+
+The agent pipeline is split into roles for SRP and quality.
+
+- **Architect (high-level strategy)**
+  - **Responsibility**: establish project outline, constraints, and milestones.
+  - **Outputs**
+    - strategy summary (assumptions, tradeoffs, risks)
+    - milestone roadmap with acceptance criteria
+    - verification plan (commands + expected results)
+  - **Tool policy**: read-only tools only.
+  - **Current code hook**: `ArchitectAdvisorTool` (already exists) for focused architecture guidance.
+
+- **Planner (persistent plan manager)**
+  - **Responsibility**: maintain a durable execution plan across tool loops and long sessions.
+  - **Tool**: `PlannerTool` (already exists) → `ConversationPlanStore`.
+  - **Plan format (markdown)**
+    - milestones
+    - per-milestone steps
+    - current step marker
+    - explicit stop condition
+
+- **Worker (tool-using executor)**
+  - **Responsibility**: execute concrete steps using tools; keep actions minimal and reversible.
+  - **Tool policy**: allowed tools depend on `AIMode` + safety settings.
+  - **Operating rules**
+    - prefer index summaries/memories before reading full files
+    - do discovery first, then narrow reads, then propose edits
+    - update plan progress after each tool batch
+
+- **QA / Code Review agent (quality gate)**
+  - **Responsibility**: review proposed changes vs plan/spec and quality bar.
+  - **Outputs**: sign-off OR actionable review feedback.
+  - **Tool policy**: read-only tools + diff view.
+  - **Iteration cap**: max 3. On iteration 3, reviewer must explicitly mark “last chance” and list must-fix items.
+
+- **Finalizer (user-facing closure)**
+  - **Responsibility**: final summary that is consistent with what was executed.
+  - **Outputs**
+    - objective restatement
+    - touched files
+    - verify status + how to re-run
+    - how to undo (checkpoint/git)
+  - **Tool policy**: no tools.
+
+### Execution lifecycle (state machine)
+
+Each agent run is modeled as a state machine with a stable `runId`.
+
+- **States**
+  - `Intake` → validate request, scope, constraints
+  - `ContextPack` → gather index summaries/memories + minimal reads
+  - `Strategy` → Architect produces roadmap + acceptance criteria
+  - `PlanPersist` → Planner persists plan
+  - `Execute` → Worker runs tool batches
+  - `Propose` → create patch set (diff-first)
+  - `Review` → QA review (loop cap 3)
+  - `Apply` → apply patch set (checkpoint first)
+  - `Verify` → run allowlisted commands (loop cap 2–3)
+  - `Finalize` → consistent summary and next steps
+
+### Indexing & context intelligence integration
+
+The agent must prefer CodebaseIndex for discovery and context selection.
+
+- **Context routing order**
+  - (1) user-pinned context
+  - (2) index summaries/memories
+  - (3) index file/symbol search
+  - (4) direct file reads
+  - (5) filesystem scan fallback
+
+- **AI enrichment (already implemented)**
+  - per-file summaries + quality scores in `CodebaseIndex.runAIEnrichment()`.
+  - used by Architect/Planner to understand the system quickly.
+  - used by Worker to avoid low-signal exploration.
+
+### Safety policies (must be enforceable)
+
+- **Role-based tool access**
+  - Architect/QA: read-only tools.
+  - Worker: write/run tools gated by settings, path validation, and (preferably) propose-first workflow.
+
+- **Command safety**
+  - verify commands are allowlisted per project.
+  - destructive commands require explicit confirmation.
+
+- **Write safety**
+  - validate all paths are within project root.
+  - serialize writes per-path (Milestone 2).
+
+### Loop protection
+
+- **Tool loop cap**
+  - agent tool-call loop is capped (already present in `ConversationManager`).
+
+- **Review loop cap**
+  - max 3 review iterations.
+
+- **Verify loop cap**
+  - max 2–3 verify retries.
+
+### Current implementation (as-is)
+
+- `ConversationManager` orchestrates model → tools → model with a tool-loop cap.
+- `AIToolExecutor` executes tool calls sequentially and logs progress.
+- `PlannerTool` persists plan markdown.
+- `ArchitectAdvisorTool` provides architecture guidance with index context.
+- `CodebaseIndex` supports file/symbol search + AI enrichment + quality scoring.
+
+### Implementation roadmap (agent-specific)
+
+- **Role separation**: introduce role prompts + persist Strategy/Review artifacts under `.ide/`.
+- **Diff-first + checkpoints**: implement PatchSetStore/DiffViewer (Milestone 3) + CheckpointManager (Milestone 4).
+- **QA loop + verify loop**: add capped review iterations and allowlisted verify retries.
+- **Tool lanes**: introduce safe parallelism for reads + serialized writes (Milestone 2).
+
+## Project tracker — Agent ecosystem (implementation plan)
+
+This tracker is the authoritative execution plan for building the full agent ecosystem described above.
+
+### Global engineering requirements (apply to every milestone)
+
+- **Observability**
+  - Every agent run has a stable `runId`.
+  - Every tool call has a stable `toolCallId`.
+  - Logs must be structured (key/value) and persist to `.ide/logs/`.
+  - UI must expose an execution timeline (inputs → tool calls → outputs → errors).
+
+- **Error handling + recovery**
+  - Errors are actionable (what failed, why, what the user can do next).
+  - Cancellation must be respected end-to-end.
+  - On app restart, in-flight runs are marked as interrupted and can be inspected.
+  - Writes must be reversible (git or checkpoints).
+
+- **Determinism + safety**
+  - Tool ordering is stable.
+  - Writes are serialized per-path.
+  - Destructive operations are gated.
+  - Path validation is enforced for all file tools.
+
+- **Testing**
+  - Each milestone must add/extend unit tests.
+  - UI tests are tracked as Phase 2 stories (can be implemented later).
+
+### Milestone A — Execution engine + traceability UI (foundation)
+
+**Outcome**: deterministic tool execution with trace IDs and a UI that clearly shows executed tools/commands and results.
+
+#### User stories (Milestone A)
+
+- **Story A1 — Tool execution timeline**
+  - As a user, I can see every tool call executed for my request, its status, and its output.
+  - **Acceptance**
+    - Timeline shows: tool name, target file/command, start time, end time, duration, status, and output preview.
+    - Selecting an entry shows full output and any structured metadata.
+
+- **Story A2 — Deterministic scheduler**
+  - As a user, tool calls execute deterministically and UI never “reorders” history.
+  - **Acceptance**
+    - Tool calls have stable indices and UI reflects them in order.
+    - Parallel reads/search/index are supported; writes are serialized per-path.
+
+- **Story A3 — Cancellation and partial progress**
+  - As a user, I can cancel a running tool batch and see what completed and what was cancelled.
+  - **Acceptance**
+    - Cancel stops pending work quickly.
+    - Completed tool outputs remain visible.
+    - Cancelled entries are clearly marked.
+
+#### Engineering scope
+
+- **Scheduler**
+  - Introduce `ToolScheduler` (actor) with:
+    - bounded concurrency for read-only tools
+    - per-path locks for write tools
+    - deterministic emission of progress events (stable ordering)
+
+- **Logging + traceability**
+  - Standardize on `runId` + `toolCallId` propagation across:
+    - `ConversationManager`
+    - `AIToolExecutor`
+    - `ExecutionLogStore` / `ConversationLogStore`
+  - Ensure tool progress streaming events are persisted for debugging.
+
+- **UI**
+  - Add a dedicated “Tasks / Execution” surface in the AI panel:
+    - timeline list
+    - details inspector
+    - copy/export output
+
+#### Unit tests (Milestone A)
+
+- `ToolScheduler` does not run two write tasks concurrently for the same path.
+- Parallel read tasks respect max concurrency and produce deterministic ordering.
+- Cancel stops queued tasks and marks them cancelled.
+
+#### Phase 2 UI tests backlog (Milestone A)
+
+- Verify tool timeline renders start→progress→complete.
+- Verify cancel button marks tasks cancelled.
+- Verify selecting a timeline row shows full output.
+
+### Milestone B — Diff-first patch sets + checkpoints (trust + reversibility)
+
+**Outcome**: agent proposes patch sets; user reviews; apply is checkpointed and reversible.
+
+#### User stories (Milestone B)
+
+- **Story B1 — Propose multi-file patch set**
+  - As a user, the agent proposes changes as a patch set instead of writing directly.
+
+- **Story B2 — Review + apply**
+  - As a user, I can review a patch set and apply it safely.
+
+- **Story B3 — Rollback**
+  - As a user, I can restore the previous state via checkpoint.
+
+#### Unit tests (Milestone B)
+
+- Patch set manifest roundtrip.
+- Apply writes expected bytes.
+- Checkpoint restore restores exact bytes.
+
+#### Phase 2 UI tests backlog (Milestone B)
+
+- Per-file accept/reject.
+- Restore checkpoint confirmation flow.
+
+### Milestone C — Multi-role orchestration (Architect → Worker → QA → Finalizer)
+
+**Outcome**: role-separated runs with review loop (max 3) and verify loop (allowlisted, capped).
+
+#### User stories (Milestone C)
+
+- **Story C1 — Strategy + plan persisted**
+  - As a user, I get a clear strategy and milestone plan saved to the plan store.
+
+- **Story C2 — QA review loop**
+  - As a user, I see review feedback; the system caps to 3 iterations and clearly communicates the final attempt.
+
+- **Story C3 — Verify loop**
+  - As a user, the agent runs allowlisted verify commands, retries failures up to the cap, then stops with a clear status.
+
+#### Unit tests (Milestone C)
+
+- Review loop stops at 3 and marks last iteration.
+- Verify loop retries up to cap and surfaces final status.
+
+#### Phase 2 UI tests backlog (Milestone C)
+
+- Verify “Review required” state blocks apply.
+- Verify “Verify failed” state shows command output and next actions.
+
+### Milestone D — Index-powered context engine + debt payoff workflows
+
+**Outcome**: systematic context selection and optional refactor/debt payoff mode driven by index summaries and quality scores.
+
+#### User stories (Milestone D)
+
+- **Story D1 — Context pack transparency**
+  - As a user, I can see which context sources were used (summaries, files, symbols).
+
+- **Story D2 — Debt payoff plan**
+  - As a user, I can request “pay down debt” and the agent generates a safe, reversible plan with verification.
+
+#### Unit tests (Milestone D)
+
+- Context packing respects budget and is deterministic.
+
+#### Phase 2 UI tests backlog (Milestone D)
+
+- Context list/pin/unpin flow.
+
+### Definition of Done (every milestone)
+
+- Feature works end-to-end.
+- Structured logs are emitted with `runId` and `toolCallId`.
+- Errors are actionable and recoverable.
+- Unit tests added/updated and passing.
+- Tracker updated if scope changed.
+
 - [ ] Git integration: agent ends each request with a commit + summary (toggleable)
   - **Primary surface**: AI panel “Review” step + Command palette.
   - **Command IDs**: `git.commitFromAgent`, `git.showStatus`, `git.showDiff` (names are placeholders; must map to real `CommandID`s).
-  - **Behavior**
-    - If an agent run changed files and user approves apply, show a “Ready to commit” card: changed file list + short diff summary + suggested commit message.
-    - Auto-commit is a **setting**; default off. If on, still show the commit result and how to undo.
-    - Never commit if working tree already has unrelated changes unless user explicitly allows.
+  - **Behavior**: If an agent run changed files and user approves apply, show a “Ready to commit” card: changed file list + short diff summary + suggested commit message.
   - **Acceptance**: after a successful agent run, user can create a single atomic commit (or skip) without leaving the IDE.
 - [ ] Conversation tabs/history UI: browse, resume, delete history files
   - **Primary surface**: AI panel top bar (tabs) + history drawer.
