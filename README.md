@@ -14,7 +14,22 @@
 [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=jtrefon_ai-ide&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=jtrefon_ai-ide)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=jtrefon_ai-ide&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=jtrefon_ai-ide)
 
-A native macOS IDE experiment built with SwiftUI and AppKit.
+**osx-ide** is a cutting-edge, AI-powered Integrated Development Environment (IDE) designed exclusively for macOS. It harmonizes hardware and software to deliver exceptional performance, providing developers with maximum support through embedded AI capabilities and an unparalleled user experience.
+
+Built with SwiftUI and AppKit, osx-ide leverages native macOS technologies to offer seamless integration, lightning-fast responsiveness, and intuitive workflows. Whether you're coding, debugging, or collaborating with AI, osx-ide empowers you to achieve more with less effort.
+
+## Key Features
+
+- **AI-Enhanced Development**: Integrated AI agent for intelligent code assistance, refactoring, and problem-solving with multi-role orchestration (Architect, Planner, Worker, QA).
+- **High-Performance Code Editor**: Advanced syntax highlighting, multi-cursor editing, code folding, minimap, and real-time diagnostics with clickable build errors.
+- **Intelligent Codebase Indexing**: Fast symbol extraction, search, and navigation across large projects with memory-based context retention.
+- **Native Terminal Integration**: Embedded terminal with build error parsing and clickable links to editor locations.
+- **Project Session Persistence**: Saves window layout, open tabs, and editor state for uninterrupted workflows.
+- **Command-Driven UX**: Comprehensive command palette and menu system for efficient navigation and actions.
+- **Extensible Language Support**: Plugin-based architecture for multiple programming languages with best-effort fallbacks.
+- **Near-Future Embedded AI**: Planned deep integration of AI for code generation, review loops, and autonomous development tasks.
+
+osx-ide is engineered for the future of software development, where AI and human creativity converge to produce high-quality code faster than ever before.
 
 ## Requirements
 
@@ -60,7 +75,7 @@ xcodebuild -project osx-ide.xcodeproj -scheme osx-ide -configuration Debug test 
 
 ## Troubleshooting
 
-### Xcode/SourceKit “false compile errors”
+### Xcode/SourceKit "false compile errors"
 
 Sometimes Xcode/SourceKit can show red errors (missing types, failed imports, etc.) while `xcodebuild build` and `xcodebuild test` are green.
 
