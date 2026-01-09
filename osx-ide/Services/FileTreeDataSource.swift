@@ -120,9 +120,9 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
     
     func url(forRelativePath relative: String) -> URL? {
         guard let rootItem = self.rootURL else { return nil }
-        let rootURL = rootItem.asURL
-        guard !relative.isEmpty else { return rootURL }
-        return rootURL.appendingPathComponent(relative)
+        let root = rootItem.asURL
+        guard !relative.isEmpty else { return root }
+        return root.appendingPathComponent(relative)
     }
     
     func canonicalUrl(forRelativePath relative: String) -> FileTreeItem? {

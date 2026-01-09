@@ -390,7 +390,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
 
                 let fileModTime = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
 
-                let existingModTime: Double? = (try? await database.getResourceLastModified(resourceId: file.absoluteString)) ?? nil
+                let existingModTime = try? await database.getResourceLastModified(resourceId: file.absoluteString)
 
                 if let fileModTime,
                    let existingModTime,

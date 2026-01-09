@@ -221,7 +221,7 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
             }
         }
 
-        score = clamp((score * 0.85) + (minScore * 0.15))
+        score = clamp(score * 0.85 + minScore * 0.15)
 
         var merged: [String: Double] = [:]
         for c in children {
