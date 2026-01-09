@@ -20,6 +20,40 @@ struct PatchSetApplyTool: AITool {
     let eventBus: EventBusProtocol
     let projectRoot: URL
 
+    private func existedBeforeByPath(_ relativePaths: [String]) -> [String: Bool] {
+        var existedBefore: [String: Bool] = [:]
+        existedBefore.reserveCapacity(relativePaths.count)
+        for rel in relativePaths {
+            let url = projectRoot.appendingPathComponent(rel)
+            existedBefore[rel] = FileManager.default.fileExists(atPath: url.path)
+        }
+        return existedBefore
+    }
+
+    private func publishEvents(manifest: PatchSetManifest, existedBefore: [String: Bool]) {
+        for entry in manifest.entries {
+            let rel = entry.relativePath
+            let url = projectRoot.appendingPathComponent(rel)
+            let existed = existedBefore[rel] ?? false
+            let existsNow = FileManager.default.fileExists(atPath: url.path)
+
+            if entry.kind == .delete {
+                if existed {
+                    eventBus.publish(FileDeletedEvent(url: url))
+                }
+                continue
+            }
+
+            if existsNow {
+                if existed {
+                    eventBus.publish(FileModifiedEvent(url: url))
+                } else {
+                    eventBus.publish(FileCreatedEvent(url: url))
+                }
+            }
+        }
+    }
+
     func execute(arguments: [String: Any]) async throws -> String {
         guard let id = arguments["patch_set_id"] as? String, !id.isEmpty else {
             throw AppError.aiServiceError("Missing 'patch_set_id' for patchset_apply")
@@ -30,39 +64,14 @@ struct PatchSetApplyTool: AITool {
         }
 
         let uniquePaths = Array(Set(manifest.entries.map { $0.relativePath })).sorted()
-        var existedBefore: [String: Bool] = [:]
-        existedBefore.reserveCapacity(uniquePaths.count)
-        for rel in uniquePaths {
-            let url = projectRoot.appendingPathComponent(rel)
-            existedBefore[rel] = FileManager.default.fileExists(atPath: url.path)
-        }
+        let existedBefore = existedBeforeByPath(uniquePaths)
 
         let checkpointId = try await CheckpointManager.shared.createCheckpoint(relativePaths: uniquePaths)
 
         let touched = try await PatchSetStore.shared.applyPatchSet(patchSetId: id)
 
         Task { @MainActor in
-            for entry in manifest.entries {
-                let rel = entry.relativePath
-                let url = projectRoot.appendingPathComponent(rel)
-                let existed = existedBefore[rel] ?? false
-                let existsNow = FileManager.default.fileExists(atPath: url.path)
-
-                switch entry.kind {
-                case .delete:
-                    if existed {
-                        eventBus.publish(FileDeletedEvent(url: url))
-                    }
-                case .write, .create, .replace:
-                    if existsNow {
-                        if existed {
-                            eventBus.publish(FileModifiedEvent(url: url))
-                        } else {
-                            eventBus.publish(FileCreatedEvent(url: url))
-                        }
-                    }
-                }
-            }
+            publishEvents(manifest: manifest, existedBefore: existedBefore)
         }
 
         if touched.isEmpty {

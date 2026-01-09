@@ -10,7 +10,7 @@ final class AIToolExecutorNoopErrorManager: ObservableObject, ErrorManagerProtoc
 
     func handle(_ error: AppError) { _ = error }
     func handle(_ error: Error, context: String) { _ = error; _ = context }
-    func dismissError() { }
+    func dismissError() { showErrorAlert = false }
 
     var statePublisher: ObservableObjectPublisher {
         objectWillChange
