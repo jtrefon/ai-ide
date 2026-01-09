@@ -282,40 +282,24 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         while i < text.endIndex {
             let ch = text[i]
 
-            switch ch {
-            case "\u{1B}":
-                if let parsed = parseANSISequence(text, from: i) {
-                    i = parsed.newIndex
-                    if !parsed.shouldSkip {
-                        currentTextAttributes.merge(parsed.attributes) { _, new in new }
-                    }
-                    continue
-                }
+            if let newIndex = consumeEscapeSequenceIfPresent(text, at: i) {
+                i = newIndex
+                continue
+            }
 
-            case "\n":
-                appendNewline(into: textStorage)
+            if let newIndex = consumeLineBreakIfPresent(text, at: i, into: textStorage) {
+                i = newIndex
+                continue
+            }
+
+            if let newIndex = consumeEditingControlIfPresent(text, at: i, into: textStorage) {
+                i = newIndex
+                continue
+            }
+
+            if consumeIgnoredControlIfPresent(ch) {
                 i = text.index(after: i)
                 continue
-
-            case "\r":
-                i = handleCarriageReturn(in: text, at: i)
-                continue
-
-            case "\u{08}", "\u{7F}":
-                handleBackspace()
-                i = text.index(after: i)
-                continue
-
-            case "\t":
-                appendTab(into: textStorage)
-                i = text.index(after: i)
-                continue
-
-            default:
-                if shouldSkipControlCharacter(ch) {
-                    i = text.index(after: i)
-                    continue
-                }
             }
 
             if pendingEraseToEndOfLine {
@@ -326,6 +310,48 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             putCharacter(String(ch), into: textStorage)
             i = text.index(after: i)
         }
+    }
+
+    private func consumeEscapeSequenceIfPresent(_ text: String, at index: String.Index) -> String.Index? {
+        guard text[index] == "\u{1B}" else { return nil }
+        guard let parsed = parseANSISequence(text, from: index) else { return nil }
+        if !parsed.shouldSkip {
+            currentTextAttributes.merge(parsed.attributes) { _, new in new }
+        }
+        return parsed.newIndex
+    }
+
+    private func consumeLineBreakIfPresent(_ text: String, at index: String.Index, into textStorage: NSTextStorage) -> String.Index? {
+        let ch = text[index]
+        if ch == "\n" {
+            appendNewline(into: textStorage)
+            return text.index(after: index)
+        }
+
+        if ch == "\r" {
+            return handleCarriageReturn(in: text, at: index)
+        }
+
+        return nil
+    }
+
+    private func consumeEditingControlIfPresent(_ text: String, at index: String.Index, into textStorage: NSTextStorage) -> String.Index? {
+        let ch = text[index]
+        if ch == "\u{08}" || ch == "\u{7F}" {
+            handleBackspace()
+            return text.index(after: index)
+        }
+
+        if ch == "\t" {
+            appendTab(into: textStorage)
+            return text.index(after: index)
+        }
+
+        return nil
+    }
+
+    private func consumeIgnoredControlIfPresent(_ ch: Character) -> Bool {
+        shouldSkipControlCharacter(ch)
     }
 
     private func appendNewline(into textStorage: NSTextStorage) {
