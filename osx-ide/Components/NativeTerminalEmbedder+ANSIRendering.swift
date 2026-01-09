@@ -15,33 +15,45 @@ extension NativeTerminalEmbedder {
 
         var i = text.startIndex
         while i < text.endIndex {
-            if text[i] == "\u{1B}" {
-                if let (newIndex, newAttributes, shouldSkip) = parseANSISequence(text, from: i) {
-                    if !shouldSkip {
-                        currentAttributes.merge(newAttributes) { (_, new) in new }
-                    }
-                    i = newIndex
-                    continue
-                }
+            if let consumed = consumeANSIIfPresent(text, at: i, currentAttributes: &currentAttributes) {
+                i = consumed
+                continue
             }
 
-            if text[i] == "\r" {
+            let ch = text[i]
+            if ch == "\r" {
                 i = text.index(after: i)
                 continue
             }
 
-            let char = String(text[i])
-            let scalarValue = char.unicodeScalars.first?.value ?? 0
-            if scalarValue < 32 && char != "\n" && char != "\t" {
+            if shouldSkipPlainTextControlCharacter(ch) {
                 i = text.index(after: i)
                 continue
             }
 
-            result.append(NSAttributedString(string: char, attributes: currentAttributes))
+            result.append(NSAttributedString(string: String(ch), attributes: currentAttributes))
             i = text.index(after: i)
         }
 
         return result
+    }
+
+    private func consumeANSIIfPresent(
+        _ text: String,
+        at index: String.Index,
+        currentAttributes: inout [NSAttributedString.Key: Any]
+    ) -> String.Index? {
+        guard text[index] == "\u{1B}" else { return nil }
+        guard let (newIndex, newAttributes, shouldSkip) = parseANSISequence(text, from: index) else { return nil }
+        if !shouldSkip {
+            currentAttributes.merge(newAttributes) { (_, new) in new }
+        }
+        return newIndex
+    }
+
+    private func shouldSkipPlainTextControlCharacter(_ ch: Character) -> Bool {
+        let scalarValue = ch.unicodeScalars.first?.value ?? 0
+        return scalarValue < 32 && ch != "\n" && ch != "\t"
     }
 
     func parseANSISequence(
@@ -63,6 +75,16 @@ extension NativeTerminalEmbedder {
         }
 
         return (i, [:], false)
+    }
+
+    private func appendCSIParamIfNeeded(_ currentParam: inout String, into parameters: inout [Int]) {
+        guard !currentParam.isEmpty else { return }
+        parameters.append(Int(currentParam) ?? 0)
+        currentParam = ""
+    }
+
+    private func isCSIFinalByte(_ char: Character) -> Bool {
+        (char >= "A" && char <= "Z") || (char >= "a" && char <= "z")
     }
 
     func parseOSCSequence(
@@ -101,16 +123,18 @@ extension NativeTerminalEmbedder {
             let char = text[i]
             if char.isNumber {
                 currentParam.append(char)
-            } else if char == ";" {
-                if !currentParam.isEmpty {
-                    parameters.append(Int(currentParam) ?? 0)
-                    currentParam = ""
-                }
-            } else if (char >= "A" && char <= "Z") || (char >= "a" && char <= "z") {
-                if !currentParam.isEmpty {
-                    parameters.append(Int(currentParam) ?? 0)
-                }
+                i = text.index(after: i)
+                continue
+            }
 
+            if char == ";" {
+                appendCSIParamIfNeeded(&currentParam, into: &parameters)
+                i = text.index(after: i)
+                continue
+            }
+
+            if isCSIFinalByte(char) {
+                appendCSIParamIfNeeded(&currentParam, into: &parameters)
                 let finalChar = char
                 i = text.index(after: i)
                 let result = handleCSIFinalCharacter(finalChar, parameters: parameters)
@@ -119,6 +143,7 @@ extension NativeTerminalEmbedder {
                 }
                 return (i, attributes, result.shouldSkip)
             }
+
             i = text.index(after: i)
         }
 
