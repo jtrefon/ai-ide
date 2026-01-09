@@ -45,9 +45,9 @@ struct osx_ideTests {
     @Test func testLanguageDetection() async throws {
         #expect(FileEditorStateManager.languageForFileExtension("swift") == "swift", "Swift files should detect as swift")
         #expect(FileEditorStateManager.languageForFileExtension("js") == "javascript", "JS files should detect as javascript")
-        #expect(FileEditorStateManager.languageForFileExtension("jsx") == "javascript", "JSX files should detect as javascript")
+        #expect(FileEditorStateManager.languageForFileExtension("jsx") == "jsx", "JSX files should detect as jsx")
         #expect(FileEditorStateManager.languageForFileExtension("ts") == "typescript", "TS files should detect as typescript")
-        #expect(FileEditorStateManager.languageForFileExtension("tsx") == "typescript", "TSX files should detect as typescript")
+        #expect(FileEditorStateManager.languageForFileExtension("tsx") == "tsx", "TSX files should detect as tsx")
         #expect(FileEditorStateManager.languageForFileExtension("py") == "python", "Python files should detect as python")
         #expect(FileEditorStateManager.languageForFileExtension("html") == "html", "HTML files should detect as html")
         #expect(FileEditorStateManager.languageForFileExtension("css") == "css", "CSS files should detect as css")
