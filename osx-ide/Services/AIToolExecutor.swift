@@ -63,13 +63,15 @@ public class AIToolExecutor {
                     "targetPath": targetFile as Any
                 ])
                 await ExecutionLogStore.shared.append(
-                    conversationId: conversationId,
-                    tool: toolCall.name,
-                    toolCallId: toolCall.id,
-                    type: "tool.execute_start",
-                    data: [
-                        "targetPath": targetFile as Any
-                    ]
+                    ExecutionLogAppendRequest(
+                        conversationId: conversationId,
+                        tool: toolCall.name,
+                        toolCallId: toolCall.id,
+                        type: "tool.execute_start",
+                        data: [
+                            "targetPath": targetFile as Any
+                        ]
+                    )
                 )
                 if let conversationId {
                     await ConversationLogStore.shared.append(
@@ -122,15 +124,17 @@ public class AIToolExecutor {
                             let cappedChunk = String(chunk.suffix(16_384))
                             Task {
                                 await ExecutionLogStore.shared.append(
-                                    conversationId: conversationId,
-                                    tool: toolCall.name,
-                                    toolCallId: toolCallId,
-                                    type: "tool.execute_progress",
-                                    data: [
-                                        "chunk": cappedChunk,
-                                        "chunkLength": chunk.count,
-                                        "totalLength": totalLength
-                                    ]
+                                    ExecutionLogAppendRequest(
+                                        conversationId: conversationId,
+                                        tool: toolCall.name,
+                                        toolCallId: toolCallId,
+                                        type: "tool.execute_progress",
+                                        data: [
+                                            "chunk": cappedChunk,
+                                            "chunkLength": chunk.count,
+                                            "totalLength": totalLength
+                                        ]
+                                    )
                                 )
                             }
 
@@ -159,13 +163,15 @@ public class AIToolExecutor {
                             "resultLength": result.count
                         ])
                         await ExecutionLogStore.shared.append(
-                            conversationId: conversationId,
-                            tool: toolCall.name,
-                            toolCallId: toolCall.id,
-                            type: "tool.execute_success",
-                            data: [
-                                "resultLength": result.count
-                            ]
+                            ExecutionLogAppendRequest(
+                                conversationId: conversationId,
+                                tool: toolCall.name,
+                                toolCallId: toolCall.id,
+                                type: "tool.execute_success",
+                                data: [
+                                    "resultLength": result.count
+                                ]
+                            )
                         )
                         if let conversationId {
                             await ConversationLogStore.shared.append(
@@ -203,13 +209,15 @@ public class AIToolExecutor {
                             "error": error.localizedDescription
                         ])
                         await ExecutionLogStore.shared.append(
-                            conversationId: conversationId,
-                            tool: toolCall.name,
-                            toolCallId: toolCall.id,
-                            type: "tool.execute_error",
-                            data: [
-                                "error": error.localizedDescription
-                            ]
+                            ExecutionLogAppendRequest(
+                                conversationId: conversationId,
+                                tool: toolCall.name,
+                                toolCallId: toolCall.id,
+                                type: "tool.execute_error",
+                                data: [
+                                    "error": error.localizedDescription
+                                ]
+                            )
                         )
                         if let conversationId {
                             await ConversationLogStore.shared.append(
