@@ -9,7 +9,7 @@ import Foundation
 import Darwin
 
 /// Run a shell command
-struct RunCommandTool: AITool {
+struct RunCommandTool: AIToolProgressReporting {
     private final class AtomicBool: @unchecked Sendable {
         private let lock = NSLock()
         private var value: Bool
@@ -67,21 +67,26 @@ struct RunCommandTool: AITool {
             return data
         }
     }
-    
-    func execute(arguments: [String: Any]) async throws -> String {
+
+    private func executeImpl(
+        arguments: [String: Any],
+        onProgress: (@Sendable (String) -> Void)?
+    ) async throws -> String {
         guard let command = arguments["command"] as? String else {
             throw AppError.aiServiceError("Missing 'command' argument for run_command")
         }
 
-        let toolCallId = arguments["toolCallId"] as? String ?? UUID().uuidString
+        let toolCallId = (arguments["_tool_call_id"] as? String)
+            ?? (arguments["toolCallId"] as? String)
+            ?? UUID().uuidString
         let isCancelled = AtomicBool(false)
-        
+
         let observer = NotificationCenter.default.addObserver(forName: NSNotification.Name("CancelToolExecution"), object: nil, queue: nil) { notification in
             if let targetId = notification.userInfo?["toolCallId"] as? String, targetId == toolCallId {
                 isCancelled.set(true)
             }
         }
-        
+
         defer { NotificationCenter.default.removeObserver(observer) }
 
         let timeoutSecondsRaw = arguments["timeout_seconds"] as? Double
@@ -89,7 +94,7 @@ struct RunCommandTool: AITool {
         if !(1...300).contains(timeoutSeconds) {
             throw AppError.aiServiceError("Invalid 'timeout_seconds' for run_command. Must be between 1 and 300.")
         }
-        
+
         let workingDirectoryArg = arguments["working_directory"] as? String
         let workingDirectoryURL: URL
         if let workingDirectoryArg, !workingDirectoryArg.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -113,28 +118,30 @@ struct RunCommandTool: AITool {
             "pathPrefix": pathPrefix,
             "timeoutSeconds": timeoutSeconds
         ])
-        
+
         let process = Process()
         let pipe = Pipe()
         let maxCapturedBytes = 64 * 1024
         let collector = OutputCollector(maxBytes: maxCapturedBytes)
-        
+
         process.standardOutput = pipe
         process.standardError = pipe
         process.environment = inheritedEnvironment
-
-        // Use a login shell so PATH matches the user's terminal (nvm/asdf/homebrew, etc.)
         process.arguments = ["-lc", command]
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-
         process.currentDirectoryURL = workingDirectoryURL
 
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             guard !data.isEmpty else { return }
             collector.append(data)
+            if let onProgress,
+               let chunk = String(data: data, encoding: .utf8),
+               !chunk.isEmpty {
+                onProgress(chunk)
+            }
         }
-        
+
         do {
             try process.run()
 
@@ -158,12 +165,12 @@ struct RunCommandTool: AITool {
                 }
 
                 let first = await group.next() ?? false
-                
+
                 if isCancelled.get() {
                     process.terminate()
                     return false
                 }
-                
+
                 group.cancelAll()
                 return first
             }
@@ -180,7 +187,6 @@ struct RunCommandTool: AITool {
                     process.terminate()
                 }
 
-                // Give it a short grace period, then SIGKILL if still running.
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 if process.isRunning {
                     kill(process.processIdentifier, SIGKILL)
@@ -190,7 +196,7 @@ struct RunCommandTool: AITool {
             pipe.fileHandleForReading.readabilityHandler = nil
             let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
             collector.append(remaining)
-            
+
             let output = String(data: collector.snapshot(), encoding: .utf8) ?? ""
 
             await AIToolTraceLogger.shared.log(type: "terminal.run_command_result", data: [
@@ -199,9 +205,12 @@ struct RunCommandTool: AITool {
                 "timedOut": !didExitBeforeTimeout,
                 "cancelled": isCancelled.get()
             ])
-            
+
             if isCancelled.get() {
-                return "Command cancelled by user.\nPartial Output:\n\(output)"
+                if onProgress == nil {
+                    return "Command cancelled by user.\nPartial Output:\n\(output)"
+                }
+                return "Command cancelled by user."
             }
 
             return """
@@ -219,5 +228,16 @@ struct RunCommandTool: AITool {
             Failed to run command: \(error.localizedDescription)
             """
         }
+    }
+    
+    func execute(arguments: [String: Any]) async throws -> String {
+        try await executeImpl(arguments: arguments, onProgress: nil)
+    }
+
+    func execute(
+        arguments: [String: Any],
+        onProgress: @Sendable @escaping (String) -> Void
+    ) async throws -> String {
+        try await executeImpl(arguments: arguments, onProgress: onProgress)
     }
 }
