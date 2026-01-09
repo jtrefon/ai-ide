@@ -28,10 +28,10 @@ public actor IndexerActor {
         let language = LanguageDetector.detect(at: url)
 
         // Basic metadata extraction for Phase 1
-        let resourceId = url.absoluteString // Simple ID for now
+        let resourceId = url.absoluteString
         let fileModTime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
 
-        let existingModTime: Double? = (try? await database.getResourceLastModified(resourceId: resourceId)) ?? nil
+        let existingModTime = try? await database.getResourceLastModified(resourceId: resourceId)
         if let fileModTime,
            let existingModTime,
            abs(existingModTime - fileModTime) < 0.000_001 {

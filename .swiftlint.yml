@@ -1,0 +1,2 @@
+disabled_rules:
+  - one_declaration_per_file

@@ -41,6 +41,12 @@ public final class CodeFoldingManager: NSObject {
 public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelegate {
     private let manager: CodeFoldingManager
 
+    private struct GlyphGenerationOutput {
+        let glyphs: [CGGlyph]
+        let properties: [NSLayoutManager.GlyphProperty]
+        let characterIndexes: [Int]
+    }
+
     public init(manager: CodeFoldingManager) {
         self.manager = manager
     }
@@ -71,20 +77,34 @@ public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelega
             }
         }
 
-        outGlyphs.withUnsafeBufferPointer { gPtr in
-            outProps.withUnsafeBufferPointer { pPtr in
-                outCharIndexes.withUnsafeBufferPointer { cPtr in
+        let output = GlyphGenerationOutput(
+            glyphs: outGlyphs,
+            properties: outProps,
+            characterIndexes: outCharIndexes
+        )
+        setGlyphs(layoutManager: layoutManager, output: output, font: aFont, glyphRange: glyphRange)
+
+        return count
+    }
+
+    private func setGlyphs(
+        layoutManager: NSLayoutManager,
+        output: GlyphGenerationOutput,
+        font: NSFont,
+        glyphRange: NSRange
+    ) {
+        output.glyphs.withUnsafeBufferPointer { gPtr in
+            output.properties.withUnsafeBufferPointer { pPtr in
+                output.characterIndexes.withUnsafeBufferPointer { cPtr in
                     layoutManager.setGlyphs(
                         gPtr.baseAddress!,
                         properties: pPtr.baseAddress!,
                         characterIndexes: cPtr.baseAddress!,
-                        font: aFont,
+                        font: font,
                         forGlyphRange: glyphRange
                     )
                 }
             }
         }
-
-        return count
     }
 }

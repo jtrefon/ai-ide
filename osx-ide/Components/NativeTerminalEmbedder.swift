@@ -507,7 +507,7 @@ extension NativeTerminalEmbedder: ShellManagerDelegate {
 
 // MARK: - NSTextViewDelegate
 extension NativeTerminalEmbedder: NSTextViewDelegate {
-    func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool { false }
+    func textView(_ textView: NSTextView, doCommandBy _: Selector) -> Bool { false }
 
-    func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool { false }
+    func textView(_ textView: NSTextView, shouldChangeTextIn _: NSRange, replacementString _: String?) -> Bool { false }
 }
