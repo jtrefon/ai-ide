@@ -52,6 +52,15 @@ struct WriteFileTool: AITool {
                 "content": [
                     "type": "string",
                     "description": "The content to write to the file."
+                ],
+                "mode": [
+                    "type": "string",
+                    "description": "One of: apply, propose. Default: apply.",
+                    "enum": ["apply", "propose"]
+                ],
+                "patch_set_id": [
+                    "type": "string",
+                    "description": "Patch set identifier to stage into when mode=propose."
                 ]
             ],
             "required": ["path", "content"]
@@ -69,9 +78,33 @@ struct WriteFileTool: AITool {
         guard let content = arguments["content"] as? String else {
             throw AppError.aiServiceError("Missing 'content' argument for write_file")
         }
+
+        let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
+        let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
+        let patchSetId = (arguments["patch_set_id"] as? String)
+            ?? (arguments["_conversation_id"] as? String)
+            ?? "default"
+
         let url = try pathValidator.validateAndResolve(path)
+        let relativePath = pathValidator.relativePath(for: url)
+
+        if mode == "propose" {
+            try await PatchSetStore.shared.stageWrite(
+                patchSetId: patchSetId,
+                toolCallId: toolCallId,
+                relativePath: relativePath,
+                content: content
+            )
+            await AIToolTraceLogger.shared.log(type: "fs.write_file_proposed", data: [
+                "path": relativePath,
+                "bytes": content.utf8.count,
+                "patchSetId": patchSetId
+            ])
+            return "Proposed write to \(relativePath) (patch_set_id=\(patchSetId))."
+        }
+
         await AIToolTraceLogger.shared.log(type: "fs.write_file", data: [
-            "path": pathValidator.relativePath(for: url),
+            "path": relativePath,
             "bytes": content.utf8.count
         ])
         let existed = FileManager.default.fileExists(atPath: url.path)
@@ -83,7 +116,7 @@ struct WriteFileTool: AITool {
                 eventBus.publish(FileCreatedEvent(url: url))
             }
         }
-        return "Successfully wrote to \(pathValidator.relativePath(for: url))"
+        return "Successfully wrote to \(relativePath)"
     }
 }
 
@@ -112,6 +145,15 @@ struct WriteFilesTool: AITool {
                         ],
                         "required": ["path", "content"]
                     ]
+                ],
+                "mode": [
+                    "type": "string",
+                    "description": "One of: apply, propose. Default: apply.",
+                    "enum": ["apply", "propose"]
+                ],
+                "patch_set_id": [
+                    "type": "string",
+                    "description": "Patch set identifier to stage into when mode=propose."
                 ]
             ],
             "required": ["files"]
@@ -127,6 +169,12 @@ struct WriteFilesTool: AITool {
             throw AppError.aiServiceError("Missing 'files' argument for write_files")
         }
 
+        let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
+        let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
+        let patchSetId = (arguments["patch_set_id"] as? String)
+            ?? (arguments["_conversation_id"] as? String)
+            ?? "default"
+
         if files.isEmpty {
             return "No files to write."
         }
@@ -134,8 +182,9 @@ struct WriteFilesTool: AITool {
         var results: [String] = []
         results.reserveCapacity(files.count)
 
-        await AIToolTraceLogger.shared.log(type: "fs.write_files_start", data: [
-            "count": files.count
+        await AIToolTraceLogger.shared.log(type: mode == "propose" ? "fs.write_files_propose_start" : "fs.write_files_start", data: [
+            "count": files.count,
+            "patchSetId": patchSetId
         ])
 
         for entry in files {
@@ -147,8 +196,21 @@ struct WriteFilesTool: AITool {
             }
 
             let url = try pathValidator.validateAndResolve(path)
+            let rel = pathValidator.relativePath(for: url)
+
+            if mode == "propose" {
+                try await PatchSetStore.shared.stageWrite(
+                    patchSetId: patchSetId,
+                    toolCallId: toolCallId,
+                    relativePath: rel,
+                    content: content
+                )
+                results.append(rel)
+                continue
+            }
+
             await AIToolTraceLogger.shared.log(type: "fs.write_files_entry", data: [
-                "path": pathValidator.relativePath(for: url),
+                "path": rel,
                 "bytes": content.utf8.count
             ])
             let existed = FileManager.default.fileExists(atPath: url.path)
@@ -162,13 +224,17 @@ struct WriteFilesTool: AITool {
                 }
             }
 
-            results.append(pathValidator.relativePath(for: url))
+            results.append(rel)
         }
 
-        await AIToolTraceLogger.shared.log(type: "fs.write_files_done", data: [
-            "count": results.count
+        await AIToolTraceLogger.shared.log(type: mode == "propose" ? "fs.write_files_propose_done" : "fs.write_files_done", data: [
+            "count": results.count,
+            "patchSetId": patchSetId
         ])
 
+        if mode == "propose" {
+            return "Proposed \(results.count) file(s) (patch_set_id=\(patchSetId)):\n" + results.joined(separator: "\n")
+        }
         return "Successfully wrote \(results.count) file(s):\n" + results.joined(separator: "\n")
     }
 }
@@ -184,6 +250,15 @@ struct CreateFileTool: AITool {
                 "path": [
                     "type": "string",
                     "description": "The absolute path where the file should be created."
+                ],
+                "mode": [
+                    "type": "string",
+                    "description": "One of: apply, propose. Default: apply.",
+                    "enum": ["apply", "propose"]
+                ],
+                "patch_set_id": [
+                    "type": "string",
+                    "description": "Patch set identifier to stage into when mode=propose."
                 ]
             ],
             "required": ["path"]
@@ -196,8 +271,21 @@ struct CreateFileTool: AITool {
         guard let path = arguments["path"] as? String else {
             throw AppError.aiServiceError("Missing 'path' argument for create_file")
         }
+
+        let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
+        let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
+        let patchSetId = (arguments["patch_set_id"] as? String)
+            ?? (arguments["_conversation_id"] as? String)
+            ?? "default"
+
         let url = try pathValidator.validateAndResolve(path)
         let fileManager = FileManager.default
+
+        if mode == "propose" {
+            let rel = pathValidator.relativePath(for: url)
+            try await PatchSetStore.shared.stageWrite(patchSetId: patchSetId, toolCallId: toolCallId, relativePath: rel, content: "")
+            return "Proposed create file at \(rel) (patch_set_id=\(patchSetId))."
+        }
 
         await AIToolTraceLogger.shared.log(type: "fs.create_file", data: [
             "path": pathValidator.relativePath(for: url)
@@ -256,6 +344,15 @@ struct DeleteFileTool: AITool {
                 "path": [
                     "type": "string",
                     "description": "The absolute path to the file to delete."
+                ],
+                "mode": [
+                    "type": "string",
+                    "description": "One of: apply, propose. Default: apply.",
+                    "enum": ["apply", "propose"]
+                ],
+                "patch_set_id": [
+                    "type": "string",
+                    "description": "Patch set identifier to stage into when mode=propose."
                 ]
             ],
             "required": ["path"]
@@ -268,7 +365,20 @@ struct DeleteFileTool: AITool {
         guard let path = arguments["path"] as? String else {
             throw AppError.aiServiceError("Missing 'path' argument for delete_file")
         }
+
+        let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
+        let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
+        let patchSetId = (arguments["patch_set_id"] as? String)
+            ?? (arguments["_conversation_id"] as? String)
+            ?? "default"
+
         let url = try pathValidator.validateAndResolve(path)
+
+        if mode == "propose" {
+            let rel = pathValidator.relativePath(for: url)
+            try await PatchSetStore.shared.stageDelete(patchSetId: patchSetId, toolCallId: toolCallId, relativePath: rel)
+            return "Proposed delete \(rel) (patch_set_id=\(patchSetId))."
+        }
         let fileManager = FileManager.default
         if !fileManager.fileExists(atPath: url.path) {
             return "Error: File does not exist at \(pathValidator.relativePath(for: url))"
@@ -300,6 +410,15 @@ struct ReplaceInFileTool: AITool {
                 "new_text": [
                     "type": "string",
                     "description": "The new text to replace the old text with."
+                ],
+                "mode": [
+                    "type": "string",
+                    "description": "One of: apply, propose. Default: apply.",
+                    "enum": ["apply", "propose"]
+                ],
+                "patch_set_id": [
+                    "type": "string",
+                    "description": "Patch set identifier to stage into when mode=propose."
                 ]
             ],
             "required": ["path", "old_text", "new_text"]
@@ -320,8 +439,15 @@ struct ReplaceInFileTool: AITool {
         guard let newText = arguments["new_text"] as? String else {
             throw AppError.aiServiceError("Missing 'new_text' argument for replace_in_file")
         }
+
+        let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
+        let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
+        let patchSetId = (arguments["patch_set_id"] as? String)
+            ?? (arguments["_conversation_id"] as? String)
+            ?? "default"
         
         let url = try pathValidator.validateAndResolve(path)
+        let relativePath = pathValidator.relativePath(for: url)
         let content = try fileSystemService.readFile(at: url)
         
         if !content.contains(oldText) {
@@ -329,11 +455,29 @@ struct ReplaceInFileTool: AITool {
         }
         
         let newContent = content.replacingOccurrences(of: oldText, with: newText)
+
+        if mode == "propose" {
+            try await PatchSetStore.shared.stageWrite(
+                patchSetId: patchSetId,
+                toolCallId: toolCallId,
+                relativePath: relativePath,
+                content: newContent
+            )
+            await AIToolTraceLogger.shared.log(type: "fs.replace_in_file_proposed", data: [
+                "path": relativePath,
+                "patchSetId": patchSetId
+            ])
+            return "Proposed replace in \(relativePath) (patch_set_id=\(patchSetId))."
+        }
+
+        await AIToolTraceLogger.shared.log(type: "fs.replace_in_file", data: [
+            "path": relativePath
+        ])
         try fileSystemService.writeFile(content: newContent, to: url)
         Task { @MainActor in
             eventBus.publish(FileModifiedEvent(url: url))
         }
         
-        return "Successfully replaced content in \(pathValidator.relativePath(for: url))"
+        return "Successfully replaced content in \(relativePath)"
     }
 }

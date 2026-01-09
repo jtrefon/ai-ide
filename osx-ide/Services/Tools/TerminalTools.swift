@@ -147,14 +147,31 @@ struct RunCommandTool: AIToolProgressReporting {
 
             let didExitBeforeTimeout: Bool = await withTaskGroup(of: Bool.self) { group in
                 group.addTask {
+                    final class OneShot: @unchecked Sendable {
+                        private let lock = NSLock()
+                        private var fired = false
+
+                        func fire(_ action: () -> Void) {
+                            lock.lock()
+                            defer { lock.unlock() }
+                            guard !fired else { return }
+                            fired = true
+                            action()
+                        }
+                    }
+
+                    let oneShot = OneShot()
                     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                        let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
-                            if !process.isRunning || isCancelled.get() {
-                                timer.invalidate()
+                        if !process.isRunning {
+                            continuation.resume()
+                            return
+                        }
+
+                        process.terminationHandler = { _ in
+                            oneShot.fire {
                                 continuation.resume()
                             }
                         }
-                        RunLoop.main.add(timer, forMode: .common)
                     }
                     return true
                 }
@@ -163,14 +180,14 @@ struct RunCommandTool: AIToolProgressReporting {
                     try? await Task.sleep(nanoseconds: nanos)
                     return false
                 }
-
-                let first = await group.next() ?? false
-
-                if isCancelled.get() {
-                    process.terminate()
+                group.addTask {
+                    while !isCancelled.get() {
+                        try? await Task.sleep(nanoseconds: 100_000_000)
+                    }
                     return false
                 }
 
+                let first = await group.next() ?? false
                 group.cancelAll()
                 return first
             }
