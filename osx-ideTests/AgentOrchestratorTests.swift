@@ -23,6 +23,40 @@ final class AgentOrchestratorTests: XCTestCase {
         }
     }
 
+    private func makeAllowlistSend() -> @Sendable (AgentOrchestrator.SendRequest) async throws -> AIServiceResponse {
+        { request in
+            let hasVerifier = request.messages.contains(where: { $0.role == .system && $0.content.contains("Verifier role") })
+            if hasVerifier {
+                return AIServiceResponse(
+                    content: "verify",
+                    toolCalls: [AIToolCall(id: UUID().uuidString, name: "run_command", arguments: ["command": "rm -rf /tmp/nope"]) ]
+                )
+            }
+            return AIServiceResponse(content: "ok", toolCalls: nil)
+        }
+    }
+
+    private func makeAllowlistExecuteTools() -> @Sendable (AgentOrchestrator.ToolExecutionRequest) async -> [ChatMessage] {
+        { request in
+            guard let runTool = request.tools.first(where: { $0.name == "run_command" }) else { return [] }
+            return await withTaskGroup(of: ChatMessage.self) { group in
+                for call in request.toolCalls {
+                    group.addTask {
+                        do {
+                            _ = try await runTool.execute(arguments: call.arguments)
+                            return ChatMessage(role: .tool, content: "should not succeed")
+                        } catch {
+                            return ChatMessage(role: .tool, content: error.localizedDescription)
+                        }
+                    }
+                }
+                var results: [ChatMessage] = []
+                for await msg in group { results.append(msg) }
+                return results
+            }
+        }
+    }
+
     private struct FakeStreamingTool: AIToolProgressReporting {
         let name: String
         let description: String = "fake_stream"
@@ -131,42 +165,8 @@ final class AgentOrchestratorTests: XCTestCase {
         let tools = makeToolsForAllowlistTest()
 
         let initialMessages = [ChatMessage(role: .user, content: "do thing")]
-
-        let send: @Sendable (AgentOrchestrator.SendRequest) async throws -> AIServiceResponse = { request in
-            let hasVerifier = request.messages.contains(where: { $0.role == .system && $0.content.contains("Verifier role") })
-            if hasVerifier {
-                return AIServiceResponse(
-                    content: "verify",
-                    toolCalls: [AIToolCall(id: UUID().uuidString, name: "run_command", arguments: ["command": "rm -rf /tmp/nope"]) ]
-                )
-            }
-            return AIServiceResponse(content: "ok", toolCalls: nil)
-        }
-
-        let executeTools: @Sendable (AgentOrchestrator.ToolExecutionRequest) async -> [ChatMessage] = { request in
-            guard let runTool = request.tools.first(where: { $0.name == "run_command" }) else {
-                return []
-            }
-
-            return await withTaskGroup(of: ChatMessage.self) { group in
-                for call in request.toolCalls {
-                    group.addTask {
-                        do {
-                            _ = try await runTool.execute(arguments: call.arguments)
-                            return ChatMessage(role: .tool, content: "should not succeed")
-                        } catch {
-                            return ChatMessage(role: .tool, content: error.localizedDescription)
-                        }
-                    }
-                }
-
-                var results: [ChatMessage] = []
-                for await msg in group {
-                    results.append(msg)
-                }
-                return results
-            }
-        }
+        let send = makeAllowlistSend()
+        let executeTools = makeAllowlistExecuteTools()
 
         var emitted: [ChatMessage] = []
         let onMessage: @MainActor @Sendable (ChatMessage) -> Void = { msg in
