@@ -59,6 +59,13 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         tools.append(ArchitectAdvisorTool(aiService: aiService, index: codebaseIndex, projectRoot: projectRoot))
         tools.append(PlannerTool())
 
+        tools.append(PatchSetListTool())
+        tools.append(PatchSetApplyTool(eventBus: eventBus, projectRoot: projectRoot))
+        tools.append(PatchSetClearTool())
+
+        tools.append(CheckpointListTool())
+        tools.append(CheckpointRestoreTool(eventBus: eventBus, projectRoot: projectRoot))
+
         return tools
     }
     
@@ -88,6 +95,11 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         self.historyManager = ChatHistoryManager()
         self.historyManager.setProjectRoot(root)
         self.toolExecutor = AIToolExecutor(fileSystemService: fileSystemService, errorManager: errorManager, projectRoot: root)
+
+        Task.detached(priority: .utility) {
+            await PatchSetStore.shared.setProjectRoot(root)
+            await CheckpointManager.shared.setProjectRoot(root)
+        }
 
         setupObservation()
 
@@ -153,6 +165,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             await ExecutionLogStore.shared.setProjectRoot(newRoot)
             await ConversationIndexStore.shared.setProjectRoot(newRoot)
             await ConversationPlanStore.shared.setProjectRoot(newRoot)
+            await PatchSetStore.shared.setProjectRoot(newRoot)
+            await CheckpointManager.shared.setProjectRoot(newRoot)
             await AppLogger.shared.info(category: .app, message: "logging.project_root_set", metadata: [
                 "projectRoot": newRootPath
             ])
@@ -249,6 +263,53 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 )
                 .get()
 
+                if currentMode == .agent {
+                    let orchestrator = AgentOrchestrator()
+                    let env = AgentOrchestrator.Environment(
+                        allTools: availableTools,
+                        send: { [self] request in
+                            let augmentedContext = await ContextBuilder.buildContext(
+                                userInput: request.messages.last(where: { $0.role == .user })?.content ?? "",
+                                explicitContext: context,
+                                index: self.codebaseIndex,
+                                projectRoot: self.projectRoot
+                            )
+                            return try await self.aiService.sendMessage(request.messages, context: augmentedContext, tools: request.tools, mode: self.currentMode, projectRoot: self.projectRoot)
+                        },
+                        executeTools: { request in
+                            await self.toolExecutor.executeBatch(request.toolCalls, availableTools: request.tools, conversationId: self.conversationId) { progressMsg in
+                                if progressMsg.isToolExecution {
+                                    self.historyManager.upsertToolExecutionMessage(progressMsg)
+                                } else {
+                                    self.historyManager.append(progressMsg)
+                                }
+                            }
+                        },
+                        onMessage: { msg in
+                            if msg.isToolExecution {
+                                self.historyManager.upsertToolExecutionMessage(msg)
+                            } else {
+                                self.historyManager.append(msg)
+                            }
+                        }
+                    )
+                    let result = try await orchestrator.run(
+                        initialMessages: self.messages,
+                        environment: env
+                    )
+
+                    let splitFinal = ChatPromptBuilder.splitReasoning(from: result.content ?? "No response received.")
+                    historyManager.append(
+                        ChatMessage(
+                            role: .assistant,
+                            content: splitFinal.content,
+                            context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
+                        )
+                    )
+                    isSending = false
+                    return
+                }
+
                 if currentMode == .agent,
                    (currentResponse.toolCalls?.isEmpty ?? true),
                    let content = currentResponse.content,
@@ -308,11 +369,19 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     }
                     
                     let toolResults = await toolExecutor.executeBatch(toolCalls, availableTools: availableTools, conversationId: self.conversationId) { progressMsg in
-                        self.historyManager.append(progressMsg)
+                        if progressMsg.isToolExecution {
+                            self.historyManager.upsertToolExecutionMessage(progressMsg)
+                        } else {
+                            self.historyManager.append(progressMsg)
+                        }
                     }
 
                     for msg in toolResults {
-                        self.historyManager.append(msg)
+                        if msg.isToolExecution {
+                            self.historyManager.upsertToolExecutionMessage(msg)
+                        } else {
+                            self.historyManager.append(msg)
+                        }
                     }
                     
                     currentResponse = try await sendMessageWithRetry(
