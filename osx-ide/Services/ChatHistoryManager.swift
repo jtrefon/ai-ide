@@ -71,14 +71,12 @@ public class ChatHistoryManager: ObservableObject {
             messages[index] = ChatMessage(
                 role: oldMessage.role,
                 content: content ?? oldMessage.content,
-                reasoning: oldMessage.reasoning,
-                codeContext: oldMessage.codeContext,
+                context: ChatMessageContentContext(reasoning: oldMessage.reasoning, codeContext: oldMessage.codeContext),
                 tool: ChatMessageToolContext(
                     toolName: oldMessage.toolName,
                     toolStatus: status,
-                    targetFile: oldMessage.targetFile,
-                    toolCallId: oldMessage.toolCallId,
-                    toolCalls: oldMessage.toolCalls
+                    target: ToolInvocationTarget(targetFile: oldMessage.targetFile, toolCallId: oldMessage.toolCallId),
+                    toolCalls: oldMessage.toolCalls ?? []
                 )
             )
             saveHistory()

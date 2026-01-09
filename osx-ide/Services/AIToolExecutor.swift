@@ -99,8 +99,7 @@ public class AIToolExecutor {
                 tool: ChatMessageToolContext(
                     toolName: toolCall.name,
                     toolStatus: .executing,
-                    targetFile: targetFile,
-                    toolCallId: toolCall.id
+                    target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
                 )
             )
             onProgress(executingMsg)
@@ -146,8 +145,7 @@ public class AIToolExecutor {
                                         tool: ChatMessageToolContext(
                                             toolName: toolCall.name,
                                             toolStatus: .executing,
-                                            targetFile: targetFile,
-                                            toolCallId: toolCallId
+                                            target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCallId)
                                         )
                                     )
                                 )
@@ -199,8 +197,7 @@ public class AIToolExecutor {
                         tool: ChatMessageToolContext(
                             toolName: toolCall.name,
                             toolStatus: .completed,
-                            targetFile: targetFile,
-                            toolCallId: toolCall.id
+                            target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
                         )
                     )
                 } catch {
@@ -247,8 +244,7 @@ public class AIToolExecutor {
                         tool: ChatMessageToolContext(
                             toolName: toolCall.name,
                             toolStatus: .failed,
-                            targetFile: targetFile,
-                            toolCallId: toolCall.id
+                            target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
                         )
                     )
                 }
@@ -282,8 +278,7 @@ public class AIToolExecutor {
                     tool: ChatMessageToolContext(
                         toolName: toolCall.name,
                         toolStatus: .failed,
-                        targetFile: targetFile,
-                        toolCallId: toolCall.id
+                        target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
                     )
                 )
             }
