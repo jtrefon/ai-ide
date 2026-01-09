@@ -30,15 +30,17 @@ actor OpenRouterAIService: AIService {
     }
     
     func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        let sanitizedMessages = Self.sanitizeToolCallOrdering(messages)
+
         let validToolCallIds: Set<String> = Set(
-            messages
+            sanitizedMessages
                 .compactMap { $0.toolCalls }
                 .flatMap { $0 }
                 .map { $0.id }
         )
 
         // Convert [ChatMessage] to [OpenRouterChatMessage]
-        var openRouterMessages = messages.compactMap { msg -> OpenRouterChatMessage? in
+        let openRouterMessages = sanitizedMessages.compactMap { msg -> OpenRouterChatMessage? in
             switch msg.role {
             case .user:
                 return OpenRouterChatMessage(role: "user", content: msg.content)
@@ -70,6 +72,85 @@ actor OpenRouterAIService: AIService {
         }
         
         return try await performChatWithHistory(messages: openRouterMessages, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
+    }
+
+    private static func sanitizeToolCallOrdering(_ messages: [ChatMessage]) -> [ChatMessage] {
+        if messages.isEmpty { return [] }
+
+        struct Block {
+            let startIndexInOutput: Int
+            let toolCallIds: Set<String>
+        }
+
+        var output: [ChatMessage] = []
+        output.reserveCapacity(messages.count)
+
+        var pending: Block?
+        var remainingToolCallIds: Set<String> = []
+
+        func dropPendingBlockIfNeeded() {
+            guard pending != nil else { return }
+            let startIndexInOutput = pending?.startIndexInOutput ?? output.count
+
+            // Remove the assistant(tool_calls) message and any subsequent tool messages that were appended.
+            if startIndexInOutput < output.count {
+                output.removeSubrange(startIndexInOutput..<output.count)
+            }
+            pending = nil
+            remainingToolCallIds.removeAll()
+        }
+
+        for msg in messages {
+            switch msg.role {
+            case .assistant:
+                // If there is an unfinished tool call block, drop it to avoid invalid message order.
+                if pending != nil, !remainingToolCallIds.isEmpty {
+                    dropPendingBlockIfNeeded()
+                }
+
+                if let calls = msg.toolCalls, !calls.isEmpty {
+                    let ids = Set(calls.map { $0.id })
+                    let start = output.count
+                    output.append(msg)
+                    pending = Block(startIndexInOutput: start, toolCallIds: ids)
+                    remainingToolCallIds = ids
+                } else {
+                    output.append(msg)
+                }
+
+            case .tool:
+                // Ignore progress messages and any tool output not tied to a tool_call_id.
+                if msg.toolStatus == .executing { continue }
+                guard let toolCallId = msg.toolCallId, !toolCallId.isEmpty else { continue }
+
+                // Only accept tool messages that correspond to the currently pending tool call block.
+                if let pendingBlock = pending,
+                   pendingBlock.toolCallIds.contains(toolCallId),
+                   remainingToolCallIds.contains(toolCallId) {
+                    output.append(msg)
+                    remainingToolCallIds.remove(toolCallId)
+                    if remainingToolCallIds.isEmpty {
+                        pending = nil
+                    }
+                } else {
+                    continue
+                }
+
+            case .system, .user:
+                // If a non-tool message appears before all tool responses, drop the pending block.
+                if pending != nil, !remainingToolCallIds.isEmpty {
+                    dropPendingBlockIfNeeded()
+                }
+                output.append(msg)
+            }
+        }
+
+        // If we ended with an incomplete tool call block, drop it.
+        if pending != nil, !remainingToolCallIds.isEmpty {
+            dropPendingBlockIfNeeded()
+        }
+
+        return output
     }
     
     func explainCode(_ code: String) async throws -> String {
