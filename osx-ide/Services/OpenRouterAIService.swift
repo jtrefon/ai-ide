@@ -75,24 +75,55 @@ actor OpenRouterAIService: AIService {
     }
 
     private static func sanitizeToolCallOrdering(_ messages: [ChatMessage]) -> [ChatMessage] {
-        if messages.isEmpty { return [] }
+        ToolCallOrderingSanitizer().sanitize(messages)
+    }
 
-        struct Block {
+    private struct ToolCallOrderingSanitizer {
+        private struct Block {
             let startIndexInOutput: Int
             let toolCallIds: Set<String>
         }
 
-        var output: [ChatMessage] = []
-        output.reserveCapacity(messages.count)
+        private var output: [ChatMessage] = []
+        private var pending: Block?
+        private var remainingToolCallIds: Set<String> = []
 
-        var pending: Block?
-        var remainingToolCallIds: Set<String> = []
+        mutating func sanitize(_ messages: [ChatMessage]) -> [ChatMessage] {
+            if messages.isEmpty { return [] }
+            output = []
+            output.reserveCapacity(messages.count)
 
-        func hasPendingResponses() -> Bool {
+            for msg in messages {
+                handleMessage(msg)
+            }
+
+            if hasPendingResponses {
+                dropPendingBlock()
+            }
+            return output
+        }
+
+        private var hasPendingResponses: Bool {
             pending != nil && !remainingToolCallIds.isEmpty
         }
 
-        func dropPendingBlock() {
+        private mutating func handleMessage(_ msg: ChatMessage) {
+            if msg.role == .assistant {
+                if hasPendingResponses { dropPendingBlock() }
+                startPendingBlock(from: msg)
+                return
+            }
+
+            if msg.role == .tool {
+                acceptToolMessageIfValid(msg)
+                return
+            }
+
+            if hasPendingResponses { dropPendingBlock() }
+            output.append(msg)
+        }
+
+        private mutating func dropPendingBlock() {
             guard let pendingBlock = pending else { return }
             if pendingBlock.startIndexInOutput < output.count {
                 output.removeSubrange(pendingBlock.startIndexInOutput..<output.count)
@@ -101,7 +132,7 @@ actor OpenRouterAIService: AIService {
             remainingToolCallIds.removeAll()
         }
 
-        func startPendingBlock(from assistant: ChatMessage) {
+        private mutating func startPendingBlock(from assistant: ChatMessage) {
             guard let calls = assistant.toolCalls, !calls.isEmpty else {
                 output.append(assistant)
                 return
@@ -113,7 +144,7 @@ actor OpenRouterAIService: AIService {
             remainingToolCallIds = ids
         }
 
-        func acceptToolMessageIfValid(_ toolMessage: ChatMessage) {
+        private mutating func acceptToolMessageIfValid(_ toolMessage: ChatMessage) {
             if toolMessage.toolStatus == .executing { return }
             guard let toolCallId = toolMessage.toolCallId, !toolCallId.isEmpty else { return }
             guard let pendingBlock = pending else { return }
@@ -126,28 +157,6 @@ actor OpenRouterAIService: AIService {
                 pending = nil
             }
         }
-
-        for msg in messages {
-            switch msg.role {
-            case .assistant:
-                // If there is an unfinished tool call block, drop it to avoid invalid message order.
-                if hasPendingResponses() { dropPendingBlock() }
-                startPendingBlock(from: msg)
-
-            case .tool:
-                acceptToolMessageIfValid(msg)
-
-            case .system, .user:
-                // If a non-tool message appears before all tool responses, drop the pending block.
-                if hasPendingResponses() { dropPendingBlock() }
-                output.append(msg)
-            }
-        }
-
-        // If we ended with an incomplete tool call block, drop it.
-        if hasPendingResponses() { dropPendingBlock() }
-
-        return output
     }
     
     func explainCode(_ code: String) async throws -> String {

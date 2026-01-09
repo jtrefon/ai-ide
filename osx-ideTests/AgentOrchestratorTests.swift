@@ -18,7 +18,7 @@ final class AgentOrchestratorTests: XCTestCase {
         var parameters: [String : Any] { ["type": "object", "properties": [:]] }
         let response: String
 
-        func execute(arguments: [String : Any]) async throws -> String {
+        func execute(arguments _: [String : Any]) async throws -> String {
             response
         }
     }
@@ -29,30 +29,33 @@ final class AgentOrchestratorTests: XCTestCase {
         var parameters: [String : Any] { ["type": "object", "properties": [:]] }
         let response: String
 
-        func execute(arguments: [String : Any]) async throws -> String {
+        func execute(arguments _: [String : Any]) async throws -> String {
             response
         }
 
-        func execute(arguments: [String : Any], onProgress: @Sendable @escaping (String) -> Void) async throws -> String {
+        func execute(arguments _: [String : Any], onProgress: @Sendable @escaping (String) -> Void) async throws -> String {
             onProgress("chunk")
             return response
         }
     }
 
-    func testVerifyLoopCapsToolIterations() async throws {
-        let orchestrator = AgentOrchestrator()
-
-        let tools: [AITool] = [
+    private func makeToolsForVerifyLoopTest() -> [AITool] {
+        [
             FakeTool(name: "planner", response: "Plan saved."),
             FakeStreamingTool(name: "run_command", response: "ok"),
             FakeTool(name: "patchset_apply", response: "Applied.")
         ]
+    }
 
-        let initialMessages = [ChatMessage(role: .user, content: "do thing")]
+    private func makeToolsForAllowlistTest() -> [AITool] {
+        [
+            FakeTool(name: "planner", response: "Plan saved."),
+            FakeStreamingTool(name: "run_command", response: "ok")
+        ]
+    }
 
-        let counter = Counter()
-
-        let send: @Sendable (AgentOrchestrator.SendRequest) async throws -> AIServiceResponse = { request in
+    private func makeVerifyLoopSend(counter: Counter) -> @Sendable (AgentOrchestrator.SendRequest) async throws -> AIServiceResponse {
+        { request in
             await counter.incrementSend()
 
             let hasVerifier = request.messages.contains(where: { $0.role == .system && $0.content.contains("Verifier role") })
@@ -64,13 +67,13 @@ final class AgentOrchestratorTests: XCTestCase {
                 )
             }
 
-            // Architect/Planner/Worker/QA/Finalizer should not matter for this test.
             return AIServiceResponse(content: "ok", toolCalls: nil)
         }
+    }
 
-        let executeTools: @Sendable (AgentOrchestrator.ToolExecutionRequest) async -> [ChatMessage] = { request in
-            let hasRunCommandTool = request.tools.contains(where: { $0.name == "run_command" })
-            if hasRunCommandTool {
+    private func makeVerifyLoopExecuteTools(counter: Counter) -> @Sendable (AgentOrchestrator.ToolExecutionRequest) async -> [ChatMessage] {
+        { request in
+            if request.tools.contains(where: { $0.name == "run_command" }) {
                 await counter.incrementVerifyToolExecutions()
             }
             return request.toolCalls.map { call in
@@ -85,6 +88,17 @@ final class AgentOrchestratorTests: XCTestCase {
                 )
             }
         }
+    }
+
+    func testVerifyLoopCapsToolIterations() async throws {
+        let orchestrator = AgentOrchestrator()
+        let tools = makeToolsForVerifyLoopTest()
+
+        let initialMessages = [ChatMessage(role: .user, content: "do thing")]
+
+        let counter = Counter()
+        let send = makeVerifyLoopSend(counter: counter)
+        let executeTools = makeVerifyLoopExecuteTools(counter: counter)
 
         var emitted: [ChatMessage] = []
         let onMessage: @MainActor @Sendable (ChatMessage) -> Void = { msg in
@@ -114,11 +128,7 @@ final class AgentOrchestratorTests: XCTestCase {
 
     func testVerifyAllowlistBlocksNonAllowlistedCommand() async throws {
         let orchestrator = AgentOrchestrator()
-
-        let tools: [AITool] = [
-            FakeTool(name: "planner", response: "Plan saved."),
-            FakeStreamingTool(name: "run_command", response: "ok")
-        ]
+        let tools = makeToolsForAllowlistTest()
 
         let initialMessages = [ChatMessage(role: .user, content: "do thing")]
 
