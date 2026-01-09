@@ -50,20 +50,25 @@ struct IndexStatusBarView: View {
     }
 
     private func displayName(for languageIdentifier: String) -> String {
-        switch languageIdentifier.lowercased() {
-        case "swift": return "Swift"
-        case "javascript": return "JavaScript"
-        case "jsx": return "JavaScript React"
-        case "typescript": return "TypeScript"
-        case "tsx": return "TypeScript React"
-        case "python": return "Python"
-        case "html": return "HTML"
-        case "css": return "CSS"
-        case "json": return "JSON"
-        case "yaml", "yml": return "YAML"
-        case "markdown", "md": return "Markdown"
-        default: return "Plain Text"
-        }
+        let normalizedIdentifier = languageIdentifier.lowercased()
+        let displayNamesByIdentifier: [String: String] = [
+            "swift": "Swift",
+            "javascript": "JavaScript",
+            "jsx": "JavaScript React",
+            "typescript": "TypeScript",
+            "tsx": "TypeScript React",
+            "python": "Python",
+            "html": "HTML",
+            "css": "CSS",
+            "json": "JSON",
+            "yaml": "YAML",
+            "yml": "YAML",
+            "markdown": "Markdown",
+            "md": "Markdown",
+            "text": "Plain Text"
+        ]
+
+        return displayNamesByIdentifier[normalizedIdentifier] ?? "Plain Text"
     }
 
     var body: some View {
