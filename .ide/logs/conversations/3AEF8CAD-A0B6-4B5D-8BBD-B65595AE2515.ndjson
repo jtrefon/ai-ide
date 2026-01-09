@@ -1,4 +1,0 @@
-{"session":"211475ED-0AB7-456D-87C0-A2BEF7434533","data":{"mode":"Chat","projectRoot":"\/tmp"},"ts":"2026-01-04T10:21:49Z","conversationId":"3AEF8CAD-A0B6-4B5D-8BBD-B65595AE2515","type":"conversation.start"}
-{"session":"211475ED-0AB7-456D-87C0-A2BEF7434533","data":{"content":"","hasSelectionContext":false},"ts":"2026-01-04T10:21:49Z","conversationId":"3AEF8CAD-A0B6-4B5D-8BBD-B65595AE2515","type":"chat.user_message"}
-{"session":"211475ED-0AB7-456D-87C0-A2BEF7434533","data":{"mode":"Chat","historyCount":22},"ts":"2026-01-04T10:21:49Z","conversationId":"3AEF8CAD-A0B6-4B5D-8BBD-B65595AE2515","type":"chat.ai_request_start"}
-{"type":"chat.assistant_message","ts":"2026-01-04T10:21:49Z","session":"211475ED-0AB7-456D-87C0-A2BEF7434533","conversationId":"3AEF8CAD-A0B6-4B5D-8BBD-B65595AE2515","data":{"content":"Mock response","reasoning":null}}

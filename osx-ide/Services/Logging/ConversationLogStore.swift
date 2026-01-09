@@ -75,6 +75,7 @@ public actor ConversationLogStore {
                 try append(line: line, to: projectFileURL)
             }
         } catch {
+            print("ConversationLogStore error: \(error)")
         }
     }
 
