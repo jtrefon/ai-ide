@@ -75,7 +75,7 @@ struct LogsPanelView: View {
         }
     }
 
-    private static func resolveURL(source: LogSource, projectRoot: URL?) -> URL {
+    private static func resolveURL(source: LogSource, projectRoot _: URL?) -> URL {
         switch source {
         case .app:
             let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -110,25 +110,16 @@ struct LogsPanelView: View {
             return dir.appendingPathComponent("empty.ndjson")
 
         case .projectIndex:
-            guard let projectRoot else {
-                return FileManager.default.temporaryDirectory.appendingPathComponent("missing.log")
-            }
-            return projectRoot
-                .appendingPathComponent(".ide", isDirectory: true)
-                .appendingPathComponent("logs", isDirectory: true)
-                .appendingPathComponent("indexing.log")
+            return FileManager.default.temporaryDirectory.appendingPathComponent("missing.log")
         }
     }
 
-    private static func mostRecentNDJSON(in directory: URL, namePrefix: String?) -> URL? {
+    private static func mostRecentNDJSON(in directory: URL, namePrefix _: String?) -> URL? {
         guard let items = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else {
             return nil
         }
         let ndjson = items.filter {
             guard $0.pathExtension == "ndjson" else { return false }
-            if let namePrefix {
-                return $0.lastPathComponent.hasPrefix(namePrefix)
-            }
             return true
         }
         return ndjson.max(by: { a, b in
