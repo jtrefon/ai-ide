@@ -11,114 +11,6 @@ import SwiftUI
 /// Handles the execution of AI tools and manages the result reporting.
 @MainActor
 public class AIToolExecutor {
-    private actor _AsyncSemaphore: Sendable {
-        private var value: Int
-        private var waiters: [CheckedContinuation<Void, Never>] = []
-
-        init(value: Int) {
-            self.value = max(0, value)
-        }
-
-        func wait() async {
-            if value > 0 {
-                value -= 1
-                return
-            }
-
-            await withCheckedContinuation { continuation in
-                waiters.append(continuation)
-            }
-        }
-
-        func signal() {
-            if !waiters.isEmpty {
-                let next = waiters.removeFirst()
-                next.resume()
-            } else {
-                value += 1
-            }
-        }
-    }
-
-    private actor _AsyncLock: Sendable {
-        private var isLocked: Bool = false
-        private var waiters: [CheckedContinuation<Void, Never>] = []
-
-        func lock() async {
-            if !isLocked {
-                isLocked = true
-                return
-            }
-
-            await withCheckedContinuation { continuation in
-                waiters.append(continuation)
-            }
-            isLocked = true
-        }
-
-        func unlock() {
-            if !waiters.isEmpty {
-                let next = waiters.removeFirst()
-                next.resume()
-            } else {
-                isLocked = false
-            }
-        }
-    }
-
-    private actor _AsyncLockMap<Key: Hashable & Sendable>: Sendable {
-        private var locks: [Key: _AsyncLock] = [:]
-
-        func lock(for key: Key) async {
-            let lock = getOrCreateLock(for: key)
-            await lock.lock()
-        }
-
-        func unlock(for key: Key) async {
-            if let lock = locks[key] {
-                await lock.unlock()
-            }
-        }
-
-        private func getOrCreateLock(for key: Key) -> _AsyncLock {
-            if let existing = locks[key] {
-                return existing
-            }
-            let newLock = _AsyncLock()
-            locks[key] = newLock
-            return newLock
-        }
-    }
-
-    private actor _ToolScheduler: Sendable {
-        struct Configuration: Sendable {
-            let maxConcurrentReadTasks: Int
-
-            init(maxConcurrentReadTasks: Int = 4) {
-                self.maxConcurrentReadTasks = max(1, maxConcurrentReadTasks)
-            }
-        }
-
-        private let readSemaphore: _AsyncSemaphore
-        private let writeLocks = _AsyncLockMap<String>()
-
-        init(configuration: Configuration = Configuration()) {
-            self.readSemaphore = _AsyncSemaphore(value: configuration.maxConcurrentReadTasks)
-        }
-
-        func runReadTask<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) async throws -> T {
-            await readSemaphore.wait()
-            defer { Task { await readSemaphore.signal() } }
-            return try await operation()
-        }
-
-        func runWriteTask<T: Sendable>(pathKey: String, _ operation: @escaping @Sendable () async throws -> T) async throws -> T {
-            await writeLocks.lock(for: pathKey)
-            defer { Task { await writeLocks.unlock(for: pathKey) } }
-            return try await operation()
-        }
-    }
-
     private final class StringAccumulator: @unchecked Sendable {
         private let lock = NSLock()
         private var value: String = ""
@@ -134,13 +26,13 @@ public class AIToolExecutor {
     private let fileSystemService: FileSystemService
     private let errorManager: ErrorManagerProtocol
     private let projectRoot: URL
-    private let scheduler: _ToolScheduler
+    private let scheduler: ToolScheduler
     
     public init(fileSystemService: FileSystemService, errorManager: ErrorManagerProtocol, projectRoot: URL) {
         self.fileSystemService = fileSystemService
         self.errorManager = errorManager
         self.projectRoot = projectRoot
-        self.scheduler = _ToolScheduler()
+        self.scheduler = ToolScheduler()
     }
 
     private func isWriteLikeTool(_ toolName: String) -> Bool {
