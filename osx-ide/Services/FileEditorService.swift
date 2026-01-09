@@ -103,8 +103,10 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
     static func languageForFileExtension(_ extension: String) -> String {
         switch `extension`.lowercased() {
         case "swift": return "swift"
-        case "js", "jsx": return "javascript"
-        case "ts", "tsx": return "typescript"
+        case "js": return "javascript"
+        case "jsx": return "jsx"
+        case "ts": return "typescript"
+        case "tsx": return "tsx"
         case "py": return "python"
         case "html": return "html"
         case "css": return "css"

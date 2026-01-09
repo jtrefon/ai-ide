@@ -38,6 +38,8 @@ class AppState: ObservableObject, IDEContext {
     @Published var renameSymbolIdentifier: String = ""
 
      @Published var showHiddenFilesInFileTree: Bool = false
+
+    @Published var languageOverridesByRelativePath: [String: String] = [:]
     
     // MARK: - Services
     
@@ -77,6 +79,13 @@ class AppState: ObservableObject, IDEContext {
         },
         setShowHiddenFilesInFileTree: { [weak self] value in
             self?.showHiddenFilesInFileTree = value
+        },
+        getLanguageOverridesByRelativePath: { [weak self] in
+            self?.languageOverridesByRelativePath ?? [:]
+        },
+        setLanguageOverridesByRelativePath: { [weak self] value in
+            self?.languageOverridesByRelativePath = value
+            self?.applyLanguageOverrideToActiveEditorIfPossible()
         },
         relativePathForURL: { [weak self] url in
             self?.relativePath(for: url)
@@ -188,6 +197,37 @@ class AppState: ObservableObject, IDEContext {
     
     func attachWindow(_ window: NSWindow) {
         projectSessionCoordinator.attachWindow(window)
+    }
+
+    func setLanguageOverride(forAbsoluteFilePath filePath: String, languageIdentifier: String?) {
+        guard let relative = relativePath(for: URL(fileURLWithPath: filePath)) else { return }
+
+        if let languageIdentifier, !languageIdentifier.isEmpty {
+            languageOverridesByRelativePath[relative] = languageIdentifier
+        } else {
+            languageOverridesByRelativePath.removeValue(forKey: relative)
+        }
+
+        applyLanguageOverrideToActiveEditorIfPossible()
+        scheduleSaveProjectSession()
+    }
+
+    func effectiveLanguageIdentifier(forAbsoluteFilePath filePath: String) -> String {
+        if let relative = relativePath(for: URL(fileURLWithPath: filePath)),
+           let override = languageOverridesByRelativePath[relative],
+           !override.isEmpty {
+            return override
+        }
+
+        return FileEditorStateManager.languageForFileExtension(URL(fileURLWithPath: filePath).pathExtension)
+    }
+
+    private func applyLanguageOverrideToActiveEditorIfPossible() {
+        guard let filePath = fileEditor.selectedFile else { return }
+        let effective = effectiveLanguageIdentifier(forAbsoluteFilePath: filePath)
+        if fileEditor.editorLanguage != effective {
+            fileEditor.editorLanguage = effective
+        }
     }
 
     var codebaseIndex: CodebaseIndexProtocol? {
