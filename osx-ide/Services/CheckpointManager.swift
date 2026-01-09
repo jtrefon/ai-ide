@@ -1,30 +1,6 @@
 import Foundation
 import Darwin
 
-public struct CheckpointManifest: Codable, Sendable {
-    public let id: String
-    public let createdAt: Date
-    public let entries: [CheckpointEntry]
-
-    public init(id: String, createdAt: Date, entries: [CheckpointEntry]) {
-        self.id = id
-        self.createdAt = createdAt
-        self.entries = entries
-    }
-}
-
-public struct CheckpointEntry: Codable, Sendable {
-    public let relativePath: String
-    public let existed: Bool
-    public let stagedRelativeBackupPath: String?
-
-    public init(relativePath: String, existed: Bool, stagedRelativeBackupPath: String?) {
-        self.relativePath = relativePath
-        self.existed = existed
-        self.stagedRelativeBackupPath = stagedRelativeBackupPath
-    }
-}
-
 public actor CheckpointManager {
     public static let shared = CheckpointManager()
 

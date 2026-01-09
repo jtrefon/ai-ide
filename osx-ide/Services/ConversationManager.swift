@@ -265,10 +265,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
                 if currentMode == .agent {
                     let orchestrator = AgentOrchestrator()
-                    let result = try await orchestrator.run(
-                        conversationId: self.conversationId,
-                        projectRoot: projectRoot,
-                        initialMessages: self.messages,
+                    let env = AgentOrchestrator.Environment(
                         allTools: availableTools,
                         send: { [self] messages, tools in
                             let augmentedContext = await ContextBuilder.buildContext(
@@ -295,6 +292,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                                 self.historyManager.append(msg)
                             }
                         }
+                    )
+                    let result = try await orchestrator.run(
+                        initialMessages: self.messages,
+                        environment: env
                     )
 
                     let splitFinal = ChatPromptBuilder.splitReasoning(from: result.content ?? "No response received.")
