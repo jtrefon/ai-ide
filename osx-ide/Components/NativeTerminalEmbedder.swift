@@ -274,11 +274,16 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             currentTextAttributes = terminalView.typingAttributes
         }
 
+        applyTerminalOutputCharacters(text, into: textStorage)
+    }
+
+    private func applyTerminalOutputCharacters(_ text: String, into textStorage: NSTextStorage) {
         var i = text.startIndex
         while i < text.endIndex {
             let ch = text[i]
 
-            if ch == "\u{1B}" {
+            switch ch {
+            case "\u{1B}":
                 if let parsed = parseANSISequence(text, from: i) {
                     i = parsed.newIndex
                     if !parsed.shouldSkip {
@@ -286,34 +291,31 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
                     }
                     continue
                 }
-            }
 
-            if ch == "\n" {
+            case "\n":
                 appendNewline(into: textStorage)
                 i = text.index(after: i)
                 continue
-            }
 
-            if ch == "\r" {
+            case "\r":
                 i = handleCarriageReturn(in: text, at: i)
                 continue
-            }
 
-            if ch == "\u{08}" || ch == "\u{7F}" {
+            case "\u{08}", "\u{7F}":
                 handleBackspace()
                 i = text.index(after: i)
                 continue
-            }
 
-            if shouldSkipControlCharacter(ch) {
-                i = text.index(after: i)
-                continue
-            }
-
-            if ch == "\t" {
+            case "\t":
                 appendTab(into: textStorage)
                 i = text.index(after: i)
                 continue
+
+            default:
+                if shouldSkipControlCharacter(ch) {
+                    i = text.index(after: i)
+                    continue
+                }
             }
 
             if pendingEraseToEndOfLine {
