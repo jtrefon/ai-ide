@@ -64,13 +64,12 @@ public class AIToolExecutor {
                 ])
                 await ExecutionLogStore.shared.append(
                     ExecutionLogAppendRequest(
-                        conversationId: conversationId,
-                        tool: toolCall.name,
                         toolCallId: toolCall.id,
                         type: "tool.execute_start",
                         data: [
                             "targetPath": targetFile as Any
-                        ]
+                        ],
+                        context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
                     )
                 )
                 if let conversationId {
@@ -125,15 +124,14 @@ public class AIToolExecutor {
                             Task {
                                 await ExecutionLogStore.shared.append(
                                     ExecutionLogAppendRequest(
-                                        conversationId: conversationId,
-                                        tool: toolCall.name,
                                         toolCallId: toolCallId,
                                         type: "tool.execute_progress",
                                         data: [
                                             "chunk": cappedChunk,
                                             "chunkLength": chunk.count,
                                             "totalLength": totalLength
-                                        ]
+                                        ],
+                                        context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
                                     )
                                 )
                             }
@@ -164,13 +162,12 @@ public class AIToolExecutor {
                         ])
                         await ExecutionLogStore.shared.append(
                             ExecutionLogAppendRequest(
-                                conversationId: conversationId,
-                                tool: toolCall.name,
                                 toolCallId: toolCall.id,
                                 type: "tool.execute_success",
                                 data: [
                                     "resultLength": result.count
-                                ]
+                                ],
+                                context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
                             )
                         )
                         if let conversationId {
@@ -210,13 +207,12 @@ public class AIToolExecutor {
                         ])
                         await ExecutionLogStore.shared.append(
                             ExecutionLogAppendRequest(
-                                conversationId: conversationId,
-                                tool: toolCall.name,
                                 toolCallId: toolCall.id,
                                 type: "tool.execute_error",
                                 data: [
                                     "error": error.localizedDescription
-                                ]
+                                ],
+                                context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
                             )
                         )
                         if let conversationId {

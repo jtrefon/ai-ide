@@ -1,37 +1,5 @@
 import Foundation
 
-public struct ExecutionLogEvent: Codable, Sendable {
-    public let ts: String
-    public let session: String
-    public let conversationId: String?
-    public let tool: String
-    public let toolCallId: String
-    public let type: String
-    public let data: [String: LogValue]?
-}
-
-public struct ExecutionLogAppendRequest: Sendable {
-    public let conversationId: String?
-    public let tool: String
-    public let toolCallId: String
-    public let type: String
-    public let data: [String: LogValue]?
-
-    public init(
-        conversationId: String?,
-        tool: String,
-        toolCallId: String,
-        type: String,
-        data: [String: Any]? = nil
-    ) {
-        self.conversationId = conversationId
-        self.tool = tool
-        self.toolCallId = toolCallId
-        self.type = type
-        self.data = data?.mapValues { LogValue.from($0) }
-    }
-}
-
 public actor ExecutionLogStore {
     public static let shared = ExecutionLogStore()
 
@@ -75,8 +43,8 @@ public actor ExecutionLogStore {
         let event = ExecutionLogEvent(
             ts: iso.string(from: Date()),
             session: sessionId,
-            conversationId: request.conversationId,
-            tool: request.tool,
+            conversationId: request.context.conversationId,
+            tool: request.context.tool,
             toolCallId: request.toolCallId,
             type: request.type,
             data: request.data
@@ -98,6 +66,7 @@ public actor ExecutionLogStore {
                 try append(line: line, to: projectFileURL)
             }
         } catch {
+            _ = error
         }
     }
 
