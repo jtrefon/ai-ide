@@ -7,9 +7,11 @@ public protocol ConversationManagerProtocol: AnyObject, StatePublisherProtocol {
     var isSending: Bool { get }
     var error: String? { get }
     var currentMode: AIMode { get set }
+    var currentConversationId: String { get }
 
     func sendMessage()
     func sendMessage(context: String?)
     func clearConversation()
+    func startNewConversation()
     func updateProjectRoot(_ root: URL)
 }
