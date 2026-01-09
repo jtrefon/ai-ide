@@ -30,9 +30,9 @@ struct AIChatPanel: View {
                         .padding(.horizontal)
                 }
                 Button(action: {
-                    conversationManager.clearConversation()
+                    conversationManager.startNewConversation()
                 }) {
-                    Image(systemName: "trash")
+                    Image(systemName: "plus")
                 }
                 .buttonStyle(BorderlessButtonStyle())
                 .padding(.horizontal)
