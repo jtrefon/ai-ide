@@ -6,23 +6,28 @@ import UniformTypeIdentifiers
 import SwiftUI
 import Combine
 
-/// Protocol for application error management
+/// Shared protocol for state publisher functionality
 @MainActor
-public protocol ErrorManagerProtocol: AnyObject {
-    var currentError: AppError? { get }
-    var showErrorAlert: Bool { get set }
-    func handle(_ error: AppError)
-    func handle(_ error: Error, context: String)
-    func dismissError()
+public protocol StatePublisherProtocol: AnyObject, ObservableObject {
     var statePublisher: AnyPublisher<Void, Never> { get }
 }
 
-public extension ErrorManagerProtocol where Self: ObservableObject {
+public extension StatePublisherProtocol {
     var statePublisher: AnyPublisher<Void, Never> {
         objectWillChange
             .map { _ in () }
             .eraseToAnyPublisher()
     }
+}
+
+/// Protocol for application error management
+@MainActor
+public protocol ErrorManagerProtocol: AnyObject, StatePublisherProtocol {
+    var currentError: AppError? { get }
+    var showErrorAlert: Bool { get set }
+    func handle(_ error: AppError)
+    func handle(_ error: Error, context: String)
+    func dismissError()
 }
 
 /// Protocol defining UI-related persistence and settings
@@ -47,7 +52,7 @@ protocol UIServiceProtocol {
 
 /// Protocol defining workspace and file system operations
 @MainActor
-protocol WorkspaceServiceProtocol: AnyObject {
+protocol WorkspaceServiceProtocol: AnyObject, StatePublisherProtocol {
     var currentDirectory: URL? { get set }
     func createFile(named name: String, in directory: URL)
     func createFolder(named name: String, in directory: URL)
@@ -59,20 +64,11 @@ protocol WorkspaceServiceProtocol: AnyObject {
     func makePathValidator(projectRoot: URL) -> PathValidator
     func makePathValidatorForCurrentDirectory() -> PathValidator?
     func handleError(_ error: AppError)
-    var statePublisher: AnyPublisher<Void, Never> { get }
-}
-
-extension WorkspaceServiceProtocol where Self: ObservableObject {
-    var statePublisher: AnyPublisher<Void, Never> {
-        objectWillChange
-            .map { _ in () }
-            .eraseToAnyPublisher()
-    }
 }
 
 /// Protocol for file editing operations
 @MainActor
-protocol FileEditorServiceProtocol: AnyObject {
+protocol FileEditorServiceProtocol: AnyObject, StatePublisherProtocol {
     var selectedFile: String? { get set }
     var editorContent: String { get set }
     var editorLanguage: String { get set }
@@ -85,15 +81,6 @@ protocol FileEditorServiceProtocol: AnyObject {
     func saveFileAs(to url: URL)
     func newFile()
     func handleError(_ error: AppError)
-    var statePublisher: AnyPublisher<Void, Never> { get }
-}
-
-extension FileEditorServiceProtocol where Self: ObservableObject {
-    var statePublisher: AnyPublisher<Void, Never> {
-        objectWillChange
-            .map { _ in () }
-            .eraseToAnyPublisher()
-    }
 }
 
 /// Protocol for user-facing file dialogs
@@ -107,7 +94,7 @@ protocol FileDialogServiceProtocol {
 
 /// Protocol for AI conversation management
 @MainActor
-public protocol ConversationManagerProtocol: AnyObject {
+public protocol ConversationManagerProtocol: AnyObject, StatePublisherProtocol {
     var messages: [ChatMessage] { get }
     var currentInput: String { get set }
     var isSending: Bool { get }
@@ -118,13 +105,4 @@ public protocol ConversationManagerProtocol: AnyObject {
     func sendMessage(context: String?)
     func clearConversation()
     func updateProjectRoot(_ root: URL)
-    var statePublisher: AnyPublisher<Void, Never> { get }
-}
-
-public extension ConversationManagerProtocol where Self: ObservableObject {
-    var statePublisher: AnyPublisher<Void, Never> {
-        objectWillChange
-            .map { _ in () }
-            .eraseToAnyPublisher()
-    }
 }
