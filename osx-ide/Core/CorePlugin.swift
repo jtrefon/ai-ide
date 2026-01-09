@@ -477,21 +477,7 @@ final class CorePlugin {
 
     @MainActor
     private static func openDiagnostic<Context: IDEContext & ObservableObject>(_ d: Diagnostic, context: Context) {
-        let url: URL
-
-        if d.relativePath.hasPrefix("/") {
-            url = URL(fileURLWithPath: d.relativePath)
-        } else if let root = context.workspace.currentDirectory?.standardizedFileURL {
-            do {
-                url = try context.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(d.relativePath)
-            } catch {
-                context.lastError = error.localizedDescription
-                return
-            }
-        } else {
-            context.lastError = "No workspace open."
-            return
-        }
+        guard let url = DiagnosticURLResolver.resolve(d, context: context) else { return }
 
         context.loadFile(from: url)
         context.fileEditor.selectLine(d.line)
