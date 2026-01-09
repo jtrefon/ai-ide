@@ -1,0 +1,39 @@
+name: Codacy
+
+on:
+  push:
+    branches:
+      - main
+      - 'fix/**'
+      - 'feature/**'
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  codacy-analysis:
+    name: Codacy Analysis
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26.1.1
+        uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd
+        with:
+          xcode-version: "26.1.1"
+
+      - name: Build
+        run: >
+          xcodebuild
+          -project osx-ide.xcodeproj
+          -scheme osx-ide
+          -configuration Debug
+          build
+          CODE_SIGNING_ALLOWED=NO
+          -derivedDataPath .build
+
+      - name: Run Codacy Analysis
+        uses: codacy/codacy-analysis-cli-action@master
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          verbose: true
+          max-allowed-issues: 1000
