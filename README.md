@@ -1,5 +1,7 @@
 # osx-ide
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/08dfd10a1dc4420c9f8d848487b063c0)](https://app.codacy.com/gh/jtrefon/ai-ide?utm_source=github.com&utm_medium=referral&utm_content=jtrefon/ai-ide&utm_campaign=Badge_Grade)
+
 ![CI](https://github.com/jtrefon/ai-ide/actions/workflows/ci.yml/badge.svg)
 ![Release](https://github.com/jtrefon/ai-ide/actions/workflows/release.yml/badge.svg)
 
