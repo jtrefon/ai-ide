@@ -1,23 +1,31 @@
 import Foundation
 
 public struct AgentOrchestrator: Sendable {
+    public struct SendRequest: Sendable {
+        public let messages: [ChatMessage]
+        public let tools: [AITool]
+
+        public init(messages: [ChatMessage], tools: [AITool]) {
+            self.messages = messages
+            self.tools = tools
+        }
+    }
+
+    public struct ToolExecutionRequest: Sendable {
+        public let toolCalls: [AIToolCall]
+        public let tools: [AITool]
+
+        public init(toolCalls: [AIToolCall], tools: [AITool]) {
+            self.toolCalls = toolCalls
+            self.tools = tools
+        }
+    }
+
     public struct Environment: Sendable {
         public let allTools: [AITool]
-        public let send: @Sendable (_ messages: [ChatMessage], _ tools: [AITool]) async throws -> AIServiceResponse
-        public let executeTools: @Sendable (_ toolCalls: [AIToolCall], _ tools: [AITool]) async -> [ChatMessage]
+        public let send: @Sendable (SendRequest) async throws -> AIServiceResponse
+        public let executeTools: @Sendable (ToolExecutionRequest) async -> [ChatMessage]
         public let onMessage: @MainActor @Sendable (ChatMessage) -> Void
-
-        public init(
-            allTools: [AITool],
-            send: @Sendable @escaping (_ messages: [ChatMessage], _ tools: [AITool]) async throws -> AIServiceResponse,
-            executeTools: @Sendable @escaping (_ toolCalls: [AIToolCall], _ tools: [AITool]) async -> [ChatMessage],
-            onMessage: @MainActor @Sendable @escaping (ChatMessage) -> Void
-        ) {
-            self.allTools = allTools
-            self.send = send
-            self.executeTools = executeTools
-            self.onMessage = onMessage
-        }
     }
 
     public struct Configuration: Sendable {
@@ -52,70 +60,78 @@ public struct AgentOrchestrator: Sendable {
         environment: Environment,
         config: Configuration = Configuration()
     ) async throws -> AIServiceResponse {
-        var messages = initialMessages
-
-        appendRoleMessage(
-            ChatMessage(role: .system, content: "You are the Architect role. Provide architecture notes and a short implementation plan. Do not call tools."),
-            to: &messages
-        )
-        try await emitAssistantContentIfPresent(
-            from: try await environment.send(messages, []),
-            to: &messages,
-            environment: environment
-        )
-
-        appendRoleMessage(
-            ChatMessage(role: .system, content: "You are the Planner role. Create or update a concrete execution plan using the planner tool. Output must be deterministic."),
-            to: &messages
-        )
-        let plannerTools = environment.allTools.filter { $0.name == "planner" }
-        let plannerResponse = try await environment.send(messages, plannerTools)
-        if let calls = plannerResponse.toolCalls, !calls.isEmpty {
-            _ = await environment.executeTools(calls, plannerTools)
-        }
-
-        appendRoleMessage(
-            ChatMessage(role: .system, content: "You are the Worker role. Implement the plan. Prefer proposing changes via patch sets; avoid direct writes unless necessary. Use tools."),
-            to: &messages
-        )
-        try await runToolLoop(
-            initialResponse: try await environment.send(messages, environment.allTools),
-            tools: environment.allTools,
-            maxIterations: config.maxWorkerToolIterations,
-            messages: &messages,
-            environment: environment
-        )
-
-        appendRoleMessage(
-            ChatMessage(role: .system, content: "You are the QA role. Review the proposed patch set(s) and tool outputs. If fixes are needed, propose edits. Otherwise, proceed to apply the patch set."),
-            to: &messages
-        )
-        try await runToolLoop(
-            initialResponse: try await environment.send(messages, environment.allTools),
-            tools: environment.allTools,
-            maxIterations: config.maxReviewIterations,
-            messages: &messages,
-            environment: environment
-        )
-
-        appendRoleMessage(
-            ChatMessage(role: .system, content: "You are the Verifier role. Run a small set of allowlisted commands to verify changes. Do not run long-lived commands."),
-            to: &messages
-        )
-        let verifyTools = allowlistedVerifyTools(from: environment.allTools, allowedPrefixes: config.verifyAllowedCommandPrefixes)
-        try await runToolLoop(
-            initialResponse: try await environment.send(messages, verifyTools),
-            tools: verifyTools,
-            maxIterations: config.maxVerifyIterations,
-            messages: &messages,
-            environment: environment
-        )
-
+        var state = RunState(messages: initialMessages)
+        try await runArchitectPhase(state: &state, environment: environment)
+        try await runPlannerPhase(state: &state, environment: environment)
+        try await runWorkerPhase(state: &state, environment: environment, config: config)
+        try await runReviewPhase(state: &state, environment: environment, config: config)
+        try await runVerifyPhase(state: &state, environment: environment, config: config)
         appendRoleMessage(
             ChatMessage(role: .system, content: "You are the Finalizer role. Provide a concise summary: what changed, touched files, verify status, and how to undo (checkpoint/git). Do not call tools."),
-            to: &messages
+            to: &state.messages
         )
-        return try await environment.send(messages, [])
+        return try await environment.send(SendRequest(messages: state.messages, tools: []))
+    }
+
+    private struct RunState {
+        var messages: [ChatMessage]
+    }
+
+    private struct ToolLoopConfig {
+        let tools: [AITool]
+        let maxIterations: Int
+    }
+
+    private func runArchitectPhase(state: inout RunState, environment: Environment) async throws {
+        appendRoleMessage(
+            ChatMessage(role: .system, content: "You are the Architect role. Provide architecture notes and a short implementation plan. Do not call tools."),
+            to: &state.messages
+        )
+        try await emitAssistantContentIfPresent(
+            from: try await environment.send(SendRequest(messages: state.messages, tools: [])),
+            to: &state.messages,
+            environment: environment
+        )
+    }
+
+    private func runPlannerPhase(state: inout RunState, environment: Environment) async throws {
+        appendRoleMessage(
+            ChatMessage(role: .system, content: "You are the Planner role. Create or update a concrete execution plan using the planner tool. Output must be deterministic."),
+            to: &state.messages
+        )
+        let plannerTools = environment.allTools.filter { $0.name == "planner" }
+        let response = try await environment.send(SendRequest(messages: state.messages, tools: plannerTools))
+        if let calls = response.toolCalls, !calls.isEmpty {
+            _ = await environment.executeTools(ToolExecutionRequest(toolCalls: calls, tools: plannerTools))
+        }
+    }
+
+    private func runWorkerPhase(state: inout RunState, environment: Environment, config: Configuration) async throws {
+        appendRoleMessage(
+            ChatMessage(role: .system, content: "You are the Worker role. Implement the plan. Prefer proposing changes via patch sets; avoid direct writes unless necessary. Use tools."),
+            to: &state.messages
+        )
+        let initial = try await environment.send(SendRequest(messages: state.messages, tools: environment.allTools))
+        try await runToolLoop(state: &state, environment: environment, initialResponse: initial, config: ToolLoopConfig(tools: environment.allTools, maxIterations: config.maxWorkerToolIterations))
+    }
+
+    private func runReviewPhase(state: inout RunState, environment: Environment, config: Configuration) async throws {
+        appendRoleMessage(
+            ChatMessage(role: .system, content: "You are the QA role. Review the proposed patch set(s) and tool outputs. If fixes are needed, propose edits. Otherwise, proceed to apply the patch set."),
+            to: &state.messages
+        )
+        let initial = try await environment.send(SendRequest(messages: state.messages, tools: environment.allTools))
+        try await runToolLoop(state: &state, environment: environment, initialResponse: initial, config: ToolLoopConfig(tools: environment.allTools, maxIterations: config.maxReviewIterations))
+    }
+
+    private func runVerifyPhase(state: inout RunState, environment: Environment, config: Configuration) async throws {
+        appendRoleMessage(
+            ChatMessage(role: .system, content: "You are the Verifier role. Run a small set of allowlisted commands to verify changes. Do not run long-lived commands."),
+            to: &state.messages
+        )
+        let verifyTools = allowlistedVerifyTools(from: environment.allTools, allowedPrefixes: config.verifyAllowedCommandPrefixes)
+        let initial = try await environment.send(SendRequest(messages: state.messages, tools: verifyTools))
+        try await runToolLoop(state: &state, environment: environment, initialResponse: initial, config: ToolLoopConfig(tools: verifyTools, maxIterations: config.maxVerifyIterations))
     }
 
     private func appendRoleMessage(_ message: ChatMessage, to messages: inout [ChatMessage]) {
@@ -131,17 +147,11 @@ public struct AgentOrchestrator: Sendable {
         }
     }
 
-    private func runToolLoop(
-        initialResponse: AIServiceResponse,
-        tools: [AITool],
-        maxIterations: Int,
-        messages: inout [ChatMessage],
-        environment: Environment
-    ) async throws {
+    private func runToolLoop(state: inout RunState, environment: Environment, initialResponse: AIServiceResponse, config: ToolLoopConfig) async throws {
         var response = initialResponse
         var iterations = 0
 
-        while let toolCalls = response.toolCalls, !toolCalls.isEmpty, iterations < maxIterations {
+        while let toolCalls = response.toolCalls, !toolCalls.isEmpty, iterations < config.maxIterations {
             iterations += 1
 
             let split = ChatPromptBuilder.splitReasoning(from: response.content ?? "")
@@ -152,15 +162,15 @@ public struct AgentOrchestrator: Sendable {
                 tool: ChatMessageToolContext(toolCalls: toolCalls)
             )
             await environment.onMessage(assistantMsg)
-            messages.append(assistantMsg)
+            state.messages.append(assistantMsg)
 
-            let results = await environment.executeTools(toolCalls, tools)
+            let results = await environment.executeTools(ToolExecutionRequest(toolCalls: toolCalls, tools: config.tools))
             for msg in results {
                 await environment.onMessage(msg)
-                messages.append(msg)
+                state.messages.append(msg)
             }
 
-            response = try await environment.send(messages, tools)
+            response = try await environment.send(SendRequest(messages: state.messages, tools: config.tools))
         }
     }
 
