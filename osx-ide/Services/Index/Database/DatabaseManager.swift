@@ -17,7 +17,7 @@ public enum DatabaseError: Error {
 }
 
 public class DatabaseManager {
-    private var db: OpaquePointer?
+    fileprivate var db: OpaquePointer?
     private let dbPath: String
     private let queue = DispatchQueue(label: "com.osx-ide.database", qos: .userInitiated)
     private let queueKey = DispatchSpecificKey<UUID>()
@@ -95,6 +95,11 @@ public class DatabaseManager {
     }
     
     private func createTables() throws {
+        try createBaseSchema()
+        try applyMigrations()
+    }
+    
+    private func createBaseSchema() throws {
         let sql = """
         CREATE TABLE IF NOT EXISTS resources (
             id TEXT PRIMARY KEY,
@@ -139,12 +144,10 @@ public class DatabaseManager {
         CREATE INDEX IF NOT EXISTS idx_memories_tier ON memories(tier);
         CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category);
         """
-        
         try execute(sql: sql)
-
-        // Lightweight migrations: allow evolving the schema without blowing away the index.
-        // NOTE: SQLite can't add NOT NULL without DEFAULT reliably for existing rows.
-        // Keep defaults here so older DBs upgrade safely.
+    }
+    
+    private func applyMigrations() throws {
         try ensureColumnExists(table: "resources", column: "content_hash", columnDefinition: "TEXT")
         try ensureColumnExists(table: "resources", column: "quality_score", columnDefinition: "REAL NOT NULL DEFAULT 0")
         try ensureColumnExists(table: "resources", column: "quality_details", columnDefinition: "TEXT")

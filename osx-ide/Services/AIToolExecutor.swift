@@ -96,10 +96,11 @@ public class AIToolExecutor {
             let executingMsg = ChatMessage(
                 role: .tool,
                 content: "Executing \(toolCall.name)...",
-                toolName: toolCall.name,
-                toolStatus: .executing,
-                targetFile: targetFile,
-                toolCallId: toolCall.id
+                tool: ChatMessageToolContext(
+                    toolName: toolCall.name,
+                    toolStatus: .executing,
+                    target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
+                )
             )
             onProgress(executingMsg)
             
@@ -141,10 +142,11 @@ public class AIToolExecutor {
                                     ChatMessage(
                                         role: .tool,
                                         content: snapshot,
-                                        toolName: toolCall.name,
-                                        toolStatus: .executing,
-                                        targetFile: targetFile,
-                                        toolCallId: toolCallId
+                                        tool: ChatMessageToolContext(
+                                            toolName: toolCall.name,
+                                            toolStatus: .executing,
+                                            target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCallId)
+                                        )
                                     )
                                 )
                             }
@@ -192,10 +194,11 @@ public class AIToolExecutor {
                     resultMessage = ChatMessage(
                         role: .tool,
                         content: result,
-                        toolName: toolCall.name,
-                        toolStatus: .completed,
-                        targetFile: targetFile,
-                        toolCallId: toolCall.id
+                        tool: ChatMessageToolContext(
+                            toolName: toolCall.name,
+                            toolStatus: .completed,
+                            target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
+                        )
                     )
                 } catch {
                     Task {
@@ -238,10 +241,11 @@ public class AIToolExecutor {
                     resultMessage = ChatMessage(
                         role: .tool,
                         content: errorContent,
-                        toolName: toolCall.name,
-                        toolStatus: .failed,
-                        targetFile: targetFile,
-                        toolCallId: toolCall.id
+                        tool: ChatMessageToolContext(
+                            toolName: toolCall.name,
+                            toolStatus: .failed,
+                            target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
+                        )
                     )
                 }
             } else {
@@ -271,10 +275,11 @@ public class AIToolExecutor {
                 resultMessage = ChatMessage(
                     role: .tool,
                     content: "Tool not found",
-                    toolName: toolCall.name,
-                    toolStatus: .failed,
-                    targetFile: targetFile,
-                    toolCallId: toolCall.id
+                    tool: ChatMessageToolContext(
+                        toolName: toolCall.name,
+                        toolStatus: .failed,
+                        target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
+                    )
                 )
             }
             
