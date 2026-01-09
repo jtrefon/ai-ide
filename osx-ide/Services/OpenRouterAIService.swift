@@ -75,17 +75,18 @@ actor OpenRouterAIService: AIService {
     }
 
     private static func sanitizeToolCallOrdering(_ messages: [ChatMessage]) -> [ChatMessage] {
-        ToolCallOrderingSanitizer().sanitize(messages)
+        var sanitizer = ToolCallOrderingSanitizer()
+        return sanitizer.sanitize(messages)
+    }
+
+    private struct ToolCallOrderingBlock {
+        let startIndexInOutput: Int
+        let toolCallIds: Set<String>
     }
 
     private struct ToolCallOrderingSanitizer {
-        private struct Block {
-            let startIndexInOutput: Int
-            let toolCallIds: Set<String>
-        }
-
         private var output: [ChatMessage] = []
-        private var pending: Block?
+        private var pending: ToolCallOrderingBlock?
         private var remainingToolCallIds: Set<String> = []
 
         mutating func sanitize(_ messages: [ChatMessage]) -> [ChatMessage] {
@@ -140,7 +141,7 @@ actor OpenRouterAIService: AIService {
             let ids = Set(calls.map { $0.id })
             let start = output.count
             output.append(assistant)
-            pending = Block(startIndexInOutput: start, toolCallIds: ids)
+            pending = ToolCallOrderingBlock(startIndexInOutput: start, toolCallIds: ids)
             remainingToolCallIds = ids
         }
 

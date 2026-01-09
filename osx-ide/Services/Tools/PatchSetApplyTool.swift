@@ -30,6 +30,7 @@ struct PatchSetApplyTool: AITool {
         return existedBefore
     }
 
+    @MainActor
     private func publishEvents(manifest: PatchSetManifest, existedBefore: [String: Bool]) {
         for entry in manifest.entries {
             let rel = entry.relativePath
