@@ -92,14 +92,15 @@ final class AgentOrchestratorTests: XCTestCase {
         }
 
         let config = AgentOrchestrator.Configuration(maxVerifyIterations: 2)
-        _ = try await orchestrator.run(
-            conversationId: UUID().uuidString,
-            projectRoot: URL(fileURLWithPath: "/tmp"),
-            initialMessages: initialMessages,
+        let env = AgentOrchestrator.Environment(
             allTools: tools,
             send: send,
             executeTools: executeTools,
-            onMessage: onMessage,
+            onMessage: onMessage
+        )
+        _ = try await orchestrator.run(
+            initialMessages: initialMessages,
+            environment: env,
             config: config
         )
 
@@ -162,14 +163,15 @@ final class AgentOrchestratorTests: XCTestCase {
         }
 
         let config = AgentOrchestrator.Configuration(maxVerifyIterations: 1, verifyAllowedCommandPrefixes: ["xcodebuild "])
-        _ = try await orchestrator.run(
-            conversationId: UUID().uuidString,
-            projectRoot: URL(fileURLWithPath: "/tmp"),
-            initialMessages: initialMessages,
+        let env = AgentOrchestrator.Environment(
             allTools: tools,
             send: send,
             executeTools: executeTools,
-            onMessage: onMessage,
+            onMessage: onMessage
+        )
+        _ = try await orchestrator.run(
+            initialMessages: initialMessages,
+            environment: env,
             config: config
         )
 

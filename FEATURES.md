@@ -448,7 +448,7 @@ This tracker is the authoritative execution plan for building the full agent eco
 
 **Outcome**: deterministic tool execution with trace IDs and a UI that clearly shows executed tools/commands and results.
 
-#### User stories
+#### User stories (Milestone A)
 
 - **Story A1 — Tool execution timeline**
   - As a user, I can see every tool call executed for my request, its status, and its output.
@@ -506,7 +506,7 @@ This tracker is the authoritative execution plan for building the full agent eco
 
 **Outcome**: agent proposes patch sets; user reviews; apply is checkpointed and reversible.
 
-#### User stories
+#### User stories (Milestone B)
 
 - **Story B1 — Propose multi-file patch set**
   - As a user, the agent proposes changes as a patch set instead of writing directly.
@@ -532,7 +532,7 @@ This tracker is the authoritative execution plan for building the full agent eco
 
 **Outcome**: role-separated runs with review loop (max 3) and verify loop (allowlisted, capped).
 
-#### User stories
+#### User stories (Milestone C)
 
 - **Story C1 — Strategy + plan persisted**
   - As a user, I get a clear strategy and milestone plan saved to the plan store.
@@ -557,7 +557,7 @@ This tracker is the authoritative execution plan for building the full agent eco
 
 **Outcome**: systematic context selection and optional refactor/debt payoff mode driven by index summaries and quality scores.
 
-#### User stories
+#### User stories (Milestone D)
 
 - **Story D1 — Context pack transparency**
   - As a user, I can see which context sources were used (summaries, files, symbols).
