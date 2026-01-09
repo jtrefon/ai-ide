@@ -18,7 +18,6 @@ public actor ExecutionLogStore {
         let base = appSupport.appendingPathComponent("osx-ide/Logs", isDirectory: true)
         return base.appendingPathComponent("conversations", isDirectory: true)
             .appendingPathComponent(conversationId, isDirectory: true)
-            .appendingPathComponent("executions", isDirectory: true)
     }
 
     private func projectConversationDirectory(conversationId: String) -> URL? {
@@ -28,15 +27,14 @@ public actor ExecutionLogStore {
             .appendingPathComponent("logs", isDirectory: true)
             .appendingPathComponent("conversations", isDirectory: true)
             .appendingPathComponent(conversationId, isDirectory: true)
-            .appendingPathComponent("executions", isDirectory: true)
     }
 
-    private func executionLogFileURL(conversationId: String, toolCallId: String) -> URL {
-        conversationDirectory(conversationId: conversationId).appendingPathComponent("\(toolCallId).ndjson")
+    private func executionLogFileURL(conversationId: String) -> URL {
+        conversationDirectory(conversationId: conversationId).appendingPathComponent("executions.ndjson")
     }
 
-    private func projectExecutionLogFileURL(conversationId: String, toolCallId: String) -> URL? {
-        projectConversationDirectory(conversationId: conversationId)?.appendingPathComponent("\(toolCallId).ndjson")
+    private func projectExecutionLogFileURL(conversationId: String) -> URL? {
+        projectConversationDirectory(conversationId: conversationId)?.appendingPathComponent("executions.ndjson")
     }
 
     public func append(_ request: ExecutionLogAppendRequest) async {
@@ -59,7 +57,7 @@ public actor ExecutionLogStore {
         do {
             let dir = conversationDirectory(conversationId: conversationId)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let fileURL = executionLogFileURL(conversationId: conversationId, toolCallId: request.toolCallId)
+            let fileURL = executionLogFileURL(conversationId: conversationId)
             let json = try JSONEncoder().encode(event)
             var line = Data()
             line.append(json)
@@ -67,7 +65,7 @@ public actor ExecutionLogStore {
 
             try append(line: line, to: fileURL)
 
-            if let projectDir = projectConversationDirectory(conversationId: conversationId), let projectFileURL = projectExecutionLogFileURL(conversationId: conversationId, toolCallId: request.toolCallId) {
+            if let projectDir = projectConversationDirectory(conversationId: conversationId), let projectFileURL = projectExecutionLogFileURL(conversationId: conversationId) {
                 try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
                 try append(line: line, to: projectFileURL)
             }
