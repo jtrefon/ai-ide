@@ -90,6 +90,19 @@ struct MessageListView: View {
     var fontFamily: String
     @State private var scrollToBottomTrigger: Int = 0
     @State private var hiddenReasoningMessageIds: Set<UUID> = []
+
+    private func reasoningHiddenBinding(for messageId: UUID) -> Binding<Bool> {
+        Binding(
+            get: { hiddenReasoningMessageIds.contains(messageId) },
+            set: { isHidden in
+                if isHidden {
+                    hiddenReasoningMessageIds.insert(messageId)
+                } else {
+                    hiddenReasoningMessageIds.remove(messageId)
+                }
+            }
+        )
+    }
     
     var body: some View {
         LiquidGlassScrollView(.vertical, showsIndicators: false, scrollToBottomTrigger: scrollToBottomTrigger) {
@@ -110,24 +123,25 @@ struct MessageListView: View {
                     if isMessageEmpty {
                         // Skip rendering entirely
                     } else if message.isToolExecution {
-                        let latestForId = displayedMessages.last { $0.toolCallId == message.toolCallId }
-                        if message.id != latestForId?.id {
-                            EmptyView()
+                        if let toolCallId = message.toolCallId,
+                           let latestForId = displayedMessages.last(where: { $0.toolCallId == toolCallId }) {
+                            if message.id != latestForId.id {
+                                EmptyView()
+                            } else {
+                                MessageView(
+                                    message: message,
+                                    fontSize: fontSize,
+                                    fontFamily: fontFamily,
+                                    isReasoningHidden: reasoningHiddenBinding(for: message.id)
+                                )
+                                .id(message.id)
+                            }
                         } else {
                             MessageView(
                                 message: message,
                                 fontSize: fontSize,
                                 fontFamily: fontFamily,
-                                isReasoningHidden: Binding(
-                                    get: { hiddenReasoningMessageIds.contains(message.id) },
-                                    set: { isHidden in
-                                        if isHidden {
-                                            hiddenReasoningMessageIds.insert(message.id)
-                                        } else {
-                                            hiddenReasoningMessageIds.remove(message.id)
-                                        }
-                                    }
-                                )
+                                isReasoningHidden: reasoningHiddenBinding(for: message.id)
                             )
                             .id(message.id)
                         }
@@ -136,16 +150,7 @@ struct MessageListView: View {
                             message: message,
                             fontSize: fontSize,
                             fontFamily: fontFamily,
-                            isReasoningHidden: Binding(
-                                get: { hiddenReasoningMessageIds.contains(message.id) },
-                                    set: { isHidden in
-                                        if isHidden {
-                                            hiddenReasoningMessageIds.insert(message.id)
-                                        } else {
-                                            hiddenReasoningMessageIds.remove(message.id)
-                                        }
-                                    }
-                                )
+                            isReasoningHidden: reasoningHiddenBinding(for: message.id)
                             )
                             .id(message.id)
                     }
@@ -212,13 +217,25 @@ struct MessageView: View {
                                 Text(message.toolName ?? "Tool")
                                     .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .medium))
                                     .foregroundColor(.primary)
-                                
+
                                 if let file = message.targetFile {
                                     Text(file)
                                         .font(.system(size: CGFloat(max(9, fontSize - 4))))
                                         .foregroundColor(.secondary)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
+                                }
+
+                                if message.toolStatus == .executing {
+                                    let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if !trimmed.isEmpty {
+                                        let lastLine = trimmed.split(separator: "\n", omittingEmptySubsequences: false).last.map(String.init) ?? trimmed
+                                        Text(lastLine)
+                                            .font(.system(size: CGFloat(max(9, fontSize - 4))))
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                    }
                                 }
                             }
                             

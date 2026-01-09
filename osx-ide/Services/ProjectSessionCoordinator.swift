@@ -22,6 +22,9 @@ final class ProjectSessionCoordinator {
     private let getShowHiddenFilesInFileTree: () -> Bool
     private let setShowHiddenFilesInFileTree: (Bool) -> Void
 
+    private let getLanguageOverridesByRelativePath: () -> [String: String]
+    private let setLanguageOverridesByRelativePath: ([String: String]) -> Void
+
     private let relativePathForURL: (URL) -> String?
     private let loadFileFromURL: (URL) -> Void
 
@@ -36,6 +39,8 @@ final class ProjectSessionCoordinator {
         setFileTreeExpandedRelativePaths: @escaping (Set<String>) -> Void,
         getShowHiddenFilesInFileTree: @escaping () -> Bool,
         setShowHiddenFilesInFileTree: @escaping (Bool) -> Void,
+        getLanguageOverridesByRelativePath: @escaping () -> [String: String],
+        setLanguageOverridesByRelativePath: @escaping ([String: String]) -> Void,
         relativePathForURL: @escaping (URL) -> String?,
         loadFileFromURL: @escaping (URL) -> Void
     ) {
@@ -47,6 +52,9 @@ final class ProjectSessionCoordinator {
         self.setFileTreeExpandedRelativePaths = setFileTreeExpandedRelativePaths
         self.getShowHiddenFilesInFileTree = getShowHiddenFilesInFileTree
         self.setShowHiddenFilesInFileTree = setShowHiddenFilesInFileTree
+
+        self.getLanguageOverridesByRelativePath = getLanguageOverridesByRelativePath
+        self.setLanguageOverridesByRelativePath = setLanguageOverridesByRelativePath
         self.relativePathForURL = relativePathForURL
         self.loadFileFromURL = loadFileFromURL
     }
@@ -122,6 +130,8 @@ final class ProjectSessionCoordinator {
         ui.minimapVisible = session.minimapVisible
 
         setShowHiddenFilesInFileTree(session.showHiddenFilesInFileTree)
+
+        setLanguageOverridesByRelativePath(session.languageOverridesByRelativePath)
 
         if let mode = AIMode(rawValue: session.aiModeRawValue) {
             conversationManager.currentMode = mode
@@ -251,7 +261,9 @@ final class ProjectSessionCoordinator {
             secondaryOpenTabRelativePaths: secondaryTabs,
             secondaryActiveTabRelativePath: secondaryActive,
 
-            fileTreeExpandedRelativePaths: Array(getFileTreeExpandedRelativePaths()).sorted()
+            fileTreeExpandedRelativePaths: Array(getFileTreeExpandedRelativePaths()).sorted(),
+
+            languageOverridesByRelativePath: getLanguageOverridesByRelativePath()
         )
 
         Task {
