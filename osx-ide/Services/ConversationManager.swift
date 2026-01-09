@@ -16,7 +16,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published var currentMode: AIMode = .chat
     @Published var cancelledToolCallIds: Set<String> = []
     
-    private let conversationId: String
+    private var conversationId: String
     
     private let historyManager: ChatHistoryManager
     private let toolExecutor: AIToolExecutor
@@ -31,6 +31,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     
     var messages: [ChatMessage] {
         historyManager.messages
+    }
+
+    var currentConversationId: String {
+        conversationId
     }
 
     private var pathValidator: PathValidator {
@@ -519,6 +523,42 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     func clearConversation() {
         historyManager.clear()
         cancelledToolCallIds.removeAll()
+    }
+
+    func startNewConversation() {
+        let oldConversationId = conversationId
+        conversationId = UUID().uuidString
+        
+        historyManager.clear()
+        cancelledToolCallIds.removeAll()
+        
+        Task.detached(priority: .utility) {
+            let initialMode = await self.currentMode.rawValue
+            let initialProjectRootPath = await self.projectRoot.path
+            let newConversationId = await self.conversationId
+            
+            await AppLogger.shared.info(category: .conversation, message: "conversation.start", metadata: [
+                "conversationId": newConversationId,
+                "mode": initialMode,
+                "projectRoot": initialProjectRootPath,
+                "previousConversationId": oldConversationId
+            ])
+            await ConversationLogStore.shared.append(
+                conversationId: newConversationId,
+                type: "conversation.start",
+                data: [
+                    "mode": initialMode,
+                    "projectRoot": initialProjectRootPath,
+                    "previousConversationId": oldConversationId
+                ]
+            )
+
+            await ConversationIndexStore.shared.appendStart(
+                conversationId: newConversationId,
+                mode: initialMode,
+                projectRootPath: initialProjectRootPath
+            )
+        }
     }
     
     func cancelToolCall(id: String) {

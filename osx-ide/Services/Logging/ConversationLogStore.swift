@@ -19,31 +19,30 @@ public actor ConversationLogStore {
         self.projectRoot = root
     }
 
-    public func conversationsDirectory() -> URL {
+    private func conversationDirectory(conversationId: String) -> URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
 
         let base = appSupport.appendingPathComponent("osx-ide/Logs", isDirectory: true)
-        let date = iso.string(from: Date()).prefix(10)
-        return base
-            .appendingPathComponent(String(date), isDirectory: true)
-            .appendingPathComponent("conversations", isDirectory: true)
+        return base.appendingPathComponent("conversations", isDirectory: true)
+            .appendingPathComponent(conversationId, isDirectory: true)
     }
 
-    public func projectConversationsDirectory() -> URL? {
+    private func projectConversationDirectory(conversationId: String) -> URL? {
         guard let projectRoot else { return nil }
         return projectRoot
             .appendingPathComponent(".ide", isDirectory: true)
             .appendingPathComponent("logs", isDirectory: true)
             .appendingPathComponent("conversations", isDirectory: true)
+            .appendingPathComponent(conversationId, isDirectory: true)
     }
 
     private func conversationLogFileURL(conversationId: String) -> URL {
-        conversationsDirectory().appendingPathComponent("\(conversationId).ndjson")
+        conversationDirectory(conversationId: conversationId).appendingPathComponent("conversation.ndjson")
     }
 
     private func projectConversationLogFileURL(conversationId: String) -> URL? {
-        projectConversationsDirectory()?.appendingPathComponent("\(conversationId).ndjson")
+        projectConversationDirectory(conversationId: conversationId)?.appendingPathComponent("conversation.ndjson")
     }
 
     public func append(
@@ -61,7 +60,7 @@ public actor ConversationLogStore {
         )
 
         do {
-            let dir = conversationsDirectory()
+            let dir = conversationDirectory(conversationId: conversationId)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let fileURL = conversationLogFileURL(conversationId: conversationId)
             let json = try JSONEncoder().encode(event)
@@ -71,7 +70,7 @@ public actor ConversationLogStore {
 
             try append(line: line, to: fileURL)
 
-            if let projectDir = projectConversationsDirectory(), let projectFileURL = projectConversationLogFileURL(conversationId: conversationId) {
+            if let projectDir = projectConversationDirectory(conversationId: conversationId), let projectFileURL = projectConversationLogFileURL(conversationId: conversationId) {
                 try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
                 try append(line: line, to: projectFileURL)
             }

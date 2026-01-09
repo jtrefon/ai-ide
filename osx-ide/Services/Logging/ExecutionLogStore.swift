@@ -11,35 +11,38 @@ public actor ExecutionLogStore {
         self.projectRoot = root
     }
 
-    public func executionsDirectory() -> URL {
+    private func conversationDirectory(conversationId: String) -> URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
 
         let base = appSupport.appendingPathComponent("osx-ide/Logs", isDirectory: true)
-        let date = iso.string(from: Date()).prefix(10)
-        return base
-            .appendingPathComponent(String(date), isDirectory: true)
+        return base.appendingPathComponent("conversations", isDirectory: true)
+            .appendingPathComponent(conversationId, isDirectory: true)
             .appendingPathComponent("executions", isDirectory: true)
     }
 
-    public func projectExecutionsDirectory() -> URL? {
+    private func projectConversationDirectory(conversationId: String) -> URL? {
         guard let projectRoot else { return nil }
         return projectRoot
             .appendingPathComponent(".ide", isDirectory: true)
             .appendingPathComponent("logs", isDirectory: true)
+            .appendingPathComponent("conversations", isDirectory: true)
+            .appendingPathComponent(conversationId, isDirectory: true)
             .appendingPathComponent("executions", isDirectory: true)
     }
 
-    private func executionLogFileURL(toolCallId: String) -> URL {
-        executionsDirectory().appendingPathComponent("\(toolCallId).ndjson")
+    private func executionLogFileURL(conversationId: String, toolCallId: String) -> URL {
+        conversationDirectory(conversationId: conversationId).appendingPathComponent("\(toolCallId).ndjson")
     }
 
-    private func projectExecutionLogFileURL(toolCallId: String) -> URL? {
-        projectExecutionsDirectory()?.appendingPathComponent("\(toolCallId).ndjson")
+    private func projectExecutionLogFileURL(conversationId: String, toolCallId: String) -> URL? {
+        projectConversationDirectory(conversationId: conversationId)?.appendingPathComponent("\(toolCallId).ndjson")
     }
 
     public func append(_ request: ExecutionLogAppendRequest) async {
         let sessionId = await AppLogger.shared.currentSessionId()
+        let conversationId = request.context.conversationId ?? "unknown"
+        
         let header = ExecutionLogEventHeader(
             ts: iso.string(from: Date()),
             session: sessionId,
@@ -54,9 +57,9 @@ public actor ExecutionLogStore {
         )
 
         do {
-            let dir = executionsDirectory()
+            let dir = conversationDirectory(conversationId: conversationId)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let fileURL = executionLogFileURL(toolCallId: request.toolCallId)
+            let fileURL = executionLogFileURL(conversationId: conversationId, toolCallId: request.toolCallId)
             let json = try JSONEncoder().encode(event)
             var line = Data()
             line.append(json)
@@ -64,7 +67,7 @@ public actor ExecutionLogStore {
 
             try append(line: line, to: fileURL)
 
-            if let projectDir = projectExecutionsDirectory(), let projectFileURL = projectExecutionLogFileURL(toolCallId: request.toolCallId) {
+            if let projectDir = projectConversationDirectory(conversationId: conversationId), let projectFileURL = projectExecutionLogFileURL(conversationId: conversationId, toolCallId: request.toolCallId) {
                 try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
                 try append(line: line, to: projectFileURL)
             }
