@@ -150,6 +150,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         Task.detached(priority: .utility) {
             await AppLogger.shared.setProjectRoot(newRoot)
             await ConversationLogStore.shared.setProjectRoot(newRoot)
+            await ExecutionLogStore.shared.setProjectRoot(newRoot)
             await ConversationIndexStore.shared.setProjectRoot(newRoot)
             await ConversationPlanStore.shared.setProjectRoot(newRoot)
             await AppLogger.shared.info(category: .app, message: "logging.project_root_set", metadata: [
@@ -302,8 +303,12 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                         )
                     }
                     
-                    let _ = await toolExecutor.executeBatch(toolCalls, availableTools: availableTools, conversationId: self.conversationId) { progressMsg in
+                    let toolResults = await toolExecutor.executeBatch(toolCalls, availableTools: availableTools, conversationId: self.conversationId) { progressMsg in
                         self.historyManager.append(progressMsg)
+                    }
+
+                    for msg in toolResults {
+                        self.historyManager.append(msg)
                     }
                     
                     currentResponse = try await sendMessageWithRetry(

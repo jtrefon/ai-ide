@@ -16,6 +16,13 @@ public protocol AITool: Sendable {
     func execute(arguments: [String: Any]) async throws -> String
 }
 
+public protocol AIToolProgressReporting: AITool {
+    func execute(
+        arguments: [String: Any],
+        onProgress: @Sendable @escaping (String) -> Void
+    ) async throws -> String
+}
+
 /// Registry to manage available AI tools
 final class ToolRegistry: Sendable {
     static let shared = ToolRegistry()

@@ -137,7 +137,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             WindowSetupView(appState: appState)
             workspaceLayout
-            IndexStatusBarView(codebaseIndexProvider: { appState.codebaseIndex }, eventBus: appState.eventBus)
+            IndexStatusBarView(appState: appState, codebaseIndexProvider: { appState.codebaseIndex }, eventBus: appState.eventBus)
         }
     }
 

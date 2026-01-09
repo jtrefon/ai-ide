@@ -362,8 +362,10 @@ final class EditorPaneStateManager: ObservableObject {
     static func languageForFileExtension(_ fileExtension: String) -> String {
         switch fileExtension.lowercased() {
         case "swift": return "swift"
-        case "js", "jsx": return "javascript"
-        case "ts", "tsx": return "typescript"
+        case "js": return "javascript"
+        case "jsx": return "jsx"
+        case "ts": return "typescript"
+        case "tsx": return "tsx"
         case "py": return "python"
         case "html": return "html"
         case "css": return "css"
