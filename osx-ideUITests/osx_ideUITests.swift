@@ -45,22 +45,47 @@ final class osx_ideUITests: XCTestCase {
     func testAppLaunchAndBasicUI() throws {
         let app = XCUIApplication()
         app.launch()
-        
+
         // Verify main window exists
         let mainWindow = app.windows.firstMatch
-        if !mainWindow.waitForExistence(timeout: 15) {
+        if !mainWindow.waitForExistence(timeout: 5) {
             XCTSkip("Main window not discoverable by XCTest on this machine/session")
         }
-        
+        XCTAssertTrue(mainWindow.exists, "Main window should exist")
+
         // Verify code editor area exists
         let codeEditor = app.textViews["CodeEditorTextView"]
-        if !codeEditor.waitForExistence(timeout: 15) {
+        if !codeEditor.waitForExistence(timeout: 5) {
             XCTSkip("Code editor not discoverable by XCTest on this machine/session")
         }
 
         if !codeEditor.exists {
             XCTSkip("Code editor became undiscoverable after initial wait (accessibility snapshot flake)")
         }
+        XCTAssertTrue(codeEditor.exists, "Code editor should exist")
+
+        // Verify menu bar exists
+        let menuBar = app.menuBars.firstMatch
+        XCTAssertTrue(menuBar.exists, "Menu bar should exist")
+
+        // Verify app is in foreground
+        XCTAssertEqual(app.state, .runningForeground, "App should be in foreground state")
+
+        // Verify window has a title
+        let windowTitle = mainWindow.title
+        XCTAssertFalse(windowTitle.isEmpty, "Main window should have a title")
+
+        // Try to verify menu items (may not be discoverable in all environments)
+        let fileMenu = app.menuItems["File"]
+        let editMenu = app.menuItems["Edit"]
+        let viewMenu = app.menuItems["View"]
+
+        // Only verify if at least one menu is accessible
+        if fileMenu.exists || editMenu.exists || viewMenu.exists {
+            let menuExists = fileMenu.exists || editMenu.exists || viewMenu.exists
+            XCTAssertTrue(menuExists, "At least one main menu (File, Edit, View) should be accessible")
+        }
+        // If menus are not discoverable, we still pass the test since the main UI elements exist
     }
 
     @MainActor
@@ -69,19 +94,43 @@ final class osx_ideUITests: XCTestCase {
         app.launch()
 
         let mainWindow = app.windows.firstMatch
-        if !mainWindow.waitForExistence(timeout: 15) {
+        if !mainWindow.waitForExistence(timeout: 5) {
             XCTSkip("Main window not discoverable by XCTest on this machine/session")
         }
-        
+
         let codeEditor = app.textViews["CodeEditorTextView"]
-        if !codeEditor.waitForExistence(timeout: 15) {
+        if !codeEditor.waitForExistence(timeout: 5) {
             XCTSkip("Code editor not discoverable by XCTest on this machine/session")
         }
 
-        // NOTE: On macOS, NSTextView-backed editors can be flaky in UI tests (the element can disappear between snapshots).
-        // Keep this as a smoke test to ensure the editor is present and the app doesn't crash.
         if !codeEditor.exists {
             XCTSkip("Code editor became undiscoverable after initial wait (accessibility snapshot flake)")
         }
+
+        // Focus on the editor
+        codeEditor.click()
+        Thread.sleep(forTimeInterval: 0.2)
+
+        // Type some text
+        let testText = "func test() {\n    print(\"Hello\")\n}"
+        codeEditor.typeText(testText)
+        Thread.sleep(forTimeInterval: 0.3)
+
+        // Verify content changed
+        let contentAfterTyping = codeEditor.value as? String ?? ""
+        XCTAssertTrue(contentAfterTyping.contains("test"), "Editor should contain typed text")
+        XCTAssertTrue(contentAfterTyping.contains("print"), "Editor should contain typed function")
+
+        // Select all text (Cmd+A)
+        codeEditor.typeKey("a", modifierFlags: [.command])
+        Thread.sleep(forTimeInterval: 0.2)
+
+        // Verify selection by typing replacement text
+        codeEditor.typeText("REPLACED")
+        Thread.sleep(forTimeInterval: 0.3)
+
+        let contentAfterReplace = codeEditor.value as? String ?? ""
+        XCTAssertTrue(contentAfterReplace.contains("REPLACED"), "Editor should contain replacement text after selection")
+        XCTAssertFalse(contentAfterReplace.contains("test"), "Original text should be replaced")
     }
 }

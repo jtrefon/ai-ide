@@ -171,6 +171,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView.drawsBackground = true
         terminalView.isContinuousSpellCheckingEnabled = false
         terminalView.delegate = self
+        terminalView.setAccessibilityIdentifier("TerminalTextView")
         
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .left
