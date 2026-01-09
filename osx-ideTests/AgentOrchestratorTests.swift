@@ -52,11 +52,11 @@ final class AgentOrchestratorTests: XCTestCase {
 
         let counter = Counter()
 
-        let send: @Sendable ([ChatMessage], [AITool]) async throws -> AIServiceResponse = { messages, tools in
+        let send: @Sendable (AgentOrchestrator.SendRequest) async throws -> AIServiceResponse = { request in
             await counter.incrementSend()
 
-            let hasVerifier = messages.contains(where: { $0.role == .system && $0.content.contains("Verifier role") })
-            let hasRunCommandTool = tools.contains(where: { $0.name == "run_command" })
+            let hasVerifier = request.messages.contains(where: { $0.role == .system && $0.content.contains("Verifier role") })
+            let hasRunCommandTool = request.tools.contains(where: { $0.name == "run_command" })
             if hasVerifier && hasRunCommandTool {
                 return AIServiceResponse(
                     content: "verify",
@@ -68,12 +68,12 @@ final class AgentOrchestratorTests: XCTestCase {
             return AIServiceResponse(content: "ok", toolCalls: nil)
         }
 
-        let executeTools: @Sendable ([AIToolCall], [AITool]) async -> [ChatMessage] = { toolCalls, tools in
-            let hasRunCommandTool = tools.contains(where: { $0.name == "run_command" })
+        let executeTools: @Sendable (AgentOrchestrator.ToolExecutionRequest) async -> [ChatMessage] = { request in
+            let hasRunCommandTool = request.tools.contains(where: { $0.name == "run_command" })
             if hasRunCommandTool {
                 await counter.incrementVerifyToolExecutions()
             }
-            return toolCalls.map { call in
+            return request.toolCalls.map { call in
                 ChatMessage(
                     role: .tool,
                     content: "executed \(call.name)",
@@ -122,8 +122,8 @@ final class AgentOrchestratorTests: XCTestCase {
 
         let initialMessages = [ChatMessage(role: .user, content: "do thing")]
 
-        let send: @Sendable ([ChatMessage], [AITool]) async throws -> AIServiceResponse = { messages, _ in
-            let hasVerifier = messages.contains(where: { $0.role == .system && $0.content.contains("Verifier role") })
+        let send: @Sendable (AgentOrchestrator.SendRequest) async throws -> AIServiceResponse = { request in
+            let hasVerifier = request.messages.contains(where: { $0.role == .system && $0.content.contains("Verifier role") })
             if hasVerifier {
                 return AIServiceResponse(
                     content: "verify",
@@ -133,15 +133,16 @@ final class AgentOrchestratorTests: XCTestCase {
             return AIServiceResponse(content: "ok", toolCalls: nil)
         }
 
-        let executeTools: @Sendable ([AIToolCall], [AITool]) async -> [ChatMessage] = { toolCalls, tools in
-            guard let run = tools.first(where: { $0.name == "run_command" }) as? any AIToolProgressReporting else {
+        let executeTools: @Sendable (AgentOrchestrator.ToolExecutionRequest) async -> [ChatMessage] = { request in
+            guard let runTool = request.tools.first(where: { $0.name == "run_command" }) else {
                 return []
             }
+
             return await withTaskGroup(of: ChatMessage.self) { group in
-                for call in toolCalls {
+                for call in request.toolCalls {
                     group.addTask {
                         do {
-                            _ = try await run.execute(arguments: call.arguments)
+                            _ = try await runTool.execute(arguments: call.arguments)
                             return ChatMessage(role: .tool, content: "should not succeed")
                         } catch {
                             return ChatMessage(role: .tool, content: error.localizedDescription)
@@ -175,6 +176,6 @@ final class AgentOrchestratorTests: XCTestCase {
             config: config
         )
 
-        XCTAssertTrue(emitted.contains(where: { $0.role == .tool && $0.content.lowercased().contains("allowlisted") }))
+        XCTAssertTrue(emitted.contains(where: { $0.role == .tool && $0.content.lowercased().contains("not allowlisted") }))
     }
 }

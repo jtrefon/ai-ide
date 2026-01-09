@@ -1,38 +1,5 @@
 import Foundation
 
-public struct PatchSetManifest: Codable, Sendable {
-    public let id: String
-    public let createdAt: Date
-    public var entries: [PatchSetEntry]
-
-    public init(id: String, createdAt: Date, entries: [PatchSetEntry]) {
-        self.id = id
-        self.createdAt = createdAt
-        self.entries = entries
-    }
-}
-
-public enum PatchSetChangeKind: String, Codable, Sendable {
-    case write
-    case delete
-    case replace
-    case create
-}
-
-public struct PatchSetEntry: Codable, Sendable {
-    public let toolCallId: String
-    public let kind: PatchSetChangeKind
-    public let relativePath: String
-    public let stagedRelativeBlobPath: String?
-
-    public init(toolCallId: String, kind: PatchSetChangeKind, relativePath: String, stagedRelativeBlobPath: String?) {
-        self.toolCallId = toolCallId
-        self.kind = kind
-        self.relativePath = relativePath
-        self.stagedRelativeBlobPath = stagedRelativeBlobPath
-    }
-}
-
 public actor PatchSetStore {
     public static let shared = PatchSetStore()
 
@@ -102,6 +69,22 @@ public actor PatchSetStore {
         try upsertManifest(manifest)
     }
 
+    private func applyWriteEntry(_ entry: PatchSetEntry, root: URL, stagingDir: URL) throws {
+        guard let blobRel = entry.stagedRelativeBlobPath else { return }
+        let blobURL = stagingDir.appendingPathComponent(blobRel)
+        let data = try Data(contentsOf: blobURL)
+        let targetURL = root.appendingPathComponent(entry.relativePath)
+        try FileManager.default.createDirectory(at: targetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: targetURL, options: [.atomic])
+    }
+
+    private func applyDeleteEntry(_ entry: PatchSetEntry, root: URL) throws {
+        let targetURL = root.appendingPathComponent(entry.relativePath)
+        if FileManager.default.fileExists(atPath: targetURL.path) {
+            try FileManager.default.removeItem(at: targetURL)
+        }
+    }
+
     public func applyPatchSet(patchSetId: String) throws -> [String] {
         guard let root = projectRoot else { throw AppError.aiServiceError("PatchSetStore missing project root") }
         guard let dir = patchSetDirectory(patchSetId: patchSetId) else { throw AppError.aiServiceError("PatchSetStore missing staging directory") }
@@ -111,19 +94,12 @@ public actor PatchSetStore {
         touched.reserveCapacity(manifest.entries.count)
 
         for entry in manifest.entries {
-            let targetURL = root.appendingPathComponent(entry.relativePath)
             switch entry.kind {
             case .write, .create, .replace:
-                guard let blobRel = entry.stagedRelativeBlobPath else { continue }
-                let blobURL = dir.appendingPathComponent(blobRel)
-                let data = try Data(contentsOf: blobURL)
-                try FileManager.default.createDirectory(at: targetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try data.write(to: targetURL, options: [.atomic])
+                try applyWriteEntry(entry, root: root, stagingDir: dir)
                 touched.append(entry.relativePath)
             case .delete:
-                if FileManager.default.fileExists(atPath: targetURL.path) {
-                    try FileManager.default.removeItem(at: targetURL)
-                }
+                try applyDeleteEntry(entry, root: root)
                 touched.append(entry.relativePath)
             }
         }

@@ -89,20 +89,31 @@ public actor CheckpointManager {
         var restored: [String] = []
         restored.reserveCapacity(manifest.entries.count)
 
-        for entry in manifest.entries {
-            let targetURL = root.appendingPathComponent(entry.relativePath)
+        func restoreExisting(_ entry: CheckpointEntry) throws -> Bool {
+            guard let rel = entry.stagedRelativeBackupPath else { return false }
+            let backupURL = checkpointDir.appendingPathComponent(rel)
+            guard FileManager.default.fileExists(atPath: backupURL.path) else { return false }
 
+            let targetURL = root.appendingPathComponent(entry.relativePath)
+            try FileManager.default.createDirectory(at: targetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try copyFile(source: backupURL, destination: targetURL)
+            return true
+        }
+
+        func deleteIfPresent(_ entry: CheckpointEntry) throws -> Bool {
+            let targetURL = root.appendingPathComponent(entry.relativePath)
+            guard FileManager.default.fileExists(atPath: targetURL.path) else { return false }
+            try FileManager.default.removeItem(at: targetURL)
+            return true
+        }
+
+        for entry in manifest.entries {
             if entry.existed {
-                guard let rel = entry.stagedRelativeBackupPath else { continue }
-                let backupURL = checkpointDir.appendingPathComponent(rel)
-                if FileManager.default.fileExists(atPath: backupURL.path) {
-                    try FileManager.default.createDirectory(at: targetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    try copyFile(source: backupURL, destination: targetURL)
+                if try restoreExisting(entry) {
                     restored.append(entry.relativePath)
                 }
             } else {
-                if FileManager.default.fileExists(atPath: targetURL.path) {
-                    try FileManager.default.removeItem(at: targetURL)
+                if try deleteIfPresent(entry) {
                     restored.append(entry.relativePath)
                 }
             }
