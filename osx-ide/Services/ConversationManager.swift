@@ -267,17 +267,17 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     let orchestrator = AgentOrchestrator()
                     let env = AgentOrchestrator.Environment(
                         allTools: availableTools,
-                        send: { [self] messages, tools in
+                        send: { [self] request in
                             let augmentedContext = await ContextBuilder.buildContext(
-                                userInput: messages.last(where: { $0.role == .user })?.content ?? "",
+                                userInput: request.messages.last(where: { $0.role == .user })?.content ?? "",
                                 explicitContext: context,
                                 index: self.codebaseIndex,
                                 projectRoot: self.projectRoot
                             )
-                            return try await self.aiService.sendMessage(messages, context: augmentedContext, tools: tools, mode: self.currentMode, projectRoot: self.projectRoot)
+                            return try await self.aiService.sendMessage(request.messages, context: augmentedContext, tools: request.tools, mode: self.currentMode, projectRoot: self.projectRoot)
                         },
-                        executeTools: { toolCalls, tools in
-                            await self.toolExecutor.executeBatch(toolCalls, availableTools: tools, conversationId: self.conversationId) { progressMsg in
+                        executeTools: { request in
+                            await self.toolExecutor.executeBatch(request.toolCalls, availableTools: request.tools, conversationId: self.conversationId) { progressMsg in
                                 if progressMsg.isToolExecution {
                                     self.historyManager.upsertToolExecutionMessage(progressMsg)
                                 } else {
