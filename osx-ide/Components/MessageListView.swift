@@ -90,6 +90,19 @@ struct MessageListView: View {
     var fontFamily: String
     @State private var scrollToBottomTrigger: Int = 0
     @State private var hiddenReasoningMessageIds: Set<UUID> = []
+
+    private func reasoningHiddenBinding(for messageId: UUID) -> Binding<Bool> {
+        Binding(
+            get: { hiddenReasoningMessageIds.contains(messageId) },
+            set: { isHidden in
+                if isHidden {
+                    hiddenReasoningMessageIds.insert(messageId)
+                } else {
+                    hiddenReasoningMessageIds.remove(messageId)
+                }
+            }
+        )
+    }
     
     var body: some View {
         LiquidGlassScrollView(.vertical, showsIndicators: false, scrollToBottomTrigger: scrollToBottomTrigger) {
@@ -119,16 +132,7 @@ struct MessageListView: View {
                                     message: message,
                                     fontSize: fontSize,
                                     fontFamily: fontFamily,
-                                    isReasoningHidden: Binding(
-                                        get: { hiddenReasoningMessageIds.contains(message.id) },
-                                        set: { isHidden in
-                                            if isHidden {
-                                                hiddenReasoningMessageIds.insert(message.id)
-                                            } else {
-                                                hiddenReasoningMessageIds.remove(message.id)
-                                            }
-                                        }
-                                    )
+                                    isReasoningHidden: reasoningHiddenBinding(for: message.id)
                                 )
                                 .id(message.id)
                             }
@@ -137,16 +141,7 @@ struct MessageListView: View {
                                 message: message,
                                 fontSize: fontSize,
                                 fontFamily: fontFamily,
-                                isReasoningHidden: Binding(
-                                    get: { hiddenReasoningMessageIds.contains(message.id) },
-                                    set: { isHidden in
-                                        if isHidden {
-                                            hiddenReasoningMessageIds.insert(message.id)
-                                        } else {
-                                            hiddenReasoningMessageIds.remove(message.id)
-                                        }
-                                    }
-                                )
+                                isReasoningHidden: reasoningHiddenBinding(for: message.id)
                             )
                             .id(message.id)
                         }
@@ -155,16 +150,7 @@ struct MessageListView: View {
                             message: message,
                             fontSize: fontSize,
                             fontFamily: fontFamily,
-                            isReasoningHidden: Binding(
-                                get: { hiddenReasoningMessageIds.contains(message.id) },
-                                    set: { isHidden in
-                                        if isHidden {
-                                            hiddenReasoningMessageIds.insert(message.id)
-                                        } else {
-                                            hiddenReasoningMessageIds.remove(message.id)
-                                        }
-                                    }
-                                )
+                            isReasoningHidden: reasoningHiddenBinding(for: message.id)
                             )
                             .id(message.id)
                     }
