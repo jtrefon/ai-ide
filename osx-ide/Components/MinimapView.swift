@@ -19,7 +19,7 @@ private struct MinimapRepresentable: NSViewRepresentable {
     @Binding var selectedRange: NSRange?
     var fontFamily: String
 
-    func makeNSView(context: Context) -> NSScrollView {
+    func makeNSView(context _: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         let textView = NSTextView()
 
@@ -41,7 +41,7 @@ private struct MinimapRepresentable: NSViewRepresentable {
         return scrollView
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+    func updateNSView(_ scrollView: NSScrollView, context _: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
         let font = resolveFont(family: fontFamily)

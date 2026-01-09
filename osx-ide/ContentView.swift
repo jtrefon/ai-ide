@@ -390,7 +390,8 @@ private struct ResizeCursorView: NSViewRepresentable {
         CursorRectNSView(cursor: .resizeUpDown)
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+    }
 }
 
 private final class CursorRectNSView: NSView {
@@ -403,7 +404,7 @@ private final class CursorRectNSView: NSView {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) {
+    required init?(coder _: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 

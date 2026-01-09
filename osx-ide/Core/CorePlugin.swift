@@ -477,12 +477,11 @@ final class CorePlugin {
 
     @MainActor
     private static func openDiagnostic<Context: IDEContext & ObservableObject>(_ d: Diagnostic, context: Context) {
-        let root = context.workspace.currentDirectory?.standardizedFileURL
         let url: URL
 
         if d.relativePath.hasPrefix("/") {
             url = URL(fileURLWithPath: d.relativePath)
-        } else if let root {
+        } else if let root = context.workspace.currentDirectory?.standardizedFileURL {
             do {
                 url = try context.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(d.relativePath)
             } catch {

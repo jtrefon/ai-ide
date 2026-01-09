@@ -71,6 +71,26 @@ public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelega
             }
         }
 
+        setGlyphs(
+            layoutManager: layoutManager,
+            outGlyphs: outGlyphs,
+            outProps: outProps,
+            outCharIndexes: outCharIndexes,
+            font: aFont,
+            glyphRange: glyphRange
+        )
+
+        return count
+    }
+
+    private func setGlyphs(
+        layoutManager: NSLayoutManager,
+        outGlyphs: [CGGlyph],
+        outProps: [NSLayoutManager.GlyphProperty],
+        outCharIndexes: [Int],
+        font: NSFont,
+        glyphRange: NSRange
+    ) {
         outGlyphs.withUnsafeBufferPointer { gPtr in
             outProps.withUnsafeBufferPointer { pPtr in
                 outCharIndexes.withUnsafeBufferPointer { cPtr in
@@ -78,13 +98,11 @@ public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelega
                         gPtr.baseAddress!,
                         properties: pPtr.baseAddress!,
                         characterIndexes: cPtr.baseAddress!,
-                        font: aFont,
+                        font: font,
                         forGlyphRange: glyphRange
                     )
                 }
             }
         }
-
-        return count
     }
 }

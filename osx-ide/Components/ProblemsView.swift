@@ -44,12 +44,11 @@ struct ProblemsView<Context: IDEContext>: View {
 
     @MainActor
     private func open(_ d: Diagnostic) {
-        let root = context.workspace.currentDirectory?.standardizedFileURL
         let url: URL
 
         if d.relativePath.hasPrefix("/") {
             url = URL(fileURLWithPath: d.relativePath)
-        } else if let root {
+        } else if let root = context.workspace.currentDirectory?.standardizedFileURL {
             do {
                 url = try context.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(d.relativePath)
             } catch {

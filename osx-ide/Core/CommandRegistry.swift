@@ -110,7 +110,7 @@ public final class CommandRegistry {
         try await execute(command.id)
     }
 
-    private static func decode<T: Decodable>(_ type: T.Type, from dict: [String: Any]) throws -> T {
+    private static func decode<T: Decodable>(_: T.Type, from dict: [String: Any]) throws -> T {
         let data = try JSONSerialization.data(withJSONObject: dict, options: [])
         return try JSONDecoder().decode(T.self, from: data)
     }
