@@ -4,4 +4,8 @@ verify_build_tests_*.txt
 .ide/index/**
 .build/
 .vscode/
-.codacy/
+.codacy/logs/
+.codacy/tools-configs/
+
+#Ignore windsurf AI rules
+.windsurfrules
