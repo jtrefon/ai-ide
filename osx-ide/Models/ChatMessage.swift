@@ -35,18 +35,24 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
     public var toolCallId: String? // For Tool Output messages (referencing the call)
     public let toolCalls: [AIToolCall]? // For Assistant messages (the calls themselves)
     
-    public init(role: MessageRole, content: String, reasoning: String? = nil, codeContext: String? = nil, toolName: String? = nil, toolStatus: ToolExecutionStatus? = nil, targetFile: String? = nil, toolCallId: String? = nil, toolCalls: [AIToolCall]? = nil) {
+    public init(
+        role: MessageRole,
+        content: String,
+        reasoning: String? = nil,
+        codeContext: String? = nil,
+        tool: ChatMessageToolContext = ChatMessageToolContext()
+    ) {
         self.id = UUID()
         self.role = role
         self.content = content
         self.reasoning = reasoning
         self.codeContext = codeContext
         self.timestamp = Date()
-        self.toolName = toolName
-        self.toolStatus = toolStatus
-        self.targetFile = targetFile
-        self.toolCallId = toolCallId
-        self.toolCalls = toolCalls
+        self.toolName = tool.toolName
+        self.toolStatus = tool.toolStatus
+        self.targetFile = tool.targetFile
+        self.toolCallId = tool.toolCallId
+        self.toolCalls = tool.toolCalls
     }
     
     // Helper to check if this is a tool execution message
