@@ -11,6 +11,18 @@ import SwiftUI
 /// Handles the execution of AI tools and manages the result reporting.
 @MainActor
 public class AIToolExecutor {
+    private final class StringAccumulator: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: String = ""
+
+        func appendAndSnapshot(_ chunk: String) -> (snapshot: String, totalLength: Int) {
+            lock.lock()
+            defer { lock.unlock() }
+            value.append(chunk)
+            return (value, value.count)
+        }
+    }
+
     private let fileSystemService: FileSystemService
     private let errorManager: ErrorManagerProtocol
     private let projectRoot: URL
@@ -31,7 +43,7 @@ public class AIToolExecutor {
         _ toolCalls: [AIToolCall],
         availableTools: [AITool],
         conversationId: String? = nil,
-        onProgress: @escaping (ChatMessage) -> Void
+        onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void
     ) async -> [ChatMessage] {
         var results: [ChatMessage] = []
         
@@ -50,6 +62,15 @@ public class AIToolExecutor {
                     "toolCallId": toolCall.id,
                     "targetPath": targetFile as Any
                 ])
+                await ExecutionLogStore.shared.append(
+                    conversationId: conversationId,
+                    tool: toolCall.name,
+                    toolCallId: toolCall.id,
+                    type: "tool.execute_start",
+                    data: [
+                        "targetPath": targetFile as Any
+                    ]
+                )
                 if let conversationId {
                     await ConversationLogStore.shared.append(
                         conversationId: conversationId,
@@ -91,7 +112,44 @@ public class AIToolExecutor {
                         mergedArguments["_conversation_id"] = conversationId
                     }
 
-                    let result = try await tool.execute(arguments: mergedArguments)
+                    let result: String
+                    if let streamingTool = tool as? any AIToolProgressReporting {
+                        let toolCallId = toolCall.id
+                        let accumulator = StringAccumulator()
+                        result = try await streamingTool.execute(arguments: mergedArguments) { chunk in
+                            let (snapshot, totalLength) = accumulator.appendAndSnapshot(chunk)
+
+                            let cappedChunk = String(chunk.suffix(16_384))
+                            Task {
+                                await ExecutionLogStore.shared.append(
+                                    conversationId: conversationId,
+                                    tool: toolCall.name,
+                                    toolCallId: toolCallId,
+                                    type: "tool.execute_progress",
+                                    data: [
+                                        "chunk": cappedChunk,
+                                        "chunkLength": chunk.count,
+                                        "totalLength": totalLength
+                                    ]
+                                )
+                            }
+
+                            Task { @MainActor in
+                                onProgress(
+                                    ChatMessage(
+                                        role: .tool,
+                                        content: snapshot,
+                                        toolName: toolCall.name,
+                                        toolStatus: .executing,
+                                        targetFile: targetFile,
+                                        toolCallId: toolCallId
+                                    )
+                                )
+                            }
+                        }
+                    } else {
+                        result = try await tool.execute(arguments: mergedArguments)
+                    }
 
                     Task {
                         await AppLogger.shared.info(category: .tool, message: "tool.execute_success", metadata: [
@@ -100,6 +158,15 @@ public class AIToolExecutor {
                             "toolCallId": toolCall.id,
                             "resultLength": result.count
                         ])
+                        await ExecutionLogStore.shared.append(
+                            conversationId: conversationId,
+                            tool: toolCall.name,
+                            toolCallId: toolCall.id,
+                            type: "tool.execute_success",
+                            data: [
+                                "resultLength": result.count
+                            ]
+                        )
                         if let conversationId {
                             await ConversationLogStore.shared.append(
                                 conversationId: conversationId,
@@ -135,6 +202,15 @@ public class AIToolExecutor {
                             "toolCallId": toolCall.id,
                             "error": error.localizedDescription
                         ])
+                        await ExecutionLogStore.shared.append(
+                            conversationId: conversationId,
+                            tool: toolCall.name,
+                            toolCallId: toolCall.id,
+                            type: "tool.execute_error",
+                            data: [
+                                "error": error.localizedDescription
+                            ]
+                        )
                         if let conversationId {
                             await ConversationLogStore.shared.append(
                                 conversationId: conversationId,

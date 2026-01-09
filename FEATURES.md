@@ -220,6 +220,19 @@ Each language module can implement one or more capabilities. This keeps the syst
   - **Command IDs**: `editor.addNextOccurrence`, `editor.addCursorAbove`, `editor.addCursorBelow`.
   - **Behavior**: add next occurrence; add cursor above/below.
   - **Acceptance**: multi-cursor operations are predictable and consistent.
+- [x] Status bar language indicator + override picker (VS Code-style)
+  - **Primary surface**: bottom status bar.
+  - **Purpose**: display the currently effective language mode for the active editor file, and allow overriding incorrect detection (e.g. `js` vs `jsx`, `ts` vs `tsx`).
+  - **Behavior**
+    - Shows a language label (e.g. “Swift”, “TypeScript React”) only when a real file is open in the editor.
+    - Clicking the label opens a picker with “Auto Detect” plus a curated list of common languages.
+    - Selecting a language forces the editor/highlighter to treat the active file as that language.
+    - Selecting “Auto Detect” clears the override.
+  - **Persistence**: per-project, stored under `.ide/session.json` as `languageOverridesByRelativePath`.
+  - **Acceptance**
+    - When no file is open (untitled buffer), the language indicator is not shown.
+    - Changing the selection immediately updates syntax highlighting.
+    - Overrides survive app restart and re-open of the same project.
 - [ ] Block (rectangular) selection
   - **Primary surface**: editor.
   - **Acceptance**: rectangular selection works without breaking normal selection behavior.

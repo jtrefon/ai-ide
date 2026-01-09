@@ -59,6 +59,8 @@ public struct ProjectSession: Codable, Sendable {
 
     public var fileTreeExpandedRelativePaths: [String]
 
+    public var languageOverridesByRelativePath: [String: String]
+
     private enum CodingKeys: String, CodingKey {
         case windowFrame
         case isSidebarVisible
@@ -86,6 +88,8 @@ public struct ProjectSession: Codable, Sendable {
         case secondaryActiveTabRelativePath
 
         case fileTreeExpandedRelativePaths
+
+        case languageOverridesByRelativePath
     }
 
     public init(
@@ -114,7 +118,9 @@ public struct ProjectSession: Codable, Sendable {
         secondaryOpenTabRelativePaths: [String],
         secondaryActiveTabRelativePath: String?,
 
-        fileTreeExpandedRelativePaths: [String]
+        fileTreeExpandedRelativePaths: [String],
+
+        languageOverridesByRelativePath: [String: String]
     ) {
         self.windowFrame = windowFrame
         self.isSidebarVisible = isSidebarVisible
@@ -142,6 +148,8 @@ public struct ProjectSession: Codable, Sendable {
         self.secondaryActiveTabRelativePath = secondaryActiveTabRelativePath
 
         self.fileTreeExpandedRelativePaths = fileTreeExpandedRelativePaths
+
+        self.languageOverridesByRelativePath = languageOverridesByRelativePath
     }
 
     public init(from decoder: Decoder) throws {
@@ -153,11 +161,11 @@ public struct ProjectSession: Codable, Sendable {
         isTerminalVisible = try c.decodeIfPresent(Bool.self, forKey: .isTerminalVisible) ?? true
         isAIChatVisible = try c.decodeIfPresent(Bool.self, forKey: .isAIChatVisible) ?? true
 
-        sidebarWidth = try c.decodeIfPresent(Double.self, forKey: .sidebarWidth) ?? AppConstants.Layout.defaultSidebarWidth
-        terminalHeight = try c.decodeIfPresent(Double.self, forKey: .terminalHeight) ?? AppConstants.Layout.defaultTerminalHeight
-        chatPanelWidth = try c.decodeIfPresent(Double.self, forKey: .chatPanelWidth) ?? AppConstants.Layout.defaultChatPanelWidth
+        sidebarWidth = try c.decodeIfPresent(Double.self, forKey: .sidebarWidth) ?? 250
+        terminalHeight = try c.decodeIfPresent(Double.self, forKey: .terminalHeight) ?? 200
+        chatPanelWidth = try c.decodeIfPresent(Double.self, forKey: .chatPanelWidth) ?? 300
 
-        selectedThemeRawValue = try c.decodeIfPresent(String.self, forKey: .selectedThemeRawValue) ?? AppTheme.system.rawValue
+        selectedThemeRawValue = try c.decodeIfPresent(String.self, forKey: .selectedThemeRawValue) ?? "system"
 
         showLineNumbers = try c.decodeIfPresent(Bool.self, forKey: .showLineNumbers) ?? true
         wordWrap = try c.decodeIfPresent(Bool.self, forKey: .wordWrap) ?? false
@@ -165,7 +173,7 @@ public struct ProjectSession: Codable, Sendable {
 
         showHiddenFilesInFileTree = try c.decodeIfPresent(Bool.self, forKey: .showHiddenFilesInFileTree) ?? false
 
-        aiModeRawValue = try c.decodeIfPresent(String.self, forKey: .aiModeRawValue) ?? AIMode.chat.rawValue
+        aiModeRawValue = try c.decodeIfPresent(String.self, forKey: .aiModeRawValue) ?? "Chat"
 
         lastOpenFileRelativePath = try c.decodeIfPresent(String.self, forKey: .lastOpenFileRelativePath)
         openTabRelativePaths = try c.decodeIfPresent([String].self, forKey: .openTabRelativePaths) ?? []
@@ -181,5 +189,7 @@ public struct ProjectSession: Codable, Sendable {
         secondaryActiveTabRelativePath = try c.decodeIfPresent(String.self, forKey: .secondaryActiveTabRelativePath)
 
         fileTreeExpandedRelativePaths = try c.decodeIfPresent([String].self, forKey: .fileTreeExpandedRelativePaths) ?? []
+
+        languageOverridesByRelativePath = try c.decodeIfPresent([String: String].self, forKey: .languageOverridesByRelativePath) ?? [:]
     }
 }

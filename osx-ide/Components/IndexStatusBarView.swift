@@ -1,13 +1,70 @@
 import SwiftUI
 
 struct IndexStatusBarView: View {
+    @ObservedObject private var appState: AppState
     @StateObject private var viewModel: IndexStatusBarViewModel
 
-    init(codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?, eventBus: EventBusProtocol) {
+    init(appState: AppState, codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?, eventBus: EventBusProtocol) {
+        self.appState = appState
         self._viewModel = StateObject(wrappedValue: IndexStatusBarViewModel(codebaseIndexProvider: codebaseIndexProvider, eventBus: eventBus))
     }
 
     @State private var isShowingMetricsInfo: Bool = false
+    @State private var isShowingLanguagePicker: Bool = false
+
+    private struct LanguageChoice: Identifiable {
+        let id: String
+        let title: String
+        let languageIdentifier: String?
+    }
+
+    private var activeFilePath: String? {
+        appState.fileEditor.selectedFile
+    }
+
+    private var activeLanguageLabel: String {
+        guard let filePath = activeFilePath else { return "" }
+        let effective = appState.effectiveLanguageIdentifier(forAbsoluteFilePath: filePath)
+        return displayName(for: effective)
+    }
+
+    private var languageChoices: [LanguageChoice] {
+        var choices: [LanguageChoice] = []
+        choices.append(LanguageChoice(id: "auto", title: "Auto Detect", languageIdentifier: nil))
+
+        // Core friendly list (keep simple; include React variants for common mis-detections).
+        choices.append(LanguageChoice(id: "swift", title: "Swift", languageIdentifier: "swift"))
+        choices.append(LanguageChoice(id: "javascript", title: "JavaScript", languageIdentifier: "javascript"))
+        choices.append(LanguageChoice(id: "jsx", title: "JavaScript React", languageIdentifier: "jsx"))
+        choices.append(LanguageChoice(id: "typescript", title: "TypeScript", languageIdentifier: "typescript"))
+        choices.append(LanguageChoice(id: "tsx", title: "TypeScript React", languageIdentifier: "tsx"))
+        choices.append(LanguageChoice(id: "python", title: "Python", languageIdentifier: "python"))
+        choices.append(LanguageChoice(id: "html", title: "HTML", languageIdentifier: "html"))
+        choices.append(LanguageChoice(id: "css", title: "CSS", languageIdentifier: "css"))
+        choices.append(LanguageChoice(id: "json", title: "JSON", languageIdentifier: "json"))
+        choices.append(LanguageChoice(id: "yaml", title: "YAML", languageIdentifier: "yaml"))
+        choices.append(LanguageChoice(id: "markdown", title: "Markdown", languageIdentifier: "markdown"))
+        choices.append(LanguageChoice(id: "text", title: "Plain Text", languageIdentifier: "text"))
+
+        return choices
+    }
+
+    private func displayName(for languageIdentifier: String) -> String {
+        switch languageIdentifier.lowercased() {
+        case "swift": return "Swift"
+        case "javascript": return "JavaScript"
+        case "jsx": return "JavaScript React"
+        case "typescript": return "TypeScript"
+        case "tsx": return "TypeScript React"
+        case "python": return "Python"
+        case "html": return "HTML"
+        case "css": return "CSS"
+        case "json": return "JSON"
+        case "yaml", "yml": return "YAML"
+        case "markdown", "md": return "Markdown"
+        default: return "Plain Text"
+        }
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -21,6 +78,40 @@ struct IndexStatusBarView: View {
                 .lineLimit(1)
 
             Spacer(minLength: 8)
+
+            if activeFilePath != nil {
+                Button {
+                    isShowingLanguagePicker.toggle()
+                } label: {
+                    Text(activeLanguageLabel)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $isShowingLanguagePicker, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Select Language Mode")
+                            .font(.headline)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(languageChoices) { choice in
+                                Button {
+                                    guard let filePath = activeFilePath else { return }
+                                    appState.setLanguageOverride(forAbsoluteFilePath: filePath, languageIdentifier: choice.languageIdentifier)
+                                    isShowingLanguagePicker = false
+                                } label: {
+                                    Text(choice.title)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .frame(width: 240)
+                }
+            }
 
             HStack(spacing: 6) {
                 Text(viewModel.metricsText)
