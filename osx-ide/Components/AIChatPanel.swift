@@ -8,6 +8,12 @@ struct AIChatPanel: View {
     @ObservedObject var ui: UIStateManager
 
     @State private var stateTick: UInt = 0
+    @State private var selectedTab: Tab = .chat
+
+    private enum Tab: String, Hashable {
+        case chat
+        case tasks
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -33,15 +39,24 @@ struct AIChatPanel: View {
             }
             .frame(height: 30)
             .background(Color(NSColor.windowBackgroundColor))
-            
-            // Messages list
-            MessageListView(
-                messages: conversationManager.messages,
-                isSending: conversationManager.isSending,
-                fontSize: ui.fontSize,
-                fontFamily: ui.fontFamily
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            TabView(selection: $selectedTab) {
+                MessageListView(
+                    messages: conversationManager.messages,
+                    isSending: conversationManager.isSending,
+                    fontSize: ui.fontSize,
+                    fontFamily: ui.fontFamily
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .tag(Tab.chat)
+                .tabItem { Text("Chat") }
+
+                ToolExecutionTimelineView(messages: conversationManager.messages)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .tag(Tab.tasks)
+                    .tabItem { Text("Tasks") }
+            }
+            .tabViewStyle(.automatic)
             
             // Error display
             if let error = conversationManager.error {
@@ -53,15 +68,17 @@ struct AIChatPanel: View {
             }
             
             // Input area
-            ChatInputView(
-                text: inputBinding,
-                isSending: conversationManager.isSending,
-                fontSize: ui.fontSize,
-                fontFamily: ui.fontFamily,
-                onSend: {
-                    sendMessage()
-                }
-            )
+            if selectedTab == .chat {
+                ChatInputView(
+                    text: inputBinding,
+                    isSending: conversationManager.isSending,
+                    fontSize: ui.fontSize,
+                    fontFamily: ui.fontFamily,
+                    onSend: {
+                        sendMessage()
+                    }
+                )
+            }
             
             // Mode selector
             HStack(spacing: 8) {
