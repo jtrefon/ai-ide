@@ -53,26 +53,26 @@ public final class WorkspaceNavigationService {
         let needle = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         if needle.isEmpty { return [] }
 
-        if let index = codebaseIndexProvider(), settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true) {
-            if let hits = try? await index.searchSymbolsWithPaths(nameLike: needle, limit: limit) {
-                let mapped = hits.compactMap { hit -> WorkspaceCodeLocation? in
+        if let index = codebaseIndexProvider(),
+           settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true),
+           let hits = try? await index.searchSymbolsWithPaths(nameLike: needle, limit: limit) {
+            let mapped = hits.compactMap { hit -> WorkspaceCodeLocation? in
+                guard let filePath = hit.filePath else { return nil }
+                let rel = Self.relativePath(projectRoot: projectRoot, filePath: filePath)
+                return WorkspaceCodeLocation(relativePath: rel, line: max(1, hit.symbol.lineStart), snippet: "\(hit.symbol.kind.rawValue) \(hit.symbol.name)")
+            }
+
+            // Prefer exact name matches if index returns fuzzy-like results.
+            let exact = hits
+                .filter { $0.symbol.name == needle }
+                .compactMap { hit -> WorkspaceCodeLocation? in
                     guard let filePath = hit.filePath else { return nil }
                     let rel = Self.relativePath(projectRoot: projectRoot, filePath: filePath)
                     return WorkspaceCodeLocation(relativePath: rel, line: max(1, hit.symbol.lineStart), snippet: "\(hit.symbol.kind.rawValue) \(hit.symbol.name)")
                 }
+            if !exact.isEmpty { return exact }
 
-                // Prefer exact name matches if index returns fuzzy-like results.
-                let exact = hits
-                    .filter { $0.symbol.name == needle }
-                    .compactMap { hit -> WorkspaceCodeLocation? in
-                        guard let filePath = hit.filePath else { return nil }
-                        let rel = Self.relativePath(projectRoot: projectRoot, filePath: filePath)
-                        return WorkspaceCodeLocation(relativePath: rel, line: max(1, hit.symbol.lineStart), snippet: "\(hit.symbol.kind.rawValue) \(hit.symbol.name)")
-                    }
-                if !exact.isEmpty { return exact }
-
-                return mapped
-            }
+            return mapped
         }
 
         let symbolSearch = WorkspaceSymbolSearchService(codebaseIndexProvider: codebaseIndexProvider)

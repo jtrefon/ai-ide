@@ -54,8 +54,8 @@ struct ChatInputView: View {
                         }
                     }
                     .onDisappear {
-                        if let monitor = self.inputMonitor {
-                            NSEvent.removeMonitor(monitor)
+                        if let existingMonitor = self.inputMonitor {
+                            NSEvent.removeMonitor(existingMonitor)
                             self.inputMonitor = nil
                         }
                     }

@@ -28,10 +28,10 @@ public final class WorkspaceSearchService {
         let needle = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
         if needle.isEmpty { return [] }
 
-        if let index = codebaseIndexProvider(), settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true) {
-            if let matches = try? await index.searchIndexedText(pattern: needle, limit: limit) {
-                return matches.compactMap(Self.parseIndexedMatchLine)
-            }
+        if let index = codebaseIndexProvider(),
+           settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true),
+           let matches = try? await index.searchIndexedText(pattern: needle, limit: limit) {
+            return matches.compactMap(Self.parseIndexedMatchLine)
         }
 
         return await fallbackSearch(pattern: needle, projectRoot: projectRoot, limit: limit)
