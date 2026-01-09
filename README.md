@@ -3,6 +3,8 @@
 ![CI](https://github.com/jtrefon/ai-ide/actions/workflows/ci.yml/badge.svg)
 ![Release](https://github.com/jtrefon/ai-ide/actions/workflows/release.yml/badge.svg)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/db02c680a7e24b90b6340b027b6ebc93)](https://app.codacy.com/gh/jtrefon/ai-ide/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=jtrefon_ai-ide&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=jtrefon_ai-ide)
+
 A native macOS IDE experiment built with SwiftUI and AppKit.
 
 ## Requirements
