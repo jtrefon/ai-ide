@@ -197,7 +197,11 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             )
         }
         
-        let userMessage = ChatMessage(role: .user, content: currentInput, codeContext: context)
+        let userMessage = ChatMessage(
+            role: .user,
+            content: currentInput,
+            context: ChatMessageContentContext(codeContext: context)
+        )
         historyManager.append(userMessage)
         
         currentInput = ""
@@ -276,8 +280,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     let assistantMsg = ChatMessage(
                         role: .assistant,
                         content: split.content,
-                        reasoning: split.reasoning,
-                        toolCalls: toolCalls
+                        context: ChatMessageContentContext(reasoning: split.reasoning),
+                        tool: ChatMessageToolContext(toolCalls: toolCalls)
                     )
                     historyManager.append(assistantMsg)
 
@@ -352,7 +356,13 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 }
 
                 let splitFinal = ChatPromptBuilder.splitReasoning(from: currentResponse.content ?? "No response received.")
-                historyManager.append(ChatMessage(role: .assistant, content: splitFinal.content, reasoning: splitFinal.reasoning))
+                historyManager.append(
+                    ChatMessage(
+                        role: .assistant,
+                        content: splitFinal.content,
+                        context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
+                    )
+                )
 
                 let hasReasoning = (splitFinal.reasoning?.isEmpty == false)
 
@@ -454,7 +464,13 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             guard let self = self else { return }
             do {
                 let response = try await aiService.explainCode(code)
-                self.historyManager.append(ChatMessage(role: .user, content: "Explain this code", codeContext: code))
+                self.historyManager.append(
+                    ChatMessage(
+                        role: .user,
+                        content: "Explain this code",
+                        context: ChatMessageContentContext(codeContext: code)
+                    )
+                )
                 self.historyManager.append(ChatMessage(role: .assistant, content: response))
                 self.isSending = false
             } catch {
@@ -470,8 +486,20 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             guard let self = self else { return }
             do {
                 let response = try await aiService.refactorCode(code, instructions: instructions)
-                self.historyManager.append(ChatMessage(role: .user, content: "Refactor this code: \(instructions)", codeContext: code))
-                self.historyManager.append(ChatMessage(role: .assistant, content: "Here's the refactored code:", codeContext: response))
+                self.historyManager.append(
+                    ChatMessage(
+                        role: .user,
+                        content: "Refactor this code: \(instructions)",
+                        context: ChatMessageContentContext(codeContext: code)
+                    )
+                )
+                self.historyManager.append(
+                    ChatMessage(
+                        role: .assistant,
+                        content: "Here's the refactored code:",
+                        context: ChatMessageContentContext(codeContext: response)
+                    )
+                )
                 self.isSending = false
             } catch {
                 self.error = "Failed to refactor code: \(error.localizedDescription)"

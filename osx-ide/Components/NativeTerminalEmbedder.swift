@@ -26,17 +26,17 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     @Published var currentDirectory: URL?
     @Published var errorMessage: String?
     
-    private var terminalView: NSTextView?
+    var terminalView: NSTextView?
     private let shellManager: ShellManaging
     private var isCleaningUp = false
     
-    private var fontSize: CGFloat = 12
-    private var fontFamily: String = "SF Mono"
+    var fontSize: CGFloat = 12
+    var fontFamily: String = "SF Mono"
     
-    private var currentLineStartLocation: Int = 0
-    private var cursorColumn: Int = 0
-    private var currentTextAttributes: [NSAttributedString.Key: Any] = [:]
-    private var pendingEraseToEndOfLine: Bool = false
+    var currentLineStartLocation: Int = 0
+    var cursorColumn: Int = 0
+    var currentTextAttributes: [NSAttributedString.Key: Any] = [:]
+    var pendingEraseToEndOfLine: Bool = false
 
     private let eventBus: EventBusProtocol
 
@@ -225,7 +225,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         }
     }
     
-    private func resolveFont(size: CGFloat, family: String, weight: NSFont.Weight = .regular) -> NSFont {
+    func resolveFont(size: CGFloat, family: String, weight: NSFont.Weight = .regular) -> NSFont {
         if let font = NSFont(name: family, size: size) {
             return NSFontManager.shared.convert(font, toHaveTrait: weight == .bold ? .boldFontMask : .unboldFontMask)
         }
@@ -274,72 +274,30 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             currentTextAttributes = terminalView.typingAttributes
         }
 
+        applyTerminalOutputCharacters(text, into: textStorage)
+    }
+
+    private func applyTerminalOutputCharacters(_ text: String, into textStorage: NSTextStorage) {
         var i = text.startIndex
         while i < text.endIndex {
             let ch = text[i]
 
-            if ch == "\u{1B}" {
-                if let parsed = parseANSISequence(text, from: i) {
-                    i = parsed.newIndex
-                    if !parsed.shouldSkip {
-                        currentTextAttributes.merge(parsed.attributes) { _, new in new }
-                    }
-                    continue
-                }
-            }
-
-            if ch == "\n" {
-                textStorage.append(NSAttributedString(string: "\n", attributes: currentTextAttributes))
-                currentLineStartLocation = textStorage.length
-                cursorColumn = 0
-                pendingEraseToEndOfLine = false
-                i = text.index(after: i)
+            if let newIndex = consumeEscapeSequenceIfPresent(text, at: i) {
+                i = newIndex
                 continue
             }
 
-            if ch == "\r" {
-                // Treat CRLF as newline to avoid arming redraw erasure on Enter.
-                if text.index(after: i) < text.endIndex, text[text.index(after: i)] == "\n" {
-                    i = text.index(after: i)
-                    continue
-                }
-                cursorColumn = 0
-                // Shells redraw the current line by carriage returning and rewriting.
-                // Clear stale tail once before the next printable character to avoid leftover prompt chars (e.g. '>'/'=').
-                pendingEraseToEndOfLine = true
-                i = text.index(after: i)
+            if let newIndex = consumeLineBreakIfPresent(text, at: i, into: textStorage) {
+                i = newIndex
                 continue
             }
 
-            // Backspace
-            if ch == "\u{08}" {
-                cursorColumn = max(0, cursorColumn - 1)
-                pendingEraseToEndOfLine = false
-                i = text.index(after: i)
+            if let newIndex = consumeEditingControlIfPresent(text, at: i, into: textStorage) {
+                i = newIndex
                 continue
             }
 
-            // DEL often used as backspace by shells
-            if ch == "\u{7F}" {
-                cursorColumn = max(0, cursorColumn - 1)
-                pendingEraseToEndOfLine = false
-                i = text.index(after: i)
-                continue
-            }
-
-            // Filter other control chars except tab.
-            let scalarValue = ch.unicodeScalars.first?.value ?? 0
-            if scalarValue < 32, ch != "\t" {
-                i = text.index(after: i)
-                continue
-            }
-
-            // Treat tab as spaces (simple rendering).
-            if ch == "\t" {
-                for _ in 0..<4 {
-                    putCharacter(" ", into: textStorage)
-                }
-                pendingEraseToEndOfLine = false
+            if consumeIgnoredControlIfPresent(ch) {
                 i = text.index(after: i)
                 continue
             }
@@ -354,7 +312,89 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         }
     }
 
-    private func eraseToEndOfLine(in textStorage: NSTextStorage) {
+    private func consumeEscapeSequenceIfPresent(_ text: String, at index: String.Index) -> String.Index? {
+        guard text[index] == "\u{1B}" else { return nil }
+        guard let parsed = parseANSISequence(text, from: index) else { return nil }
+        if !parsed.shouldSkip {
+            currentTextAttributes.merge(parsed.attributes) { _, new in new }
+        }
+        return parsed.newIndex
+    }
+
+    private func consumeLineBreakIfPresent(_ text: String, at index: String.Index, into textStorage: NSTextStorage) -> String.Index? {
+        let ch = text[index]
+        if ch == "\n" {
+            appendNewline(into: textStorage)
+            return text.index(after: index)
+        }
+
+        if ch == "\r" {
+            return handleCarriageReturn(in: text, at: index)
+        }
+
+        return nil
+    }
+
+    private func consumeEditingControlIfPresent(_ text: String, at index: String.Index, into textStorage: NSTextStorage) -> String.Index? {
+        let ch = text[index]
+        if ch == "\u{08}" || ch == "\u{7F}" {
+            handleBackspace()
+            return text.index(after: index)
+        }
+
+        if ch == "\t" {
+            appendTab(into: textStorage)
+            return text.index(after: index)
+        }
+
+        return nil
+    }
+
+    private func consumeIgnoredControlIfPresent(_ ch: Character) -> Bool {
+        shouldSkipControlCharacter(ch)
+    }
+
+    private func appendNewline(into textStorage: NSTextStorage) {
+        textStorage.append(NSAttributedString(string: "\n", attributes: currentTextAttributes))
+        currentLineStartLocation = textStorage.length
+        cursorColumn = 0
+        pendingEraseToEndOfLine = false
+    }
+
+    private func handleCarriageReturn(in text: String, at index: String.Index) -> String.Index {
+        // Treat CRLF as newline to avoid arming redraw erasure on Enter.
+        let nextIndex = text.index(after: index)
+        if nextIndex < text.endIndex, text[nextIndex] == "\n" {
+            return nextIndex
+        }
+
+        cursorColumn = 0
+        // Shells redraw the current line by carriage returning and rewriting.
+        // Clear stale tail once before the next printable character to avoid leftover prompt chars.
+        pendingEraseToEndOfLine = true
+        return nextIndex
+    }
+
+    private func handleBackspace() {
+        cursorColumn = max(0, cursorColumn - 1)
+        pendingEraseToEndOfLine = false
+    }
+
+    private func shouldSkipControlCharacter(_ ch: Character) -> Bool {
+        // Filter other control chars except tab.
+        let scalarValue = ch.unicodeScalars.first?.value ?? 0
+        return scalarValue < 32 && ch != "\t"
+    }
+
+    private func appendTab(into textStorage: NSTextStorage) {
+        // Treat tab as spaces (simple rendering).
+        for _ in 0..<4 {
+            putCharacter(" ", into: textStorage)
+        }
+        pendingEraseToEndOfLine = false
+    }
+
+    func eraseToEndOfLine(in textStorage: NSTextStorage) {
         let full = textStorage.string as NSString
         let startIndex = max(0, currentLineStartLocation + cursorColumn)
         let searchRange = NSRange(location: currentLineStartLocation, length: max(0, full.length - currentLineStartLocation))
@@ -365,7 +405,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         }
     }
 
-    private func eraseInLine(mode: Int, in textStorage: NSTextStorage) {
+    func eraseInLine(mode: Int, in textStorage: NSTextStorage) {
         let full = textStorage.string as NSString
         let lineRange = NSRange(location: currentLineStartLocation, length: max(0, full.length - currentLineStartLocation))
         let newlineRange = full.range(of: "\n", options: [], range: lineRange)
@@ -393,7 +433,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         }
     }
 
-    private func deleteCharacters(_ count: Int, in textStorage: NSTextStorage) {
+    func deleteCharacters(_ count: Int, in textStorage: NSTextStorage) {
         guard count > 0 else { return }
         let full = textStorage.string as NSString
         let lineRange = NSRange(location: currentLineStartLocation, length: max(0, full.length - currentLineStartLocation))
@@ -406,7 +446,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         }
     }
 
-    private func putCharacter(_ character: String, into textStorage: NSTextStorage) {
+    func putCharacter(_ character: String, into textStorage: NSTextStorage) {
         let absoluteCursor = max(0, currentLineStartLocation + cursorColumn)
 
         // Find end-of-line (or end-of-buffer) so we overwrite within the line.
@@ -426,230 +466,12 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
 
         cursorColumn += 1
     }
-    
-    /// Process ANSI escape sequences and return attributed string
-    private func processANSIEscapeSequences(_ text: String) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .left
-        var currentAttributes: [NSAttributedString.Key: Any] = [
-            .font: resolveFont(size: fontSize, family: fontFamily),
-            .foregroundColor: NSColor.green,
-            .paragraphStyle: paragraphStyle
-        ]
-        
-        var i = text.startIndex
-        while i < text.endIndex {
-            if text[i] == "\u{1B}" { // ESC character
-                if let (newIndex, newAttributes, shouldSkip) = parseANSISequence(text, from: i) {
-                    if !shouldSkip {
-                        currentAttributes.merge(newAttributes) { (_, new) in new }
-                    }
-                    i = newIndex
-                    continue
-                }
-            }
-            
-            if text[i] == "\r" {
-                i = text.index(after: i)
-                continue
-            }
-            
-            let char = String(text[i])
-            let scalarValue = char.unicodeScalars.first?.value ?? 0
-            if scalarValue < 32 && char != "\n" && char != "\t" {
-                i = text.index(after: i)
-                continue
-            }
-            
-            result.append(NSAttributedString(string: char, attributes: currentAttributes))
-            i = text.index(after: i)
-        }
-        
-        return result
-    }
-    
-    private func parseANSISequence(_ text: String, from start: String.Index) -> (newIndex: String.Index, attributes: [NSAttributedString.Key: Any], shouldSkip: Bool)? {
-        guard start < text.endIndex, text[start] == "\u{1B}" else { return nil }
-        
-        var i = text.index(after: start)
-        guard i < text.endIndex else { return (i, [:], false) }
-        
-        if text[i] == "[" {
-            i = text.index(after: i)
-            return parseCSISequence(text, from: i)
-        } else if text[i] == "]" {
-            while i < text.endIndex {
-                if text[i] == "\u{07}" || (text[i] == "\u{1B}" && i < text.index(before: text.endIndex) && text[text.index(after: i)] == "\\") {
-                    if text[i] == "\u{1B}" { i = text.index(after: i) }
-                    i = text.index(after: i)
-                    break
-                }
-                i = text.index(after: i)
-            }
-            return (i, [:], true)
-        }
-        
-        return (i, [:], false)
-    }
-    
-    private func parseCSISequence(_ text: String, from start: String.Index) -> (newIndex: String.Index, attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
-        var i = start
-        var parameters: [Int] = []
-        var currentParam = ""
-        var attributes: [NSAttributedString.Key: Any] = [:]
-        
-        while i < text.endIndex {
-            let char = text[i]
-            if char.isNumber {
-                currentParam.append(char)
-            } else if char == ";" {
-                if !currentParam.isEmpty {
-                    parameters.append(Int(currentParam) ?? 0)
-                    currentParam = ""
-                }
-            } else if char >= "A" && char <= "Z" || char >= "a" && char <= "z" {
-                if !currentParam.isEmpty {
-                    parameters.append(Int(currentParam) ?? 0)
-                }
-                
-                switch char {
-                case "m":
-                    attributes = applySGRParameters(parameters)
-                    i = text.index(after: i)
-                    return (i, attributes, false)
-                case "H", "f":
-                    // Cursor position (row;col). We don't emulate a full screen buffer.
-                    // Best-effort: move to end so we don't overwrite earlier content (prevents prompt pinned to top-left).
-                    if let terminalView = terminalView, let storage = terminalView.textStorage {
-                        currentLineStartLocation = storage.length
-                        cursorColumn = 0
-                        pendingEraseToEndOfLine = false
-                    }
-                    i = text.index(after: i)
-                    return (i, [:], true)
-                case "J":
-                    // Erase in display. Best-effort: if clear-screen requested, clear the buffer.
-                    let mode = parameters.first ?? 0
-                    if let terminalView = terminalView, let storage = terminalView.textStorage {
-                        if mode == 2 || mode == 3 {
-                            storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: "")
-                            currentLineStartLocation = 0
-                            cursorColumn = 0
-                            pendingEraseToEndOfLine = false
-                        } else {
-                            currentLineStartLocation = storage.length
-                            cursorColumn = 0
-                            pendingEraseToEndOfLine = false
-                        }
-                    }
-                    i = text.index(after: i)
-                    return (i, [:], true)
-                case "K":
-                    // Erase in line. Support common mode 0 (cursor to end).
-                    let mode = parameters.first ?? 0
-                    if let terminalView = terminalView, let storage = terminalView.textStorage {
-                        eraseInLine(mode: mode, in: storage)
-                    }
-                    i = text.index(after: i)
-                    return (i, [:], true)
-                case "P":
-                    // Delete characters (DCH) starting at cursor.
-                    let n = max(1, parameters.first ?? 1)
-                    if let terminalView = terminalView, let storage = terminalView.textStorage {
-                        deleteCharacters(n, in: storage)
-                    }
-                    i = text.index(after: i)
-                    return (i, [:], true)
-                case "X":
-                    // Erase characters (ECH). Best-effort: delete them to avoid stale prompt artifacts.
-                    let n = max(1, parameters.first ?? 1)
-                    if let terminalView = terminalView, let storage = terminalView.textStorage {
-                        deleteCharacters(n, in: storage)
-                    }
-                    i = text.index(after: i)
-                    return (i, [:], true)
-                case "A", "B":
-                    // Cursor up/down. Without a screen model, avoid overwriting by forcing append position.
-                    if let terminalView = terminalView, let storage = terminalView.textStorage {
-                        currentLineStartLocation = storage.length
-                        cursorColumn = 0
-                        pendingEraseToEndOfLine = false
-                    }
-                    i = text.index(after: i)
-                    return (i, [:], true)
-                case "G":
-                    // Cursor horizontal absolute.
-                    let col = max(1, parameters.first ?? 1)
-                    cursorColumn = max(0, col - 1)
-                    i = text.index(after: i)
-                    return (i, [:], true)
-                case "C":
-                    // Cursor forward.
-                    let n = max(1, parameters.first ?? 1)
-                    cursorColumn += n
-                    i = text.index(after: i)
-                    return (i, [:], true)
-                case "D":
-                    // Cursor backward.
-                    let n = max(1, parameters.first ?? 1)
-                    cursorColumn = max(0, cursorColumn - n)
-                    i = text.index(after: i)
-                    return (i, [:], true)
-                default:
-                    i = text.index(after: i)
-                    return (i, [:], true)
-                }
-            }
-            i = text.index(after: i)
-        }
-        
-        return (i, [:], false)
-    }
-    
-    private func applySGRParameters(_ parameters: [Int]) -> [NSAttributedString.Key: Any] {
-        var attributes: [NSAttributedString.Key: Any] = [:]
-        for param in parameters.isEmpty ? [0] : parameters {
-            switch param {
-            case 0: // Reset
-                let paragraphStyle = NSMutableParagraphStyle()
-                paragraphStyle.alignment = .left
-                attributes = [
-                    .font: resolveFont(size: fontSize, family: fontFamily),
-                    .foregroundColor: NSColor.green,
-                    .paragraphStyle: paragraphStyle
-                ]
-            case 1: // Bold
-                attributes[.font] = resolveFont(size: fontSize, family: fontFamily, weight: .bold)
-            case 30...37: // Foreground
-                attributes[.foregroundColor] = ansiColor(param - 30)
-            case 40...47: // Background
-                attributes[.backgroundColor] = ansiColor(param - 40)
-            default: break
-            }
-        }
-        return attributes
-    }
-    
-    private func ansiColor(_ code: Int) -> NSColor {
-        switch code {
-        case 0: return .black
-        case 1: return .red
-        case 2: return .green
-        case 3: return .yellow
-        case 4: return .blue
-        case 5: return .magenta
-        case 6: return .cyan
-        case 7: return .white
-        default: return .green
-        }
-    }
-    
+
     func clearTerminal() {
         guard !isCleaningUp else { return }
         terminalView?.string = ""
     }
-    
+
     func removeEmbedding() {
         cleanup()
     }
