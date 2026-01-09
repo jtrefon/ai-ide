@@ -112,39 +112,13 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
         setupObservation()
 
-        let initialMode = self.currentMode.rawValue
-        let initialProjectRootPath = self.projectRoot.path
-        let initialConversationId = self.conversationId
-
         Task.detached(priority: .utility) {
             let logPath = await AIToolTraceLogger.shared.currentLogFilePath()
             await AIToolTraceLogger.shared.log(type: "trace.start", data: [
                 "logFile": logPath,
-                "mode": initialMode,
-                "projectRoot": initialProjectRootPath
+                "mode": await self.currentMode.rawValue,
+                "projectRoot": await self.projectRoot.path
             ])
-        }
-
-        Task.detached(priority: .utility) {
-            await AppLogger.shared.info(category: .conversation, message: "conversation.start", metadata: [
-                "conversationId": initialConversationId,
-                "mode": initialMode,
-                "projectRoot": initialProjectRootPath
-            ])
-            await ConversationLogStore.shared.append(
-                conversationId: initialConversationId,
-                type: "conversation.start",
-                data: [
-                    "mode": initialMode,
-                    "projectRoot": initialProjectRootPath
-                ]
-            )
-
-            await ConversationIndexStore.shared.appendStart(
-                conversationId: initialConversationId,
-                mode: initialMode,
-                projectRootPath: initialProjectRootPath
-            )
         }
     }
     
@@ -168,6 +142,9 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         historyManager.setProjectRoot(newRoot)
 
         let newRootPath = newRoot.path
+        let initialMode = self.currentMode.rawValue
+        let initialConversationId = self.conversationId
+        
         Task.detached(priority: .utility) {
             await AppLogger.shared.setProjectRoot(newRoot)
             await ConversationLogStore.shared.setProjectRoot(newRoot)
@@ -179,6 +156,26 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             await AppLogger.shared.info(category: .app, message: "logging.project_root_set", metadata: [
                 "projectRoot": newRootPath
             ])
+            
+            await AppLogger.shared.info(category: .conversation, message: "conversation.start", metadata: [
+                "conversationId": initialConversationId,
+                "mode": initialMode,
+                "projectRoot": newRootPath
+            ])
+            await ConversationLogStore.shared.append(
+                conversationId: initialConversationId,
+                type: "conversation.start",
+                data: [
+                    "mode": initialMode,
+                    "projectRoot": newRootPath
+                ]
+            )
+
+            await ConversationIndexStore.shared.appendStart(
+                conversationId: initialConversationId,
+                mode: initialMode,
+                projectRootPath: newRootPath
+            )
         }
     }
     
