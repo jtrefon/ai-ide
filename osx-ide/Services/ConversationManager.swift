@@ -277,7 +277,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                         role: .assistant,
                         content: split.content,
                         reasoning: split.reasoning,
-                        toolCalls: toolCalls
+                        tool: ChatMessageToolContext(toolCalls: toolCalls)
                     )
                     historyManager.append(assistantMsg)
 
