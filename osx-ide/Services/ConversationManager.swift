@@ -101,6 +101,11 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         self.toolExecutor = AIToolExecutor(fileSystemService: fileSystemService, errorManager: errorManager, projectRoot: root)
 
         Task.detached(priority: .utility) {
+            await AppLogger.shared.setProjectRoot(root)
+            await ConversationLogStore.shared.setProjectRoot(root)
+            await ExecutionLogStore.shared.setProjectRoot(root)
+            await ConversationIndexStore.shared.setProjectRoot(root)
+            await ConversationPlanStore.shared.setProjectRoot(root)
             await PatchSetStore.shared.setProjectRoot(root)
             await CheckpointManager.shared.setProjectRoot(root)
         }
