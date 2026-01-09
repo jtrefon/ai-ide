@@ -10,6 +10,28 @@ public struct ExecutionLogEvent: Codable, Sendable {
     public let data: [String: LogValue]?
 }
 
+public struct ExecutionLogAppendRequest: Sendable {
+    public let conversationId: String?
+    public let tool: String
+    public let toolCallId: String
+    public let type: String
+    public let data: [String: LogValue]?
+
+    public init(
+        conversationId: String?,
+        tool: String,
+        toolCallId: String,
+        type: String,
+        data: [String: Any]? = nil
+    ) {
+        self.conversationId = conversationId
+        self.tool = tool
+        self.toolCallId = toolCallId
+        self.type = type
+        self.data = data?.mapValues { LogValue.from($0) }
+    }
+}
+
 public actor ExecutionLogStore {
     public static let shared = ExecutionLogStore()
 
@@ -48,28 +70,22 @@ public actor ExecutionLogStore {
         projectExecutionsDirectory()?.appendingPathComponent("\(toolCallId).ndjson")
     }
 
-    public func append(
-        conversationId: String?,
-        tool: String,
-        toolCallId: String,
-        type: String,
-        data: [String: Any]? = nil
-    ) async {
+    public func append(_ request: ExecutionLogAppendRequest) async {
         let sessionId = await AppLogger.shared.currentSessionId()
         let event = ExecutionLogEvent(
             ts: iso.string(from: Date()),
             session: sessionId,
-            conversationId: conversationId,
-            tool: tool,
-            toolCallId: toolCallId,
-            type: type,
-            data: data?.mapValues { LogValue.from($0) }
+            conversationId: request.conversationId,
+            tool: request.tool,
+            toolCallId: request.toolCallId,
+            type: request.type,
+            data: request.data
         )
 
         do {
             let dir = executionsDirectory()
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let fileURL = executionLogFileURL(toolCallId: toolCallId)
+            let fileURL = executionLogFileURL(toolCallId: request.toolCallId)
             let json = try JSONEncoder().encode(event)
             var line = Data()
             line.append(json)
@@ -77,7 +93,7 @@ public actor ExecutionLogStore {
 
             try append(line: line, to: fileURL)
 
-            if let projectDir = projectExecutionsDirectory(), let projectFileURL = projectExecutionLogFileURL(toolCallId: toolCallId) {
+            if let projectDir = projectExecutionsDirectory(), let projectFileURL = projectExecutionLogFileURL(toolCallId: request.toolCallId) {
                 try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
                 try append(line: line, to: projectFileURL)
             }
