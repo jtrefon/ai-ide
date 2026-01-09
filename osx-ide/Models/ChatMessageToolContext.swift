@@ -3,21 +3,26 @@ import Foundation
 public struct ChatMessageToolContext: Sendable {
     public let toolName: String?
     public let toolStatus: ToolExecutionStatus?
-    public let targetFile: String?
-    public let toolCallId: String?
-    public let toolCalls: [AIToolCall]?
+    public let target: ToolInvocationTarget
+    public let toolCalls: [AIToolCall]
 
     public init(
         toolName: String? = nil,
         toolStatus: ToolExecutionStatus? = nil,
-        targetFile: String? = nil,
-        toolCallId: String? = nil,
-        toolCalls: [AIToolCall]? = nil
+        target: ToolInvocationTarget = ToolInvocationTarget(),
+        toolCalls: [AIToolCall] = []
     ) {
         self.toolName = toolName
         self.toolStatus = toolStatus
-        self.targetFile = targetFile
-        self.toolCallId = toolCallId
         self.toolCalls = toolCalls
+        self.target = target
+    }
+
+    public var targetFile: String? {
+        target.targetFile
+    }
+
+    public var toolCallId: String? {
+        target.toolCallId
     }
 }
