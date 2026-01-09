@@ -10,18 +10,15 @@ public struct ExecutionLogEvent: Codable, Sendable {
     public let data: [String: LogValue]
 
     public init(
-        ts: String,
-        session: String,
-        conversationId: String?,
-        tool: String,
+        header: ExecutionLogEventHeader,
         toolCallId: String,
         type: String,
         data: [String: LogValue] = [:]
     ) {
-        self.ts = ts
-        self.session = session
-        self.conversationId = conversationId
-        self.tool = tool
+        self.ts = header.ts
+        self.session = header.session
+        self.conversationId = header.conversationId
+        self.tool = header.tool
         self.toolCallId = toolCallId
         self.type = type
         self.data = data

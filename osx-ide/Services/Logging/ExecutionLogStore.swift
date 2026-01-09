@@ -40,11 +40,14 @@ public actor ExecutionLogStore {
 
     public func append(_ request: ExecutionLogAppendRequest) async {
         let sessionId = await AppLogger.shared.currentSessionId()
-        let event = ExecutionLogEvent(
+        let header = ExecutionLogEventHeader(
             ts: iso.string(from: Date()),
             session: sessionId,
             conversationId: request.context.conversationId,
-            tool: request.context.tool,
+            tool: request.context.tool
+        )
+        let event = ExecutionLogEvent(
+            header: header,
             toolCallId: request.toolCallId,
             type: request.type,
             data: request.data
