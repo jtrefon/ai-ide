@@ -18,9 +18,7 @@ public actor AIToolTraceLogger {
             dir = appSupport.appendingPathComponent("osx-ide/Logs", isDirectory: true)
         }
 
-        let date = ISO8601DateFormatter().string(from: Date())
-            .replacingOccurrences(of: ":", with: "-")
-        self.logFileURL = dir.appendingPathComponent("ai-trace-\(date).ndjson")
+        self.logFileURL = dir.appendingPathComponent("ai-trace.ndjson")
     }
 
     public func log(type: String, data: [String: Any] = [:], file: String = #fileID, line: Int = #line) {
