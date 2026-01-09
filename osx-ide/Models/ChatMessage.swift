@@ -38,21 +38,20 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
     public init(
         role: MessageRole,
         content: String,
-        reasoning: String? = nil,
-        codeContext: String? = nil,
+        context: ChatMessageContentContext = ChatMessageContentContext(),
         tool: ChatMessageToolContext = ChatMessageToolContext()
     ) {
         self.id = UUID()
         self.role = role
         self.content = content
-        self.reasoning = reasoning
-        self.codeContext = codeContext
+        self.reasoning = context.reasoning
+        self.codeContext = context.codeContext
         self.timestamp = Date()
         self.toolName = tool.toolName
         self.toolStatus = tool.toolStatus
         self.targetFile = tool.targetFile
         self.toolCallId = tool.toolCallId
-        self.toolCalls = tool.toolCalls
+        self.toolCalls = tool.toolCalls.isEmpty ? nil : tool.toolCalls
     }
     
     // Helper to check if this is a tool execution message

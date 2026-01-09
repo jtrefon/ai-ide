@@ -2,6 +2,12 @@ import AppKit
 import Foundation
 
 extension NativeTerminalEmbedder {
+
+    struct ANSIParseResult {
+        let newIndex: String.Index
+        let attributes: [NSAttributedString.Key: Any]
+        let shouldSkip: Bool
+    }
     /// Process ANSI escape sequences and return attributed string
     func processANSIEscapeSequences(_ text: String) -> NSAttributedString {
         let result = NSMutableAttributedString()
@@ -44,11 +50,11 @@ extension NativeTerminalEmbedder {
         currentAttributes: inout [NSAttributedString.Key: Any]
     ) -> String.Index? {
         guard text[index] == "\u{1B}" else { return nil }
-        guard let (newIndex, newAttributes, shouldSkip) = parseANSISequence(text, from: index) else { return nil }
-        if !shouldSkip {
-            currentAttributes.merge(newAttributes) { (_, new) in new }
+        guard let result = parseANSISequence(text, from: index) else { return nil }
+        if !result.shouldSkip {
+            currentAttributes.merge(result.attributes) { (_, new) in new }
         }
-        return newIndex
+        return result.newIndex
     }
 
     private func shouldSkipPlainTextControlCharacter(_ ch: Character) -> Bool {
@@ -59,11 +65,11 @@ extension NativeTerminalEmbedder {
     func parseANSISequence(
         _ text: String,
         from start: String.Index
-    ) -> (newIndex: String.Index, attributes: [NSAttributedString.Key: Any], shouldSkip: Bool)? {
+    ) -> ANSIParseResult? {
         guard start < text.endIndex, text[start] == "\u{1B}" else { return nil }
 
         var i = text.index(after: start)
-        guard i < text.endIndex else { return (i, [:], false) }
+        guard i < text.endIndex else { return ANSIParseResult(newIndex: i, attributes: [:], shouldSkip: false) }
 
         if text[i] == "[" {
             i = text.index(after: i)
@@ -74,7 +80,7 @@ extension NativeTerminalEmbedder {
             return parseOSCSequence(text, from: i)
         }
 
-        return (i, [:], false)
+        return ANSIParseResult(newIndex: i, attributes: [:], shouldSkip: false)
     }
 
     private func appendCSIParamIfNeeded(_ currentParam: inout String, into parameters: inout [Int]) {
@@ -90,7 +96,7 @@ extension NativeTerminalEmbedder {
     func parseOSCSequence(
         _ text: String,
         from start: String.Index
-    ) -> (newIndex: String.Index, attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
+    ) -> ANSIParseResult {
         var i = start
         while i < text.endIndex {
             if text[i] == "\u{07}" {
@@ -107,13 +113,13 @@ extension NativeTerminalEmbedder {
             i = text.index(after: i)
         }
 
-        return (i, [:], true)
+        return ANSIParseResult(newIndex: i, attributes: [:], shouldSkip: true)
     }
 
     func parseCSISequence(
         _ text: String,
         from start: String.Index
-    ) -> (newIndex: String.Index, attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
+    ) -> ANSIParseResult {
         var i = start
         var parameters: [Int] = []
         var currentParam = ""
@@ -138,23 +144,21 @@ extension NativeTerminalEmbedder {
                 let finalChar = char
                 i = text.index(after: i)
                 let result = handleCSIFinalCharacter(finalChar, parameters: parameters)
-                if let returnedAttributes = result.attributes {
-                    attributes = returnedAttributes
-                }
-                return (i, attributes, result.shouldSkip)
+                attributes = result.attributes
+                return ANSIParseResult(newIndex: i, attributes: attributes, shouldSkip: result.shouldSkip)
             }
 
             i = text.index(after: i)
         }
 
-        return (i, [:], false)
+        return ANSIParseResult(newIndex: i, attributes: [:], shouldSkip: false)
     }
 
     func handleCSIFinalCharacter(
         _ finalChar: Character,
         parameters: [Int]
-    ) -> (attributes: [NSAttributedString.Key: Any]?, shouldSkip: Bool) {
-        let handlers: [Character: () -> (attributes: [NSAttributedString.Key: Any]?, shouldSkip: Bool)] = [
+    ) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
+        let handlers: [Character: () -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool)] = [
             "m": { self.handleSGR(parameters) },
             "H": { self.handleCursorPositioning() },
             "f": { self.handleCursorPositioning() },
@@ -169,60 +173,60 @@ extension NativeTerminalEmbedder {
             "D": { self.handleCursorBackward(parameters) }
         ]
 
-        return handlers[finalChar]?() ?? (nil, true)
+        return handlers[finalChar]?() ?? ([:], true)
     }
 
-    func handleSGR(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any]?, shouldSkip: Bool) {
+    func handleSGR(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         (applySGRParameters(parameters), false)
     }
 
-    func handleCursorPositioning() -> (attributes: [NSAttributedString.Key: Any]?, shouldSkip: Bool) {
+    func handleCursorPositioning() -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         moveCursorToEndForUnsupportedPositioning()
-        return (nil, true)
+        return ([:], true)
     }
 
-    func handleEraseInDisplay(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any]?, shouldSkip: Bool) {
+    func handleEraseInDisplay(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         let mode = parameters.first ?? 0
         eraseInDisplay(mode: mode)
-        return (nil, true)
+        return ([:], true)
     }
 
-    func handleEraseInLine(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any]?, shouldSkip: Bool) {
+    func handleEraseInLine(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         let mode = parameters.first ?? 0
         if let terminalView = terminalView, let storage = terminalView.textStorage {
             eraseInLine(mode: mode, in: storage)
         }
-        return (nil, true)
+        return ([:], true)
     }
 
-    func handleDeleteCharacters(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any]?, shouldSkip: Bool) {
+    func handleDeleteCharacters(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         let n = max(1, parameters.first ?? 1)
         if let terminalView = terminalView, let storage = terminalView.textStorage {
             deleteCharacters(n, in: storage)
         }
-        return (nil, true)
+        return ([:], true)
     }
 
-    func handleEraseCharacters(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any]?, shouldSkip: Bool) {
+    func handleEraseCharacters(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         handleDeleteCharacters(parameters)
     }
 
-    func handleCursorHorizontalAbsolute(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any]?, shouldSkip: Bool) {
+    func handleCursorHorizontalAbsolute(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         let col = max(1, parameters.first ?? 1)
         cursorColumn = max(0, col - 1)
-        return (nil, true)
+        return ([:], true)
     }
 
-    func handleCursorForward(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any]?, shouldSkip: Bool) {
+    func handleCursorForward(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         let n = max(1, parameters.first ?? 1)
         cursorColumn += n
-        return (nil, true)
+        return ([:], true)
     }
 
-    func handleCursorBackward(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any]?, shouldSkip: Bool) {
+    func handleCursorBackward(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         let n = max(1, parameters.first ?? 1)
         cursorColumn = max(0, cursorColumn - n)
-        return (nil, true)
+        return ([:], true)
     }
 
     func moveCursorToEndForUnsupportedPositioning() {
