@@ -48,6 +48,11 @@ final class UIService: UIServiceProtocol {
     func setIndentationStyle(_ style: IndentationStyle) {
         settingsStore.set(style.rawValue, forKey: AppConstants.Storage.indentationStyleKey)
     }
+
+    func setCliTimeoutSeconds(_ seconds: Double) {
+        let clamped = max(1, min(300, seconds))
+        settingsStore.set(clamped, forKey: AppConstants.Storage.cliTimeoutSecondsKey)
+    }
     
     // MARK: - Editor Settings
     
@@ -101,12 +106,16 @@ final class UIService: UIServiceProtocol {
         let minimapVisible: Bool = false
 
         let indentationStyle = IndentationStyle.current(userDefaults: .standard)
+
+        let storedCliTimeout = settingsStore.double(forKey: AppConstants.Storage.cliTimeoutSecondsKey)
+        let cliTimeoutSeconds = storedCliTimeout == 0 ? 30 : storedCliTimeout
         
         return UISettings(
             selectedTheme: storedTheme,
             fontSize: fontSize,
             fontFamily: settingsStore.string(forKey: AppConstants.Storage.fontFamilyKey) ?? AppConstants.Editor.defaultFontFamily,
             indentationStyle: indentationStyle,
+            cliTimeoutSeconds: cliTimeoutSeconds,
             showLineNumbers: showLineNumbers,
             wordWrap: wordWrap,
             minimapVisible: minimapVisible,
@@ -122,6 +131,7 @@ final class UIService: UIServiceProtocol {
         setFontSize(settings.fontSize)
         setFontFamily(settings.fontFamily)
         setIndentationStyle(settings.indentationStyle)
+        setCliTimeoutSeconds(settings.cliTimeoutSeconds)
         setShowLineNumbers(settings.showLineNumbers)
         setWordWrap(settings.wordWrap)
         setMinimapVisible(settings.minimapVisible)
@@ -135,7 +145,8 @@ final class UIService: UIServiceProtocol {
         let keys = [
             AppConstants.Storage.fontSizeKey,
             AppConstants.Storage.fontFamilyKey,
-            AppConstants.Storage.indentationStyleKey
+            AppConstants.Storage.indentationStyleKey,
+            AppConstants.Storage.cliTimeoutSecondsKey
         ]
         keys.forEach { settingsStore.removeObject(forKey: $0) }
     }
@@ -147,6 +158,7 @@ final class UIService: UIServiceProtocol {
             "fontSize": settings.fontSize,
             "fontFamily": settings.fontFamily,
             "indentationStyle": settings.indentationStyle.rawValue,
+            "cliTimeoutSeconds": settings.cliTimeoutSeconds,
             "showLineNumbers": settings.showLineNumbers,
             "wordWrap": settings.wordWrap,
             "minimapVisible": settings.minimapVisible,
@@ -158,47 +170,78 @@ final class UIService: UIServiceProtocol {
     
     /// Import settings
     func importSettings(_ settings: [String: Any]) {
-        if let themeRaw = settings["theme"] as? String,
-           let theme = AppTheme(rawValue: themeRaw) {
-            setTheme(theme)
-        }
-        
-        if let size = settings["fontSize"] as? Double {
-            setFontSize(size)
-        }
-        
-        if let family = settings["fontFamily"] as? String {
-            setFontFamily(family)
-        }
+        applyTheme(from: settings)
+        applyFontSize(from: settings)
+        applyFontFamily(from: settings)
+        applyIndentationStyle(from: settings)
+        applyCliTimeoutSeconds(from: settings)
+        applyShowLineNumbers(from: settings)
+        applyWordWrap(from: settings)
+        applyMinimapVisible(from: settings)
+        applySidebarWidth(from: settings)
+        applyTerminalHeight(from: settings)
+        applyChatPanelWidth(from: settings)
+    }
 
-        if let raw = settings["indentationStyle"] as? String,
-           let style = IndentationStyle(rawValue: raw) {
-            setIndentationStyle(style)
+    private func applyTheme(from settings: [String: Any]) {
+        guard let themeRaw = settings["theme"] as? String,
+              let theme = AppTheme(rawValue: themeRaw) else {
+            return
         }
-        
-        if let show = settings["showLineNumbers"] as? Bool {
-            setShowLineNumbers(show)
+        setTheme(theme)
+    }
+
+    private func applyFontSize(from settings: [String: Any]) {
+        guard let size = settings["fontSize"] as? Double else { return }
+        setFontSize(size)
+    }
+
+    private func applyFontFamily(from settings: [String: Any]) {
+        guard let family = settings["fontFamily"] as? String else { return }
+        setFontFamily(family)
+    }
+
+    private func applyIndentationStyle(from settings: [String: Any]) {
+        guard let raw = settings["indentationStyle"] as? String,
+              let style = IndentationStyle(rawValue: raw) else {
+            return
         }
-        
-        if let wrap = settings["wordWrap"] as? Bool {
-            setWordWrap(wrap)
-        }
-        
-        if let visible = settings["minimapVisible"] as? Bool {
-            setMinimapVisible(visible)
-        }
-        
-        if let width = settings["sidebarWidth"] as? Double {
-            setSidebarWidth(width)
-        }
-        
-        if let height = settings["terminalHeight"] as? Double {
-            setTerminalHeight(height)
-        }
-        
-        if let width = settings["chatPanelWidth"] as? Double {
-            setChatPanelWidth(width)
-        }
+        setIndentationStyle(style)
+    }
+
+    private func applyCliTimeoutSeconds(from settings: [String: Any]) {
+        guard let timeout = settings["cliTimeoutSeconds"] as? Double else { return }
+        setCliTimeoutSeconds(timeout)
+    }
+
+    private func applyShowLineNumbers(from settings: [String: Any]) {
+        guard let show = settings["showLineNumbers"] as? Bool else { return }
+        setShowLineNumbers(show)
+    }
+
+    private func applyWordWrap(from settings: [String: Any]) {
+        guard let wrap = settings["wordWrap"] as? Bool else { return }
+        setWordWrap(wrap)
+    }
+
+    private func applyMinimapVisible(from settings: [String: Any]) {
+        guard let visible = settings["minimapVisible"] as? Bool else { return }
+        setMinimapVisible(visible)
+    }
+
+    private func applySidebarWidth(from settings: [String: Any]) {
+        guard let width = settings["sidebarWidth"] as? Double else { return }
+        setSidebarWidth(width)
+    }
+
+    private func applyTerminalHeight(from settings: [String: Any]) {
+        guard let height = settings["terminalHeight"] as? Double else { return }
+        setTerminalHeight(height)
+    }
+
+    private func applyChatPanelWidth(from settings: [String: Any]) {
+        guard let width = settings["chatPanelWidth"] as? Double else { return }
+        setChatPanelWidth(width)
     }
 }
 
@@ -207,6 +250,7 @@ struct UISettings {
     let fontSize: Double
     let fontFamily: String
     let indentationStyle: IndentationStyle
+    let cliTimeoutSeconds: Double
     let showLineNumbers: Bool
     let wordWrap: Bool
     let minimapVisible: Bool

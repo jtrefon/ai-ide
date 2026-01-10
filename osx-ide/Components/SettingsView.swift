@@ -27,6 +27,11 @@ struct SettingsView: View {
                         .tabItem {
                             Label("AI", systemImage: "sparkles")
                         }
+
+                    AgentSettingsTab(ui: ui)
+                        .tabItem {
+                            Label("Agent", systemImage: "bolt.fill")
+                        }
                     
                     LanguageModulesTab()
                         .tabItem {

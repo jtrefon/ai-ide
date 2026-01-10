@@ -30,6 +30,10 @@ class UIStateManager: ObservableObject {
     @Published var fontSize: Double = AppConstants.Editor.defaultFontSize
     @Published var fontFamily: String = AppConstants.Editor.defaultFontFamily
     @Published var indentationStyle: IndentationStyle = .tabs
+
+    // MARK: - Agent Settings
+
+    @Published var cliTimeoutSeconds: Double = 30
     
     // MARK: - Theme State
     
@@ -152,6 +156,12 @@ class UIStateManager: ObservableObject {
         uiService.setTheme(theme)
         updateTheme()
     }
+
+    func setCliTimeoutSeconds(_ seconds: Double) {
+        let clamped = max(1, min(300, seconds))
+        cliTimeoutSeconds = clamped
+        uiService.setCliTimeoutSeconds(clamped)
+    }
     
     private func updateTheme() {
         switch selectedTheme {
@@ -177,6 +187,7 @@ class UIStateManager: ObservableObject {
         fontSize = settings.fontSize
         fontFamily = settings.fontFamily
         indentationStyle = settings.indentationStyle
+        cliTimeoutSeconds = settings.cliTimeoutSeconds
         showLineNumbers = settings.showLineNumbers
         wordWrap = settings.wordWrap
         minimapVisible = settings.minimapVisible
@@ -203,6 +214,7 @@ class UIStateManager: ObservableObject {
         fontSize = AppConstants.Editor.defaultFontSize
         fontFamily = AppConstants.Editor.defaultFontFamily
         indentationStyle = .tabs
+        cliTimeoutSeconds = 30
         selectedTheme = .system
         
         updateTheme()
