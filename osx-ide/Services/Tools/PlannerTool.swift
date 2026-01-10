@@ -35,7 +35,10 @@ struct PlannerTool: AITool {
         switch action {
         case "get":
             let current = await ConversationPlanStore.shared.get(conversationId: conversationId)
-            return current ?? "No plan set."
+            if let current, !current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return current
+            }
+            return "No plan set.\n\nSet one with:\n{\n  \"action\": \"set\",\n  \"plan\": \"- Step 1: ...\\n- Step 2: ...\\n- Step 3: ...\"\n}"
 
         case "set":
             guard let plan = arguments["plan"] as? String, !plan.isEmpty else {
@@ -43,7 +46,7 @@ struct PlannerTool: AITool {
             }
             await ConversationPlanStore.shared.set(conversationId: conversationId, plan: plan)
             await ConversationLogStore.shared.append(conversationId: conversationId, type: "planner.set", data: ["length": plan.count])
-            return "Plan saved."
+            return plan
 
         case "update":
             guard let plan = arguments["plan"] as? String, !plan.isEmpty else {
@@ -58,7 +61,7 @@ struct PlannerTool: AITool {
             }
             await ConversationPlanStore.shared.set(conversationId: conversationId, plan: merged)
             await ConversationLogStore.shared.append(conversationId: conversationId, type: "planner.update", data: ["appendLength": plan.count, "totalLength": merged.count])
-            return "Plan updated."
+            return merged
 
         case "clear":
             await ConversationPlanStore.shared.set(conversationId: conversationId, plan: "")

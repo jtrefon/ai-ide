@@ -26,6 +26,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var aiService: AIService
     private let errorManager: ErrorManagerProtocol
     private let fileSystemService: FileSystemService
+    private weak var fileEditorService: (any FileEditorServiceProtocol)?
     private let workspaceService: WorkspaceServiceProtocol
     private let eventBus: EventBusProtocol
     private var codebaseIndex: CodebaseIndexProtocol?
@@ -117,6 +118,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         aiService: AIService,
         errorManager: ErrorManagerProtocol,
         fileSystemService: FileSystemService = FileSystemService(),
+        fileEditorService: (any FileEditorServiceProtocol)? = nil,
         workspaceService: WorkspaceServiceProtocol,
         eventBus: EventBusProtocol,
         projectRoot: URL? = nil,
@@ -126,6 +128,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         self.aiService = aiService
         self.errorManager = errorManager
         self.fileSystemService = fileSystemService
+        self.fileEditorService = fileEditorService
         self.workspaceService = workspaceService
         self.eventBus = eventBus
         let root = projectRoot ?? FileManager.default.temporaryDirectory
@@ -134,8 +137,15 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
         self.historyManager = ChatHistoryManager()
         self.historyManager.setProjectRoot(root)
+        let fileEditorServiceProvider = fileEditorService
         self.toolExecutor = AIToolExecutor(
-            fileSystemService: fileSystemService, errorManager: errorManager, projectRoot: root)
+            fileSystemService: fileSystemService,
+            errorManager: errorManager,
+            projectRoot: root,
+            defaultFilePathProvider: { [weak fileEditorServiceProvider] in
+                fileEditorServiceProvider?.selectedFile
+            }
+        )
 
         Task.detached(priority: .utility) {
             await AppLogger.shared.setProjectRoot(root)

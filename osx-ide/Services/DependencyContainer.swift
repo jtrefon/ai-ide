@@ -39,6 +39,7 @@ class DependencyContainer {
             aiService: _aiService,
             errorManager: errorManager,
             fileSystemService: _fileSystemService,
+            fileEditorService: _fileEditorService,
             workspaceService: _workspaceService,
             eventBus: _eventBus,
             codebaseIndex: nil

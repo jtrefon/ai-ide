@@ -8,6 +8,7 @@ struct AIChatPanel: View {
     @ObservedObject var ui: UIStateManager
 
     @State private var stateTick: UInt = 0
+    @State private var conversationPlan: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -33,6 +34,30 @@ struct AIChatPanel: View {
             }
             .frame(height: 30)
             .background(Color(NSColor.windowBackgroundColor))
+
+            if shouldShowPlanPanel {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Plan")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+
+                    MarkdownMessageView(
+                        content: conversationPlan ?? "No plan set.",
+                        fontSize: ui.fontSize,
+                        fontFamily: ui.fontFamily
+                    )
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color.gray.opacity(0.08))
+                .cornerRadius(14)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+            }
 
             MessageListView(
                 messages: conversationManager.messages,
@@ -94,6 +119,11 @@ struct AIChatPanel: View {
                 stateTick &+= 1
             }
         }
+        .onChange(of: stateTick) { _ in
+            Task { @MainActor in
+                await refreshConversationPlan()
+            }
+        }
         .animation(nil, value: stateTick)
         .accessibilityIdentifier("AIChatPanel")
         .background(Color(NSColor.controlBackgroundColor))
@@ -124,6 +154,27 @@ struct AIChatPanel: View {
         let context = currentSelection
         conversationManager.currentInput = conversationManager.currentInput.trimmingCharacters(in: .whitespacesAndNewlines)
         conversationManager.sendMessage(context: context)
+    }
+
+    private var shouldShowPlanPanel: Bool {
+        guard let plan = conversationPlan?.trimmingCharacters(in: .whitespacesAndNewlines), !plan.isEmpty else {
+            return false
+        }
+
+        if let latestToolMessage = conversationManager.messages.last(where: { $0.isToolExecution }) {
+            if latestToolMessage.toolStatus == .executing, latestToolMessage.toolName != "planner" {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    @MainActor
+    private func refreshConversationPlan() async {
+        let conversationId = conversationManager.currentConversationId
+        let plan = await ConversationPlanStore.shared.get(conversationId: conversationId)
+        conversationPlan = plan
     }
 }
 
