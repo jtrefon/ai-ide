@@ -70,10 +70,15 @@ struct WriteFileTool: AITool {
     let fileSystemService: FileSystemService
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
-    
+
     func execute(arguments: [String: Any]) async throws -> String {
-        guard let path = arguments["path"] as? String else {
-            throw AppError.aiServiceError("Missing 'path' argument for write_file")
+        guard let path = arguments["path"] as? String, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            let keys = arguments.keys.sorted().joined(separator: ", ")
+            throw AppError.aiServiceError(
+                "Missing 'path' argument for write_file. Provided keys: [\(keys)]. "
+                    + "Fix: include a non-empty path (absolute or project-root-relative). Example:\n"
+                    + "{\n  \"path\": \"src/App.css\",\n  \"content\": \"/* ... */\"\n}"
+            )
         }
         guard let content = arguments["content"] as? String else {
             throw AppError.aiServiceError("Missing 'content' argument for write_file")
@@ -164,16 +169,64 @@ struct WriteFilesTool: AITool {
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
 
-    func execute(arguments: [String: Any]) async throws -> String {
-        guard let files = arguments["files"] as? [[String: Any]] else {
-            throw AppError.aiServiceError("Missing 'files' argument for write_files")
-        }
-
+    private func executionContext(from arguments: [String: Any]) -> (mode: String, toolCallId: String, patchSetId: String) {
         let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
         let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
         let patchSetId = (arguments["patch_set_id"] as? String)
             ?? (arguments["_conversation_id"] as? String)
             ?? "default"
+        return (mode: mode, toolCallId: toolCallId, patchSetId: patchSetId)
+    }
+
+    private func resolvedWriteFileEntry(from entry: [String: Any]) throws -> (url: URL, relativePath: String, content: String) {
+        guard let path = entry["path"] as? String else {
+            throw AppError.aiServiceError("Missing 'path' in a write_files entry")
+        }
+        guard let content = entry["content"] as? String else {
+            throw AppError.aiServiceError("Missing 'content' in a write_files entry")
+        }
+
+        let url = try pathValidator.validateAndResolve(path)
+        let relativePath = pathValidator.relativePath(for: url)
+        return (url: url, relativePath: relativePath, content: content)
+    }
+
+    private func stageWrite(toolCallId: String, patchSetId: String, relativePath: String, content: String) async throws {
+        try await PatchSetStore.shared.stageWrite(
+            patchSetId: patchSetId,
+            toolCallId: toolCallId,
+            relativePath: relativePath,
+            content: content
+        )
+    }
+
+    private func applyWrite(url: URL, relativePath: String, content: String) async throws {
+        await AIToolTraceLogger.shared.log(type: "fs.write_files_entry", data: [
+            "path": relativePath,
+            "bytes": content.utf8.count
+        ])
+
+        let existed = FileManager.default.fileExists(atPath: url.path)
+        try fileSystemService.writeFile(content: content, to: url)
+
+        Task { @MainActor in
+            if existed {
+                eventBus.publish(FileModifiedEvent(url: url))
+            } else {
+                eventBus.publish(FileCreatedEvent(url: url))
+            }
+        }
+    }
+
+    func execute(arguments: [String: Any]) async throws -> String {
+        guard let files = arguments["files"] as? [[String: Any]] else {
+            throw AppError.aiServiceError("Missing 'files' argument for write_files")
+        }
+
+        let context = executionContext(from: arguments)
+        let mode = context.mode
+        let toolCallId = context.toolCallId
+        let patchSetId = context.patchSetId
 
         if files.isEmpty {
             return "No files to write."
@@ -188,43 +241,20 @@ struct WriteFilesTool: AITool {
         ])
 
         for entry in files {
-            guard let path = entry["path"] as? String else {
-                throw AppError.aiServiceError("Missing 'path' in a write_files entry")
-            }
-            guard let content = entry["content"] as? String else {
-                throw AppError.aiServiceError("Missing 'content' in a write_files entry")
-            }
-
-            let url = try pathValidator.validateAndResolve(path)
-            let rel = pathValidator.relativePath(for: url)
-
+            let resolved = try resolvedWriteFileEntry(from: entry)
             if mode == "propose" {
-                try await PatchSetStore.shared.stageWrite(
-                    patchSetId: patchSetId,
+                try await stageWrite(
                     toolCallId: toolCallId,
-                    relativePath: rel,
-                    content: content
+                    patchSetId: patchSetId,
+                    relativePath: resolved.relativePath,
+                    content: resolved.content
                 )
-                results.append(rel)
+                results.append(resolved.relativePath)
                 continue
             }
 
-            await AIToolTraceLogger.shared.log(type: "fs.write_files_entry", data: [
-                "path": rel,
-                "bytes": content.utf8.count
-            ])
-            let existed = FileManager.default.fileExists(atPath: url.path)
-            try fileSystemService.writeFile(content: content, to: url)
-
-            Task { @MainActor in
-                if existed {
-                    eventBus.publish(FileModifiedEvent(url: url))
-                } else {
-                    eventBus.publish(FileCreatedEvent(url: url))
-                }
-            }
-
-            results.append(rel)
+            try await applyWrite(url: resolved.url, relativePath: resolved.relativePath, content: resolved.content)
+            results.append(resolved.relativePath)
         }
 
         await AIToolTraceLogger.shared.log(type: mode == "propose" ? "fs.write_files_propose_done" : "fs.write_files_done", data: [
@@ -403,6 +433,10 @@ struct ReplaceInFileTool: AITool {
                     "type": "string",
                     "description": "The absolute path to the file."
                 ],
+                "targetPath": [
+                    "type": "string",
+                    "description": "Deprecated alias for path. Use path instead."
+                ],
                 "old_text": [
                     "type": "string",
                     "description": "The exact text to find and replace. Must match exactly including whitespace."
@@ -429,16 +463,48 @@ struct ReplaceInFileTool: AITool {
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
     
+    private func resolvedPath(from arguments: [String: Any]) throws -> String {
+        let candidates: [Any?] = [
+            arguments["path"],
+            arguments["targetPath"],
+            arguments["target_path"],
+            arguments["file_path"],
+            arguments["file"],
+            arguments["target"],
+        ]
+
+        let path = candidates
+            .compactMap { $0 as? String }
+            .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+
+        guard let path else {
+            let keys = arguments.keys.sorted().joined(separator: ", ")
+            throw AppError.aiServiceError(
+                "Missing 'path' argument for replace_in_file. Provided keys: [\(keys)]. "
+                    + "Fix: include a non-empty file path. Preferred key: 'path'. Accepted aliases: targetPath, target_path, file_path, file, target. Example:\n"
+                    + "{\n  \"path\": \"src/App.css\",\n  \"old_text\": \".old { color: red; }\",\n  \"new_text\": \".old { color: blue; }\"\n}"
+            )
+        }
+        
+        return path
+    }
+
+    private func requiredString(_ key: String, in arguments: [String: Any]) throws -> String {
+        guard let value = arguments[key] as? String else {
+            let keys = arguments.keys.sorted().joined(separator: ", ")
+            throw AppError.aiServiceError(
+                "Missing '\(key)' argument for replace_in_file. Provided keys: [\(keys)]. "
+                    + "Fix: include a non-empty '\(key)' value. Example:\n"
+                    + "{\n  \"path\": \"src/App.css\",\n  \"\(key)\": \".old { color: blue; }\"\n}"
+            )
+        }
+        return value
+    }
+
     func execute(arguments: [String: Any]) async throws -> String {
-        guard let path = arguments["path"] as? String else {
-            throw AppError.aiServiceError("Missing 'path' argument for replace_in_file")
-        }
-        guard let oldText = arguments["old_text"] as? String else {
-            throw AppError.aiServiceError("Missing 'old_text' argument for replace_in_file")
-        }
-        guard let newText = arguments["new_text"] as? String else {
-            throw AppError.aiServiceError("Missing 'new_text' argument for replace_in_file")
-        }
+        let path = try resolvedPath(from: arguments)
+        let oldText = try requiredString("old_text", in: arguments)
+        let newText = try requiredString("new_text", in: arguments)
 
         let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
         let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString

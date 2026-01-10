@@ -10,7 +10,7 @@ import SwiftUI
 
 /// Handles the execution of AI tools and manages the result reporting.
 @MainActor
-public class AIToolExecutor {
+public final class AIToolExecutor {
     private final class StringAccumulator: @unchecked Sendable {
         private let lock = NSLock()
         private var value: String = ""
@@ -24,15 +24,22 @@ public class AIToolExecutor {
     }
 
     private let fileSystemService: FileSystemService
-    private let errorManager: ErrorManagerProtocol
+    private let errorManager: any ErrorManagerProtocol
     private let projectRoot: URL
     private let scheduler: ToolScheduler
+    private let defaultFilePathProvider: (@MainActor () -> String?)?
     
-    public init(fileSystemService: FileSystemService, errorManager: ErrorManagerProtocol, projectRoot: URL) {
+    public init(
+        fileSystemService: FileSystemService,
+        errorManager: any ErrorManagerProtocol,
+        projectRoot: URL,
+        defaultFilePathProvider: (@MainActor () -> String?)? = nil
+    ) {
         self.fileSystemService = fileSystemService
         self.errorManager = errorManager
         self.projectRoot = projectRoot
         self.scheduler = ToolScheduler()
+        self.defaultFilePathProvider = defaultFilePathProvider
     }
 
     private func isWriteLikeTool(_ toolName: String) -> Bool {
@@ -53,10 +60,64 @@ public class AIToolExecutor {
         if let path = toolCall.arguments["path"] as? String, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return path
         }
+        if let path = toolCall.arguments["targetPath"] as? String, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return path
+        }
         if let paths = toolCall.arguments["paths"] as? [String], let first = paths.first {
             return first
         }
         return toolCall.name
+    }
+
+    private func resolveTargetFile(for toolCall: AIToolCall) -> String? {
+        if toolCall.name == "run_command" {
+            return toolCall.arguments["command"] as? String
+        }
+
+        let candidates: [Any?] = [
+            toolCall.arguments["path"],
+            toolCall.arguments["targetPath"],
+            toolCall.arguments["target_path"],
+            toolCall.arguments["file_path"],
+            toolCall.arguments["file"],
+            toolCall.arguments["target"],
+        ]
+        return candidates
+            .compactMap { $0 as? String }
+            .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+    }
+
+    private nonisolated static func isFilePathLikeTool(_ toolName: String) -> Bool {
+        switch toolName {
+        case "read_file", "write_file", "write_files", "create_file", "delete_file", "replace_in_file":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private nonisolated static func explicitFilePath(from arguments: [String: Any]) -> String? {
+        let candidates: [Any?] = [
+            arguments["path"],
+            arguments["targetPath"],
+            arguments["target_path"],
+            arguments["file_path"],
+            arguments["file"],
+            arguments["target"],
+        ]
+
+        return candidates
+            .compactMap { $0 as? String }
+            .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+    }
+
+    private func resolvedOrInjectedFilePath(arguments: [String: Any], toolName: String) -> String? {
+        if let explicit = Self.explicitFilePath(from: arguments) {
+            return explicit
+        }
+
+        guard Self.isFilePathLikeTool(toolName) else { return nil }
+        return nil
     }
     
     /// Executes a list of tool calls and returns the results as ChatMessages.
@@ -78,11 +139,7 @@ public class AIToolExecutor {
 
         let tasks: [Task<ChatMessage, Never>] = toolCalls.map { toolCall in
             let targetFile: String?
-            if toolCall.name == "run_command" {
-                targetFile = toolCall.arguments["command"] as? String
-            } else {
-                targetFile = toolCall.arguments["path"] as? String
-            }
+            targetFile = resolveTargetFile(for: toolCall)
 
             let executingMsg = ChatMessage(
                 role: .tool,
@@ -147,6 +204,27 @@ public class AIToolExecutor {
                             mergedArguments["_tool_call_id"] = toolCall.id
                             if let conversationId {
                                 mergedArguments["_conversation_id"] = conversationId
+                            }
+
+                            let explicitPath = Self.explicitFilePath(from: mergedArguments)
+                            let fallbackPath: String? = {
+                                guard explicitPath == nil else { return nil }
+                                guard Self.isFilePathLikeTool(toolCall.name) else { return nil }
+                                guard self.defaultFilePathProvider != nil else { return nil }
+                                return "__needs_main_actor__"
+                            }()
+
+                            let injectedPath: String?
+                            if fallbackPath == "__needs_main_actor__" {
+                                injectedPath = await MainActor.run {
+                                    self.defaultFilePathProvider?()?.trimmingCharacters(in: .whitespacesAndNewlines)
+                                }
+                            } else {
+                                injectedPath = explicitPath
+                            }
+
+                            if let injectedPath, !injectedPath.isEmpty, mergedArguments["path"] == nil {
+                                mergedArguments["path"] = injectedPath
                             }
 
                             let result: String

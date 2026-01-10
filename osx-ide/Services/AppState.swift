@@ -179,7 +179,8 @@ class AppState: ObservableObject, IDEContext {
         // Initialize specialized state managers
         self.fileEditor = FileEditorStateManager(
             fileEditorService: fileEditorService,
-            fileDialogService: fileDialogService
+            fileDialogService: fileDialogService,
+            fileSystemService: fileSystemService
         )
         self.workspace = WorkspaceStateManager(
             workspaceService: workspaceService,

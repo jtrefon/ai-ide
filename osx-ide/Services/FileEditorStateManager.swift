@@ -8,6 +8,74 @@
 import SwiftUI
 import Combine
 import UniformTypeIdentifiers
+import Darwin
+
+private final class FileChangeMonitor {
+    private let url: URL
+    private let eventMask: DispatchSource.FileSystemEvent
+    private let queue: DispatchQueue
+    private let handler: (DispatchSource.FileSystemEvent) -> Void
+
+    private var source: DispatchSourceFileSystemObject?
+    private var fileDescriptor: CInt = -1
+    private var isActive = false
+
+    init(
+        url: URL,
+        eventMask: DispatchSource.FileSystemEvent = [.write, .extend, .attrib, .rename, .delete],
+        queue: DispatchQueue = DispatchQueue(label: "FileChangeMonitor"),
+        handler: @escaping (DispatchSource.FileSystemEvent) -> Void
+    ) {
+        self.url = url
+        self.eventMask = eventMask
+        self.queue = queue
+        self.handler = handler
+    }
+
+    deinit {
+        stop()
+    }
+
+    func start() {
+        stop()
+
+        let fd = open(url.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        fileDescriptor = fd
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: eventMask,
+            queue: queue
+        )
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.handler(source.data)
+        }
+        source.setCancelHandler { [weak self] in
+            self?.closeDescriptor()
+        }
+        self.source = source
+        isActive = true
+        source.resume()
+    }
+
+    func stop() {
+        guard isActive else {
+            closeDescriptor()
+            return
+        }
+        isActive = false
+        source?.cancel()
+        source = nil
+    }
+
+    private func closeDescriptor() {
+        guard fileDescriptor >= 0 else { return }
+        close(fileDescriptor)
+        fileDescriptor = -1
+    }
+}
 
 /// Manages file editor state and operations
 @MainActor
@@ -43,6 +111,9 @@ final class EditorPaneStateManager: ObservableObject {
             selectedFile = newPath
             fileEditorService.selectedFile = newPath
         }
+
+        endWatchingFile(at: oldPath)
+        beginWatchingFile(at: newPath)
     }
 
     @Published var tabs: [EditorTab] = []
@@ -70,10 +141,21 @@ final class EditorPaneStateManager: ObservableObject {
     private var isLoadingFile = false
     private let fileEditorService: FileEditorServiceProtocol
     private let fileDialogService: FileDialogServiceProtocol
+    private let fileSystemService: FileSystemService
+    private var fileWatchers: [String: FileChangeMonitor] = [:]
+    private var pendingReloads: [String: DispatchWorkItem] = [:]
+    private var pendingWatchRestarts: [String: DispatchWorkItem] = [:]
     
-    init(fileEditorService: FileEditorServiceProtocol, fileDialogService: FileDialogServiceProtocol) {
+    init(fileEditorService: FileEditorServiceProtocol, fileDialogService: FileDialogServiceProtocol, fileSystemService: FileSystemService) {
         self.fileEditorService = fileEditorService
         self.fileDialogService = fileDialogService
+        self.fileSystemService = fileSystemService
+    }
+
+    deinit {
+        Task { @MainActor [weak self] in
+            self?.stopWatchingAllFiles()
+        }
     }
 
     private func detectLanguageForUntitledBufferIfNeeded(newContent: String) {
@@ -145,6 +227,7 @@ final class EditorPaneStateManager: ObservableObject {
     
     /// Create new empty file with validation
     func newFile() {
+        stopWatchingAllFiles()
         tabs.removeAll()
         activeTabID = nil
         selectedRange = nil
@@ -162,6 +245,7 @@ final class EditorPaneStateManager: ObservableObject {
         activeTabID = id
 
         let tab = tabs[idx]
+        beginWatchingFile(at: tab.filePath)
         isLoadingFile = true
         defer { isLoadingFile = false }
         selectedFile = tab.filePath
@@ -179,6 +263,7 @@ final class EditorPaneStateManager: ObservableObject {
     func closeTab(id: UUID) {
         guard let idx = tabs.firstIndex(where: { $0.id == id }) else { return }
         let removed = tabs.remove(at: idx)
+        endWatchingFile(at: removed.filePath)
 
         if activeTabID == removed.id {
             if let newActive = tabs.last {
@@ -197,6 +282,10 @@ final class EditorPaneStateManager: ObservableObject {
     func closeOtherTabs(keeping id: UUID) {
         guard let keepIdx = tabs.firstIndex(where: { $0.id == id }) else { return }
         let keep = tabs[keepIdx]
+        let removedPaths = tabs.filter { $0.id != id }.map { $0.filePath }
+        for path in removedPaths {
+            endWatchingFile(at: path)
+        }
         tabs = [keep]
         activateTab(id: keep.id)
     }
@@ -245,6 +334,7 @@ final class EditorPaneStateManager: ObservableObject {
         let newTab = EditorTab(filePath: selectedPath, language: language, content: content, isDirty: false)
         tabs.append(newTab)
         activeTabID = newTab.id
+        beginWatchingFile(at: selectedPath)
 
         selectedFile = selectedPath
         editorContent = content
@@ -335,6 +425,109 @@ final class EditorPaneStateManager: ObservableObject {
         selectedRange = NSRange(location: location, length: 0)
     }
 
+    // MARK: - File Watching
+
+    private func beginWatchingFile(at path: String) {
+        guard fileWatchers[path] == nil else { return }
+        let url = URL(fileURLWithPath: path)
+        let watcher = FileChangeMonitor(
+            url: url,
+            queue: DispatchQueue(label: "FileChangeMonitor.\(url.lastPathComponent)")
+        ) { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.handleFileSystemEvent(event, forPath: path)
+            }
+        }
+        fileWatchers[path] = watcher
+        watcher.start()
+    }
+
+    private func endWatchingFile(at path: String) {
+        pendingReloads[path]?.cancel()
+        pendingReloads.removeValue(forKey: path)
+
+        pendingWatchRestarts[path]?.cancel()
+        pendingWatchRestarts.removeValue(forKey: path)
+
+        if let watcher = fileWatchers[path] {
+            watcher.stop()
+            fileWatchers.removeValue(forKey: path)
+        }
+    }
+
+    private func stopWatchingAllFiles(except keepPath: String? = nil) {
+        let paths = fileWatchers.keys.filter { $0 != keepPath }
+        for path in paths {
+            endWatchingFile(at: path)
+        }
+    }
+
+    private func handleFileSystemEvent(_ event: DispatchSource.FileSystemEvent, forPath path: String) {
+        if event.contains(.rename) || event.contains(.delete) || event.contains(.revoke) {
+            endWatchingFile(at: path)
+            scheduleWatchRestart(for: path)
+            return
+        }
+
+        if event.contains(.write) || event.contains(.extend) || event.contains(.attrib) {
+            scheduleReload(for: path)
+        }
+    }
+
+    private func scheduleWatchRestart(for path: String, attempt: Int = 0) {
+        let maxAttempts = 5
+        guard attempt < maxAttempts else { return }
+
+        pendingWatchRestarts[path]?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            if FileManager.default.fileExists(atPath: path) {
+                self.beginWatchingFile(at: path)
+                self.scheduleReload(for: path)
+            } else {
+                self.scheduleWatchRestart(for: path, attempt: attempt + 1)
+            }
+        }
+        pendingWatchRestarts[path] = work
+        let delay = 0.2 * Double(attempt + 1)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func scheduleReload(for path: String) {
+        pendingReloads[path]?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.reloadFileFromDisk(for: path)
+        }
+        pendingReloads[path] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+    }
+
+    private func reloadFileFromDisk(for path: String) {
+        guard let idx = tabs.firstIndex(where: { $0.filePath == path }) else { return }
+        guard !tabs[idx].isDirty else { return }
+        guard FileManager.default.fileExists(atPath: path) else { return }
+
+        let url = URL(fileURLWithPath: path)
+        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        guard !isDirectory else { return }
+
+        switch fileSystemService.readFileResult(at: url) {
+        case .success(let content):
+            guard content != tabs[idx].content else { return }
+            tabs[idx].content = content
+            tabs[idx].isDirty = false
+
+            if activeTabID == tabs[idx].id {
+                isLoadingFile = true
+                defer { isLoadingFile = false }
+                editorContent = content
+                isDirty = false
+            }
+        case .failure:
+            return
+        }
+    }
+
     private func syncServiceState() {
         fileEditorService.selectedFile = selectedFile
         fileEditorService.editorContent = editorContent
@@ -394,9 +587,17 @@ final class FileEditorStateManager: ObservableObject {
     let primaryPane: EditorPaneStateManager
     let secondaryPane: EditorPaneStateManager
 
-    init(fileEditorService: FileEditorServiceProtocol, fileDialogService: FileDialogServiceProtocol) {
-        self.primaryPane = EditorPaneStateManager(fileEditorService: fileEditorService, fileDialogService: fileDialogService)
-        self.secondaryPane = EditorPaneStateManager(fileEditorService: fileEditorService, fileDialogService: fileDialogService)
+    init(fileEditorService: FileEditorServiceProtocol, fileDialogService: FileDialogServiceProtocol, fileSystemService: FileSystemService) {
+        self.primaryPane = EditorPaneStateManager(
+            fileEditorService: fileEditorService,
+            fileDialogService: fileDialogService,
+            fileSystemService: fileSystemService
+        )
+        self.secondaryPane = EditorPaneStateManager(
+            fileEditorService: fileEditorService,
+            fileDialogService: fileDialogService,
+            fileSystemService: fileSystemService
+        )
 
         primaryPane.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
