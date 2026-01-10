@@ -251,6 +251,13 @@ actor OpenRouterAIService: AIService {
             ]
         }
 
+        let toolChoice: String?
+        if let toolDefinitions, !toolDefinitions.isEmpty {
+            toolChoice = "auto"
+        } else {
+            toolChoice = nil
+        }
+
         await AppLogger.shared.info(category: .ai, message: "openrouter.request_start", metadata: [
             "requestId": requestId,
             "model": model,
@@ -273,7 +280,8 @@ actor OpenRouterAIService: AIService {
             messages: finalMessages,
             maxTokens: 2048,
             temperature: 0.2,
-            tools: toolDefinitions
+            tools: toolDefinitions,
+            toolChoice: toolChoice
         )
         
         let body = try JSONEncoder().encode(request)
@@ -363,6 +371,7 @@ private struct OpenRouterChatRequest: Encodable {
     let maxTokens: Int
     let temperature: Double
     let tools: [[String: Any]]?
+    let toolChoice: String?
     
     enum CodingKeys: String, CodingKey {
         case model
@@ -370,6 +379,7 @@ private struct OpenRouterChatRequest: Encodable {
         case maxTokens = "max_tokens"
         case temperature
         case tools
+        case toolChoice = "tool_choice"
     }
     
     func encode(to encoder: Encoder) throws {
@@ -383,6 +393,10 @@ private struct OpenRouterChatRequest: Encodable {
             let data = try JSONSerialization.data(withJSONObject: tools)
             let json = try JSONSerialization.jsonObject(with: data)
             try container.encode(AnyCodable(json), forKey: .tools)
+        }
+
+        if let toolChoice, !toolChoice.isEmpty {
+            try container.encode(toolChoice, forKey: .toolChoice)
         }
     }
 }

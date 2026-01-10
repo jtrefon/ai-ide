@@ -1,5 +1,6 @@
-import XCTest
 import Combine
+import XCTest
+
 @testable import osx_ide
 
 @MainActor
@@ -15,30 +16,42 @@ final class AgentOrchestratorTests: XCTestCase {
     private struct FakeTool: AITool {
         let name: String
         let description: String = "fake"
-        var parameters: [String : Any] { ["type": "object", "properties": [:]] }
+        var parameters: [String: Any] { ["type": "object", "properties": [:]] }
         let response: String
 
-        func execute(arguments _: [String : Any]) async throws -> String {
+        func execute(arguments _: [String: Any]) async throws -> String {
             response
         }
     }
 
-    private func makeAllowlistSend() -> @Sendable (AgentOrchestrator.SendRequest) async throws -> AIServiceResponse {
+    private func makeAllowlistSend()
+        -> @Sendable (AgentOrchestrator.SendRequest) async throws -> AIServiceResponse
+    {
         { request in
-            let hasVerifier = request.messages.contains(where: { $0.role == .system && $0.content.contains("Verifier role") })
+            let hasVerifier = request.messages.contains(where: {
+                $0.role == .system && $0.content.contains("Verifier role")
+            })
             if hasVerifier {
                 return AIServiceResponse(
                     content: "verify",
-                    toolCalls: [AIToolCall(id: UUID().uuidString, name: "run_command", arguments: ["command": "rm -rf /tmp/nope"]) ]
+                    toolCalls: [
+                        AIToolCall(
+                            id: UUID().uuidString, name: "run_command",
+                            arguments: ["command": "rm -rf /tmp/nope"])
+                    ]
                 )
             }
             return AIServiceResponse(content: "ok", toolCalls: nil)
         }
     }
 
-    private func makeAllowlistExecuteTools() -> @Sendable (AgentOrchestrator.ToolExecutionRequest) async -> [ChatMessage] {
+    private func makeAllowlistExecuteTools()
+        -> @Sendable (AgentOrchestrator.ToolExecutionRequest) async -> [ChatMessage]
+    {
         { request in
-            guard let runTool = request.tools.first(where: { $0.name == "run_command" }) else { return [] }
+            guard let runTool = request.tools.first(where: { $0.name == "run_command" }) else {
+                return []
+            }
             return await withTaskGroup(of: ChatMessage.self) { group in
                 for call in request.toolCalls {
                     group.addTask {
@@ -60,14 +73,16 @@ final class AgentOrchestratorTests: XCTestCase {
     private struct FakeStreamingTool: AIToolProgressReporting {
         let name: String
         let description: String = "fake_stream"
-        var parameters: [String : Any] { ["type": "object", "properties": [:]] }
+        var parameters: [String: Any] { ["type": "object", "properties": [:]] }
         let response: String
 
-        func execute(arguments _: [String : Any]) async throws -> String {
+        func execute(arguments _: [String: Any]) async throws -> String {
             response
         }
 
-        func execute(arguments _: [String : Any], onProgress: @Sendable @escaping (String) -> Void) async throws -> String {
+        func execute(arguments _: [String: Any], onProgress: @Sendable @escaping (String) -> Void)
+            async throws -> String
+        {
             onProgress("chunk")
             return response
         }
@@ -77,27 +92,35 @@ final class AgentOrchestratorTests: XCTestCase {
         [
             FakeTool(name: "planner", response: "Plan saved."),
             FakeStreamingTool(name: "run_command", response: "ok"),
-            FakeTool(name: "patchset_apply", response: "Applied.")
+            FakeTool(name: "patchset_apply", response: "Applied."),
         ]
     }
 
     private func makeToolsForAllowlistTest() -> [AITool] {
         [
             FakeTool(name: "planner", response: "Plan saved."),
-            FakeStreamingTool(name: "run_command", response: "ok")
+            FakeStreamingTool(name: "run_command", response: "ok"),
         ]
     }
 
-    private func makeVerifyLoopSend(counter: Counter) -> @Sendable (AgentOrchestrator.SendRequest) async throws -> AIServiceResponse {
+    private func makeVerifyLoopSend(counter: Counter)
+        -> @Sendable (AgentOrchestrator.SendRequest) async throws -> AIServiceResponse
+    {
         { request in
             await counter.incrementSend()
 
-            let hasVerifier = request.messages.contains(where: { $0.role == .system && $0.content.contains("Verifier role") })
+            let hasVerifier = request.messages.contains(where: {
+                $0.role == .system && $0.content.contains("Verifier role")
+            })
             let hasRunCommandTool = request.tools.contains(where: { $0.name == "run_command" })
             if hasVerifier && hasRunCommandTool {
                 return AIServiceResponse(
                     content: "verify",
-                    toolCalls: [AIToolCall(id: UUID().uuidString, name: "run_command", arguments: ["command": "xcodebuild test"]) ]
+                    toolCalls: [
+                        AIToolCall(
+                            id: UUID().uuidString, name: "run_command",
+                            arguments: ["command": "xcodebuild test"])
+                    ]
                 )
             }
 
@@ -105,7 +128,9 @@ final class AgentOrchestratorTests: XCTestCase {
         }
     }
 
-    private func makeVerifyLoopExecuteTools(counter: Counter) -> @Sendable (AgentOrchestrator.ToolExecutionRequest) async -> [ChatMessage] {
+    private func makeVerifyLoopExecuteTools(counter: Counter)
+        -> @Sendable (AgentOrchestrator.ToolExecutionRequest) async -> [ChatMessage]
+    {
         { request in
             if request.tools.contains(where: { $0.name == "run_command" }) {
                 await counter.incrementVerifyToolExecutions()
@@ -173,7 +198,8 @@ final class AgentOrchestratorTests: XCTestCase {
             emitted.append(msg)
         }
 
-        let config = AgentOrchestrator.Configuration(maxVerifyIterations: 1, verifyAllowedCommandPrefixes: ["xcodebuild "])
+        let config = AgentOrchestrator.Configuration(
+            maxVerifyIterations: 1, verifyAllowedCommandPrefixes: ["xcodebuild "])
         let env = AgentOrchestrator.Environment(
             allTools: tools,
             send: send,
@@ -186,6 +212,9 @@ final class AgentOrchestratorTests: XCTestCase {
             config: config
         )
 
-        XCTAssertTrue(emitted.contains(where: { $0.role == .tool && $0.content.lowercased().contains("not allowlisted") }))
+        XCTAssertTrue(
+            emitted.contains(where: {
+                $0.role == .tool && $0.content.lowercased().contains("not allowlisted")
+            }))
     }
 }
