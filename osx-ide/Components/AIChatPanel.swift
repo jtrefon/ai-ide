@@ -47,16 +47,17 @@ struct AIChatPanel: View {
                     fontSize: ui.fontSize,
                     fontFamily: ui.fontFamily
                 )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .tag(Tab.chat)
                 .tabItem { Text("Chat") }
 
                 ToolExecutionTimelineView(messages: conversationManager.messages)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .tag(Tab.tasks)
                     .tabItem { Text("Tasks") }
             }
             .tabViewStyle(.automatic)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .layoutPriority(1)
+            .clipped()
             
             // Error display
             if let error = conversationManager.error {

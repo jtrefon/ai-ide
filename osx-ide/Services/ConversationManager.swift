@@ -80,6 +80,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         tools.append(CheckpointListTool())
         tools.append(CheckpointRestoreTool(eventBus: eventBus, projectRoot: projectRoot))
 
+        tools.append(ConversationFoldTool(projectRoot: projectRoot))
+
         return tools
     }
 
@@ -253,6 +255,27 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             guard let self = self else { return }
 
             do {
+                let thresholds = ConversationFoldingThresholds()
+                if let foldResult = try await ConversationFoldingService.fold(
+                    messages: self.messages,
+                    projectRoot: self.projectRoot,
+                    thresholds: thresholds
+                ) {
+                    self.historyManager.removeOldestMessages(count: foldResult.foldedMessageCount)
+                    self.historyManager.append(
+                        ChatMessage(
+                            role: .system,
+                            content: "Earlier conversation context was condensed into folded context. Fold id: \(foldResult.entry.id). Summary: \(foldResult.entry.summary). To rehydrate, use the conversation_fold tool (action=list/read)."
+                        )
+                    )
+
+                    await AIToolTraceLogger.shared.log(type: "chat.context_folded", data: [
+                        "foldId": foldResult.entry.id,
+                        "foldedMessageCount": foldResult.foldedMessageCount,
+                        "summary": foldResult.entry.summary,
+                    ])
+                }
+
                 let modeRawValue = self.currentMode.rawValue
                 let projectRootPath = self.projectRoot.path
                 let conversationId = self.conversationId
