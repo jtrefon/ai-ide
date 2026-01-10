@@ -201,6 +201,7 @@ enum AppConstants {
         static let sidebarWidthKey = "SidebarWidth"
         static let terminalHeightKey = "TerminalHeight"
         static let chatPanelWidthKey = "ChatPanelWidth"
+        static let cliTimeoutSecondsKey = "Agent.CliTimeoutSeconds"
         static let codebaseIndexEnabledKey = "CodebaseIndexEnabled"
         static let codebaseIndexAIEnrichmentEnabledKey = "CodebaseIndexAIEnrichmentEnabled"
         static let enabledLanguageModulesKey = "EnabledLanguageModules"
