@@ -19,6 +19,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private let useMultiRoleAgentOrchestrator: Bool = false
 
     private var conversationId: String
+    private var hasStartedConversation: Bool = false
 
     private let historyManager: ChatHistoryManager
     private let toolExecutor: AIToolExecutor
@@ -152,6 +153,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     }
 
     func updateProjectRoot(_ newRoot: URL) {
+        if projectRoot.standardizedFileURL == newRoot.standardizedFileURL {
+            return
+        }
+
         projectRoot = newRoot
 
         historyManager.setProjectRoot(newRoot)
@@ -159,6 +164,11 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         let newRootPath = newRoot.path
         let initialMode = self.currentMode.rawValue
         let initialConversationId = self.conversationId
+
+        let shouldStartConversation = !hasStartedConversation
+        if shouldStartConversation {
+            hasStartedConversation = true
+        }
 
         Task.detached(priority: .utility) {
             await AppLogger.shared.setProjectRoot(newRoot)
@@ -174,27 +184,29 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     "projectRoot": newRootPath
                 ])
 
-            await AppLogger.shared.info(
-                category: .conversation, message: "conversation.start",
-                metadata: [
-                    "conversationId": initialConversationId,
-                    "mode": initialMode,
-                    "projectRoot": newRootPath,
-                ])
-            await ConversationLogStore.shared.append(
-                conversationId: initialConversationId,
-                type: "conversation.start",
-                data: [
-                    "mode": initialMode,
-                    "projectRoot": newRootPath,
-                ]
-            )
+            if shouldStartConversation {
+                await AppLogger.shared.info(
+                    category: .conversation, message: "conversation.start",
+                    metadata: [
+                        "conversationId": initialConversationId,
+                        "mode": initialMode,
+                        "projectRoot": newRootPath,
+                    ])
+                await ConversationLogStore.shared.append(
+                    conversationId: initialConversationId,
+                    type: "conversation.start",
+                    data: [
+                        "mode": initialMode,
+                        "projectRoot": newRootPath,
+                    ]
+                )
 
-            await ConversationIndexStore.shared.appendStart(
-                conversationId: initialConversationId,
-                mode: initialMode,
-                projectRootPath: newRootPath
-            )
+                await ConversationIndexStore.shared.appendStart(
+                    conversationId: initialConversationId,
+                    mode: initialMode,
+                    projectRootPath: newRootPath
+                )
+            }
         }
     }
 
@@ -612,6 +624,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     func startNewConversation() {
         let oldConversationId = conversationId
         conversationId = UUID().uuidString
+
+        hasStartedConversation = true
 
         historyManager.clear()
         cancelledToolCallIds.removeAll()
