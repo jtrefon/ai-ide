@@ -90,7 +90,14 @@ struct RunCommandTool: AIToolProgressReporting {
         defer { NotificationCenter.default.removeObserver(observer) }
 
         let timeoutSecondsRaw = arguments["timeout_seconds"] as? Double
-        let timeoutSeconds = timeoutSecondsRaw ?? 30
+        let timeoutSeconds: Double = {
+            if let timeoutSecondsRaw {
+                return timeoutSecondsRaw
+            }
+
+            let storedTimeout = UserDefaults.standard.double(forKey: AppConstants.Storage.cliTimeoutSecondsKey)
+            return storedTimeout == 0 ? 30 : storedTimeout
+        }()
         if !(1...300).contains(timeoutSeconds) {
             throw AppError.aiServiceError("Invalid 'timeout_seconds' for run_command. Must be between 1 and 300.")
         }
