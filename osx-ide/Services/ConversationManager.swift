@@ -32,6 +32,29 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var projectRoot: URL
     private var cancellables = Set<AnyCancellable>()
 
+    private func conversationIdFileURL(projectRoot: URL) -> URL {
+        projectRoot
+            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent("chat", isDirectory: true)
+            .appendingPathComponent("conversation_id.txt")
+    }
+
+    private func loadPersistedConversationId(projectRoot: URL) -> String? {
+        let url = conversationIdFileURL(projectRoot: projectRoot)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    private func persistConversationId(projectRoot: URL, conversationId: String) {
+        let url = conversationIdFileURL(projectRoot: projectRoot)
+        let dir = url.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? conversationId.write(to: url, atomically: true, encoding: .utf8)
+    }
+
     var messages: [ChatMessage] {
         historyManager.messages
     }
@@ -159,6 +182,13 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
         projectRoot = newRoot
 
+        if let persisted = loadPersistedConversationId(projectRoot: newRoot) {
+            conversationId = persisted
+            hasStartedConversation = true
+        } else {
+            persistConversationId(projectRoot: newRoot, conversationId: conversationId)
+        }
+
         historyManager.setProjectRoot(newRoot)
 
         let newRootPath = newRoot.path
@@ -274,12 +304,6 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     thresholds: thresholds
                 ) {
                     self.historyManager.removeOldestMessages(count: foldResult.foldedMessageCount)
-                    self.historyManager.append(
-                        ChatMessage(
-                            role: .system,
-                            content: "Earlier conversation context was condensed into folded context. Fold id: \(foldResult.entry.id). Summary: \(foldResult.entry.summary). To rehydrate, use the conversation_fold tool (action=list/read)."
-                        )
-                    )
 
                     await AIToolTraceLogger.shared.log(type: "chat.context_folded", data: [
                         "foldId": foldResult.entry.id,
@@ -626,6 +650,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         conversationId = UUID().uuidString
 
         hasStartedConversation = true
+        persistConversationId(projectRoot: projectRoot, conversationId: conversationId)
 
         historyManager.clear()
         cancelledToolCallIds.removeAll()
