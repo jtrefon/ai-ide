@@ -88,7 +88,6 @@ struct MessageListView: View {
     let isSending: Bool
     var fontSize: Double
     var fontFamily: String
-    @State private var scrollToBottomTrigger: Int = 0
     @State private var hiddenReasoningMessageIds: Set<UUID> = []
 
     private func reasoningHiddenBinding(for messageId: UUID) -> Binding<Bool> {
@@ -105,28 +104,38 @@ struct MessageListView: View {
     }
     
     var body: some View {
-        LiquidGlassScrollView(.vertical, showsIndicators: false, scrollToBottomTrigger: scrollToBottomTrigger) {
-            VStack(alignment: .leading, spacing: 12) {
-                let displayedMessages = messages.filter { message in
-                    if message.role == .assistant && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (message.reasoning?.isEmpty ?? true) && (message.toolCalls?.isEmpty ?? true) {
-                        return false
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 12) {
+                    let displayedMessages = messages.filter { message in
+                        if message.role == .assistant && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (message.reasoning?.isEmpty ?? true) && (message.toolCalls?.isEmpty ?? true) {
+                            return false
+                        }
+                        return true
                     }
-                    return true
-                }
-                
-                ForEach(displayedMessages) { message in
-                    let isMessageEmpty = message.role == .assistant && 
-                                        message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && 
-                                        (message.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) && 
-                                        (message.toolCalls?.isEmpty ?? true)
-                    
-                    if isMessageEmpty {
-                        // Skip rendering entirely
-                    } else if message.isToolExecution {
-                        if let toolCallId = message.toolCallId,
-                           let latestForId = displayedMessages.last(where: { $0.toolCallId == toolCallId }) {
-                            if message.id != latestForId.id {
-                                EmptyView()
+
+                    ForEach(displayedMessages) { message in
+                        let isMessageEmpty = message.role == .assistant &&
+                                            message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                                            (message.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) &&
+                                            (message.toolCalls?.isEmpty ?? true)
+
+                        if isMessageEmpty {
+                            EmptyView()
+                        } else if message.isToolExecution {
+                            if let toolCallId = message.toolCallId,
+                               let latestForId = displayedMessages.last(where: { $0.toolCallId == toolCallId }) {
+                                if message.id != latestForId.id {
+                                    EmptyView()
+                                } else {
+                                    MessageView(
+                                        message: message,
+                                        fontSize: fontSize,
+                                        fontFamily: fontFamily,
+                                        isReasoningHidden: reasoningHiddenBinding(for: message.id)
+                                    )
+                                    .id(message.id)
+                                }
                             } else {
                                 MessageView(
                                     message: message,
@@ -145,43 +154,41 @@ struct MessageListView: View {
                             )
                             .id(message.id)
                         }
-                    } else {
-                        MessageView(
-                            message: message,
-                            fontSize: fontSize,
-                            fontFamily: fontFamily,
-                            isReasoningHidden: reasoningHiddenBinding(for: message.id)
-                            )
-                            .id(message.id)
                     }
-                }
 
-                if isSending {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                        Text("Assistant is typing…")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
+                    if isSending {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Assistant is typing…")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.gray.opacity(0.15))
+                        .cornerRadius(16)
+                        .frame(maxWidth: 400)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.gray.opacity(0.15))
-                    .cornerRadius(16)
-                    .frame(maxWidth: 400)
+
+                    Color.clear
+                        .frame(height: 1)
+                        .id("__bottom__")
+                }
+                .padding()
+            }
+            .scrollIndicators(.hidden)
+            .onAppear {
+                DispatchQueue.main.async {
+                    proxy.scrollTo("__bottom__", anchor: .bottom)
                 }
             }
-            .padding()
-            .padding(.bottom, 120)
-        }
-        .onChange(of: messages.count) {
-            // Increment trigger to scroll to bottom when new messages are added
-            scrollToBottomTrigger += 1
-        }
-        .onAppear {
-            // Initial scroll to bottom
-            scrollToBottomTrigger += 1
+            .onChange(of: messages.last?.id) { _ in
+                DispatchQueue.main.async {
+                    proxy.scrollTo("__bottom__", anchor: .bottom)
+                }
+            }
         }
     }
 }

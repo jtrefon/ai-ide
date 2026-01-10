@@ -376,6 +376,20 @@ The agent must prefer CodebaseIndex for discovery and context selection.
   - used by Architect/Planner to understand the system quickly.
   - used by Worker to avoid low-signal exploration.
 
+### Context condensation (folded conversation history)
+
+To protect the model context window, older conversation history can be condensed and moved out of the active prompt.
+
+- **Storage**: folded content is stored under `.ide/chat/folds/`.
+  - `index.json`: list of folds (id, summary, createdAt)
+  - `<id>.txt`: the folded transcript content
+
+- **Automatic folding**: `ConversationManager` may fold the oldest messages when thresholds are exceeded.
+
+- **Rehydration**: the agent can rehydrate folded context via the `conversation_fold` tool.
+  - `action=list` to see available folds and their summaries
+  - `action=read` with an `id` to retrieve the full folded content
+
 ### Safety policies (must be enforceable)
 
 - **Role-based tool access**

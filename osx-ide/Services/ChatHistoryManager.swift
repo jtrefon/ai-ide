@@ -69,6 +69,25 @@ public class ChatHistoryManager: ObservableObject {
             saveHistory()
         }
     }
+
+    public func removeOldestMessages(count: Int) {
+        guard count > 0 else { return }
+        guard !messages.isEmpty else { return }
+
+        if count >= messages.count {
+            messages.removeAll()
+        } else {
+            messages.removeFirst(count)
+        }
+
+        if messages.isEmpty {
+            messages.append(ChatMessage(
+                role: .assistant,
+                content: "Hello! I'm your AI coding assistant. How can I help you today?"
+            ))
+        }
+        saveHistory()
+    }
     
     public func clear() {
         messages.removeAll()
