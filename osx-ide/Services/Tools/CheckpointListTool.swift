@@ -11,7 +11,7 @@ struct CheckpointListTool: AITool {
         ]
     }
 
-    func execute(arguments _: [String: Any]) async throws -> String {
+    func execute(arguments _: ToolArguments) async throws -> String {
         let ids = await CheckpointManager.shared.listCheckpointIds()
         if ids.isEmpty { return "No checkpoints." }
         return ids.joined(separator: "\n")

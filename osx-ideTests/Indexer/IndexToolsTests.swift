@@ -34,10 +34,10 @@ final class IndexToolsTests: XCTestCase {
             IndexedFileMatch(path: "src/utils/helpers.swift", aiEnriched: false, qualityScore: nil)
         ]
 
-        let result = try await indexFindFilesTool.execute(arguments: [
+        let result = try await indexFindFilesTool.execute(arguments: ToolArguments([
             "query": "main",
             "limit": 10
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.contains { $0.contains("src/main.swift") })
@@ -48,10 +48,10 @@ final class IndexToolsTests: XCTestCase {
     func testIndexFindFilesTool_empty() async throws {
         codebaseIndex.mockFindFilesResult = []
 
-        let result = try await indexFindFilesTool.execute(arguments: [
+        let result = try await indexFindFilesTool.execute(arguments: ToolArguments([
             "query": "nonexistent",
             "limit": 10
-        ])
+        ]))
 
         XCTAssertTrue(result.contains("No files found in index."))
     }
@@ -63,11 +63,11 @@ final class IndexToolsTests: XCTestCase {
             "README.md"
         ]
 
-        let result = try await indexListFilesTool.execute(arguments: [
+        let result = try await indexListFilesTool.execute(arguments: ToolArguments([
             "query": nil,
             "limit": 10,
             "offset": 0
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.contains { $0.contains("src/main.swift") })
@@ -80,11 +80,11 @@ final class IndexToolsTests: XCTestCase {
             "src/utils/helpers.swift"
         ]
 
-        let result = try await indexListFilesTool.execute(arguments: [
+        let result = try await indexListFilesTool.execute(arguments: ToolArguments([
             "query": "src",
             "limit": 10,
             "offset": 0
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.allSatisfy { $0.contains("src") })
@@ -101,11 +101,11 @@ final class IndexToolsTests: XCTestCase {
         7 | }
         """
 
-        let result = try await indexReadFileTool.execute(arguments: [
+        let result = try await indexReadFileTool.execute(arguments: ToolArguments([
             "path": "src/main.swift",
             "start_line": nil,
             "end_line": nil
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.contains { $0.contains("1 | import Foundation") })
@@ -121,11 +121,11 @@ final class IndexToolsTests: XCTestCase {
         6 |     }
         """
 
-        let result = try await indexReadFileTool.execute(arguments: [
+        let result = try await indexReadFileTool.execute(arguments: ToolArguments([
             "path": "src/main.swift",
             "start_line": 2,
             "end_line": 6
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertEqual(lines.first, "2 | ")
@@ -136,11 +136,11 @@ final class IndexToolsTests: XCTestCase {
         codebaseIndex.shouldThrowReadFileError = true
 
         do {
-            _ = try await indexReadFileTool.execute(arguments: [
+            _ = try await indexReadFileTool.execute(arguments: ToolArguments([
                 "path": "nonexistent.swift",
                 "start_line": nil,
                 "end_line": nil
-            ])
+            ]))
             XCTFail("Expected error to be thrown")
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("File not found"))
@@ -153,10 +153,10 @@ final class IndexToolsTests: XCTestCase {
             "src/utils/helpers.swift:12:    print(\"Helpers\")"
         ]
 
-        let result = try await indexSearchTextTool.execute(arguments: [
+        let result = try await indexSearchTextTool.execute(arguments: ToolArguments([
             "pattern": "print",
             "limit": 10
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.contains { $0.contains("src/main.swift:5:") })
@@ -166,10 +166,10 @@ final class IndexToolsTests: XCTestCase {
     func testIndexSearchTextTool_noMatches() async throws {
         codebaseIndex.mockSearchTextResult = []
 
-        let result = try await indexSearchTextTool.execute(arguments: [
+        let result = try await indexSearchTextTool.execute(arguments: ToolArguments([
             "pattern": "nonexistent",
             "limit": 10
-        ])
+        ]))
 
         XCTAssertTrue(result.contains("No matches"))
     }
@@ -186,10 +186,10 @@ final class IndexToolsTests: XCTestCase {
             )
         ]
 
-        let result = try await indexSearchSymbolsTool.execute(arguments: [
+        let result = try await indexSearchSymbolsTool.execute(arguments: ToolArguments([
             "query": "My",
             "limit": 10
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.contains { $0.contains("MyClass") && $0.contains("class") })
@@ -199,10 +199,10 @@ final class IndexToolsTests: XCTestCase {
     func testIndexSearchSymbolsTool_noMatches() async throws {
         codebaseIndex.mockSearchSymbolsWithPathsResult = []
 
-        let result = try await indexSearchSymbolsTool.execute(arguments: [
+        let result = try await indexSearchSymbolsTool.execute(arguments: ToolArguments([
             "query": "Nonexistent",
             "limit": 10
-        ])
+        ]))
 
         XCTAssertTrue(result.contains("No symbols"))
     }

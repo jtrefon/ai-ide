@@ -13,25 +13,26 @@ import SwiftUI
 public class ChatHistoryManager: ObservableObject {
     @Published public var messages: [ChatMessage] = []
     private var projectRoot: URL?
+    private static let defaultGreetingMessage = "Hello! I'm your AI coding assistant. How can I help you today?"
     
     public init() {
-        if messages.isEmpty {
-            messages.append(ChatMessage(
+        ensureDefaultGreetingMessageIfNeeded()
+    }
+
+    private func ensureDefaultGreetingMessageIfNeeded() {
+        guard messages.isEmpty else { return }
+        messages.append(
+            ChatMessage(
                 role: .assistant,
-                content: "Hello! I'm your AI coding assistant. How can I help you today?"
-            ))
-        }
+                content: Self.defaultGreetingMessage
+            )
+        )
     }
 
     public func setProjectRoot(_ root: URL) {
         projectRoot = root
         loadHistory()
-        if messages.isEmpty {
-            messages.append(ChatMessage(
-                role: .assistant,
-                content: "Hello! I'm your AI coding assistant. How can I help you today?"
-            ))
-        }
+        ensureDefaultGreetingMessageIfNeeded()
     }
     
     public func append(_ message: ChatMessage) {
@@ -80,12 +81,7 @@ public class ChatHistoryManager: ObservableObject {
             messages.removeFirst(count)
         }
 
-        if messages.isEmpty {
-            messages.append(ChatMessage(
-                role: .assistant,
-                content: "Hello! I'm your AI coding assistant. How can I help you today?"
-            ))
-        }
+        ensureDefaultGreetingMessageIfNeeded()
         saveHistory()
     }
     

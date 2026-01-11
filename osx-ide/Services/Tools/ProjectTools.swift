@@ -7,7 +7,6 @@
 
 import Foundation
 
-/// Get the complete project file structure as a tree
 struct GetProjectStructureTool: AITool {
     let name = "get_project_structure"
     let description = "Get the complete file and folder structure of the current project. Returns a hierarchical tree view of all files and directories. Use this to understand the project layout and cognitively identify files even with partial or misspelled names."
@@ -26,8 +25,11 @@ struct GetProjectStructureTool: AITool {
     
     let projectRoot: URL
     
-    func execute(arguments: [String: Any]) async throws -> String {
-        let maxDepth = arguments["max_depth"] as? Int
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
+        guard let maxDepth = arguments["max_depth"] as? Int else {
+            throw AppError.aiServiceError("Missing 'max_depth' argument for get_project_structure")
+        }
         return buildTreeSync(maxDepth: maxDepth)
     }
     
@@ -70,7 +72,6 @@ struct GetProjectStructureTool: AITool {
     }
 }
 
-/// List all files in the project (flat list for cognitive searching)
 struct ListAllFilesTool: AITool {
     let name = "list_all_files"
     let description = "Get a flat list of ALL files in the project with their relative paths. Use this when you need to find a specific file by name (even partial or misspelled). You can cognitively search through this list to identify the correct file."
@@ -83,8 +84,8 @@ struct ListAllFilesTool: AITool {
     }
     
     let projectRoot: URL
-    
-    func execute(arguments: [String: Any]) async throws -> String {
+
+    func execute(arguments: ToolArguments) async throws -> String {
         return getFilesSync()
     }
     
@@ -125,7 +126,6 @@ struct ListAllFilesTool: AITool {
     }
 }
 
-/// Fallback regex search for very large projects
 struct FindFileRegexTool: AITool {
     let name = "find_file_regex"
     let description = "FALLBACK TOOL: Use only when list_all_files returns too many files (>1000) and you cannot cognitively search. Searches for files matching a regex pattern. Much less intelligent than cognitive search - use as last resort."
@@ -144,7 +144,8 @@ struct FindFileRegexTool: AITool {
     
     let projectRoot: URL
     
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let pattern = arguments["pattern"] as? String else {
             throw AppError.aiServiceError("Missing 'pattern' argument for find_file_regex")
         }

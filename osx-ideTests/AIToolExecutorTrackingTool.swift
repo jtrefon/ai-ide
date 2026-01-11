@@ -9,7 +9,7 @@ struct AIToolExecutorTrackingTool: AITool, @unchecked Sendable {
     let tracker: AIToolExecutorConcurrencyTracker
     let delayNs: UInt64
 
-    func execute(arguments _: [String: Any]) async throws -> String {
+    func execute(arguments _: ToolArguments) async throws -> String {
         await tracker.enter()
         defer { Task { await tracker.exit() } }
         try await Task.sleep(nanoseconds: delayNs)

@@ -119,6 +119,341 @@ public final class AIToolExecutor {
         guard Self.isFilePathLikeTool(toolName) else { return nil }
         return nil
     }
+
+    private nonisolated static func makeToolExecutionMessage(
+        content: String,
+        toolName: String,
+        status: ToolExecutionStatus,
+        targetFile: String?,
+        toolCallId: String
+    ) -> ChatMessage {
+        ChatMessage(
+            role: .tool,
+            content: content,
+            tool: ChatMessageToolContext(
+                toolName: toolName,
+                toolStatus: status,
+                target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCallId)
+            )
+        )
+    }
+
+    private func logToolExecuteStart(
+        conversationId: String?,
+        toolCall: AIToolCall,
+        targetFile: String?
+    ) async {
+        await AppLogger.shared.info(category: .tool, message: "tool.execute_start", metadata: [
+            "conversationId": conversationId as Any,
+            "tool": toolCall.name,
+            "toolCallId": toolCall.id,
+            "targetPath": targetFile as Any
+        ])
+
+        await ExecutionLogStore.shared.append(
+            ExecutionLogAppendRequest(
+                toolCallId: toolCall.id,
+                type: "tool.execute_start",
+                data: [
+                    "targetPath": targetFile as Any
+                ],
+                context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
+            )
+        )
+
+        if let conversationId {
+            await ConversationLogStore.shared.append(
+                conversationId: conversationId,
+                type: "tool.execute_start",
+                data: [
+                    "tool": toolCall.name,
+                    "toolCallId": toolCall.id,
+                    "targetPath": targetFile as Any
+                ]
+            )
+        }
+
+        await AIToolTraceLogger.shared.log(type: "tool.execute_start", data: [
+            "tool": toolCall.name,
+            "toolCallId": toolCall.id,
+            "targetPath": targetFile as Any,
+            "argumentKeys": Array(toolCall.arguments.keys).sorted()
+        ])
+    }
+
+    private func logToolExecuteProgress(
+        conversationId: String?,
+        toolName: String,
+        toolCallId: String,
+        chunk: String,
+        totalLength: Int
+    ) async {
+        let cappedChunk = String(chunk.suffix(16_384))
+        await ExecutionLogStore.shared.append(
+            ExecutionLogAppendRequest(
+                toolCallId: toolCallId,
+                type: "tool.execute_progress",
+                data: [
+                    "chunk": cappedChunk,
+                    "chunkLength": chunk.count,
+                    "totalLength": totalLength
+                ],
+                context: ExecutionLogContext(conversationId: conversationId, tool: toolName)
+            )
+        )
+    }
+
+    private func logToolExecuteSuccess(conversationId: String?, toolCall: AIToolCall, resultLength: Int) async {
+        await AppLogger.shared.info(category: .tool, message: "tool.execute_success", metadata: [
+            "conversationId": conversationId as Any,
+            "tool": toolCall.name,
+            "toolCallId": toolCall.id,
+            "resultLength": resultLength
+        ])
+
+        await ExecutionLogStore.shared.append(
+            ExecutionLogAppendRequest(
+                toolCallId: toolCall.id,
+                type: "tool.execute_success",
+                data: [
+                    "resultLength": resultLength
+                ],
+                context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
+            )
+        )
+
+        if let conversationId {
+            await ConversationLogStore.shared.append(
+                conversationId: conversationId,
+                type: "tool.execute_success",
+                data: [
+                    "tool": toolCall.name,
+                    "toolCallId": toolCall.id,
+                    "resultLength": resultLength
+                ]
+            )
+        }
+
+        await AIToolTraceLogger.shared.log(type: "tool.execute_success", data: [
+            "tool": toolCall.name,
+            "toolCallId": toolCall.id,
+            "resultLength": resultLength
+        ])
+    }
+
+    private func logToolExecuteError(conversationId: String?, toolCall: AIToolCall, error: Error) async {
+        await AppLogger.shared.error(category: .tool, message: "tool.execute_error", metadata: [
+            "conversationId": conversationId as Any,
+            "tool": toolCall.name,
+            "toolCallId": toolCall.id,
+            "error": error.localizedDescription
+        ])
+
+        await ExecutionLogStore.shared.append(
+            ExecutionLogAppendRequest(
+                toolCallId: toolCall.id,
+                type: "tool.execute_error",
+                data: [
+                    "error": error.localizedDescription
+                ],
+                context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
+            )
+        )
+
+        if let conversationId {
+            await ConversationLogStore.shared.append(
+                conversationId: conversationId,
+                type: "tool.execute_error",
+                data: [
+                    "tool": toolCall.name,
+                    "toolCallId": toolCall.id,
+                    "error": error.localizedDescription
+                ]
+            )
+        }
+
+        await AIToolTraceLogger.shared.log(type: "tool.execute_error", data: [
+            "tool": toolCall.name,
+            "toolCallId": toolCall.id,
+            "error": error.localizedDescription
+        ])
+    }
+
+    private func logToolNotFound(conversationId: String?, toolCall: AIToolCall) async {
+        await AppLogger.shared.error(category: .tool, message: "tool.not_found", metadata: [
+            "conversationId": conversationId as Any,
+            "tool": toolCall.name,
+            "toolCallId": toolCall.id
+        ])
+
+        if let conversationId {
+            await ConversationLogStore.shared.append(
+                conversationId: conversationId,
+                type: "tool.not_found",
+                data: [
+                    "tool": toolCall.name,
+                    "toolCallId": toolCall.id
+                ]
+            )
+        }
+
+        await AIToolTraceLogger.shared.log(type: "tool.not_found", data: [
+            "tool": toolCall.name,
+            "toolCallId": toolCall.id
+        ])
+    }
+
+    private func resolveInjectedPath(toolName: String, explicitPath: String?) async -> String? {
+        guard explicitPath == nil else { return explicitPath }
+        guard Self.isFilePathLikeTool(toolName) else { return nil }
+        guard defaultFilePathProvider != nil else { return nil }
+        return await MainActor.run {
+            self.defaultFilePathProvider?()?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private func buildMergedArguments(toolCall: AIToolCall, conversationId: String?) async -> [String: Any] {
+        var mergedArguments = toolCall.arguments
+        mergedArguments["_tool_call_id"] = toolCall.id
+        if let conversationId {
+            mergedArguments["_conversation_id"] = conversationId
+        }
+
+        let explicitPath = Self.explicitFilePath(from: mergedArguments)
+        let injectedPath = await resolveInjectedPath(toolName: toolCall.name, explicitPath: explicitPath)
+        if let injectedPath, !injectedPath.isEmpty, mergedArguments["path"] == nil {
+            mergedArguments["path"] = injectedPath
+        }
+
+        return mergedArguments
+    }
+
+    private nonisolated static func sendToolProgressSnapshot(
+        snapshot: String,
+        toolName: String,
+        toolCallId: String,
+        targetFile: String?,
+        onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void
+    ) {
+        Task { @MainActor in
+            onProgress(
+                Self.makeToolExecutionMessage(
+                    content: snapshot,
+                    toolName: toolName,
+                    status: .executing,
+                    targetFile: targetFile,
+                    toolCallId: toolCallId
+                )
+            )
+        }
+    }
+
+    private func executeToolAndCaptureResult(
+        tool: AITool,
+        toolCall: AIToolCall,
+        mergedArguments: [String: Any],
+        conversationId: String?,
+        targetFile: String?,
+        onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void
+    ) async throws -> String {
+        if let streamingTool = tool as? any AIToolProgressReporting {
+            let toolCallId = toolCall.id
+            let accumulator = StringAccumulator()
+            return try await streamingTool.execute(arguments: ToolArguments(mergedArguments)) { chunk in
+                let (snapshot, totalLength) = accumulator.appendAndSnapshot(chunk)
+
+                Task {
+                    await self.logToolExecuteProgress(
+                        conversationId: conversationId,
+                        toolName: toolCall.name,
+                        toolCallId: toolCallId,
+                        chunk: chunk,
+                        totalLength: totalLength
+                    )
+                }
+
+                Self.sendToolProgressSnapshot(
+                    snapshot: snapshot,
+                    toolName: toolCall.name,
+                    toolCallId: toolCallId,
+                    targetFile: targetFile,
+                    onProgress: onProgress
+                )
+            }
+        }
+
+        return try await tool.execute(arguments: ToolArguments(mergedArguments))
+    }
+
+    private func makeToolCallFinalMessage(result: Result<String, Error>, toolCall: AIToolCall, targetFile: String?) -> ChatMessage {
+        switch result {
+        case .success(let content):
+            return Self.makeToolExecutionMessage(
+                content: content,
+                toolName: toolCall.name,
+                status: .completed,
+                targetFile: targetFile,
+                toolCallId: toolCall.id
+            )
+        case .failure(let error):
+            let errorContent = Self.formatError(error, toolName: toolCall.name)
+            return Self.makeToolExecutionMessage(
+                content: errorContent,
+                toolName: toolCall.name,
+                status: .failed,
+                targetFile: targetFile,
+                toolCallId: toolCall.id
+            )
+        }
+    }
+
+    private func executeToolCall(
+        toolCall: AIToolCall,
+        availableTools: [AITool],
+        conversationId: String?,
+        onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void,
+        targetFile: String?
+    ) async -> ChatMessage {
+        await logToolExecuteStart(conversationId: conversationId, toolCall: toolCall, targetFile: targetFile)
+
+        let resultMessage: ChatMessage
+        if let tool = availableTools.first(where: { $0.name == toolCall.name }) {
+            let result: Result<String, Error>
+            do {
+                let mergedArguments = await buildMergedArguments(toolCall: toolCall, conversationId: conversationId)
+                let content = try await executeToolAndCaptureResult(
+                    tool: tool,
+                    toolCall: toolCall,
+                    mergedArguments: mergedArguments,
+                    conversationId: conversationId,
+                    targetFile: targetFile,
+                    onProgress: onProgress
+                )
+                await logToolExecuteSuccess(conversationId: conversationId, toolCall: toolCall, resultLength: content.count)
+                result = .success(content)
+            } catch {
+                await logToolExecuteError(conversationId: conversationId, toolCall: toolCall, error: error)
+                result = .failure(error)
+            }
+
+            resultMessage = makeToolCallFinalMessage(result: result, toolCall: toolCall, targetFile: targetFile)
+        } else {
+            await logToolNotFound(conversationId: conversationId, toolCall: toolCall)
+            resultMessage = Self.makeToolExecutionMessage(
+                content: "Tool not found",
+                toolName: toolCall.name,
+                status: .failed,
+                targetFile: targetFile,
+                toolCallId: toolCall.id
+            )
+        }
+
+        Task { @MainActor in
+            onProgress(resultMessage)
+        }
+
+        return resultMessage
+    }
     
     /// Executes a list of tool calls and returns the results as ChatMessages.
     /// - Parameters:
@@ -137,284 +472,13 @@ public final class AIToolExecutor {
         var results: [ChatMessage] = []
         results.reserveCapacity(toolCalls.count)
 
-        let tasks: [Task<ChatMessage, Never>] = toolCalls.map { toolCall in
-            let targetFile: String?
-            targetFile = resolveTargetFile(for: toolCall)
-
-            let executingMsg = ChatMessage(
-                role: .tool,
-                content: "Executing \(toolCall.name)...",
-                tool: ChatMessageToolContext(
-                    toolName: toolCall.name,
-                    toolStatus: .executing,
-                    target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
-                )
+        let tasks: [Task<ChatMessage, Never>] = toolCalls.map {
+            makeExecuteBatchTask(
+                toolCall: $0,
+                availableTools: availableTools,
+                conversationId: conversationId,
+                onProgress: onProgress
             )
-            onProgress(executingMsg)
-
-            return Task { [weak self] in
-                guard let self else {
-                    return ChatMessage(role: .tool, content: "Tool executor unavailable")
-                }
-
-                let pathKey = self.pathKey(for: toolCall)
-
-                let run: @Sendable () async -> ChatMessage = {
-                    await AppLogger.shared.info(category: .tool, message: "tool.execute_start", metadata: [
-                        "conversationId": conversationId as Any,
-                        "tool": toolCall.name,
-                        "toolCallId": toolCall.id,
-                        "targetPath": targetFile as Any
-                    ])
-
-                    await ExecutionLogStore.shared.append(
-                        ExecutionLogAppendRequest(
-                            toolCallId: toolCall.id,
-                            type: "tool.execute_start",
-                            data: [
-                                "targetPath": targetFile as Any
-                            ],
-                            context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
-                        )
-                    )
-
-                    if let conversationId {
-                        await ConversationLogStore.shared.append(
-                            conversationId: conversationId,
-                            type: "tool.execute_start",
-                            data: [
-                                "tool": toolCall.name,
-                                "toolCallId": toolCall.id,
-                                "targetPath": targetFile as Any
-                            ]
-                        )
-                    }
-
-                    await AIToolTraceLogger.shared.log(type: "tool.execute_start", data: [
-                        "tool": toolCall.name,
-                        "toolCallId": toolCall.id,
-                        "targetPath": targetFile as Any,
-                        "argumentKeys": Array(toolCall.arguments.keys).sorted()
-                    ])
-
-                    let resultMessage: ChatMessage
-                    if let tool = availableTools.first(where: { $0.name == toolCall.name }) {
-                        do {
-                            var mergedArguments = toolCall.arguments
-                            mergedArguments["_tool_call_id"] = toolCall.id
-                            if let conversationId {
-                                mergedArguments["_conversation_id"] = conversationId
-                            }
-
-                            let explicitPath = Self.explicitFilePath(from: mergedArguments)
-                            let fallbackPath: String? = {
-                                guard explicitPath == nil else { return nil }
-                                guard Self.isFilePathLikeTool(toolCall.name) else { return nil }
-                                guard self.defaultFilePathProvider != nil else { return nil }
-                                return "__needs_main_actor__"
-                            }()
-
-                            let injectedPath: String?
-                            if fallbackPath == "__needs_main_actor__" {
-                                injectedPath = await MainActor.run {
-                                    self.defaultFilePathProvider?()?.trimmingCharacters(in: .whitespacesAndNewlines)
-                                }
-                            } else {
-                                injectedPath = explicitPath
-                            }
-
-                            if let injectedPath, !injectedPath.isEmpty, mergedArguments["path"] == nil {
-                                mergedArguments["path"] = injectedPath
-                            }
-
-                            let result: String
-                            if let streamingTool = tool as? any AIToolProgressReporting {
-                                let toolCallId = toolCall.id
-                                let accumulator = StringAccumulator()
-                                result = try await streamingTool.execute(arguments: mergedArguments) { chunk in
-                                    let (snapshot, totalLength) = accumulator.appendAndSnapshot(chunk)
-
-                                    let cappedChunk = String(chunk.suffix(16_384))
-                                    Task {
-                                        await ExecutionLogStore.shared.append(
-                                            ExecutionLogAppendRequest(
-                                                toolCallId: toolCallId,
-                                                type: "tool.execute_progress",
-                                                data: [
-                                                    "chunk": cappedChunk,
-                                                    "chunkLength": chunk.count,
-                                                    "totalLength": totalLength
-                                                ],
-                                                context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
-                                            )
-                                        )
-                                    }
-
-                                    Task { @MainActor in
-                                        onProgress(
-                                            ChatMessage(
-                                                role: .tool,
-                                                content: snapshot,
-                                                tool: ChatMessageToolContext(
-                                                    toolName: toolCall.name,
-                                                    toolStatus: .executing,
-                                                    target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCallId)
-                                                )
-                                            )
-                                        )
-                                    }
-                                }
-                            } else {
-                                result = try await tool.execute(arguments: mergedArguments)
-                            }
-
-                            await AppLogger.shared.info(category: .tool, message: "tool.execute_success", metadata: [
-                                "conversationId": conversationId as Any,
-                                "tool": toolCall.name,
-                                "toolCallId": toolCall.id,
-                                "resultLength": result.count
-                            ])
-
-                            await ExecutionLogStore.shared.append(
-                                ExecutionLogAppendRequest(
-                                    toolCallId: toolCall.id,
-                                    type: "tool.execute_success",
-                                    data: [
-                                        "resultLength": result.count
-                                    ],
-                                    context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
-                                )
-                            )
-
-                            if let conversationId {
-                                await ConversationLogStore.shared.append(
-                                    conversationId: conversationId,
-                                    type: "tool.execute_success",
-                                    data: [
-                                        "tool": toolCall.name,
-                                        "toolCallId": toolCall.id,
-                                        "resultLength": result.count
-                                    ]
-                                )
-                            }
-
-                            await AIToolTraceLogger.shared.log(type: "tool.execute_success", data: [
-                                "tool": toolCall.name,
-                                "toolCallId": toolCall.id,
-                                "resultLength": result.count
-                            ])
-
-                            resultMessage = ChatMessage(
-                                role: .tool,
-                                content: result,
-                                tool: ChatMessageToolContext(
-                                    toolName: toolCall.name,
-                                    toolStatus: .completed,
-                                    target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
-                                )
-                            )
-                        } catch {
-                            await AppLogger.shared.error(category: .tool, message: "tool.execute_error", metadata: [
-                                "conversationId": conversationId as Any,
-                                "tool": toolCall.name,
-                                "toolCallId": toolCall.id,
-                                "error": error.localizedDescription
-                            ])
-
-                            await ExecutionLogStore.shared.append(
-                                ExecutionLogAppendRequest(
-                                    toolCallId: toolCall.id,
-                                    type: "tool.execute_error",
-                                    data: [
-                                        "error": error.localizedDescription
-                                    ],
-                                    context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
-                                )
-                            )
-
-                            if let conversationId {
-                                await ConversationLogStore.shared.append(
-                                    conversationId: conversationId,
-                                    type: "tool.execute_error",
-                                    data: [
-                                        "tool": toolCall.name,
-                                        "toolCallId": toolCall.id,
-                                        "error": error.localizedDescription
-                                    ]
-                                )
-                            }
-
-                            await AIToolTraceLogger.shared.log(type: "tool.execute_error", data: [
-                                "tool": toolCall.name,
-                                "toolCallId": toolCall.id,
-                                "error": error.localizedDescription
-                            ])
-
-                            let errorContent = Self.formatError(error, toolName: toolCall.name)
-                            resultMessage = ChatMessage(
-                                role: .tool,
-                                content: errorContent,
-                                tool: ChatMessageToolContext(
-                                    toolName: toolCall.name,
-                                    toolStatus: .failed,
-                                    target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
-                                )
-                            )
-                        }
-                    } else {
-                        await AppLogger.shared.error(category: .tool, message: "tool.not_found", metadata: [
-                            "conversationId": conversationId as Any,
-                            "tool": toolCall.name,
-                            "toolCallId": toolCall.id
-                        ])
-
-                        if let conversationId {
-                            await ConversationLogStore.shared.append(
-                                conversationId: conversationId,
-                                type: "tool.not_found",
-                                data: [
-                                    "tool": toolCall.name,
-                                    "toolCallId": toolCall.id
-                                ]
-                            )
-                        }
-
-                        await AIToolTraceLogger.shared.log(type: "tool.not_found", data: [
-                            "tool": toolCall.name,
-                            "toolCallId": toolCall.id
-                        ])
-
-                        resultMessage = ChatMessage(
-                            role: .tool,
-                            content: "Tool not found",
-                            tool: ChatMessageToolContext(
-                                toolName: toolCall.name,
-                                toolStatus: .failed,
-                                target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCall.id)
-                            )
-                        )
-                    }
-
-                    Task { @MainActor in
-                        onProgress(resultMessage)
-                    }
-
-                    return resultMessage
-                }
-
-                do {
-                    if self.isWriteLikeTool(toolCall.name) {
-                        return try await self.scheduler.runWriteTask(pathKey: pathKey) {
-                            await run()
-                        }
-                    }
-                    return try await self.scheduler.runReadTask {
-                        await run()
-                    }
-                } catch {
-                    return ChatMessage(role: .tool, content: "Error: \(error.localizedDescription)")
-                }
-            }
         }
 
         for task in tasks {
@@ -423,6 +487,56 @@ public final class AIToolExecutor {
         }
 
         return results
+    }
+
+    private func makeExecuteBatchTask(
+        toolCall: AIToolCall,
+        availableTools: [AITool],
+        conversationId: String?,
+        onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void
+    ) -> Task<ChatMessage, Never> {
+        let targetFile: String?
+        targetFile = resolveTargetFile(for: toolCall)
+
+        let executingMsg = Self.makeToolExecutionMessage(
+            content: "Executing \(toolCall.name)...",
+            toolName: toolCall.name,
+            status: .executing,
+            targetFile: targetFile,
+            toolCallId: toolCall.id
+        )
+        onProgress(executingMsg)
+
+        return Task { [weak self] in
+            guard let self else {
+                return ChatMessage(role: .tool, content: "Tool executor unavailable")
+            }
+
+            let pathKey = self.pathKey(for: toolCall)
+
+            let run: @Sendable () async -> ChatMessage = {
+                await self.executeToolCall(
+                    toolCall: toolCall,
+                    availableTools: availableTools,
+                    conversationId: conversationId,
+                    onProgress: onProgress,
+                    targetFile: targetFile
+                )
+            }
+
+            do {
+                if self.isWriteLikeTool(toolCall.name) {
+                    return try await self.scheduler.runWriteTask(pathKey: pathKey) {
+                        await run()
+                    }
+                }
+                return try await self.scheduler.runReadTask {
+                    await run()
+                }
+            } catch {
+                return ChatMessage(role: .tool, content: "Error: \(error.localizedDescription)")
+            }
+        }
     }
     
     private nonisolated static func formatError(_ error: Error, toolName: String) -> String {

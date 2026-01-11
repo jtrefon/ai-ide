@@ -32,7 +32,8 @@ struct IndexFindFilesTool: AITool {
 
     let index: CodebaseIndexProtocol
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let query = arguments["query"] as? String else {
             throw AppError.aiServiceError("Missing 'query' argument for index_find_files")
         }
@@ -82,7 +83,8 @@ struct IndexListFilesTool: AITool {
 
     let index: CodebaseIndexProtocol
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         let query = (arguments["query"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let limit = max(1, min(500, arguments["limit"] as? Int ?? 50))
         let offset = max(0, arguments["offset"] as? Int ?? 0)
@@ -117,7 +119,8 @@ struct IndexSearchTextTool: AITool {
 
     let index: CodebaseIndexProtocol
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let pattern = arguments["pattern"] as? String, !pattern.isEmpty else {
             throw AppError.aiServiceError("Missing 'pattern' argument for index_search_text")
         }
@@ -157,7 +160,8 @@ struct IndexReadFileTool: AITool {
 
     let index: CodebaseIndexProtocol
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let path = arguments["path"] as? String else {
             throw AppError.aiServiceError("Missing 'path' argument for index_read_file")
         }
@@ -192,7 +196,8 @@ struct IndexSearchSymbolsTool: AITool {
 
     let index: CodebaseIndexProtocol
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let query = arguments["query"] as? String, !query.isEmpty else {
             throw AppError.aiServiceError("Missing 'query' argument for index_search_symbols")
         }

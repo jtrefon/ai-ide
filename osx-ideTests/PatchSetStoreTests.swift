@@ -50,14 +50,14 @@ final class PatchSetStoreTests: XCTestCase {
             eventBus: EventBus()
         )
 
-        _ = try await tool.execute(arguments: [
+        _ = try await tool.execute(arguments: ToolArguments([
             "path": targetURL.path,
             "old_text": "world",
             "new_text": "there",
             "mode": "propose",
             "patch_set_id": patchSetId,
             "_tool_call_id": toolCallId
-        ])
+        ]))
 
         let unchanged = try String(contentsOf: targetURL, encoding: .utf8)
         XCTAssertEqual(unchanged, "hello world")
@@ -90,7 +90,7 @@ final class PatchSetStoreTests: XCTestCase {
         )
 
         let tool = PatchSetApplyTool(eventBus: EventBus(), projectRoot: tempRoot)
-        _ = try await tool.execute(arguments: ["patch_set_id": patchSetId])
+        _ = try await tool.execute(arguments: ToolArguments(["patch_set_id": patchSetId]))
 
         let applied = try String(contentsOf: fileURL, encoding: .utf8)
         XCTAssertEqual(applied, "new")

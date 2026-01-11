@@ -31,7 +31,8 @@ struct ArchitectAdvisorTool: AITool {
         self.projectRoot = projectRoot
     }
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let task = arguments["task"] as? String, !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw AppError.aiServiceError("Missing 'task' argument for architect_advisor")
         }

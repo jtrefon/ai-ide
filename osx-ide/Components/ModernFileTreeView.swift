@@ -88,14 +88,16 @@ struct ModernFileTreeView: NSViewRepresentable {
 
     func makeCoordinator() -> ModernCoordinator {
         ModernCoordinator(
-            expandedRelativePaths: $expandedRelativePaths,
-            selectedRelativePath: $selectedRelativePath,
-            onOpenFile: onOpenFile,
-            onCreateFile: onCreateFile,
-            onCreateFolder: onCreateFolder,
-            onDeleteItem: onDeleteItem,
-            onRenameItem: onRenameItem,
-            onRevealInFinder: onRevealInFinder
+            configuration: ModernCoordinator.Configuration(
+                expandedRelativePaths: $expandedRelativePaths,
+                selectedRelativePath: $selectedRelativePath,
+                onOpenFile: onOpenFile,
+                onCreateFile: onCreateFile,
+                onCreateFolder: onCreateFolder,
+                onDeleteItem: onDeleteItem,
+                onRenameItem: onRenameItem,
+                onRevealInFinder: onRevealInFinder
+            )
         )
     }
 }
@@ -104,6 +106,17 @@ struct ModernFileTreeView: NSViewRepresentable {
 @MainActor
 final class ModernCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
     let dataSource = FileTreeDataSource()
+
+    struct Configuration {
+        let expandedRelativePaths: Binding<Set<String>>
+        let selectedRelativePath: Binding<String?>
+        let onOpenFile: (URL) -> Void
+        let onCreateFile: (URL, String) -> Void
+        let onCreateFolder: (URL, String) -> Void
+        let onDeleteItem: (URL) -> Void
+        let onRenameItem: (URL, String) -> Void
+        let onRevealInFinder: (URL) -> Void
+    }
     
     private let expandedRelativePaths: Binding<Set<String>>
     private let selectedRelativePath: Binding<String?>
@@ -124,24 +137,15 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
     private var fontSize: Double = 13
     private var fontFamily: String = AppConstants.Editor.defaultFontFamily
 
-    init(
-        expandedRelativePaths: Binding<Set<String>>,
-        selectedRelativePath: Binding<String?>,
-        onOpenFile: @escaping (URL) -> Void,
-        onCreateFile: @escaping (URL, String) -> Void,
-        onCreateFolder: @escaping (URL, String) -> Void,
-        onDeleteItem: @escaping (URL) -> Void,
-        onRenameItem: @escaping (URL, String) -> Void,
-        onRevealInFinder: @escaping (URL) -> Void
-    ) {
-        self.expandedRelativePaths = expandedRelativePaths
-        self.selectedRelativePath = selectedRelativePath
-        self.onOpenFile = onOpenFile
-        self.onCreateFile = onCreateFile
-        self.onCreateFolder = onCreateFolder
-        self.onDeleteItem = onDeleteItem
-        self.onRenameItem = onRenameItem
-        self.onRevealInFinder = onRevealInFinder
+    init(configuration: Configuration) {
+        self.expandedRelativePaths = configuration.expandedRelativePaths
+        self.selectedRelativePath = configuration.selectedRelativePath
+        self.onOpenFile = configuration.onOpenFile
+        self.onCreateFile = configuration.onCreateFile
+        self.onCreateFolder = configuration.onCreateFolder
+        self.onDeleteItem = configuration.onDeleteItem
+        self.onRenameItem = configuration.onRenameItem
+        self.onRevealInFinder = configuration.onRevealInFinder
         super.init()
     }
 
