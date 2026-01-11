@@ -509,7 +509,13 @@ public final class AIToolExecutor {
 
         return Task { [weak self] in
             guard let self else {
-                return ChatMessage(role: .tool, content: "Tool executor unavailable")
+                return Self.makeToolExecutionMessage(
+                    content: "Tool executor unavailable",
+                    toolName: toolCall.name,
+                    status: .failed,
+                    targetFile: targetFile,
+                    toolCallId: toolCall.id
+                )
             }
 
             let pathKey = self.pathKey(for: toolCall)
@@ -534,7 +540,13 @@ public final class AIToolExecutor {
                     await run()
                 }
             } catch {
-                return ChatMessage(role: .tool, content: "Error: \(error.localizedDescription)")
+                return Self.makeToolExecutionMessage(
+                    content: "Error: \(error.localizedDescription)",
+                    toolName: toolCall.name,
+                    status: .failed,
+                    targetFile: targetFile,
+                    toolCallId: toolCall.id
+                )
             }
         }
     }

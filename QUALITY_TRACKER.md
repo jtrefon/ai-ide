@@ -207,10 +207,10 @@ Please carry on with development with set of priorities:
 **File:** `osx-ide/Components/QuickOpenOverlayView.swift:120`
 **Actions:**
 
-- [ ] Extract file filtering logic
-- [ ] Extract result limiting logic
-- [ ] Extract error handling
-- [ ] Write tests
+- [x] Extract file filtering logic
+- [x] Extract result limiting logic
+- [x] Extract error handling
+- [x] Write tests
 
 #### 5.2 WorkspaceSearchService.fallbackSearch (CCN 16)
 
