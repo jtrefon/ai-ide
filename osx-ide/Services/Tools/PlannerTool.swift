@@ -22,7 +22,8 @@ struct PlannerTool: AITool {
         ]
     }
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let action = arguments["action"] as? String else {
             throw AppError.aiServiceError("Missing 'action' argument for planner")
         }

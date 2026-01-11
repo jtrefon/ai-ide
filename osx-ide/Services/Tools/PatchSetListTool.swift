@@ -11,7 +11,7 @@ struct PatchSetListTool: AITool {
         ]
     }
 
-    func execute(arguments _: [String: Any]) async throws -> String {
+    func execute(arguments _: ToolArguments) async throws -> String {
         let ids = await PatchSetStore.shared.listPatchSetIds()
         if ids.isEmpty { return "No staged patch sets." }
         return ids.joined(separator: "\n")

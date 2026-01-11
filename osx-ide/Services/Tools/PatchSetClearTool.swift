@@ -17,7 +17,8 @@ struct PatchSetClearTool: AITool {
         ]
     }
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let id = arguments["patch_set_id"] as? String, !id.isEmpty else {
             throw AppError.aiServiceError("Missing 'patch_set_id' for patchset_clear")
         }

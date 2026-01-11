@@ -39,6 +39,11 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
         }
         return URL(fileURLWithPath: path).standardizedFileURL
     }
+
+    private func mapToAppError(_ error: Error, operation: String) -> AppError {
+        if let appError = error as? AppError { return appError }
+        return AppError.fileOperationFailed(operation, underlying: error)
+    }
     
     /// Handle error through the service's error manager
     func handleError(_ error: AppError) {
@@ -122,8 +127,7 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
             eventBus.publish(FileDeletedEvent(url: standardized))
         }
         .mapError { error in
-            if let appError = error as? AppError { return appError }
-            return AppError.fileOperationFailed("delete", underlying: error)
+            mapToAppError(error, operation: "delete")
         }
     }
 
@@ -155,8 +159,7 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
             return standardizedDestination
         }
         .mapError { error in
-            if let appError = error as? AppError { return appError }
-            return AppError.fileOperationFailed("rename", underlying: error)
+            mapToAppError(error, operation: "rename")
         }
     }
 
@@ -173,8 +176,7 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
             return newFileURL
         }
         .mapError { error in
-            if let appError = error as? AppError { return appError }
-            return AppError.fileOperationFailed("create file", underlying: error)
+            mapToAppError(error, operation: "create file")
         }
     }
 
@@ -190,8 +192,7 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
             try fileManager.createDirectory(at: newFolderURL, withIntermediateDirectories: false, attributes: nil)
         }
         .mapError { error in
-            if let appError = error as? AppError { return appError }
-            return AppError.fileOperationFailed("create folder", underlying: error)
+            mapToAppError(error, operation: "create folder")
         }
     }
     
