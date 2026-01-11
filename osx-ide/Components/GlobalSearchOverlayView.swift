@@ -6,6 +6,10 @@ struct GlobalSearchOverlayView: View {
     @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     private struct SearchResultGroup: Identifiable {
         let file: String
         let matches: [WorkspaceSearchMatch]
@@ -31,9 +35,9 @@ struct GlobalSearchOverlayView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 8) {
-                Text("Search")
+                Text(localized("global_search.title"))
                     .font(.headline)
-                TextField("Find in workspace", text: $query)
+                TextField(localized("global_search.placeholder"), text: $query)
                     .textFieldStyle(.roundedBorder)
                     .frame(minWidth: AppConstants.Overlay.searchFieldMinWidth)
                     .onSubmit {
@@ -45,7 +49,7 @@ struct GlobalSearchOverlayView: View {
                         .scaleEffect(0.75)
                 }
 
-                Button("Close") {
+                Button(localized("common.close")) {
                     close()
                 }
             }

@@ -10,11 +10,15 @@ import AppKit
 
 struct ChatInputView: View {
     @Binding var text: String
-    var isSending: Bool
+    let isSending: Bool
     var fontSize: Double
     var fontFamily: String
-    var onSend: () -> Void
+    let onSend: () -> Void
     @State private var inputMonitor: Any?
+
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
     @FocusState private var isInputFocused: Bool
     
     var body: some View {
@@ -43,7 +47,7 @@ struct ChatInputView: View {
                                 } else {
                                     // Plain Enter: send message
                                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending {
-                                        DispatchQueue.main.async {
+                                        Task { @MainActor in
                                             onSend()
                                         }
                                     }
@@ -62,7 +66,7 @@ struct ChatInputView: View {
                 
                 // Placeholder text
                 if text.isEmpty {
-                    Text("Type a message... (Shift+Enter for newline)")
+                    Text(localized("chat_input.placeholder"))
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 12)

@@ -90,6 +90,10 @@ struct MessageListView: View {
     var fontFamily: String
     @State private var hiddenReasoningMessageIds: Set<UUID> = []
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     private func reasoningHiddenBinding(for messageId: UUID) -> Binding<Bool> {
         Binding(
             get: { hiddenReasoningMessageIds.contains(messageId) },
@@ -160,7 +164,7 @@ struct MessageListView: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .scaleEffect(0.8)
-                            Text("Assistant is typing…")
+                            Text(localized("chat.typing"))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             Spacer()
@@ -180,12 +184,12 @@ struct MessageListView: View {
             }
             .scrollIndicators(.hidden)
             .onAppear {
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     proxy.scrollTo("__bottom__", anchor: .bottom)
                 }
             }
             .onChange(of: messages.last?.id) { _ in
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     proxy.scrollTo("__bottom__", anchor: .bottom)
                 }
             }
@@ -200,6 +204,10 @@ struct MessageView: View {
     @Binding var isReasoningHidden: Bool
     @State private var isExpanded = false
     @State private var showFullReasoning = false
+
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
     
     var body: some View {
         HStack {
@@ -221,7 +229,7 @@ struct MessageView: View {
                             statusIcon
                             
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(message.toolName ?? "Tool")
+                                Text(message.toolName ?? localized("tool.default_name"))
                                     .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .medium))
                                     .foregroundColor(.primary)
 
@@ -258,7 +266,7 @@ struct MessageView: View {
                                         .font(.caption)
                                 }
                                 .buttonStyle(.plain)
-                                .help("Cancel execution")
+                                .help(localized("tool.cancel_help"))
                             }
                             
                             // Chevron for expansion
@@ -300,7 +308,7 @@ struct MessageView: View {
                     
                     if !isMessageEmpty {
                         VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
-                            Text(message.role == .user ? "You" : "Assistant")
+                            Text(message.role == .user ? localized("chat.role.you") : localized("chat.role.assistant"))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
 
@@ -311,7 +319,7 @@ struct MessageView: View {
                                         .font(.caption)
                                         .foregroundColor(.secondary)
 
-                                    Text("Reasoning")
+                                    Text(localized("chat.reasoning.title"))
                                         .font(resolveFont(size: max(10, fontSize - 2), family: fontFamily))
                                         .foregroundColor(.secondary)
 
@@ -334,14 +342,14 @@ struct MessageView: View {
                                     .lineLimit(showFullReasoning ? nil : 5)
 
                                 HStack(spacing: 8) {
-                                    Button(showFullReasoning ? "Show less" : "Show more") {
+                                    Button(showFullReasoning ? localized("common.show_less") : localized("common.show_more")) {
                                         withAnimation(.easeInOut(duration: 0.2)) {
                                             showFullReasoning.toggle()
                                         }
                                     }
                                     .buttonStyle(.borderless)
 
-                                    Button("Hide") {
+                                    Button(localized("common.hide")) {
                                         withAnimation(.easeInOut(duration: 0.2)) {
                                             isReasoningHidden = true
                                         }
@@ -377,7 +385,7 @@ struct MessageView: View {
                                         NSPasteboard.general.clearContents()
                                         NSPasteboard.general.setString(message.content, forType: .string)
                                     } label: {
-                                        Text("Copy Message")
+                                        Text(localized("chat.copy_message"))
                                         Image(systemName: "doc.on.doc")
                                     }
                                 }
@@ -395,7 +403,7 @@ struct MessageView: View {
                                         NSPasteboard.general.clearContents()
                                         NSPasteboard.general.setString(message.content, forType: .string)
                                     } label: {
-                                        Text("Copy Message")
+                                        Text(localized("chat.copy_message"))
                                         Image(systemName: "doc.on.doc")
                                     }
                                 }

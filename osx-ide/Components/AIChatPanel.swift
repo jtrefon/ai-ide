@@ -10,16 +10,20 @@ struct AIChatPanel: View {
     @State private var stateTick: UInt = 0
     @State private var conversationPlan: String? = nil
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
-                Text("AI Assistant")
+                Text(localized("ai_chat.title"))
                     .font(.headline)
                     .padding(.horizontal)
                 Spacer()
                 if let selected = currentSelection, !selected.isEmpty {
-                    Text("Context: \"\(selected.prefix(30))\(selected.count > 30 ? "..." : "")\"")
+                    Text(String(format: localized("ai_chat.context_format"), "\(selected.prefix(30))\(selected.count > 30 ? "..." : "")"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.horizontal)
@@ -38,14 +42,14 @@ struct AIChatPanel: View {
             if shouldShowPlanPanel {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("Plan")
+                        Text(localized("ai_chat.plan.title"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Spacer()
                     }
 
                     MarkdownMessageView(
-                        content: conversationPlan ?? "No plan set.",
+                        content: conversationPlan ?? localized("ai_chat.plan.empty"),
                         fontSize: ui.fontSize,
                         fontFamily: ui.fontFamily
                     )
@@ -95,7 +99,7 @@ struct AIChatPanel: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
-                Picker("Mode", selection: modeBinding) {
+                Picker(localized("ai_chat.mode"), selection: modeBinding) {
                     ForEach(AIMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
@@ -115,7 +119,7 @@ struct AIChatPanel: View {
             .background(Color.gray.opacity(0.1))
         }
         .onReceive(conversationManager.statePublisher) { _ in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 stateTick &+= 1
             }
         }

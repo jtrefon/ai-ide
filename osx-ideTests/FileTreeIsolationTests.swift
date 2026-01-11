@@ -108,8 +108,8 @@ final class FileTreeIsolationTests: XCTestCase {
 
         let expanded = Binding<Set<String>>(get: { [] }, set: { _ in })
         let selected = Binding<String?>(get: { nil }, set: { _ in })
-        let coordinator = ModernCoordinator(
-            configuration: ModernCoordinator.Configuration(
+        let coordinator = ModernFileTreeCoordinator(
+            configuration: ModernFileTreeCoordinator.Configuration(
                 expandedRelativePaths: expanded,
                 selectedRelativePath: selected,
                 onOpenFile: { _ in },
@@ -158,8 +158,8 @@ final class FileTreeIsolationTests: XCTestCase {
 
         let expanded = Binding<Set<String>>(get: { [] }, set: { _ in })
         let selected = Binding<String?>(get: { nil }, set: { _ in })
-        let coordinator = ModernCoordinator(
-            configuration: ModernCoordinator.Configuration(
+        let coordinator = ModernFileTreeCoordinator(
+            configuration: ModernFileTreeCoordinator.Configuration(
                 expandedRelativePaths: expanded,
                 selectedRelativePath: selected,
                 onOpenFile: { _ in },

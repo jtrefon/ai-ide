@@ -8,6 +8,33 @@ import XCTest
 @MainActor
 final class SettingsGeneralUITests: XCTestCase {
 
+    private func skipIfElementNotDiscoverable(_ element: XCUIElement, name: String, timeout: TimeInterval) {
+        if !element.waitForExistence(timeout: timeout) {
+            XCTSkip("\(name) not discoverable by XCTest on this machine/session")
+        }
+        if !element.exists {
+            XCTSkip("\(name) became undiscoverable after initial wait (accessibility snapshot flake)")
+        }
+    }
+
+    private func waitForValueChange(of element: XCUIElement, from initialValue: String, timeout: TimeInterval) {
+        let valueChanged = expectation(description: "Value changed")
+        let pollInterval: TimeInterval = 0.1
+        var elapsedTime: TimeInterval = 0
+
+        while elapsedTime < timeout {
+            let currentValue = element.value as? String ?? ""
+            if currentValue != initialValue {
+                valueChanged.fulfill()
+                break
+            }
+            Thread.sleep(forTimeInterval: pollInterval)
+            elapsedTime += pollInterval
+        }
+
+        wait(for: [valueChanged], timeout: timeout + 0.5)
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -25,27 +52,17 @@ final class SettingsGeneralUITests: XCTestCase {
         app.launch()
 
         let mainWindow = app.windows.firstMatch
-        if !mainWindow.waitForExistence(timeout: 5) {
-            XCTSkip("Main window not discoverable by XCTest on this machine/session")
-        }
+        skipIfElementNotDiscoverable(mainWindow, name: "Main window", timeout: 5)
 
         let editor = app.textViews["CodeEditorTextView"]
-        if !editor.waitForExistence(timeout: 5) {
-            XCTSkip("Code editor not discoverable by XCTest on this machine/session")
-        }
-
-        if !editor.exists {
-            XCTSkip("Code editor became undiscoverable after initial wait (accessibility snapshot flake)")
-        }
+        skipIfElementNotDiscoverable(editor, name: "Code editor", timeout: 5)
 
         // Open Settings (Cmd+,)
         app.typeKey(",", modifierFlags: [.command])
 
         // Wait for settings window to appear
         let settingsWindow = app.windows.firstMatch
-        if !settingsWindow.waitForExistence(timeout: 5) {
-            XCTSkip("Settings window not discoverable by XCTest on this machine/session")
-        }
+        skipIfElementNotDiscoverable(settingsWindow, name: "Settings window", timeout: 5)
 
         // Verify settings window opened
         XCTAssertTrue(settingsWindow.exists, "Settings window should be open")
@@ -70,23 +87,7 @@ final class SettingsGeneralUITests: XCTestCase {
             let initialSliderValue = fontSizeSlider.value as? String ?? ""
             fontSizeSlider.adjust(toNormalizedSliderPosition: 0.7)
 
-            // Wait for slider value to change using expectation
-            let sliderChanged = expectation(description: "Slider value changed")
-            let pollInterval: TimeInterval = 0.1
-            let maxWaitTime: TimeInterval = 2.0
-            var elapsedTime: TimeInterval = 0
-
-            while elapsedTime < maxWaitTime {
-                let currentValue = fontSizeSlider.value as? String ?? ""
-                if currentValue != initialSliderValue {
-                    sliderChanged.fulfill()
-                    break
-                }
-                Thread.sleep(forTimeInterval: pollInterval)
-                elapsedTime += pollInterval
-            }
-
-            wait(for: [sliderChanged], timeout: maxWaitTime + 0.5)
+            waitForValueChange(of: fontSizeSlider, from: initialSliderValue, timeout: 2.0)
 
             let adjustedSliderValue = fontSizeSlider.value as? String ?? ""
             XCTAssertNotEqual(initialSliderValue, adjustedSliderValue, "Font size slider value should change after adjustment")
@@ -96,23 +97,7 @@ final class SettingsGeneralUITests: XCTestCase {
             let initialToggleValue = wordWrapToggle.value as? String ?? ""
             wordWrapToggle.click()
 
-            // Wait for toggle value to change using expectation
-            let toggleChanged = expectation(description: "Toggle value changed")
-            let pollInterval: TimeInterval = 0.1
-            let maxWaitTime: TimeInterval = 2.0
-            var elapsedTime: TimeInterval = 0
-
-            while elapsedTime < maxWaitTime {
-                let currentValue = wordWrapToggle.value as? String ?? ""
-                if currentValue != initialToggleValue {
-                    toggleChanged.fulfill()
-                    break
-                }
-                Thread.sleep(forTimeInterval: pollInterval)
-                elapsedTime += pollInterval
-            }
-
-            wait(for: [toggleChanged], timeout: maxWaitTime + 0.5)
+            waitForValueChange(of: wordWrapToggle, from: initialToggleValue, timeout: 2.0)
 
             let toggledValue = wordWrapToggle.value as? String ?? ""
             XCTAssertNotEqual(initialToggleValue, toggledValue, "Word wrap toggle value should change")

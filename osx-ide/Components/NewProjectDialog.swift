@@ -28,16 +28,16 @@ struct NewProjectDialog: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            Text("Create New Project")
+            Text(NSLocalizedString("new_project.title", comment: ""))
                 .font(.title2)
                 .fontWeight(.semibold)
             
             VStack(alignment: .leading, spacing: 8) {
-                Text("Project Location:")
+                Text(NSLocalizedString("new_project.project_location", comment: ""))
                     .font(.headline)
                 
                 HStack {
-                    Text(projectLocation?.path ?? "No location selected")
+                    Text(projectLocation?.path ?? NSLocalizedString("new_project.no_location_selected", comment: ""))
                         .foregroundColor(projectLocation != nil ? .primary : .secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 8)
@@ -45,7 +45,7 @@ struct NewProjectDialog: View {
                         .background(Color(NSColor.controlBackgroundColor))
                         .cornerRadius(4)
                     
-                    Button("Browse...") {
+                    Button(NSLocalizedString("new_project.browse", comment: "")) {
                         Task {
                             await selectLocation()
                         }
@@ -55,10 +55,10 @@ struct NewProjectDialog: View {
             }
             
             VStack(alignment: .leading, spacing: 8) {
-                Text("Project Name:")
+                Text(NSLocalizedString("new_project.project_name", comment: ""))
                     .font(.headline)
                 
-                TextField("Enter project name", text: $projectName)
+                TextField(NSLocalizedString("new_project.enter_project_name", comment: ""), text: $projectName)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
                         if canCreateProject {
@@ -70,20 +70,20 @@ struct NewProjectDialog: View {
             }
             
             if !projectName.isEmpty && !isValidProjectName(projectName) {
-                Text("Invalid project name. Avoid special characters and reserved names.")
+                Text(NSLocalizedString("new_project.invalid_project_name", comment: ""))
                     .font(.caption)
                     .foregroundColor(.red)
             }
             
             HStack {
-                Button("Cancel") {
+                Button(NSLocalizedString("common.cancel", comment: "")) {
                     dismiss()
                 }
                 .keyboardShortcut(.escape)
                 
                 Spacer()
                 
-                Button("Create") {
+                Button(NSLocalizedString("common.create", comment: "")) {
                     Task {
                         await createProject()
                     }
@@ -97,8 +97,11 @@ struct NewProjectDialog: View {
         .frame(width: 400, height: 250)
         .onAppear {
             // Set initial focus to project name field
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                NSApp.keyWindow?.makeFirstResponder(nil)
+            Task {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                await MainActor.run { () -> Void in
+                    NSApp.keyWindow?.makeFirstResponder(nil)
+                }
             }
         }
     }

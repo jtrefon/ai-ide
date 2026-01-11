@@ -48,7 +48,7 @@ struct ModernFileTreeView: NSViewRepresentable {
         outlineView.delegate = context.coordinator
         outlineView.dataSource = context.coordinator.dataSource
         outlineView.target = context.coordinator
-        outlineView.doubleAction = #selector(ModernCoordinator.onDoubleClick(_:))
+        outlineView.doubleAction = #selector(ModernFileTreeCoordinator.onDoubleClick(_:))
 
         let scrollView = NSScrollView(frame: .zero)
         scrollView.setAccessibilityIdentifier("Modern Explorer")
@@ -86,9 +86,9 @@ struct ModernFileTreeView: NSViewRepresentable {
         )
     }
 
-    func makeCoordinator() -> ModernCoordinator {
-        ModernCoordinator(
-            configuration: ModernCoordinator.Configuration(
+    func makeCoordinator() -> ModernFileTreeCoordinator {
+        ModernFileTreeCoordinator(
+            configuration: ModernFileTreeCoordinator.Configuration(
                 expandedRelativePaths: $expandedRelativePaths,
                 selectedRelativePath: $selectedRelativePath,
                 onOpenFile: onOpenFile,

@@ -5,45 +5,60 @@ import AppKit
 
 @MainActor
 struct JSONHighlighterTests {
+
+    private static let jsonSample = """
+        {
+            \"key\": \"value\",
+            \"number\": 123,
+            \"bool\": true,
+            \"nullVal\": null,
+            \"arr\": [1, false],
+            \"obj\": {\"nested\": false}
+        }
+        """
+
+    private func subrange(_ needle: String, in container: String, within fullText: NSString, offset: Int = 0) -> NSRange {
+        let containerRange = fullText.range(of: container)
+        #expect(containerRange.location != NSNotFound, Comment(rawValue: "Expected to find container: \(container)"))
+        let sub = (container as NSString).range(of: needle)
+        #expect(sub.location != NSNotFound, Comment(rawValue: "Expected to find needle: \(needle) in container: \(container)"))
+        return NSRange(location: containerRange.location + sub.location + offset, length: sub.length)
+    }
+
+    private func colorAt(_ range: NSRange, in result: NSAttributedString) -> NSColor? {
+        var color: NSColor? = nil
+        result.enumerateAttributes(in: range, options: []) { attrs, _, _ in
+            if let c = attrs[.foregroundColor] as? NSColor { color = c }
+        }
+        return color
+    }
+
+    private func expectColor(_ range: NSRange, in result: NSAttributedString, equals expected: NSColor?, message: String) {
+        #expect(colorAt(range, in: result) == expected, Comment(rawValue: message))
+    }
+
     @Test func testJSONHighlighting() async throws {
         let highlighter = SyntaxHighlighter.shared
         let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        let jsonCode = """
-        {
-            "key": "value",
-            "number": 123,
-            "bool": true,
-            "nullVal": null,
-            "arr": [1, false],
-            "obj": {"nested": false}
-        }
-        """
+        let jsonCode = Self.jsonSample
         
         // Verify JSONModule is registered and active
         let module = LanguageModuleManager.shared.getModule(for: .json)
-        #expect(module != nil, "JSONModule should be registered in LanguageModuleManager")
-        #expect(module is JSONModule, "Module for .json should be an instance of JSONModule")
+        #expect(module != nil, Comment(rawValue: "JSONModule should be registered in LanguageModuleManager"))
+        #expect(module is JSONModule, Comment(rawValue: "Module for .json should be an instance of JSONModule"))
         
         let jsonModule = module as! JSONModule
         let result = highlighter.highlight(jsonCode, language: "json", font: font)
         let ns = jsonCode as NSString
 
-        func subrange(_ needle: String, in container: String, offset: Int = 0) -> NSRange {
-            let containerRange = ns.range(of: container)
-            #expect(containerRange.location != NSNotFound, "Expected to find container: \(container)")
-            let sub = (container as NSString).range(of: needle)
-            #expect(sub.location != NSNotFound, "Expected to find needle: \(needle) in container: \(container)")
-            return NSRange(location: containerRange.location + sub.location + offset, length: sub.length)
-        }
-
         // Find ranges for each syntax element
-        let keyRange = subrange("key", in: "\"key\": \"value\"")
-        let valueRange = subrange("value", in: "\"key\": \"value\"")
+        let keyRange = subrange("key", in: "\"key\": \"value\"", within: ns)
+        let valueRange = subrange("value", in: "\"key\": \"value\"", within: ns)
         let numberRange = ns.range(of: "123")
         // Use value-context containers so we don't accidentally match substrings inside keys
         // (e.g., "null" inside "nullVal").
-        let boolRange = subrange("true", in: ": true")
-        let nullRange = subrange("null", in: ": null")
+        let boolRange = subrange("true", in: ": true", within: ns)
+        let nullRange = subrange("null", in: ": null", within: ns)
         let arrRange = ns.range(of: "[")
         let objRange = ns.range(of: "{")
         let arrCloseRange = ns.range(of: "]")
@@ -51,18 +66,10 @@ struct JSONHighlighterTests {
         let commaRange = ns.range(of: ",")
         let colonRange = ns.range(of: ":")
         let quoteRange = ns.range(of: "\"") // first quote
-
-        func colorAt(_ range: NSRange) -> NSColor? {
-            var color: NSColor? = nil
-            result.enumerateAttributes(in: range, options: []) { attrs, _, _ in
-                if let c = attrs[.foregroundColor] as? NSColor { color = c }
-            }
-            return color
-        }
         
         // Detailed assertions to catch the "everything is red" bug
-        let keyColor = colorAt(keyRange)
-        let valueColor = colorAt(valueRange)
+        let keyColor = colorAt(keyRange, in: result)
+        let valueColor = colorAt(valueRange, in: result)
 
         let expectedKey = jsonModule.highlightPalette.color(for: .key)
         let expectedString = jsonModule.highlightPalette.color(for: .string)
@@ -78,18 +85,18 @@ struct JSONHighlighterTests {
         let keyDesc = keyColor.map { String(describing: $0) } ?? "nil"
         let valueDesc = valueColor.map { String(describing: $0) } ?? "nil"
 
-        #expect(keyColor == expectedKey, "JSON Key color mismatch; got \(keyDesc)")
-        #expect(valueColor == expectedString, "JSON String value color mismatch; got \(valueDesc)")
+        #expect(keyColor == expectedKey, Comment(rawValue: "JSON Key color mismatch; got \(keyDesc)"))
+        #expect(valueColor == expectedString, Comment(rawValue: "JSON String value color mismatch; got \(valueDesc)"))
 
-        #expect(colorAt(numberRange) == expectedNumber, "JSON Number color mismatch")
-        #expect(colorAt(boolRange) == expectedBool, "JSON Boolean color mismatch")
-        #expect(colorAt(nullRange) == expectedNull, "JSON null color mismatch")
-        #expect(colorAt(arrRange) == expectedBracket, "[ color mismatch")
-        #expect(colorAt(objRange) == expectedBrace, "{ color mismatch")
-        #expect(colorAt(arrCloseRange) == expectedBracket, "] color mismatch")
-        #expect(colorAt(objCloseRange) == expectedBrace, "} color mismatch")
-        #expect(colorAt(commaRange) == expectedComma, ", color mismatch")
-        #expect(colorAt(colonRange) == expectedColon, ": color mismatch")
-        #expect(colorAt(quoteRange) == expectedQuote, "quote color mismatch")
+        expectColor(numberRange, in: result, equals: expectedNumber, message: "JSON Number color mismatch")
+        expectColor(boolRange, in: result, equals: expectedBool, message: "JSON Boolean color mismatch")
+        expectColor(nullRange, in: result, equals: expectedNull, message: "JSON null color mismatch")
+        expectColor(arrRange, in: result, equals: expectedBracket, message: "[ color mismatch")
+        expectColor(objRange, in: result, equals: expectedBrace, message: "{ color mismatch")
+        expectColor(arrCloseRange, in: result, equals: expectedBracket, message: "] color mismatch")
+        expectColor(objCloseRange, in: result, equals: expectedBrace, message: "} color mismatch")
+        expectColor(commaRange, in: result, equals: expectedComma, message: ", color mismatch")
+        expectColor(colonRange, in: result, equals: expectedColon, message: ": color mismatch")
+        expectColor(quoteRange, in: result, equals: expectedQuote, message: "quote color mismatch")
     }
 }

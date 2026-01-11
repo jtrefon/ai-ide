@@ -7,6 +7,10 @@ struct NavigationLocationsOverlayView: View {
     @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     init(appState: AppState, isPresented: Binding<Bool>) {
         self.appState = appState
         self._workspace = ObservedObject(wrappedValue: appState.workspace)
@@ -22,7 +26,7 @@ struct NavigationLocationsOverlayView: View {
 
                 Spacer()
 
-                Button("Close") {
+                Button(localized("common.close")) {
                     close()
                 }
             }

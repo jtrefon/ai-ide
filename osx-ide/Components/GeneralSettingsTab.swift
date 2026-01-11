@@ -23,12 +23,12 @@ struct GeneralSettingsTab: View {
         ScrollView {
             VStack(spacing: AppConstants.Settings.sectionSpacing) {
                 SettingsCard(
-                    title: "Appearance",
-                    subtitle: "Choose a theme that feels native and calm."
+                    title: NSLocalizedString("settings.appearance.title", comment: ""),
+                    subtitle: NSLocalizedString("settings.appearance.subtitle", comment: "")
                 ) {
                     SettingsRow(
-                        title: "Theme",
-                        subtitle: "Match the system or pick a style.",
+                        title: NSLocalizedString("settings.appearance.theme.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.appearance.theme.subtitle", comment: ""),
                         systemImage: "paintpalette"
                     ) {
                         Picker("", selection: themeBinding) {
@@ -45,12 +45,12 @@ struct GeneralSettingsTab: View {
                 }
                 
                 SettingsCard(
-                    title: "Editor",
-                    subtitle: "Typography and layout tuned for focus."
+                    title: NSLocalizedString("settings.editor.title", comment: ""),
+                    subtitle: NSLocalizedString("settings.editor.subtitle", comment: "")
                 ) {
                     SettingsRow(
-                        title: "Font family",
-                        subtitle: "Select a monospace font for code.",
+                        title: NSLocalizedString("settings.editor.font_family.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.editor.font_family.subtitle", comment: ""),
                         systemImage: "textformat"
                     ) {
                         Picker("", selection: fontFamilyBinding) {
@@ -65,8 +65,8 @@ struct GeneralSettingsTab: View {
                     }
                     
                     SettingsRow(
-                        title: "Font size",
-                        subtitle: "Adjust the editor point size.",
+                        title: NSLocalizedString("settings.editor.font_size.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.editor.font_size.subtitle", comment: ""),
                         systemImage: "textformat.size"
                     ) {
                         HStack(spacing: 12) {
@@ -78,15 +78,15 @@ struct GeneralSettingsTab: View {
                             .frame(width: AppConstants.Settings.sliderWidth)
                             .accessibilityIdentifier("Settings.FontSize")
                             
-                            Text("\(Int(ui.fontSize)) pt")
+                            Text("\(Int(ui.fontSize)) \(NSLocalizedString("settings.editor.font_size.unit", comment: ""))")
                                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }
                     }
 
                     SettingsRow(
-                        title: "Indentation",
-                        subtitle: "Choose tabs or spaces.",
+                        title: NSLocalizedString("settings.editor.indentation.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.editor.indentation.subtitle", comment: ""),
                         systemImage: "arrow.right.to.line"
                     ) {
                         Picker("", selection: indentationStyleBinding) {
@@ -102,8 +102,8 @@ struct GeneralSettingsTab: View {
                     }
                     
                     SettingsRow(
-                        title: "Line numbers",
-                        subtitle: "Show a gutter for navigation.",
+                        title: NSLocalizedString("settings.editor.line_numbers.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.editor.line_numbers.subtitle", comment: ""),
                         systemImage: "list.number"
                     ) {
                         Toggle("", isOn: showLineNumbersBinding)
@@ -113,8 +113,8 @@ struct GeneralSettingsTab: View {
                     }
                     
                     SettingsRow(
-                        title: "Word wrap",
-                        subtitle: "Keep long lines within the view.",
+                        title: NSLocalizedString("settings.editor.word_wrap.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.editor.word_wrap.subtitle", comment: ""),
                         systemImage: "arrow.left.and.right.text.vertical"
                     ) {
                         Toggle("", isOn: wordWrapBinding)
@@ -124,8 +124,8 @@ struct GeneralSettingsTab: View {
                     }
                     
                     SettingsRow(
-                        title: "Minimap",
-                        subtitle: "Quickly scan large files.",
+                        title: NSLocalizedString("settings.editor.minimap.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.editor.minimap.subtitle", comment: ""),
                         systemImage: "rectangle.inset.filled.and.person.filled"
                     ) {
                         Toggle("", isOn: minimapBinding)
@@ -136,12 +136,12 @@ struct GeneralSettingsTab: View {
                 }
                 
                 SettingsCard(
-                    title: "Workspace",
-                    subtitle: "Layout options for your daily flow."
+                    title: NSLocalizedString("settings.workspace.title", comment: ""),
+                    subtitle: NSLocalizedString("settings.workspace.subtitle", comment: "")
                 ) {
                     SettingsRow(
-                        title: "Sidebar",
-                        subtitle: "Show the file tree and tabs.",
+                        title: NSLocalizedString("settings.workspace.sidebar.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.workspace.sidebar.subtitle", comment: ""),
                         systemImage: "sidebar.leading"
                     ) {
                         Toggle("", isOn: sidebarBinding)
@@ -152,23 +152,23 @@ struct GeneralSettingsTab: View {
                 }
                 
                 SettingsCard(
-                    title: "Defaults",
-                    subtitle: "Restore the original configuration."
+                    title: NSLocalizedString("settings.defaults.title", comment: ""),
+                    subtitle: NSLocalizedString("settings.defaults.subtitle", comment: "")
                 ) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Reset settings")
+                            Text(NSLocalizedString("settings.defaults.reset.title", comment: ""))
                                 .font(.body)
-                            Text("Revert all preferences to their factory values.")
+                            Text(NSLocalizedString("settings.defaults.reset.subtitle", comment: ""))
                                 .font(.caption)
-                            Text("This will restore layouts and editor preferences.")
+                            Text(NSLocalizedString("settings.defaults.reset.warning", comment: ""))
                                 .font(.caption2)
                                 .foregroundStyle(.red.opacity(0.8))
                         }
                         
                         Spacer()
                         
-                        Button("Reset to Defaults") {
+                        Button(NSLocalizedString("settings.defaults.reset.button", comment: "")) {
                             ui.resetToDefaults()
                         }
                         .buttonStyle(.borderedProminent)
