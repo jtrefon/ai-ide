@@ -102,4 +102,32 @@ final class ShellManagerTests: XCTestCase, ShellManagerDelegate {
         try await Task.sleep(nanoseconds: 10_000_000)
         // Pass if no crash
     }
+
+    func testResolveShellPathPrefersZshWhenExecutable() {
+        let resolved = ShellManager.resolveShellPath(
+            fileExists: { path in path == "/bin/zsh" || path == "/bin/bash" },
+            isExecutable: { path in path == "/bin/zsh" }
+        )
+        XCTAssertEqual(resolved, "/bin/zsh")
+    }
+
+    func testResolveShellPathFallsBackToBash() {
+        let resolved = ShellManager.resolveShellPath(
+            fileExists: { path in path == "/bin/bash" },
+            isExecutable: { _ in true }
+        )
+        XCTAssertEqual(resolved, "/bin/bash")
+    }
+
+    func testBuildEnvironmentAppliesOverridesAndDefaults() {
+        let env = ShellManager.buildEnvironment(environmentOverrides: [
+            "TERM": "xterm",
+            "PROMPT_EOL_MARK": "custom",
+        ])
+        XCTAssertEqual(env["TERM"], "xterm")
+        XCTAssertEqual(env["PROMPT_EOL_MARK"], "custom")
+        XCTAssertNotNil(env["HOME"])
+        XCTAssertFalse((env["COLUMNS"] ?? "").isEmpty)
+        XCTAssertFalse((env["LINES"] ?? "").isEmpty)
+    }
 }

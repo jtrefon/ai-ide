@@ -44,29 +44,72 @@ class ShellManager: NSObject {
         cleanup()
         isCleaningUp = false
 
-        let shellPath: String
-        if FileManager.default.fileExists(atPath: "/bin/zsh") {
-            shellPath = "/bin/zsh"
-        } else if FileManager.default.fileExists(atPath: "/bin/bash") {
-            shellPath = "/bin/bash"
-        } else {
+        guard let shellPath = Self.resolveShellPath(
+            fileExists: { FileManager.default.fileExists(atPath: $0) },
+            isExecutable: { FileManager.default.isExecutableFile(atPath: $0) }
+        ) else {
             notifyError("No suitable shell found (zsh or bash required)")
             return
         }
 
-        guard FileManager.default.isExecutableFile(atPath: shellPath) else {
+        if !FileManager.default.isExecutableFile(atPath: shellPath) {
             notifyError("Shell at \(shellPath) is not executable")
             return
         }
 
-        var master: Int32 = 0
-        var slave: Int32 = 0
-        guard openpty(&master, &slave, nil, nil, nil) == 0 else {
+        guard let pty = createPTY() else {
             notifyError("Failed to create PTY")
             return
         }
 
-        // Configure a reasonable initial window size so shells that depend on it behave.
+        let process = configureProcess(
+            shellPath: shellPath,
+            arguments: arguments,
+            directory: directory,
+            slaveHandle: pty.slaveHandle,
+            environmentOverrides: environmentOverrides
+        )
+
+        registerRunningProcess(process, pty: pty)
+        setupOutputMonitoring()
+
+        do {
+            try process.run()
+            finalizeStartAfterRun(slaveHandle: pty.slaveHandle)
+            schedulePostLaunchVerification()
+        } catch {
+            notifyError("Failed to start shell: \(error.localizedDescription)")
+            cleanup()
+        }
+    }
+
+    nonisolated static func resolveShellPath(
+        fileExists: (String) -> Bool,
+        isExecutable: (String) -> Bool
+    ) -> String? {
+        let candidates = ["/bin/zsh", "/bin/bash"]
+        for path in candidates where fileExists(path) {
+            if isExecutable(path) {
+                return path
+            }
+        }
+        return nil
+    }
+
+    private struct PTYHandles {
+        let masterFD: Int32
+        let slaveFD: Int32
+        let masterHandle: FileHandle
+        let slaveHandle: FileHandle
+    }
+
+    private func createPTY() -> PTYHandles? {
+        var master: Int32 = 0
+        var slave: Int32 = 0
+        guard openpty(&master, &slave, nil, nil, nil) == 0 else {
+            return nil
+        }
+
         var winSize = winsize(
             ws_row: UInt16(AppConstants.Terminal.defaultRows),
             ws_col: UInt16(AppConstants.Terminal.defaultColumns),
@@ -75,9 +118,21 @@ class ShellManager: NSObject {
         )
         _ = ioctl(master, TIOCSWINSZ, &winSize)
 
-        let masterHandle = FileHandle(fileDescriptor: master, closeOnDealloc: false)
-        let slaveHandle = FileHandle(fileDescriptor: slave, closeOnDealloc: false)
+        return PTYHandles(
+            masterFD: master,
+            slaveFD: slave,
+            masterHandle: FileHandle(fileDescriptor: master, closeOnDealloc: false),
+            slaveHandle: FileHandle(fileDescriptor: slave, closeOnDealloc: false)
+        )
+    }
 
+    private func configureProcess(
+        shellPath: String,
+        arguments: [String],
+        directory: URL?,
+        slaveHandle: FileHandle,
+        environmentOverrides: [String: String]
+    ) -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shellPath)
         process.arguments = arguments
@@ -85,53 +140,49 @@ class ShellManager: NSObject {
         process.standardInput = slaveHandle
         process.standardOutput = slaveHandle
         process.standardError = slaveHandle
+        process.environment = Self.buildEnvironment(environmentOverrides: environmentOverrides)
+        return process
+    }
 
+    private func registerRunningProcess(_ process: Process, pty: PTYHandles) {
+        shellProcess = process
+        ptyMasterFD = pty.masterFD
+        ptySlaveFD = pty.slaveFD
+        readHandle = pty.masterHandle
+        writeHandle = pty.masterHandle
+    }
+
+    nonisolated static func buildEnvironment(environmentOverrides: [String: String]) -> [String: String] {
         var environment = ProcessInfo.processInfo.environment
         environment["TERM"] = environmentOverrides["TERM"] ?? "xterm-256color"
         environment["COLUMNS"] = environmentOverrides["COLUMNS"] ?? "\(AppConstants.Terminal.defaultColumns)"
         environment["LINES"] = environmentOverrides["LINES"] ?? "\(AppConstants.Terminal.defaultRows)"
 
-        // Ensure HOME is present so login shells locate user configuration correctly.
         if environment["HOME"]?.isEmpty ?? true {
             environment["HOME"] = FileManager.default.homeDirectoryForCurrentUser.path
         }
 
-        // zsh uses PROMPT_EOL_MARK to display an end-of-line marker for prompts.
-        // In embedded terminals this often shows up as a stray '='. Disable by default.
         if environmentOverrides["PROMPT_EOL_MARK"] == nil {
             environment["PROMPT_EOL_MARK"] = ""
         }
         for (k, v) in environmentOverrides {
             environment[k] = v
         }
-        process.environment = environment
+        return environment
+    }
 
-        self.shellProcess = process
-        self.ptyMasterFD = master
-        self.ptySlaveFD = slave
-        self.readHandle = masterHandle
-        self.writeHandle = masterHandle
+    private func finalizeStartAfterRun(slaveHandle: FileHandle) {
+        try? slaveHandle.close()
+        ptySlaveFD = nil
+    }
 
-        setupOutputMonitoring()
-
-        do {
-            try process.run()
-
-            // Parent no longer needs to hold the slave side open once the child is running.
-            try? slaveHandle.close()
-            self.ptySlaveFD = nil
-
-            // Re-verify after a short delay
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
-                if let isRunning = self.shellProcess?.isRunning, !isRunning {
-                    self.notifyError("Process failed to start. Please check full disk access permissions.")
-                    self.cleanup()
-                }
+    private func schedulePostLaunchVerification() {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            if let isRunning = self.shellProcess?.isRunning, !isRunning {
+                self.notifyError("Process failed to start. Please check full disk access permissions.")
+                self.cleanup()
             }
-        } catch {
-            notifyError("Failed to start shell: \(error.localizedDescription)")
-            cleanup()
         }
     }
     

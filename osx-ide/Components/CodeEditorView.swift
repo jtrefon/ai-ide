@@ -73,7 +73,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         textView.isEditable = true
         textView.isSelectable = true
         textView.allowsUndo = true
-        textView.font = resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize)
+        textView.font = Self.resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize)
         textView.backgroundColor = NSColor.textBackgroundColor
         textView.insertionPointColor = NSColor.labelColor
         textView.isAutomaticQuoteSubstitutionEnabled = false
@@ -106,7 +106,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         scrollView.autohidesScrollers = false
 
         DispatchQueue.main.async {
-            applyWordWrap(wordWrap, to: scrollView, textView: textView)
+            Self.applyWordWrap(wordWrap, to: scrollView, textView: textView)
         }
 
         if showLineNumbers {
@@ -122,7 +122,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         }
         
         // Apply syntax highlighting after the view is set up asynchronously
-        context.coordinator.performAsyncHighlight(for: text, in: textView, language: language, font: resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize))
+        context.coordinator.performAsyncHighlight(for: text, in: textView, language: language, font: Self.resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize))
         
         return scrollView
     }
@@ -130,7 +130,7 @@ struct TextViewRepresentable: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
-        let resolvedFont = resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize)
+        let resolvedFont = Self.resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize)
         let needsRehighlight = syncFont(resolvedFont, for: textView, in: scrollView)
         scheduleWordWrapUpdate(for: scrollView, textView: textView)
         syncTextAndHighlightIfNeeded(
@@ -159,7 +159,7 @@ struct TextViewRepresentable: NSViewRepresentable {
 
     private func scheduleWordWrapUpdate(for scrollView: NSScrollView, textView: NSTextView) {
         DispatchQueue.main.async {
-            applyWordWrap(wordWrap, to: scrollView, textView: textView)
+            Self.applyWordWrap(wordWrap, to: scrollView, textView: textView)
         }
     }
 
@@ -208,7 +208,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         }
     }
 
-    private func resolveEditorFont(fontFamily: String, fontSize: Double) -> NSFont {
+    static func resolveEditorFont(fontFamily: String, fontSize: Double) -> NSFont {
         let size = CGFloat(fontSize)
 
         if let font = NSFont(name: fontFamily, size: size) {
@@ -222,7 +222,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
     }
 
-    private func applyWordWrap(_ enabled: Bool, to scrollView: NSScrollView, textView: NSTextView) {
+    static func applyWordWrap(_ enabled: Bool, to scrollView: NSScrollView, textView: NSTextView) {
         guard let container = textView.textContainer else { return }
 
         if enabled {

@@ -4,6 +4,8 @@ import SQLite3
 final class DatabaseSymbolManager {
     private unowned let database: DatabaseManager
 
+    private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
     init(database: DatabaseManager) {
         self.database = database
     }
@@ -48,7 +50,24 @@ final class DatabaseSymbolManager {
     }
 
     func searchSymbolsWithPaths(nameLike query: String, limit: Int = 50) throws -> [SymbolSearchResult] {
-        let sql = """
+        let sql = Self.makeSearchSymbolsWithPathsSQL()
+
+        return try database.syncOnQueue {
+            let statement = try prepareStatement(sql)
+            defer { sqlite3_finalize(statement) }
+
+            bindSearchSymbolsWithPathsParameters(statement, query: query, limit: limit)
+
+            var results: [SymbolSearchResult] = []
+            while sqlite3_step(statement) == SQLITE_ROW {
+                results.append(makeSymbolSearchResult(from: statement))
+            }
+            return results
+        }
+    }
+
+    private static func makeSearchSymbolsWithPathsSQL() -> String {
+        """
         SELECT
             s.id,
             s.resource_id,
@@ -64,20 +83,12 @@ final class DatabaseSymbolManager {
         ORDER BY s.name
         LIMIT ?;
         """
+    }
 
-        return try database.syncOnQueue {
-            let statement = try prepareStatement(sql)
-            defer { sqlite3_finalize(statement) }
-
-            sqlite3_bind_text(statement, 1, "%\(query)%", -1, nil)
-            sqlite3_bind_int(statement, 2, Int32(limit))
-
-            var results: [SymbolSearchResult] = []
-            while sqlite3_step(statement) == SQLITE_ROW {
-                results.append(makeSymbolSearchResult(from: statement))
-            }
-            return results
-        }
+    private func bindSearchSymbolsWithPathsParameters(_ statement: OpaquePointer, query: String, limit: Int) {
+        let pattern = "%\(query)%" as NSString
+        sqlite3_bind_text(statement, 1, pattern.utf8String, -1, Self.sqliteTransient)
+        sqlite3_bind_int(statement, 2, Int32(limit))
     }
 
     func searchSymbols(nameLike query: String, limit: Int = 50) throws -> [Symbol] {
@@ -91,7 +102,8 @@ final class DatabaseSymbolManager {
             }
             defer { sqlite3_finalize(statement) }
 
-            sqlite3_bind_text(statement, 1, "%\(query)%", -1, nil)
+            let pattern = "%\(query)%" as NSString
+            sqlite3_bind_text(statement, 1, pattern.utf8String, -1, Self.sqliteTransient)
             sqlite3_bind_int(statement, 2, Int32(limit))
 
             while sqlite3_step(statement) == SQLITE_ROW {
