@@ -7,7 +7,6 @@
 
 import Foundation
 
-/// Search for a pattern in files within a directory
 struct GrepTool: AITool {
     let name = "grep"
     let description = "Search for a text pattern within files in a directory (recursive)."
@@ -29,8 +28,9 @@ struct GrepTool: AITool {
     }
     
     let pathValidator: PathValidator
-    
-    func execute(arguments: [String: Any]) async throws -> String {
+
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let pattern = arguments["pattern"] as? String else {
             throw AppError.aiServiceError("Missing 'pattern' argument for grep")
         }
@@ -71,7 +71,6 @@ struct GrepTool: AITool {
     }
 }
 
-/// Find files by name pattern (Glob-like)
 struct FindFileTool: AITool {
     let name = "find_file"
     let description = "Find files matching a simple name pattern recursively (case insensitive). Use this to locate files when you don't know the exact path."
@@ -93,8 +92,9 @@ struct FindFileTool: AITool {
     }
     
     let pathValidator: PathValidator
-    
-    func execute(arguments: [String: Any]) async throws -> String {
+
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let pattern = arguments["pattern"] as? String else {
             throw AppError.aiServiceError("Missing 'pattern' argument for find_file")
         }

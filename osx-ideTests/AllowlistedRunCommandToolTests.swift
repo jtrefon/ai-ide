@@ -10,12 +10,14 @@ final class AllowlistedRunCommandToolTests: XCTestCase {
         let description = "fake"
         var parameters: [String: Any] { ["type": "object", "properties": [:]] }
 
-        func execute(arguments: [String : Any]) async throws -> String {
+        func execute(arguments: ToolArguments) async throws -> String {
+            let arguments = arguments.raw
             let cmd = (arguments["command"] as? String) ?? ""
             return "FAKE: \(cmd)"
         }
 
-        func execute(arguments: [String : Any], onProgress: @Sendable @escaping (String) -> Void) async throws -> String {
+        func execute(arguments: ToolArguments, onProgress: @Sendable @escaping (String) -> Void) async throws -> String {
+            let arguments = arguments.raw
             let cmd = (arguments["command"] as? String) ?? ""
             onProgress("FAKE_PROGRESS")
             return "FAKE: \(cmd)"
@@ -26,7 +28,7 @@ final class AllowlistedRunCommandToolTests: XCTestCase {
         let tool = AllowlistedRunCommandTool(base: FakeRunCommandTool(), allowedPrefixes: ["echo ", "xcodebuild "])
 
         do {
-            _ = try await tool.execute(arguments: ["command": "rm -rf /tmp/should_not_run"])
+            _ = try await tool.execute(arguments: ToolArguments(["command": "rm -rf /tmp/should_not_run"]))
             XCTFail("Expected non-allowlisted command to throw")
         } catch {
             XCTAssertTrue(error.localizedDescription.lowercased().contains("allowlisted"))
@@ -36,7 +38,7 @@ final class AllowlistedRunCommandToolTests: XCTestCase {
     func testAllowsEchoCommand() async throws {
         let tool = AllowlistedRunCommandTool(base: FakeRunCommandTool(), allowedPrefixes: ["echo "])
 
-        let output = try await tool.execute(arguments: ["command": "echo ok"])
+        let output = try await tool.execute(arguments: ToolArguments(["command": "echo ok"]))
         XCTAssertEqual(output, "FAKE: echo ok")
     }
 }

@@ -16,18 +16,18 @@ struct AllowlistedRunCommandTool: AIToolProgressReporting {
         self.allowedPrefixes = allowedPrefixes
     }
 
-    func execute(arguments: [String: Any]) async throws -> String {
-        let command = try validatedCommand(arguments: arguments)
-        var merged = arguments
+    func execute(arguments: ToolArguments) async throws -> String {
+        let command = try validatedCommand(arguments: arguments.raw)
+        var merged = arguments.raw
         merged["command"] = command
-        return try await base.execute(arguments: merged)
+        return try await base.execute(arguments: ToolArguments(merged))
     }
 
-    func execute(arguments: [String: Any], onProgress: @Sendable @escaping (String) -> Void) async throws -> String {
-        let command = try validatedCommand(arguments: arguments)
-        var merged = arguments
+    func execute(arguments: ToolArguments, onProgress: @Sendable @escaping (String) -> Void) async throws -> String {
+        let command = try validatedCommand(arguments: arguments.raw)
+        var merged = arguments.raw
         merged["command"] = command
-        return try await base.execute(arguments: merged, onProgress: onProgress)
+        return try await base.execute(arguments: ToolArguments(merged), onProgress: onProgress)
     }
 
     private func validatedCommand(arguments: [String: Any]) throws -> String {

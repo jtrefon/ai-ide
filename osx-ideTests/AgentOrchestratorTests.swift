@@ -19,7 +19,7 @@ final class AgentOrchestratorTests: XCTestCase {
         var parameters: [String: Any] { ["type": "object", "properties": [:]] }
         let response: String
 
-        func execute(arguments _: [String: Any]) async throws -> String {
+        func execute(arguments _: ToolArguments) async throws -> String {
             response
         }
     }
@@ -56,7 +56,7 @@ final class AgentOrchestratorTests: XCTestCase {
                 for call in request.toolCalls {
                     group.addTask {
                         do {
-                            _ = try await runTool.execute(arguments: call.arguments)
+                            _ = try await runTool.execute(arguments: ToolArguments(call.arguments))
                             return ChatMessage(role: .tool, content: "should not succeed")
                         } catch {
                             return ChatMessage(role: .tool, content: error.localizedDescription)
@@ -76,11 +76,11 @@ final class AgentOrchestratorTests: XCTestCase {
         var parameters: [String: Any] { ["type": "object", "properties": [:]] }
         let response: String
 
-        func execute(arguments _: [String: Any]) async throws -> String {
+        func execute(arguments _: ToolArguments) async throws -> String {
             response
         }
 
-        func execute(arguments _: [String: Any], onProgress: @Sendable @escaping (String) -> Void)
+        func execute(arguments _: ToolArguments, onProgress: @Sendable @escaping (String) -> Void)
             async throws -> String
         {
             onProgress("chunk")

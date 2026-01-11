@@ -254,14 +254,14 @@ struct RunCommandTool: AIToolProgressReporting {
         }
     }
     
-    func execute(arguments: [String: Any]) async throws -> String {
-        try await executeImpl(arguments: arguments, onProgress: nil)
+    func execute(arguments: ToolArguments) async throws -> String {
+        try await executeImpl(arguments: arguments.raw, onProgress: nil)
     }
 
     func execute(
-        arguments: [String: Any],
+        arguments: ToolArguments,
         onProgress: @Sendable @escaping (String) -> Void
     ) async throws -> String {
-        try await executeImpl(arguments: arguments, onProgress: onProgress)
+        try await executeImpl(arguments: arguments.raw, onProgress: onProgress)
     }
 }

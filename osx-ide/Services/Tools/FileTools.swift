@@ -28,7 +28,8 @@ struct ReadFileTool: AITool {
     let fileSystemService: FileSystemService
     let pathValidator: PathValidator
     
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let path = arguments["path"] as? String else {
             throw AppError.aiServiceError("Missing 'path' argument for read_file")
         }
@@ -37,7 +38,6 @@ struct ReadFileTool: AITool {
     }
 }
 
-/// Write content to a file
 struct WriteFileTool: AITool {
     let name = "write_file"
     let description = "Write content to a file at the specified path. Overwrites if it exists."
@@ -71,7 +71,8 @@ struct WriteFileTool: AITool {
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let path = arguments["path"] as? String, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             let keys = arguments.keys.sorted().joined(separator: ", ")
             throw AppError.aiServiceError(
@@ -218,7 +219,8 @@ struct WriteFilesTool: AITool {
         }
     }
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let files = arguments["files"] as? [[String: Any]] else {
             throw AppError.aiServiceError("Missing 'files' argument for write_files")
         }
@@ -297,7 +299,8 @@ struct CreateFileTool: AITool {
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
     
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let path = arguments["path"] as? String else {
             throw AppError.aiServiceError("Missing 'path' argument for create_file")
         }
@@ -352,7 +355,8 @@ struct ListFilesTool: AITool {
     }
     let pathValidator: PathValidator
     
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let path = arguments["path"] as? String else {
             throw AppError.aiServiceError("Missing 'path' argument for list_files")
         }
@@ -391,7 +395,8 @@ struct DeleteFileTool: AITool {
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
     
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let path = arguments["path"] as? String else {
             throw AppError.aiServiceError("Missing 'path' argument for delete_file")
         }
@@ -501,7 +506,8 @@ struct ReplaceInFileTool: AITool {
         return value
     }
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         let path = try resolvedPath(from: arguments)
         let oldText = try requiredString("old_text", in: arguments)
         let newText = try requiredString("new_text", in: arguments)
