@@ -106,7 +106,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         if let existingView = terminalView {
             if existingView.enclosingScrollView?.superview == parentView || existingView.superview == parentView {
                 if let current = self.currentDirectory?.standardizedFileURL, let new = newDir, current.path != new.path {
-                    DispatchQueue.main.async { [weak self] in
+                    Task { @MainActor [weak self] in
                         self?.currentDirectory = new
                     }
                     shellManager.sendInput("cd '\(new.path)'\n")
@@ -118,8 +118,8 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         cleanup()
         
         let targetDir = newDir ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
-        
-        DispatchQueue.main.async { [weak self] in
+
+        Task { @MainActor [weak self] in
             self?.currentDirectory = targetDir
             self?.errorMessage = nil
         }
@@ -238,7 +238,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
 
         eventBus.publish(TerminalOutputProducedEvent(output: text))
 
-        DispatchQueue.main.async { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self = self, let terminalView = self.terminalView, !self.isCleaningUp else { return }
             let shouldAutoscroll = self.isNearBottom(terminalView)
             self.applyTerminalOutput(text, to: terminalView)
@@ -476,7 +476,6 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     func removeEmbedding() {
         cleanup()
     }
-    
     private func cleanup() {
         guard !isCleaningUp else { return }
         isCleaningUp = true
@@ -485,7 +484,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView?.removeFromSuperview()
         terminalView = nil
         
-        DispatchQueue.main.async { [weak self] in
+        Task { @MainActor [weak self] in
             self?.errorMessage = nil
         }
     }

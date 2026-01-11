@@ -20,7 +20,7 @@ extension TextViewRepresentable {
         var isProgrammaticUpdate = false
         var isProgrammaticSelectionUpdate = false
         private var currentHighlightTask: Task<Void, Never>?
-        private var pendingHighlightWorkItem: DispatchWorkItem?
+        private var pendingHighlightTask: Task<Void, Never>?
         private weak var attachedTextView: NSTextView?
         let textStorageDelegateProxy: TextStorageDelegateProxy
 
@@ -434,15 +434,15 @@ extension TextViewRepresentable {
 
         @MainActor
         private func scheduleHighlight(for text: String, in textView: NSTextView, language: String, font: NSFont) {
-            pendingHighlightWorkItem?.cancel()
-
-            let workItem = DispatchWorkItem { [weak self, weak textView] in
+            pendingHighlightTask?.cancel()
+            pendingHighlightTask = Task { [weak self, weak textView] in
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                guard !Task.isCancelled else { return }
                 guard let self, let textView else { return }
-                self.performAsyncHighlight(for: text, in: textView, language: language, font: font)
+                await MainActor.run {
+                    self.performAsyncHighlight(for: text, in: textView, language: language, font: font)
+                }
             }
-
-            pendingHighlightWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: workItem)
         }
 
         @MainActor

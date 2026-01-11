@@ -30,7 +30,7 @@ struct IndexStatusBarView: View {
 
     private var languageChoices: [LanguageChoice] {
         var choices: [LanguageChoice] = []
-        choices.append(LanguageChoice(id: "auto", title: "Auto Detect", languageIdentifier: nil))
+        choices.append(LanguageChoice(id: "auto", title: NSLocalizedString("status.language_mode.auto_detect", comment: ""), languageIdentifier: nil))
 
         // Core friendly list (keep simple; include React variants for common mis-detections).
         choices.append(LanguageChoice(id: "swift", title: "Swift", languageIdentifier: "swift"))
@@ -96,7 +96,7 @@ struct IndexStatusBarView: View {
                 .buttonStyle(.plain)
                 .popover(isPresented: $isShowingLanguagePicker, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Select Language Mode")
+                        Text(NSLocalizedString("status.language_mode.select_title", comment: ""))
                             .font(.headline)
 
                         VStack(alignment: .leading, spacing: 6) {
@@ -134,14 +134,14 @@ struct IndexStatusBarView: View {
                 .buttonStyle(.plain)
                 .popover(isPresented: $isShowingMetricsInfo, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Index Metrics")
+                        Text(NSLocalizedString("status.metrics.title", comment: ""))
                             .font(.headline)
-                        Text("C = Classes")
-                        Text("F = Functions")
-                        Text("S = Total symbols")
-                        Text("Q = Average quality score (0-100)")
-                        Text("M = Memories (LT = Long-term)")
-                        Text("DB = Database size")
+                        Text(NSLocalizedString("status.metrics.c", comment: ""))
+                        Text(NSLocalizedString("status.metrics.f", comment: ""))
+                        Text(NSLocalizedString("status.metrics.s", comment: ""))
+                        Text(NSLocalizedString("status.metrics.q", comment: ""))
+                        Text(NSLocalizedString("status.metrics.m", comment: ""))
+                        Text(NSLocalizedString("status.metrics.db", comment: ""))
                     }
                     .padding(12)
                     .frame(width: 260)

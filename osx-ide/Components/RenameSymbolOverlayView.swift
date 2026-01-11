@@ -9,6 +9,10 @@ struct RenameSymbolOverlayView: View {
     @State private var newName: String = ""
     @State private var previewReplacements: Int = 0
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     init(appState: AppState, isPresented: Binding<Bool>) {
         self.appState = appState
         self._fileEditor = ObservedObject(wrappedValue: appState.fileEditor)
@@ -18,17 +22,17 @@ struct RenameSymbolOverlayView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 8) {
-                Text("Rename \"\(appState.renameSymbolIdentifier)\"")
+                Text(String(format: localized("rename_symbol.title_format"), appState.renameSymbolIdentifier))
                     .font(.headline)
 
                 Spacer()
 
-                Button("Close") {
+                Button(localized("common.close")) {
                     close()
                 }
             }
 
-            TextField("New name", text: $newName)
+            TextField(localized("rename_symbol.new_name_placeholder"), text: $newName)
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
                 .onSubmit {
@@ -36,13 +40,13 @@ struct RenameSymbolOverlayView: View {
                 }
 
             HStack {
-                Text("Replacements: \(previewReplacements)")
+                Text(String(format: localized("rename_symbol.replacements_format"), previewReplacements))
                     .font(.caption)
                     .foregroundColor(.secondary)
 
                 Spacer()
 
-                Button("Rename") {
+                Button(localized("rename_symbol.rename")) {
                     applyRename()
                 }
                 .keyboardShortcut(.defaultAction)

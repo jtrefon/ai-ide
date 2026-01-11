@@ -10,6 +10,10 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var ui: UIStateManager
     @StateObject private var openRouterViewModel = OpenRouterSettingsViewModel()
+
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
     
     var body: some View {
         ZStack {
@@ -20,22 +24,22 @@ struct SettingsView: View {
                 TabView {
                     GeneralSettingsTab(ui: ui)
                         .tabItem {
-                            Label("General", systemImage: "gearshape")
+                            Label(localized("settings.tabs.general"), systemImage: "gearshape")
                         }
                     
                     AISettingsTab(viewModel: openRouterViewModel)
                         .tabItem {
-                            Label("AI", systemImage: "sparkles")
+                            Label(localized("settings.tabs.ai"), systemImage: "sparkles")
                         }
 
                     AgentSettingsTab(ui: ui)
                         .tabItem {
-                            Label("Agent", systemImage: "bolt.fill")
+                            Label(localized("settings.tabs.agent"), systemImage: "bolt.fill")
                         }
                     
                     LanguageModulesTab()
                         .tabItem {
-                            Label("Modules", systemImage: "puzzlepiece")
+                            Label(localized("settings.tabs.modules"), systemImage: "puzzlepiece")
                         }
                 }
             }

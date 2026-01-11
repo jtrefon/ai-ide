@@ -14,11 +14,16 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
     @Published var currentError: AppError?
     @Published var showErrorAlert: Bool = false
     @Published var errorHistory: [AppError] = []
+
+    private var pendingAutoDismissTask: Task<Void, Never>?
     
     private let maxHistoryCount = AppConstants.FileSystem.maxHistoryCount
     
     /// Handle an error with appropriate UI feedback
     func handle(_ error: AppError) {
+        pendingAutoDismissTask?.cancel()
+        pendingAutoDismissTask = nil
+
         currentError = error
         showErrorAlert = true
         
@@ -33,9 +38,14 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
         
         // Auto-dismiss info and warning errors after delay
         if error.severity == .info || error.severity == .warning {
-            DispatchQueue.main.asyncAfter(deadline: .now() + AppConstants.Time.errorAutoDismissDelay) { [weak self] in
-                if self?.currentError?.severity == error.severity {
-                    self?.dismissError()
+            let targetSeverity = error.severity
+            pendingAutoDismissTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(AppConstants.Time.errorAutoDismissDelay * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                await MainActor.run { [weak self] in
+                    if self?.currentError?.severity == targetSeverity {
+                        self?.dismissError()
+                    }
                 }
             }
         }
@@ -47,13 +57,20 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
         if let appErr = error as? AppError {
             appError = appErr
         } else {
-            appError = .unknown("\(context): \(error.localizedDescription)")
+            let trimmedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedContext.isEmpty {
+                appError = .unknown(error.localizedDescription)
+            } else {
+                appError = .unknown("\(trimmedContext): \(error.localizedDescription)")
+            }
         }
         handle(appError)
     }
     
     /// Dismiss current error
     func dismissError() {
+        pendingAutoDismissTask?.cancel()
+        pendingAutoDismissTask = nil
         currentError = nil
         showErrorAlert = false
     }

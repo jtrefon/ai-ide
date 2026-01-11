@@ -7,6 +7,10 @@ struct QuickOpenOverlayView: View {
     @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     @State private var query: String = ""
     @State private var results: [String] = []
     @State private var isSearching: Bool = false
@@ -22,10 +26,10 @@ struct QuickOpenOverlayView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 8) {
-                Text("Quick Open")
+                Text(localized("quick_open.title"))
                     .font(.headline)
 
-                TextField("Type a file name…", text: $query)
+                TextField(localized("quick_open.placeholder"), text: $query)
                     .textFieldStyle(.roundedBorder)
                     .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
                     .onSubmit {
@@ -37,14 +41,14 @@ struct QuickOpenOverlayView: View {
                         .scaleEffect(0.75)
                 }
 
-                Button("Close") {
+                Button(localized("common.close")) {
                     close()
                 }
             }
 
             List {
                 if !recentCandidates().isEmpty && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Section("Recent") {
+                    Section(localized("quick_open.recent")) {
                         ForEach(recentCandidates(), id: \.self) { path in
                             Button(action: { open(path: path, openToSide: false) }) {
                                 Text(path)
@@ -54,7 +58,7 @@ struct QuickOpenOverlayView: View {
                     }
                 }
 
-                Section("Results") {
+                Section(localized("quick_open.results")) {
                     ForEach(results, id: \.self) { path in
                         Button(action: { open(path: path, openToSide: NSEvent.modifierFlags.contains(.command)) }) {
                             Text(path)

@@ -49,7 +49,7 @@ struct NativeTerminalView: View {
         .onChange(of: ui.fontFamily) { _, newValue in
             embedder.updateFont(size: ui.fontSize, family: newValue)
         }
-        .alert("Terminal Error", isPresented: Binding(
+        .alert(NSLocalizedString("terminal.error.title", comment: ""), isPresented: Binding(
             get: { embedder.errorMessage != nil },
             set: { isPresented in
                 if !isPresented {
@@ -57,7 +57,7 @@ struct NativeTerminalView: View {
                 }
             }
         )) {
-            Button("OK") {
+            Button(NSLocalizedString("common.ok", comment: "")) {
                 embedder.errorMessage = nil
             }
         } message: {

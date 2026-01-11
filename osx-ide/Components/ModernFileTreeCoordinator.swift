@@ -3,7 +3,7 @@ import AppKit
 
 /// Modern coordinator for the file tree focusing on UI events and state bridging
 @MainActor
-final class ModernCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
+final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
     let dataSource = FileTreeDataSource()
 
     struct Configuration {
@@ -26,7 +26,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
     private let onRenameItem: (URL, String) -> Void
     private let onRevealInFinder: (URL) -> Void
     private weak var outlineView: NSOutlineView?
-    private var searchWorkItem: DispatchWorkItem?
+    private var pendingSearchTask: Task<Void, Never>?
     private var searchGeneration: Int = 0
     var refreshToken: Int = 0
     private var lastRootPath: String?
@@ -66,11 +66,11 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
 
     private func promptForRename(initialName: String) -> String? {
         let alert = NSAlert()
-        alert.messageText = "Rename"
-        alert.informativeText = "Enter a new name."
+        alert.messageText = NSLocalizedString("file_tree.rename.title", comment: "")
+        alert.informativeText = NSLocalizedString("file_tree.rename.info", comment: "")
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: NSLocalizedString("file_tree.rename.button", comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("common.cancel", comment: ""))
 
         let textField = NSTextField(string: initialName)
         textField.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
@@ -88,8 +88,8 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
         alert.messageText = title
         alert.informativeText = informativeText
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: NSLocalizedString("file_tree.create.button", comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("common.cancel", comment: ""))
 
         let textField = NSTextField(string: "")
         textField.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
@@ -253,18 +253,18 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
     @objc func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        menu.addItem(withTitle: "New File", action: #selector(onContextNewFile(_:)), keyEquivalent: "")
-        menu.addItem(withTitle: "New Folder", action: #selector(onContextNewFolder(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: NSLocalizedString("file_tree.context.new_file", comment: ""), action: #selector(onContextNewFile(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: NSLocalizedString("file_tree.context.new_folder", comment: ""), action: #selector(onContextNewFolder(_:)), keyEquivalent: "")
 
         if let item = clickedFileTreeItem() {
             let url = item.url as URL
             menu.addItem(.separator())
-            menu.addItem(withTitle: "Open", action: #selector(onContextOpen(_:)), keyEquivalent: "")
+            menu.addItem(withTitle: NSLocalizedString("file_tree.context.open", comment: ""), action: #selector(onContextOpen(_:)), keyEquivalent: "")
             menu.addItem(.separator())
-            menu.addItem(withTitle: "Rename", action: #selector(onContextRename(_:)), keyEquivalent: "")
-            menu.addItem(withTitle: "Delete", action: #selector(onContextDelete(_:)), keyEquivalent: "")
+            menu.addItem(withTitle: NSLocalizedString("file_tree.context.rename", comment: ""), action: #selector(onContextRename(_:)), keyEquivalent: "")
+            menu.addItem(withTitle: NSLocalizedString("file_tree.context.delete", comment: ""), action: #selector(onContextDelete(_:)), keyEquivalent: "")
             menu.addItem(.separator())
-            menu.addItem(withTitle: "Show in Finder", action: #selector(onContextRevealInFinder(_:)), keyEquivalent: "")
+            menu.addItem(withTitle: NSLocalizedString("file_tree.context.show_in_finder", comment: ""), action: #selector(onContextRevealInFinder(_:)), keyEquivalent: "")
 
             for menuItem in menu.items {
                 menuItem.target = self
@@ -302,13 +302,19 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
 
     @objc private func onContextNewFile(_ sender: NSMenuItem) {
         guard let directory = directoryForCreate() else { return }
-        guard let name = promptForNewItem(title: "Create New File", informativeText: "Enter a file name.") else { return }
+        guard let name = promptForNewItem(
+            title: NSLocalizedString("file_tree.create_file.title", comment: ""),
+            informativeText: NSLocalizedString("file_tree.create_file.info", comment: "")
+        ) else { return }
         onCreateFile(directory, name)
     }
 
     @objc private func onContextNewFolder(_ sender: NSMenuItem) {
         guard let directory = directoryForCreate() else { return }
-        guard let name = promptForNewItem(title: "Create New Folder", informativeText: "Enter a folder name.") else { return }
+        guard let name = promptForNewItem(
+            title: NSLocalizedString("file_tree.create_folder.title", comment: ""),
+            informativeText: NSLocalizedString("file_tree.create_folder.info", comment: "")
+        ) else { return }
         onCreateFolder(directory, name)
     }
 
@@ -482,7 +488,7 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
     }
 
     private func beginSearch(query: String) -> SearchContext {
-        searchWorkItem?.cancel()
+        pendingSearchTask?.cancel()
         searchGeneration += 1
         return SearchContext(generation: searchGeneration, rootURL: lastRootURL, query: query)
     }
@@ -510,15 +516,20 @@ final class ModernCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
     private func scheduleAsynchronousSearch(_ context: SearchContext) {
         guard let rootURL = context.rootURL else { return }
 
-        let work = Self.makeSearchWorkItem(rootURL: rootURL, query: context.query, limit: 500) { [weak self] results in
-            DispatchQueue.main.async {
-                guard let self else { return }
+        pendingSearchTask?.cancel()
+        pendingSearchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            guard let self else { return }
+
+            let results = await Task.detached(priority: .userInitiated) {
+                Self.enumerateMatches(rootURL: rootURL, query: context.query, limit: 500)
+            }.value
+
+            await MainActor.run {
                 self.applySearchResults(results, context: context)
             }
         }
-
-        searchWorkItem = work
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.25, execute: work)
     }
 
     private func fileLabelColor(for url: NSURL) -> NSColor? {

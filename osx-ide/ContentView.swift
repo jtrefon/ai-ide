@@ -26,6 +26,10 @@ struct ContentView: View {
         self._registry = ObservedObject(wrappedValue: appState.uiRegistry)
     }
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     private struct EditorPaneView: View {
         @ObservedObject var pane: EditorPaneStateManager
         let isFocused: Bool
@@ -37,12 +41,16 @@ struct ContentView: View {
         let fontSize: Double
         let fontFamily: String
 
+        private func localized(_ key: String) -> String {
+            NSLocalizedString(key, comment: "")
+        }
+
         var body: some View {
             VStack(spacing: 0) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         if pane.tabs.isEmpty {
-                            Text("Untitled")
+                            Text(localized("editor.untitled"))
                                 .font(.headline)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
@@ -243,7 +251,7 @@ struct ContentView: View {
 
             Spacer(minLength: 0)
 
-            Picker("Bottom Panel", selection: $ui.bottomPanelSelectedName) {
+            Picker(localized("bottom_panel.picker"), selection: $ui.bottomPanelSelectedName) {
                 ForEach(bottomViews) { v in
                     Text(v.name.replacingOccurrences(of: "Internal.", with: ""))
                         .tag(v.name)
@@ -274,15 +282,15 @@ struct ContentView: View {
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.borderless)
-            .help("Clear Terminal")
+            .help(localized("terminal.clear_help"))
 
-            Text("Terminal")
+            Text(localized("bottom_panel.terminal"))
                 .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
         } else if selectedName == "Internal.Logs" {
-            Text("Logs")
+            Text(localized("bottom_panel.logs"))
                 .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
         } else if selectedName == "Internal.Problems" {
-            Text("Problems")
+            Text(localized("bottom_panel.problems"))
                 .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
         }
     }
@@ -290,19 +298,19 @@ struct ContentView: View {
     @ViewBuilder
     private func bottomPanelTrailingControls(selectedName: String) -> some View {
         if selectedName == AppConstants.UI.internalTerminalPanelName {
-            Text(workspace.currentDirectory?.lastPathComponent ?? "Terminal")
+            Text(workspace.currentDirectory?.lastPathComponent ?? localized("bottom_panel.terminal"))
                 .font(.system(size: max(10, ui.fontSize - 3)))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
         } else if selectedName == "Internal.Logs" {
-            Toggle("Follow", isOn: $logsFollow)
+            Toggle(localized("logs.follow"), isOn: $logsFollow)
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .onChange(of: logsFollow) { _, newValue in
                     appState.eventBus.publish(LogsFollowChangedEvent(follow: newValue))
                 }
 
-            Picker("Source", selection: $logsSource) {
+            Picker(localized("logs.source"), selection: $logsSource) {
                 ForEach(LogsPanelView.LogSource.allCases) { src in
                     Text(src.title).tag(src.rawValue)
                 }
@@ -312,12 +320,12 @@ struct ContentView: View {
                 appState.eventBus.publish(LogsSourceChangedEvent(sourceRawValue: newValue))
             }
 
-            Button("Clear") {
+            Button(localized("common.clear")) {
                 appState.eventBus.publish(LogsClearRequestedEvent())
             }
             .buttonStyle(.borderless)
         } else if selectedName == "Internal.Problems" {
-            Button("Clear") {
+            Button(localized("common.clear")) {
                 appState.eventBus.publish(ProblemsClearRequestedEvent())
             }
             .buttonStyle(.borderless)
