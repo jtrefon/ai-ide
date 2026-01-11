@@ -309,7 +309,7 @@ extension TextViewRepresentable {
             }
         }
 
-        private func applyHighlightAttributes(textStorage: NSTextStorage, attributedString: NSAttributedString, font: NSFont) {
+        func applyHighlightAttributes(textStorage: NSTextStorage, attributedString: NSAttributedString, font: NSFont) {
             let fullRange = NSRange(location: 0, length: textStorage.length)
             let applyLength = min(textStorage.length, attributedString.length)
             let applyRange = NSRange(location: 0, length: applyLength)
@@ -363,7 +363,7 @@ extension TextViewRepresentable {
             }
         }
 
-        private static func buildHighlightDiagnostics(from attributed: NSAttributedString, language: String) -> String {
+        static func buildHighlightDiagnostics(from attributed: NSAttributedString, language: String) -> String {
             let fullRange = NSRange(location: 0, length: attributed.length)
             var unique: Set<String> = []
 
