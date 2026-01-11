@@ -1,6 +1,12 @@
 # Quality Improvement Tracker
 
 This document tracks technical debt and quality issues identified during the code review, organized by priority.
+Please carry on with development with set of priorities:
+
+- quality is paramount, it takes priority over anything else.
+- confused what to do next, use order of importance from this document.
+- always build after finishing task to catch any compilation errors and ensure regression free state.
+- always write tests for new functionality.
 
 ## Legend
 
