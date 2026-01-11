@@ -482,7 +482,7 @@ struct MessageListView_Previews: PreviewProvider {
             ],
             isSending: true,
             fontSize: 12,
-            fontFamily: AppConstants.Editor.defaultFontFamily
+            fontFamily: "Menlo"
         )
     }
 }
