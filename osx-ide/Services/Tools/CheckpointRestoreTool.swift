@@ -20,7 +20,8 @@ struct CheckpointRestoreTool: AITool {
     let eventBus: EventBusProtocol
     let projectRoot: URL
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let id = arguments["checkpoint_id"] as? String, !id.isEmpty else {
             throw AppError.aiServiceError("Missing 'checkpoint_id' for checkpoint_restore")
         }

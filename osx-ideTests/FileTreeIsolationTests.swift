@@ -85,10 +85,10 @@ final class FileTreeIsolationTests: XCTestCase {
         dataSource.setRootURL(tempDirectory)
 
         let outlineView = NSOutlineView()
-        let rootChildCount = dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil)
+        let rootChildCount = dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil as Any?)
         XCTAssertGreaterThan(rootChildCount, 0)
 
-        let folderAItemAny = dataSource.outlineView(outlineView, child: 0, ofItem: nil)
+        let folderAItemAny = dataSource.outlineView(outlineView, child: 0, ofItem: nil as Any?)
         guard let folderAItem = folderAItemAny as? FileTreeItem else {
             XCTFail("Expected FileTreeItem")
             return
@@ -109,14 +109,16 @@ final class FileTreeIsolationTests: XCTestCase {
         let expanded = Binding<Set<String>>(get: { [] }, set: { _ in })
         let selected = Binding<String?>(get: { nil }, set: { _ in })
         let coordinator = ModernCoordinator(
-            expandedRelativePaths: expanded,
-            selectedRelativePath: selected,
-            onOpenFile: { _ in },
-            onCreateFile: { _, _ in },
-            onCreateFolder: { _, _ in },
-            onDeleteItem: { _ in },
-            onRenameItem: { _, _ in },
-            onRevealInFinder: { _ in }
+            configuration: ModernCoordinator.Configuration(
+                expandedRelativePaths: expanded,
+                selectedRelativePath: selected,
+                onOpenFile: { _ in },
+                onCreateFile: { _, _ in },
+                onCreateFolder: { _, _ in },
+                onDeleteItem: { _ in },
+                onRenameItem: { _, _ in },
+                onRevealInFinder: { _ in }
+            )
         )
 
         let outlineView = NSOutlineView()
@@ -131,11 +133,11 @@ final class FileTreeIsolationTests: XCTestCase {
         coordinator.dataSource.setRootURL(tempDirectory)
         outlineView.reloadData()
 
-        let rootChildCount = coordinator.dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil)
+        let rootChildCount = coordinator.dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil as Any?)
         XCTAssertGreaterThan(rootChildCount, 0)
 
         for i in 0..<min(rootChildCount, 5) {
-            let childAny = coordinator.dataSource.outlineView(outlineView, child: i, ofItem: nil)
+            let childAny = coordinator.dataSource.outlineView(outlineView, child: i, ofItem: nil as Any?)
             _ = coordinator.outlineView(outlineView, viewFor: column, item: childAny)
 
             if coordinator.dataSource.outlineView(outlineView, isItemExpandable: childAny) {
@@ -157,14 +159,16 @@ final class FileTreeIsolationTests: XCTestCase {
         let expanded = Binding<Set<String>>(get: { [] }, set: { _ in })
         let selected = Binding<String?>(get: { nil }, set: { _ in })
         let coordinator = ModernCoordinator(
-            expandedRelativePaths: expanded,
-            selectedRelativePath: selected,
-            onOpenFile: { _ in },
-            onCreateFile: { _, _ in },
-            onCreateFolder: { _, _ in },
-            onDeleteItem: { _ in },
-            onRenameItem: { _, _ in },
-            onRevealInFinder: { _ in }
+            configuration: ModernCoordinator.Configuration(
+                expandedRelativePaths: expanded,
+                selectedRelativePath: selected,
+                onOpenFile: { _ in },
+                onCreateFile: { _, _ in },
+                onCreateFolder: { _, _ in },
+                onDeleteItem: { _ in },
+                onRenameItem: { _, _ in },
+                onRevealInFinder: { _ in }
+            )
         )
 
         let dataSource = coordinator.dataSource

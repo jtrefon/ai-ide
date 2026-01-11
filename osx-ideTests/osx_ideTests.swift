@@ -577,6 +577,31 @@ struct osx_ideTests {
         #expect(appState.lastError == nil, "Error should be clearable")
     }
 
+    @Test func testChatHistoryManagerSeedsDefaultGreetingOnInit() async throws {
+        let expected = "Hello! I'm your AI coding assistant. How can I help you today?"
+
+        let messages = await MainActor.run {
+            let manager = ChatHistoryManager()
+            return manager.messages
+        }
+
+        #expect(messages.count == 1, "Expected a single greeting message")
+        #expect(messages.first?.content == expected, "Expected default greeting content")
+    }
+
+    @Test func testChatHistoryManagerRestoresDefaultGreetingAfterRemovingAllMessages() async throws {
+        let expected = "Hello! I'm your AI coding assistant. How can I help you today?"
+
+        let messages = await MainActor.run {
+            let manager = ChatHistoryManager()
+            manager.removeOldestMessages(count: manager.messages.count)
+            return manager.messages
+        }
+
+        #expect(messages.count == 1, "Expected a single greeting message after removal")
+        #expect(messages.first?.content == expected, "Expected default greeting content after removal")
+    }
+
     @Test func testWorkspaceServiceRenamePublishesEventAndMovesFile() async throws {
         let errorManager = ErrorManager()
         let eventBus = EventBus()
@@ -667,7 +692,7 @@ struct osx_ideTests {
         let validator = PathValidator(projectRoot: tempRoot)
 
         let writeFilesTool = WriteFilesTool(fileSystemService: fileSystemService, pathValidator: validator, eventBus: EventBus())
-        _ = try await writeFilesTool.execute(arguments: [
+        _ = try await writeFilesTool.execute(arguments: ToolArguments([
             "files": [
                 [
                     "path": "src/pages/Register.tsx",
@@ -678,7 +703,7 @@ struct osx_ideTests {
                     "content": "export function Button() { return null }\n"
                 ]
             ]
-        ])
+        ]))
 
         let registerURL = tempRoot.appendingPathComponent("src/pages/Register.tsx")
         let buttonURL = tempRoot.appendingPathComponent("src/components/Button.tsx")
@@ -690,9 +715,9 @@ struct osx_ideTests {
         #expect(registerContent.contains("function Register"), "Register.tsx content should match")
 
         let createFileTool = CreateFileTool(pathValidator: validator, eventBus: EventBus())
-        _ = try await createFileTool.execute(arguments: [
+        _ = try await createFileTool.execute(arguments: ToolArguments([
             "path": "src/styles/app.css"
-        ])
+        ]))
 
         let cssURL = tempRoot.appendingPathComponent("src/styles/app.css")
         #expect(FileManager.default.fileExists(atPath: cssURL.path), "Nested create_file should create parent directories")
