@@ -118,56 +118,7 @@ struct QuickOpenOverlayView: View {
     }
 
     private func fallbackFindFiles(query: String, root: URL, limit: Int) -> [String] {
-        let fm = FileManager.default
-        let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey], options: [.skipsHiddenFiles])
-
-        let needle = query.lowercased()
-        var hits: [(path: String, score: Int)] = []
-
-        while let url = enumerator?.nextObject() as? URL {
-            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
-            if values?.isDirectory == true {
-                let name = url.lastPathComponent.lowercased()
-                if name == ".git" || name == ".ide" || name == "node_modules" {
-                    enumerator?.skipDescendants()
-                }
-                continue
-            }
-
-            guard values?.isRegularFile == true else { continue }
-
-            let rel: String
-            if url.path.hasPrefix(root.path + "/") {
-                rel = String(url.path.dropFirst(root.path.count + 1))
-            } else {
-                rel = url.lastPathComponent
-            }
-
-            let lower = rel.lowercased()
-            let base = url.lastPathComponent.lowercased()
-
-            var score = 0
-            if base == needle { score += 1000 }
-            if base.hasPrefix(needle) { score += 700 }
-            if base.contains(needle) { score += 500 }
-            if lower.hasPrefix(needle) { score += 250 }
-            if lower.contains(needle) { score += 100 }
-
-            if score > 0 {
-                hits.append((path: rel, score: score))
-            }
-
-            if hits.count > limit * 20 {
-                break
-            }
-        }
-
-        let sorted = hits.sorted { a, b in
-            if a.score != b.score { return a.score > b.score }
-            return a.path < b.path
-        }
-
-        return Array(sorted.prefix(limit)).map { $0.path }
+        QuickOpenFileFinder().findFiles(query: query, root: root, limit: limit)
     }
 
     private func recentCandidates() -> [String] {

@@ -95,12 +95,13 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         ]
 
         let aiService = SequenceAIService(responses: [
-            AIServiceResponse(content: "<ide_reasoning>Analyze: A\nResearch: B\nPlan: C\nReflect: D</ide_reasoning>Call tool", toolCalls: toolCalls),
-            AIServiceResponse(content: "<ide_reasoning>Analyze: A\nResearch: B\nPlan: C\nReflect: D</ide_reasoning>Done", toolCalls: nil),
+            AIServiceResponse(content: "<ide_reasoning>Analyze: Details\nResearch: Details\nPlan: Details\nReflect: Details</ide_reasoning>Call tool", toolCalls: toolCalls),
+            AIServiceResponse(content: "<ide_reasoning>Analyze: Details\nResearch: Details\nPlan: Details\nReflect: Details</ide_reasoning>Done", toolCalls: nil),
         ])
 
         let historyManager = ChatHistoryManager()
-        let projectRoot = URL(fileURLWithPath: NSTemporaryDirectory())
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let historyCoordinator = ChatHistoryCoordinator(historyManager: historyManager, projectRoot: projectRoot)
 
         historyCoordinator.append(ChatMessage(role: .user, content: "Hello"))
@@ -131,7 +132,20 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         )
 
         XCTAssertTrue(historyCoordinator.messages.contains(where: { $0.role == .assistant && $0.toolCalls?.isEmpty == false }))
-        XCTAssertTrue(historyCoordinator.messages.contains(where: { $0.role == .tool && $0.toolName == "fake_tool" }))
+
+        let toolMessages = historyCoordinator.messages.filter {
+            $0.role == .tool && $0.toolCallId == toolCallId
+        }
+
+        XCTAssertFalse(
+            toolMessages.isEmpty,
+            "Expected tool messages for toolCallId=\(toolCallId). Observed tool messages: \(historyCoordinator.messages.filter { $0.role == .tool }.map { "\($0.toolName ?? "nil"):\($0.toolStatus?.rawValue ?? "nil"):\($0.toolCallId ?? "nil")" })"
+        )
+
+        XCTAssertTrue(
+            toolMessages.contains(where: { $0.toolStatus == .completed }),
+            "Expected at least one completed tool message for toolCallId=\(toolCallId). Observed: \(toolMessages.map { "\($0.toolName ?? "nil"):\($0.toolStatus?.rawValue ?? "nil")" })"
+        )
         XCTAssertTrue(historyCoordinator.messages.contains(where: { $0.role == .assistant && $0.content.contains("Done") }))
     }
 }
