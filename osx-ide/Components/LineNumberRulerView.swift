@@ -39,6 +39,25 @@ final class ModernLineNumberRulerView: NSRulerView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    nonisolated static func startingLineNumber(string: NSString, firstCharIndex: Int) -> Int {
+        guard firstCharIndex > 0 else { return 1 }
+
+        // IMPORTANT: NSTextView / NSLayoutManager indices are UTF-16 (NSString) based.
+        // Do not mix Swift String.count (grapheme clusters) with NSRange locations.
+        var count = 1
+        var pos = 0
+        while pos < firstCharIndex {
+            let r = string.lineRange(for: NSRange(location: pos, length: 0))
+            let next = NSMaxRange(r)
+            guard next > pos else { break }
+            if next <= firstCharIndex {
+                count += 1
+            }
+            pos = next
+        }
+        return count
+    }
+
     override func drawHashMarksAndLabels(in rect: NSRect) {
         guard let textView, let layoutManager = textView.layoutManager, let textContainer = textView.textContainer else {
             return
@@ -55,25 +74,31 @@ final class ModernLineNumberRulerView: NSRulerView {
         let string = textView.string as NSString
         let firstCharIndex = layoutManager.characterIndexForGlyph(at: glyphRange.location)
 
-        var lineNumber = 1
-        if firstCharIndex > 0 {
-            // IMPORTANT: NSTextView / NSLayoutManager indices are UTF-16 (NSString) based.
-            // Do not mix Swift String.count (grapheme clusters) with NSRange locations.
-            var count = 1
-            var pos = 0
-            while pos < firstCharIndex {
-                let r = string.lineRange(for: NSRange(location: pos, length: 0))
-                let next = NSMaxRange(r)
-                guard next > pos else { break }
-                if next < firstCharIndex {
-                    count += 1
-                }
-                pos = next
-            }
-            lineNumber = count
-        }
+        let lineNumber = Self.startingLineNumber(string: string, firstCharIndex: firstCharIndex)
+        drawLineNumbers(
+            in: rect,
+            textView: textView,
+            string: string,
+            layoutManager: layoutManager,
+            textContainer: textContainer,
+            glyphRange: glyphRange,
+            relativePoint: relativePoint,
+            startingLineNumber: lineNumber
+        )
+    }
 
-        // Enhanced attributes for macOS v26
+    private func drawLineNumbers(
+        in rect: NSRect,
+        textView: NSTextView,
+        string: NSString,
+        layoutManager: NSLayoutManager,
+        textContainer: NSTextContainer,
+        glyphRange: NSRange,
+        relativePoint: NSPoint,
+        startingLineNumber: Int
+    ) {
+        var lineNumber = startingLineNumber
+
         let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: textColor
@@ -92,19 +117,17 @@ final class ModernLineNumberRulerView: NSRulerView {
             lineRect.origin.x += relativePoint.x
             lineRect.origin.y += relativePoint.y
 
-            // Enhanced drawing with better positioning
             let label = "\(lineNumber)" as NSString
             let labelSize = label.size(withAttributes: attrs)
             let y = lineRect.minY + (lineRect.height - labelSize.height) / 2
             let x = ruleThickness - 6 - labelSize.width
-            
-            // Draw selection highlight if current line
+
             if charIndex == textView.selectedRange.location {
                 let highlightRect = NSRect(x: 0, y: lineRect.minY, width: ruleThickness, height: lineRect.height)
                 selectionColor.setFill()
                 highlightRect.fill()
             }
-            
+
             label.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
 
             let nextGlyphIndex = NSMaxRange(lineGlyphRange)

@@ -199,7 +199,7 @@ Please carry on with development with set of priorities:
 
 ### 5. High Complexity Methods (CCN 10-16)
 
-**Status:** ⬜ Not Started
+**Status:** 🟡 In Progress
 **Estimated Effort:** 2-3 days total
 
 #### 5.1 QuickOpenOverlayView.fallbackFindFiles (CCN 16)
@@ -217,48 +217,48 @@ Please carry on with development with set of priorities:
 **File:** `osx-ide/Services/WorkspaceSearchService.swift:40`
 **Actions:**
 
-- [ ] Extract file enumeration logic
-- [ ] Extract result matching logic
-- [ ] Extract error handling
-- [ ] Write tests
+- [x] Extract file enumeration logic
+- [x] Extract result matching logic
+- [x] Extract error handling
+- [x] Write tests
 
 #### 5.3 ShellManager.start (74 LOC, CCN 11)
 
 **File:** `osx-ide/Services/ShellManager.swift:43`
 **Actions:**
 
-- [ ] Extract PTY setup logic
-- [ ] Extract process launch logic
-- [ ] Extract error handling
-- [ ] Write tests
+- [x] Extract PTY setup logic
+- [x] Extract process launch logic
+- [x] Extract error handling
+- [x] Write tests
 
 #### 5.4 CodeEditorView.updateNSView (CCN 11)
 
 **File:** `osx-ide/Components/CodeEditorView.swift:142`
 **Actions:**
 
-- [ ] Extract font update logic
-- [ ] Extract word wrap logic
-- [ ] Extract content update logic
-- [ ] Write tests
+- [x] Extract font update logic
+- [x] Extract word wrap logic
+- [x] Extract content update logic
+- [x] Write tests
 
-#### 5.5 CodeEditorView.performAsyncHighlight (52 LOC, CCN 9)
+#### 5.5 TextViewRepresentable.Coordinator.performAsyncHighlight (52 LOC, CCN 9)
 
-**File:** `osx-ide/Components/CodeEditorView.swift:489`
+**File:** `osx-ide/Components/TextViewRepresentable+Coordinator.swift:272`
 **Actions:**
 
-- [ ] Extract highlighting preparation logic
-- [ ] Extract attribute application logic
-- [ ] Write tests
+- [x] Extract highlighting preparation logic
+- [x] Extract attribute application logic
+- [x] Write tests
 
 #### 5.6 LineNumberRulerView.drawHashMarksAndLabels (56 LOC, CCN 9)
 
 **File:** `osx-ide/Components/LineNumberRulerView.swift:42`
 **Actions:**
 
-- [ ] Extract line number calculation logic
-- [ ] Extract drawing logic
-- [ ] Write tests
+- [x] Extract line number calculation logic
+- [x] Extract drawing logic
+- [x] Write tests
 
 #### 5.7 ModernFileTreeView.scheduleSearch (CCN 10)
 
@@ -272,31 +272,31 @@ Please carry on with development with set of priorities:
 
 #### 5.8 DatabaseManager.searchSymbolsWithPaths (52 LOC, CCN 9)
 
-**File:** `osx-ide/Services/Index/Database/DatabaseManager.swift:340`
+**File:** `osx-ide/Services/Index/Database/DatabaseSymbolManager.swift:50`
 **Actions:**
 
-- [ ] Extract SQL query building logic
-- [ ] Extract parameter binding logic
-- [ ] Write tests
+- [x] Extract SQL query building logic
+- [x] Extract parameter binding logic
+- [x] Write tests
 
 #### 5.9 FileEditorStateManager.reloadFileFromDisk (CCN 11)
 
-**File:** `osx-ide/Services/FileEditorStateManager.swift:505`
+**File:** `osx-ide/Services/EditorPaneStateManager+FileWatching.swift:47`
 **Actions:**
 
-- [ ] Extract file reading logic
-- [ ] Extract conflict detection logic
-- [ ] Extract UI update logic
-- [ ] Write tests
+- [x] Extract file reading logic
+- [x] Extract conflict detection logic
+- [x] Extract UI update logic
+- [x] Write tests
 
 #### 5.10 FileEditorStateManager.languageForFileExtension (CCN 10)
 
-**File:** `osx-ide/Services/FileEditorStateManager.swift:555`
+**File:** `osx-ide/Services/EditorLanguageDetector.swift:20`
 **Actions:**
 
-- [ ] Extract extension mapping logic
-- [ ] Extract fallback logic
-- [ ] Write tests
+- [x] Extract extension mapping logic
+- [x] Extract fallback logic
+- [x] Write tests
 
 ---
 
