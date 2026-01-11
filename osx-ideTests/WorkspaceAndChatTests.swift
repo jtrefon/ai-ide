@@ -5,6 +5,25 @@ import Foundation
 @MainActor
 struct WorkspaceAndChatTests {
 
+    private struct ThrowingAIService: AIService {
+        func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws -> AIServiceResponse {
+            throw NSError(domain: "test.ai", code: 1, userInfo: [NSLocalizedDescriptionKey: "boom"])
+        }
+
+        func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+            throw NSError(domain: "test.ai", code: 2, userInfo: [NSLocalizedDescriptionKey: "boom"])
+        }
+
+        func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+            throw NSError(domain: "test.ai", code: 3, userInfo: [NSLocalizedDescriptionKey: "boom"])
+        }
+
+        func explainCode(_ code: String) async throws -> String { throw NSError(domain: "test.ai", code: 4) }
+        func refactorCode(_ code: String, instructions: String) async throws -> String { throw NSError(domain: "test.ai", code: 5) }
+        func generateCode(_ prompt: String) async throws -> String { throw NSError(domain: "test.ai", code: 6) }
+        func fixCode(_ code: String, error: String) async throws -> String { throw NSError(domain: "test.ai", code: 7) }
+    }
+
     @Test func testErrorHandling() async throws {
         let appState = DependencyContainer().makeAppState()
 
@@ -14,6 +33,36 @@ struct WorkspaceAndChatTests {
 
         appState.lastError = nil
         #expect(appState.lastError == nil, "Error should be clearable")
+    }
+
+    @Test func testErrorManagerHandleErrorIncludesContextWhenProvided() async throws {
+        let manager = ErrorManager()
+        manager.handle(NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Test error"]), context: "WorkspaceService.rename")
+
+        let description = manager.currentError?.errorDescription ?? ""
+        #expect(description.contains("WorkspaceService.rename"), "Expected error description to include context")
+        #expect(description.contains("Test error"), "Expected error description to include underlying message")
+    }
+
+    @Test func testErrorManagerHandleErrorDoesNotPrefixEmptyContext() async throws {
+        let manager = ErrorManager()
+        manager.handle(NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Test error"]), context: "")
+
+        let description = manager.currentError?.errorDescription ?? ""
+        #expect(description == "Unknown error: Test error", "Expected empty context to not add additional prefixes")
+    }
+
+    @Test func testAIServiceSendMessageResultWrapsOperationContext() async throws {
+        let service = ThrowingAIService()
+        let result = await service.sendMessageResult("hi", context: nil, tools: nil, mode: nil)
+
+        switch result {
+        case .success:
+            Issue.record("Expected failure")
+        case .failure(let error):
+            let description = error.errorDescription ?? ""
+            #expect(description.contains("AIService.sendMessage failed"), "Expected error to include operation context")
+        }
     }
 
     @Test func testChatHistoryManagerSeedsDefaultGreetingOnInit() async throws {

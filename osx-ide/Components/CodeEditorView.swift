@@ -105,7 +105,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = false
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Self.applyWordWrap(wordWrap, to: scrollView, textView: textView)
         }
 
@@ -115,7 +115,7 @@ struct TextViewRepresentable: NSViewRepresentable {
             scrollView.verticalRulerView = ModernLineNumberRulerView(scrollView: scrollView, textView: textView)
 
             // Ensure the ruler is laid out and painted on first draw (otherwise it can appear only after scrolling).
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 scrollView.tile()
                 scrollView.verticalRulerView?.needsDisplay = true
             }
@@ -158,7 +158,7 @@ struct TextViewRepresentable: NSViewRepresentable {
     }
 
     private func scheduleWordWrapUpdate(for scrollView: NSScrollView, textView: NSTextView) {
-        DispatchQueue.main.async {
+        Task { @MainActor in
             Self.applyWordWrap(wordWrap, to: scrollView, textView: textView)
         }
     }

@@ -3,8 +3,8 @@ import Foundation
 @MainActor
 final class FileWatchCoordinator {
     private var fileWatchers: [String: FileChangeMonitor] = [:]
-    private var pendingReloads: [String: DispatchWorkItem] = [:]
-    private var pendingWatchRestarts: [String: DispatchWorkItem] = [:]
+    private var pendingReloads: [String: Task<Void, Never>] = [:]
+    private var pendingWatchRestarts: [String: Task<Void, Never>] = [:]
 
     func beginWatchingFile(at path: String, onEvent: @escaping (DispatchSource.FileSystemEvent) -> Void) {
         guard fileWatchers[path] == nil else { return }
@@ -61,16 +61,22 @@ final class FileWatchCoordinator {
         guard attempt < maxAttempts else { return }
 
         pendingWatchRestarts[path]?.cancel()
-        let item = DispatchWorkItem(block: work)
-        pendingWatchRestarts[path] = item
-        let delay = 0.2 * Double(attempt + 1)
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+        let delaySeconds = 0.2 * Double(attempt + 1)
+        pendingWatchRestarts[path] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            guard let self, self.pendingWatchRestarts[path]?.isCancelled == false else { return }
+            work()
+        }
     }
 
     func scheduleReload(for path: String, work: @escaping () -> Void) {
         pendingReloads[path]?.cancel()
-        let item = DispatchWorkItem(block: work)
-        pendingReloads[path] = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: item)
+        pendingReloads[path] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            guard !Task.isCancelled else { return }
+            guard let self, self.pendingReloads[path]?.isCancelled == false else { return }
+            work()
+        }
     }
 }

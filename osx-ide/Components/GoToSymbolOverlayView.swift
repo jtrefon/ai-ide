@@ -8,6 +8,10 @@ struct GoToSymbolOverlayView: View {
     @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     @State private var query: String = ""
     @State private var results: [WorkspaceSymbolLocation] = []
     @State private var isSearching: Bool = false
@@ -25,10 +29,10 @@ struct GoToSymbolOverlayView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 8) {
-                Text("Go to Symbol")
+                Text(localized("go_to_symbol.title"))
                     .font(.headline)
 
-                TextField("Type a symbol…", text: $query)
+                TextField(localized("go_to_symbol.placeholder"), text: $query)
                     .textFieldStyle(.roundedBorder)
                     .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
                     .onSubmit {
@@ -40,7 +44,7 @@ struct GoToSymbolOverlayView: View {
                         .scaleEffect(0.75)
                 }
 
-                Button("Close") {
+                Button(localized("common.close")) {
                     close()
                 }
             }

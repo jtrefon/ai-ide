@@ -32,23 +32,27 @@ struct CommandPaletteOverlayView: View {
     let commandRegistry: CommandRegistry
     @Binding var isPresented: Bool
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     @State private var query: String = ""
     @State private var items: [CommandPaletteItem] = []
 
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 8) {
-                Text("Command Palette")
+                Text(localized("command_palette.title"))
                     .font(.headline)
 
-                TextField("Type a command…", text: $query)
+                TextField(localized("command_palette.placeholder"), text: $query)
                     .textFieldStyle(.roundedBorder)
                     .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
                     .onSubmit {
                         runFirstMatch()
                     }
 
-                Button("Close") {
+                Button(localized("common.close")) {
                     close()
                 }
             }

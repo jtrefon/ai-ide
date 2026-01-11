@@ -33,7 +33,7 @@ public extension AIService {
             let response = try await sendMessage(message, context: context, tools: tools, mode: mode)
             return .success(response)
         } catch {
-            return .failure(Self.mapToAppError(error))
+            return .failure(Self.mapToAppError(error, operation: "sendMessage"))
         }
     }
 
@@ -48,7 +48,7 @@ public extension AIService {
             let response = try await sendMessage(message, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
             return .success(response)
         } catch {
-            return .failure(Self.mapToAppError(error))
+            return .failure(Self.mapToAppError(error, operation: "sendMessageWithProjectRoot"))
         }
     }
 
@@ -63,14 +63,14 @@ public extension AIService {
             let response = try await sendMessage(messages, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
             return .success(response)
         } catch {
-            return .failure(Self.mapToAppError(error))
+            return .failure(Self.mapToAppError(error, operation: "sendMessageHistory"))
         }
     }
 
-    private static func mapToAppError(_ error: Error) -> AppError {
+    private static func mapToAppError(_ error: Error, operation: String) -> AppError {
         if let appError = error as? AppError {
             return appError
         }
-        return .aiServiceError(error.localizedDescription)
+        return .aiServiceError("AIService.\(operation) failed: \(error.localizedDescription)")
     }
 }

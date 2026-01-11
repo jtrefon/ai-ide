@@ -127,10 +127,14 @@ struct SettingsStatusPill: View {
 struct ModelSuggestionList: View {
     let models: [OpenRouterModel]
     let onSelect: (OpenRouterModel) -> Void
+
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Matches \(models.count) models")
+            Text(String(format: localized("model_suggestions.matches_format"), models.count))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             

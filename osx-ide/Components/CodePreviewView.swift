@@ -79,8 +79,11 @@ struct CodePreviewView: View {
         pasteboard.setString(code, forType: .string)
         
         isCopied = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            isCopied = false
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run {
+                isCopied = false
+            }
         }
     }
 }

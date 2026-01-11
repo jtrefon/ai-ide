@@ -20,6 +20,10 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
     @State private var newFileName: String = ""
     @State private var newFolderName: String = ""
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
@@ -30,7 +34,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                         .font(.system(size: max(10, context.ui.fontSize - 2)))
                         .foregroundColor(.secondary)
                     
-                    TextField("Search...", text: $searchQuery)
+                    TextField(localized("file_explorer.search.placeholder"), text: $searchQuery)
                         .textFieldStyle(.plain)
                         .font(.system(size: CGFloat(context.ui.fontSize)))
                     
@@ -58,7 +62,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                         .font(.system(size: max(10, context.ui.fontSize - 2))) 
                 }
                 .buttonStyle(BorderlessButtonStyle())
-                .help("Refresh")
+                .help(localized("file_explorer.refresh_help"))
             }
             .padding(8)
             .frame(height: 48) // Slightly taller for search bar
@@ -118,31 +122,31 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
             )
             .background(Color(NSColor.windowBackgroundColor))
             .contextMenu {
-                Button("New File") {
+                Button(localized("file_tree.context.new_file")) {
                     newFileName = ""
                     isShowingNewFileSheet = true
                 }
-                Button("New Folder") {
+                Button(localized("file_tree.context.new_folder")) {
                     newFolderName = ""
                     isShowingNewFolderSheet = true
                 }
             }
             .sheet(isPresented: $isShowingNewFileSheet) {
                 VStack(spacing: 20) {
-                    Text("Create New File")
+                    Text(localized("file_tree.create_file.title"))
                         .font(.headline)
-                    TextField("File name", text: $newFileName)
+                    TextField(localized("file_tree.create_file.name_placeholder"), text: $newFileName)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding()
                         .onSubmit {
                             createNewFile()
                         }
                     HStack {
-                        Button("Cancel") {
+                        Button(localized("common.cancel")) {
                             isShowingNewFileSheet = false
                         }
                         Spacer()
-                        Button("Create") {
+                        Button(localized("common.create")) {
                             createNewFile()
                         }
                         .disabled(newFileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -154,20 +158,20 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
             }
             .sheet(isPresented: $isShowingNewFolderSheet) {
                 VStack(spacing: 20) {
-                    Text("Create New Folder")
+                    Text(localized("file_tree.create_folder.title"))
                         .font(.headline)
-                    TextField("Folder name", text: $newFolderName)
+                    TextField(localized("file_tree.create_folder.name_placeholder"), text: $newFolderName)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding()
                         .onSubmit {
                             createNewFolder()
                         }
                     HStack {
-                        Button("Cancel") {
+                        Button(localized("common.cancel")) {
                             isShowingNewFolderSheet = false
                         }
                         Spacer()
-                        Button("Create") {
+                        Button(localized("common.create")) {
                             createNewFolder()
                         }
                         .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

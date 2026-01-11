@@ -27,7 +27,7 @@ struct LanguageModulesTab: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                TextField("Search modules...", text: $searchText)
+                TextField(NSLocalizedString("language_modules.search.placeholder", comment: ""), text: $searchText)
                     .textFieldStyle(.plain)
             }
             .padding(10)
@@ -39,12 +39,12 @@ struct LanguageModulesTab: View {
             ScrollView {
                 VStack(spacing: 20) {
                     SettingsCard(
-                        title: "Language Modules",
-                        subtitle: "Enable or disable language-specific features for better performance."
+                        title: NSLocalizedString("language_modules.card.title", comment: ""),
+                        subtitle: NSLocalizedString("language_modules.card.subtitle", comment: "")
                     ) {
                         VStack(alignment: .leading, spacing: 12) {
                             if filteredLanguages.isEmpty {
-                                Text("No modules found matching '\(searchText)'")
+                                Text(String(format: NSLocalizedString("language_modules.empty", comment: ""), searchText))
                                     .foregroundColor(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .center)
                                     .padding(.vertical, 20)
@@ -54,12 +54,12 @@ struct LanguageModulesTab: View {
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text(language.rawValue.capitalized)
                                                 .font(.headline)
-                                            Text("Syntax coloring, symbol extraction, and IntelliSense.")
+                                            Text(NSLocalizedString("language_modules.feature_summary", comment: ""))
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
                                             
                                             if let module = moduleManager.getModule(for: language) {
-                                                Text("Extensions: \(module.fileExtensions.joined(separator: ", "))")
+                                                Text(String(format: NSLocalizedString("language_modules.extensions", comment: ""), module.fileExtensions.joined(separator: ", ")))
                                                     .font(.system(size: 10, design: .monospaced))
                                                     .foregroundColor(.blue.opacity(0.8))
                                             }
@@ -84,14 +84,14 @@ struct LanguageModulesTab: View {
                     }
                     
                     SettingsCard(
-                        title: "Performance Note",
-                        subtitle: "Disabling unused modules reduces memory usage and speeds up indexing."
+                        title: NSLocalizedString("language_modules.performance.title", comment: ""),
+                        subtitle: NSLocalizedString("language_modules.performance.subtitle", comment: "")
                     ) {
                         HStack(spacing: 12) {
                             Image(systemName: "info.circle.fill")
                                 .font(.title2)
                                 .foregroundColor(.blue)
-                            Text("When a module is disabled, files of that type will still be viewable but will not have syntax highlighting or symbol navigation.")
+                            Text(NSLocalizedString("language_modules.performance.detail", comment: ""))
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }

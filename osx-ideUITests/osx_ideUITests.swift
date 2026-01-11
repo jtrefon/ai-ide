@@ -11,6 +11,21 @@ import XCTest
 final class osx_ideUITests: XCTestCase {
     private static var testFiles: [URL] = []
 
+    private func makeLaunchedApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launch()
+        return app
+    }
+
+    private func skipIfElementNotDiscoverable(_ element: XCUIElement, name: String, timeout: TimeInterval) {
+        if !element.waitForExistence(timeout: timeout) {
+            XCTSkip("\(name) not discoverable by XCTest on this machine/session")
+        }
+        if !element.exists {
+            XCTSkip("\(name) became undiscoverable after initial wait (accessibility snapshot flake)")
+        }
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -43,25 +58,16 @@ final class osx_ideUITests: XCTestCase {
 
     @MainActor
     func testAppLaunchAndBasicUI() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = makeLaunchedApp()
 
         // Verify main window exists
         let mainWindow = app.windows.firstMatch
-        if !mainWindow.waitForExistence(timeout: 5) {
-            XCTSkip("Main window not discoverable by XCTest on this machine/session")
-        }
+        skipIfElementNotDiscoverable(mainWindow, name: "Main window", timeout: 5)
         XCTAssertTrue(mainWindow.exists, "Main window should exist")
 
         // Verify code editor area exists
         let codeEditor = app.textViews["CodeEditorTextView"]
-        if !codeEditor.waitForExistence(timeout: 5) {
-            XCTSkip("Code editor not discoverable by XCTest on this machine/session")
-        }
-
-        if !codeEditor.exists {
-            XCTSkip("Code editor became undiscoverable after initial wait (accessibility snapshot flake)")
-        }
+        skipIfElementNotDiscoverable(codeEditor, name: "Code editor", timeout: 5)
         XCTAssertTrue(codeEditor.exists, "Code editor should exist")
 
         // Verify menu bar exists
