@@ -13,23 +13,25 @@ import AppKit
 @MainActor
 final class CorePlugin {
     static func initialize<Context: IDEContext & ObservableObject>(registry: UIRegistry, context: Context) {
-
-        touchDiagnosticsStore(context: context)
-
-        registerSidebarComponents(registry: registry, context: context)
-        registerBottomPanelComponents(registry: registry, context: context)
-        registerRightPanelComponents(registry: registry, context: context)
-
-        registerStandardCommands(context: context)
-
+        CoreUIRegistrar(registry: registry, context: context).registerAll()
+        CoreCommandRegistrar(commandRegistry: context.commandRegistry, context: context).registerAll()
         print("[CorePlugin] Initialized core UI components and commands")
     }
+}
 
-    private static func touchDiagnosticsStore<Context: IDEContext & ObservableObject>(context: Context) {
+@MainActor
+private struct CoreUIRegistrar<Context: IDEContext & ObservableObject> {
+    let registry: UIRegistry
+    let context: Context
+
+    func registerAll() {
         _ = context.diagnosticsStore
+        registerSidebarComponents()
+        registerBottomPanelComponents()
+        registerRightPanelComponents()
     }
 
-    private static func registerSidebarComponents<Context: IDEContext & ObservableObject>(registry: UIRegistry, context: Context) {
+    private func registerSidebarComponents() {
         registry.register(
             point: .sidebarLeft,
             name: "Internal.FileExplorer",
@@ -38,7 +40,7 @@ final class CorePlugin {
         )
     }
 
-    private static func registerBottomPanelComponents<Context: IDEContext & ObservableObject>(registry: UIRegistry, context: Context) {
+    private func registerBottomPanelComponents() {
         registry.register(
             point: .panelBottom,
             name: AppConstants.UI.internalTerminalPanelName,
@@ -68,7 +70,7 @@ final class CorePlugin {
         )
     }
 
-    private static func registerRightPanelComponents<Context: IDEContext & ObservableObject>(registry: UIRegistry, context: Context) {
+    private func registerRightPanelComponents() {
         registry.register(
             point: .panelRight,
             name: "Internal.AIChat",
@@ -80,18 +82,22 @@ final class CorePlugin {
             )
         )
     }
+}
 
-    private static func registerStandardCommands<Context: IDEContext & ObservableObject>(context: Context) {
-        let commandRegistry = context.commandRegistry
+@MainActor
+private struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
+    let commandRegistry: CommandRegistry
+    let context: Context
 
-        registerFileCommands(commandRegistry: commandRegistry, context: context)
-        registerEditorCommands(commandRegistry: commandRegistry, context: context)
-        registerViewCommands(commandRegistry: commandRegistry, context: context)
-        registerWorkbenchCommands(commandRegistry: commandRegistry, context: context)
-        registerExplorerCommands(commandRegistry: commandRegistry, context: context)
+    func registerAll() {
+        registerFileCommands()
+        registerEditorCommands()
+        registerViewCommands()
+        registerWorkbenchCommands()
+        registerExplorerCommands()
     }
 
-    private static func registerFileCommands<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerFileCommands() {
         commandRegistry.register(command: .fileNew) { _ in
             context.fileEditor.newFile()
         }
@@ -117,7 +123,7 @@ final class CorePlugin {
         }
     }
 
-    private static func registerEditorCommands<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerEditorCommands() {
         commandRegistry.register(command: .editorFormat) { _ in
             let content = context.fileEditor.editorContent
             let languageStr = context.fileEditor.editorLanguage
@@ -131,24 +137,24 @@ final class CorePlugin {
             context.fileEditor.editorContent = CodeFormatter.format(content, language: language)
         }
 
-        registerNavigationCommands(commandRegistry: commandRegistry, context: context)
-        registerEditorStateCommands(commandRegistry: commandRegistry, context: context)
-        registerTextFinderCommands(commandRegistry: commandRegistry)
-        registerMultiCursorCommands(commandRegistry: commandRegistry)
-        registerInlineAIAssistCommand(commandRegistry: commandRegistry, context: context)
+        registerNavigationCommands()
+        registerEditorStateCommands()
+        registerTextFinderCommands()
+        registerMultiCursorCommands()
+        registerInlineAIAssistCommand()
     }
 
-    private static func registerNavigationCommands<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
-        registerGoToDefinitionCommand(commandRegistry: commandRegistry, context: context)
-        registerFindReferencesCommand(commandRegistry: commandRegistry, context: context)
-        registerRenameSymbolCommand(commandRegistry: commandRegistry, context: context)
+    private func registerNavigationCommands() {
+        registerGoToDefinitionCommand()
+        registerFindReferencesCommand()
+        registerRenameSymbolCommand()
     }
 
-    private static func registerGoToDefinitionCommand<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerGoToDefinitionCommand() {
         commandRegistry.register(command: .editorGoToDefinition) { _ in
             guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
 
-            guard let identifier = resolveWorkspaceIdentifier(context: context) else {
+            guard let identifier = resolveWorkspaceIdentifier() else {
                 context.lastError = "No symbol selected"
                 return
             }
@@ -172,7 +178,7 @@ final class CorePlugin {
                 }
 
                 if locations.count == 1, let only = locations.first {
-                    openWorkspaceLocation(only, projectRoot: root, context: context)
+                    openWorkspaceLocation(only, projectRoot: root)
                     return
                 }
 
@@ -188,11 +194,11 @@ final class CorePlugin {
         }
     }
 
-    private static func registerFindReferencesCommand<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerFindReferencesCommand() {
         commandRegistry.register(command: .editorFindReferences) { _ in
             guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
 
-            guard let identifier = resolveWorkspaceIdentifier(context: context) else {
+            guard let identifier = resolveWorkspaceIdentifier() else {
                 context.lastError = "No symbol selected"
                 return
             }
@@ -216,9 +222,9 @@ final class CorePlugin {
         }
     }
 
-    private static func registerRenameSymbolCommand<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerRenameSymbolCommand() {
         commandRegistry.register(command: .editorRenameSymbol) { _ in
-            guard let identifier = resolveWorkspaceIdentifier(context: context) else {
+            guard let identifier = resolveWorkspaceIdentifier() else {
                 context.lastError = "No symbol selected"
                 return
             }
@@ -233,7 +239,7 @@ final class CorePlugin {
         }
     }
 
-    private static func registerEditorStateCommands<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerEditorStateCommands() {
         commandRegistry.register(command: .editorTabsCloseActive) { _ in
             context.fileEditor.closeActiveTab()
         }
@@ -263,7 +269,7 @@ final class CorePlugin {
         }
     }
 
-    private static func registerTextFinderCommands(commandRegistry: CommandRegistry) {
+    private func registerTextFinderCommands() {
         commandRegistry.register(command: .editorFind) { _ in
             let item = NSMenuItem()
             item.tag = Int(NSTextFinder.Action.showFindInterface.rawValue)
@@ -285,7 +291,7 @@ final class CorePlugin {
         }
     }
 
-    private static func registerMultiCursorCommands(commandRegistry: CommandRegistry) {
+    private func registerMultiCursorCommands() {
         commandRegistry.register(command: .editorAddNextOccurrence) { _ in
             NSApp.sendAction(#selector(CodeEditorTextView.addNextOccurrence(_:)), to: nil, from: nil)
         }
@@ -299,7 +305,7 @@ final class CorePlugin {
         }
     }
 
-    private static func registerInlineAIAssistCommand<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerInlineAIAssistCommand() {
         commandRegistry.register(command: .editorAIInlineAssist) { _ in
             context.ui.isAIChatVisible = true
 
@@ -317,7 +323,7 @@ final class CorePlugin {
         }
     }
 
-    private static func registerViewCommands<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerViewCommands() {
         commandRegistry.register(command: .viewToggleMinimap) { _ in
             context.ui.toggleMinimap()
         }
@@ -336,7 +342,7 @@ final class CorePlugin {
             context.ui.isTerminalVisible = true
             context.ui.bottomPanelSelectedName = "Internal.Problems"
             if let d = context.diagnosticsStore.selectNext() {
-                openDiagnostic(d, context: context)
+                openDiagnostic(d)
             }
         }
 
@@ -344,12 +350,12 @@ final class CorePlugin {
             context.ui.isTerminalVisible = true
             context.ui.bottomPanelSelectedName = "Internal.Problems"
             if let d = context.diagnosticsStore.selectPrevious() {
-                openDiagnostic(d, context: context)
+                openDiagnostic(d)
             }
         }
     }
 
-    private static func registerWorkbenchCommands<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerWorkbenchCommands() {
         commandRegistry.register(command: .workbenchQuickOpen) { _ in
             context.isQuickOpenPresented = true
             context.isGlobalSearchPresented = false
@@ -372,14 +378,14 @@ final class CorePlugin {
         }
     }
 
-    private static func registerExplorerCommands<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
-        registerExplorerOpenSelectionCommand(commandRegistry: commandRegistry, context: context)
-        registerExplorerDeleteSelectionCommand(commandRegistry: commandRegistry, context: context)
-        registerExplorerRenameSelectionCommand(commandRegistry: commandRegistry, context: context)
-        registerExplorerRevealInFinderCommand(commandRegistry: commandRegistry, context: context)
+    private func registerExplorerCommands() {
+        registerExplorerOpenSelectionCommand()
+        registerExplorerDeleteSelectionCommand()
+        registerExplorerRenameSelectionCommand()
+        registerExplorerRevealInFinderCommand()
     }
 
-    private static func registerExplorerOpenSelectionCommand<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerExplorerOpenSelectionCommand() {
         commandRegistry.register(command: .explorerOpenSelection) { (args: ExplorerPathArgs) in
             let path = args.path
             guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
@@ -395,7 +401,7 @@ final class CorePlugin {
         }
     }
 
-    private static func registerExplorerDeleteSelectionCommand<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerExplorerDeleteSelectionCommand() {
         commandRegistry.register(command: .explorerDeleteSelection) { (args: ExplorerPathArgs) in
             let path = args.path
             guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
@@ -411,7 +417,7 @@ final class CorePlugin {
         }
     }
 
-    private static func registerExplorerRenameSelectionCommand<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerExplorerRenameSelectionCommand() {
         commandRegistry.register(command: .explorerRenameSelection) { (args: ExplorerRenameArgs) in
             let path = args.path
             let newName = args.newName
@@ -436,7 +442,7 @@ final class CorePlugin {
         }
     }
 
-    private static func registerExplorerRevealInFinderCommand<Context: IDEContext & ObservableObject>(commandRegistry: CommandRegistry, context: Context) {
+    private func registerExplorerRevealInFinderCommand() {
         commandRegistry.register(command: .explorerRevealInFinder) { (args: ExplorerPathArgs) in
             let path = args.path
             guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
@@ -449,7 +455,7 @@ final class CorePlugin {
         }
     }
 
-    private static func resolveWorkspaceIdentifier<Context: IDEContext & ObservableObject>(context: Context) -> String? {
+    private func resolveWorkspaceIdentifier() -> String? {
         let selected = context.selectionContext.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
         if WorkspaceNavigationService.isValidIdentifier(selected) {
             return selected
@@ -461,11 +467,7 @@ final class CorePlugin {
     }
 
     @MainActor
-    private static func openWorkspaceLocation<Context: IDEContext & ObservableObject>(
-        _ loc: WorkspaceCodeLocation,
-        projectRoot: URL,
-        context: Context
-    ) {
+    private func openWorkspaceLocation(_ loc: WorkspaceCodeLocation, projectRoot: URL) {
         do {
             let url = try context.workspaceService.makePathValidator(projectRoot: projectRoot).validateAndResolve(loc.relativePath)
             context.loadFile(from: url)
@@ -476,7 +478,7 @@ final class CorePlugin {
     }
 
     @MainActor
-    private static func openDiagnostic<Context: IDEContext & ObservableObject>(_ d: Diagnostic, context: Context) {
+    private func openDiagnostic(_ d: Diagnostic) {
         guard let url = DiagnosticURLResolver.resolve(d, context: context) else { return }
 
         context.loadFile(from: url)

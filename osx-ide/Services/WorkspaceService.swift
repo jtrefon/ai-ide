@@ -121,6 +121,16 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
             do {
                 try fileManager.trashItem(at: standardized, resultingItemURL: &resultingURL)
             } catch {
+                Task {
+                    await CrashReporter.shared.capture(
+                        error,
+                        context: CrashReportContext(operation: "WorkspaceService.deleteItemResult"),
+                        metadata: ["path": standardized.path],
+                        file: #fileID,
+                        function: #function,
+                        line: #line
+                    )
+                }
                 try fileManager.removeItem(at: standardized)
             }
 

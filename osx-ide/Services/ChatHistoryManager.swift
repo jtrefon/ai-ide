@@ -119,7 +119,16 @@ public class ChatHistoryManager: ObservableObject {
             try ensureDirectoryExists(for: url)
             try data.write(to: url, options: Data.WritingOptions.atomic)
         } catch {
-            print("Failed to save conversation history: \(error)")
+            Task {
+                await CrashReporter.shared.capture(
+                    error,
+                    context: CrashReportContext(operation: "ChatHistoryManager.saveHistory"),
+                    metadata: ["url": url.path],
+                    file: #fileID,
+                    function: #function,
+                    line: #line
+                )
+            }
         }
     }
     
@@ -130,7 +139,16 @@ public class ChatHistoryManager: ObservableObject {
         do {
             messages = try JSONDecoder().decode([ChatMessage].self, from: data)
         } catch {
-            print("Failed to load conversation history: \(error)")
+            Task {
+                await CrashReporter.shared.capture(
+                    error,
+                    context: CrashReportContext(operation: "ChatHistoryManager.loadHistory"),
+                    metadata: ["url": url.path],
+                    file: #fileID,
+                    function: #function,
+                    line: #line
+                )
+            }
         }
     }
 

@@ -65,6 +65,14 @@ public actor ConversationIndexStore {
                 try append(line: line, to: projectIndexURL)
             }
         } catch {
+            await CrashReporter.shared.capture(
+                error,
+                context: CrashReportContext(operation: "ConversationIndexStore.appendStart"),
+                metadata: ["conversationId": conversationId],
+                file: #fileID,
+                function: #function,
+                line: #line
+            )
         }
     }
 

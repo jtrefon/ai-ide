@@ -232,38 +232,41 @@ final class ProjectSessionCoordinator {
         }
 
         let session = ProjectSession(
-            windowFrame: windowFrame,
-            isSidebarVisible: ui.isSidebarVisible,
-            isTerminalVisible: ui.isTerminalVisible,
-            isAIChatVisible: ui.isAIChatVisible,
-            sidebarWidth: ui.sidebarWidth,
-            terminalHeight: ui.terminalHeight,
-            chatPanelWidth: ui.chatPanelWidth,
-
-            selectedThemeRawValue: ui.selectedTheme.rawValue,
-
-            showLineNumbers: ui.showLineNumbers,
-            wordWrap: ui.wordWrap,
-            minimapVisible: ui.minimapVisible,
-
-            showHiddenFilesInFileTree: getShowHiddenFilesInFileTree(),
-
-            aiModeRawValue: conversationManager.currentMode.rawValue,
-            lastOpenFileRelativePath: lastOpenRelative,
-            openTabRelativePaths: openTabRelatives,
-            activeTabRelativePath: activeRelative,
-
-            isSplitEditor: fileEditor.isSplitEditor,
-            splitAxisRawValue: fileEditor.splitAxis.rawValue,
-            focusedEditorPaneRawValue: fileEditor.focusedPane.rawValue,
-            primaryOpenTabRelativePaths: primaryTabs,
-            primaryActiveTabRelativePath: primaryActive,
-            secondaryOpenTabRelativePaths: secondaryTabs,
-            secondaryActiveTabRelativePath: secondaryActive,
-
-            fileTreeExpandedRelativePaths: Array(getFileTreeExpandedRelativePaths()).sorted(),
-
-            languageOverridesByRelativePath: getLanguageOverridesByRelativePath()
+            ui: UIConfiguration(
+                windowFrame: windowFrame,
+                isSidebarVisible: ui.isSidebarVisible,
+                isTerminalVisible: ui.isTerminalVisible,
+                isAIChatVisible: ui.isAIChatVisible,
+                sidebarWidth: ui.sidebarWidth,
+                terminalHeight: ui.terminalHeight,
+                chatPanelWidth: ui.chatPanelWidth
+            ),
+            editor: EditorConfiguration(
+                selectedThemeRawValue: ui.selectedTheme.rawValue,
+                showLineNumbers: ui.showLineNumbers,
+                wordWrap: ui.wordWrap,
+                minimapVisible: ui.minimapVisible,
+                showHiddenFilesInFileTree: getShowHiddenFilesInFileTree()
+            ),
+            fileState: FileState(
+                lastOpenFileRelativePath: lastOpenRelative,
+                openTabRelativePaths: openTabRelatives,
+                activeTabRelativePath: activeRelative
+            ),
+            splitEditor: SplitEditorState(
+                isSplitEditor: fileEditor.isSplitEditor,
+                splitAxisRawValue: fileEditor.splitAxis.rawValue,
+                focusedEditorPaneRawValue: fileEditor.focusedPane.rawValue,
+                primaryOpenTabRelativePaths: primaryTabs,
+                primaryActiveTabRelativePath: primaryActive,
+                secondaryOpenTabRelativePaths: secondaryTabs,
+                secondaryActiveTabRelativePath: secondaryActive
+            ),
+            fileTree: FileTreeState(
+                fileTreeExpandedRelativePaths: Array(getFileTreeExpandedRelativePaths()).sorted(),
+                languageOverridesByRelativePath: getLanguageOverridesByRelativePath()
+            ),
+            aiModeRawValue: conversationManager.currentMode.rawValue
         )
 
         Task {

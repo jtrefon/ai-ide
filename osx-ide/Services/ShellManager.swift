@@ -199,7 +199,16 @@ class ShellManager: NSObject {
             do {
                 try writeHandle.write(contentsOf: data)
             } catch {
-                print("Shell input error: \(error)")
+                Task {
+                    await CrashReporter.shared.capture(
+                        error,
+                        context: CrashReportContext(operation: "ShellManager.sendInput"),
+                        metadata: nil,
+                        file: #fileID,
+                        function: #function,
+                        line: #line
+                    )
+                }
             }
         }
     }

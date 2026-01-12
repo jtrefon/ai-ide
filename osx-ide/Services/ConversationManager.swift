@@ -30,6 +30,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private let eventBus: EventBusProtocol
     private var codebaseIndex: CodebaseIndexProtocol?
     private var projectRoot: URL
+    private let conversationLogger: ConversationLogger
     private lazy var toolProvider = ConversationToolProvider(
         fileSystemService: fileSystemService,
         eventBus: eventBus,
@@ -104,6 +105,21 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             toolExecutionCoordinator: toolExecutionCoordinator
         )
 
+        self.conversationLogger = ConversationLogger()
+
+        conversationLogger.initializeProjectRoot(root)
+
+        setupObservation()
+
+        Task.detached(priority: .utility) {
+            let logPath = await AIToolTraceLogger.shared.currentLogFilePath()
+            await self.conversationLogger.logTraceStart(
+                mode: await self.currentMode.rawValue,
+                projectRootPath: await self.projectRoot.path,
+                logPath: logPath
+            )
+        }
+
         Task.detached(priority: .utility) {
             await AppLogger.shared.setProjectRoot(root)
             await ConversationLogStore.shared.setProjectRoot(root)
@@ -112,19 +128,6 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             await ConversationPlanStore.shared.setProjectRoot(root)
             await PatchSetStore.shared.setProjectRoot(root)
             await CheckpointManager.shared.setProjectRoot(root)
-        }
-
-        setupObservation()
-
-        Task.detached(priority: .utility) {
-            let logPath = await AIToolTraceLogger.shared.currentLogFilePath()
-            await AIToolTraceLogger.shared.log(
-                type: "trace.start",
-                data: [
-                    "logFile": logPath,
-                    "mode": await self.currentMode.rawValue,
-                    "projectRoot": await self.projectRoot.path,
-                ])
         }
     }
 
@@ -157,47 +160,12 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             onStartConversation: { _, _, _ in }
         )
 
-        let newRootPath = newRoot.path
-        let initialMode = self.currentMode.rawValue
-        let initialConversationId = self.conversationId
-
-        let shouldStartConversation = false
-
-        Task.detached(priority: .utility) {
-            await AppLogger.shared.setProjectRoot(newRoot)
-            await ConversationLogStore.shared.setProjectRoot(newRoot)
-            await ExecutionLogStore.shared.setProjectRoot(newRoot)
-            await ConversationIndexStore.shared.setProjectRoot(newRoot)
-            await ConversationPlanStore.shared.setProjectRoot(newRoot)
-            await PatchSetStore.shared.setProjectRoot(newRoot)
-            await CheckpointManager.shared.setProjectRoot(newRoot)
-            await AppLogger.shared.info(
-                category: .app, message: "logging.project_root_set",
-                metadata: [
-                    "projectRoot": newRootPath
-                ])
-
-            await AppLogger.shared.info(
-                category: .conversation, message: "conversation.start",
-                metadata: [
-                    "mode": initialMode,
-                    "projectRoot": newRootPath,
-                ])
-            await ConversationLogStore.shared.append(
-                conversationId: initialConversationId,
-                type: "conversation.start",
-                data: [
-                    "mode": initialMode,
-                    "projectRoot": newRootPath,
-                ]
-            )
-
-            await ConversationIndexStore.shared.appendStart(
-                conversationId: initialConversationId,
-                mode: initialMode,
-                projectRootPath: newRootPath
-            )
-        }
+        conversationLogger.initializeProjectRoot(newRoot)
+        conversationLogger.logConversationStart(
+            conversationId: self.conversationId,
+            mode: self.currentMode.rawValue,
+            projectRootPath: newRoot.path
+        )
     }
 
     func sendMessage() {
@@ -208,39 +176,15 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         guard !currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
         let userMessageText = currentInput
-        let modeRawValue = currentMode.rawValue
-        let projectRootPath = projectRoot.path
         let hasSelectionContext = (context?.isEmpty == false)
-        let conversationId = self.conversationId
 
-        Task.detached(priority: .utility) {
-            await AIToolTraceLogger.shared.log(
-                type: "chat.user_message",
-                data: [
-                    "mode": modeRawValue,
-                    "projectRoot": projectRootPath,
-                    "inputLength": userMessageText.count,
-                    "hasSelectionContext": hasSelectionContext,
-                ])
-
-            await AppLogger.shared.info(
-                category: .conversation, message: "chat.user_message",
-                metadata: [
-                    "conversationId": conversationId,
-                    "mode": modeRawValue,
-                    "projectRoot": projectRootPath,
-                    "inputLength": userMessageText.count,
-                    "hasSelectionContext": hasSelectionContext,
-                ])
-            await ConversationLogStore.shared.append(
-                conversationId: conversationId,
-                type: "chat.user_message",
-                data: [
-                    "content": userMessageText,
-                    "hasSelectionContext": hasSelectionContext,
-                ]
-            )
-        }
+        conversationLogger.logUserMessage(
+            text: userMessageText,
+            mode: currentMode.rawValue,
+            projectRootPath: projectRoot.path,
+            conversationId: self.conversationId,
+            hasSelectionContext: hasSelectionContext
+        )
 
         let userMessage = ChatMessage(
             role: .user,
@@ -257,19 +201,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             guard let self = self else { return }
 
             do {
-                let modeRawValue = self.currentMode.rawValue
-                let projectRootPath = self.projectRoot.path
-                let conversationId = self.conversationId
-                let historyCount = self.messages.count
-
-                Task.detached(priority: .utility) {
-                    await AIToolTraceLogger.shared.log(
-                        type: "chat.ai_request_start",
-                        data: [
-                            "mode": modeRawValue,
-                            "historyCount": historyCount,
-                        ])
-                }
+                conversationLogger.logAIRequestStart(
+                    mode: self.currentMode.rawValue,
+                    historyCount: self.messages.count
+                )
 
                 try await self.sendCoordinator.send(
                     userInput: userMessageText,
@@ -284,23 +219,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 self.isSending = false
 
             } catch {
-                let conversationId = self.conversationId
-                let errorDescription = error.localizedDescription
-                Task.detached(priority: .utility) {
-                    await AppLogger.shared.error(
-                        category: .error, message: "chat.error",
-                        metadata: [
-                            "conversationId": conversationId,
-                            "error": errorDescription,
-                        ])
-                    await ConversationLogStore.shared.append(
-                        conversationId: conversationId,
-                        type: "chat.error",
-                        data: [
-                            "error": errorDescription
-                        ]
-                    )
-                }
+                conversationLogger.logChatError(
+                    conversationId: self.conversationId,
+                    errorDescription: error.localizedDescription
+                )
                 await MainActor.run {
                     self.errorManager.handle(.aiServiceError(error.localizedDescription))
                     self.error = "Failed to get AI response: \(error.localizedDescription)"
@@ -320,35 +242,12 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         let ids = historyCoordinator.startNewConversation(projectRoot: projectRoot)
         cancelledToolCallIds.removeAll()
 
-        Task.detached(priority: .utility) {
-            let initialMode = await self.currentMode.rawValue
-            let initialProjectRootPath = await self.projectRoot.path
-            let newConversationId = ids.newConversationId
-
-            await AppLogger.shared.info(
-                category: .conversation, message: "conversation.start",
-                metadata: [
-                    "conversationId": newConversationId,
-                    "mode": initialMode,
-                    "projectRoot": initialProjectRootPath,
-                    "previousConversationId": oldConversationId,
-                ])
-            await ConversationLogStore.shared.append(
-                conversationId: newConversationId,
-                type: "conversation.start",
-                data: [
-                    "mode": initialMode,
-                    "projectRoot": initialProjectRootPath,
-                    "previousConversationId": oldConversationId,
-                ]
-            )
-
-            await ConversationIndexStore.shared.appendStart(
-                conversationId: newConversationId,
-                mode: initialMode,
-                projectRootPath: initialProjectRootPath
-            )
-        }
+        conversationLogger.logConversationStart(
+            conversationId: ids.newConversationId,
+            mode: self.currentMode.rawValue,
+            projectRootPath: self.projectRoot.path,
+            previousConversationId: oldConversationId
+        )
     }
 
     func cancelToolCall(id: String) {

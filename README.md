@@ -18,6 +18,43 @@
 
 Built with SwiftUI and AppKit, osx-ide leverages native macOS technologies to offer seamless integration, lightning-fast responsiveness, and intuitive workflows. Whether you're coding, debugging, or collaborating with AI, osx-ide empowers you to achieve more with less effort.
 
+## Architecture Overview
+
+osx-ide follows a **layered architecture** with clear separation of concerns:
+
+```
+┌─────────────────────────────────────────┐
+│              UI Layer                    │
+│  SwiftUI Views + AppKit Components      │
+├─────────────────────────────────────────┤
+│            Service Layer                 │
+│  Business Logic + State Management      │
+├─────────────────────────────────────────┤
+│            Core Layer                   │
+│  Utilities + Protocols + Models        │
+├─────────────────────────────────────────┤
+│           Data Layer                    │
+│  File System + Database + Persistence   │
+└─────────────────────────────────────────┘
+```
+
+### Key Architectural Principles
+
+- **SOLID Principles**: Single responsibility, dependency inversion, and interface segregation
+- **Dependency Injection**: Centralized service registration and management
+- **Event-Driven Communication**: Loose coupling via EventBus pattern
+- **Actor-Based Concurrency**: Thread-safe state management with Swift Concurrency
+- **Modular Design**: Extensible plugin system for tools and language support
+
+### Core Components
+
+- **UI Layer**: SwiftUI views with AppKit integration for complex components
+- **Service Layer**: Business logic, state management, and AI coordination
+- **Core Layer**: Protocols, utilities, and shared infrastructure
+- **Data Layer**: SQLite database, file system abstraction, and indexing
+
+For detailed architecture documentation, see [ARCHITECTURE.md](./ARCHITECTURE.md).
+
 ## Key Features
 
 - **AI-Enhanced Development**: Integrated AI agent for intelligent code assistance, refactoring, and problem-solving with multi-role orchestration (Architect, Planner, Worker, QA).
