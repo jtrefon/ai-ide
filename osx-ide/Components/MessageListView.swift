@@ -8,87 +8,14 @@
 import SwiftUI
 import Foundation
 
-struct RectCorner: OptionSet, Sendable {
-    let rawValue: Int
-    static let topLeft = RectCorner(rawValue: 1 << 0)
-    static let topRight = RectCorner(rawValue: 1 << 1)
-    static let bottomRight = RectCorner(rawValue: 1 << 2)
-    static let bottomLeft = RectCorner(rawValue: 1 << 3)
-    static let allCorners: RectCorner = [.topLeft, .topRight, .bottomLeft, .bottomRight]
-}
-
-extension View {
-    func cornerRadius(_ radius: CGFloat, corners: RectCorner) -> some View {
-        clipShape(RoundedCorner(radius: radius, corners: corners))
-    }
-}
-
-struct RoundedCorner: Shape {
-    var radius: CGFloat = .infinity
-    var corners: RectCorner = .allCorners
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        
-        let p1 = CGPoint(x: rect.minX, y: rect.minY)
-        let p2 = CGPoint(x: rect.maxX, y: rect.minY)
-        let p3 = CGPoint(x: rect.maxX, y: rect.maxY)
-        let p4 = CGPoint(x: rect.minX, y: rect.maxY)
-        
-        // Start from top-left
-        if corners.contains(.topLeft) {
-            path.move(to: CGPoint(x: p1.x + radius, y: p1.y))
-        } else {
-            path.move(to: p1)
-        }
-        
-        // Top edge to top-right
-        if corners.contains(.topRight) {
-            path.addLine(to: CGPoint(x: p2.x - radius, y: p2.y))
-            path.addArc(center: CGPoint(x: p2.x - radius, y: p2.y + radius), radius: radius, startAngle: Angle(degrees: -90), endAngle: Angle(degrees: 0), clockwise: false)
-        } else {
-            path.addLine(to: p2)
-        }
-        
-        // Right edge to bottom-right
-        if corners.contains(.bottomRight) {
-            path.addLine(to: CGPoint(x: p3.x, y: p3.y - radius))
-            path.addArc(center: CGPoint(x: p3.x - radius, y: p3.y - radius), radius: radius, startAngle: Angle(degrees: 0), endAngle: Angle(degrees: 90), clockwise: false)
-        } else {
-            path.addLine(to: p3)
-        }
-        
-        // Bottom edge to bottom-left
-        if corners.contains(.bottomLeft) {
-            path.addLine(to: CGPoint(x: p4.x + radius, y: p4.y))
-            path.addArc(center: CGPoint(x: p4.x + radius, y: p4.y - radius), radius: radius, startAngle: Angle(degrees: 90), endAngle: Angle(degrees: 180), clockwise: false)
-        } else {
-            path.addLine(to: p4)
-        }
-        
-        // Left edge to top-left
-        if corners.contains(.topLeft) {
-            path.addLine(to: CGPoint(x: p1.x, y: p1.y + radius))
-            path.addArc(center: CGPoint(x: p1.x + radius, y: p1.y + radius), radius: radius, startAngle: Angle(degrees: 180), endAngle: Angle(degrees: 270), clockwise: false)
-        } else {
-            path.addLine(to: p1)
-        }
-        
-        path.closeSubpath()
-        return path
-    }
-}
-
-extension NSBezierPath {
-    // Removed redundant/broken extensions
-}
-
 struct MessageListView: View {
     let messages: [ChatMessage]
     let isSending: Bool
     var fontSize: Double
     var fontFamily: String
     @State private var hiddenReasoningMessageIds: Set<UUID> = []
+
+    private let filterCoordinator = MessageFilterCoordinator()
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
@@ -106,50 +33,13 @@ struct MessageListView: View {
             }
         )
     }
-    
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 12) {
-                    let displayedMessages = messages.filter { message in
-                        if message.role == .assistant && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (message.reasoning?.isEmpty ?? true) && (message.toolCalls?.isEmpty ?? true) {
-                            return false
-                        }
-                        return true
-                    }
-
-                    ForEach(displayedMessages) { message in
-                        let isMessageEmpty = message.role == .assistant &&
-                                            message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-                                            (message.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) &&
-                                            (message.toolCalls?.isEmpty ?? true)
-
-                        if isMessageEmpty {
-                            EmptyView()
-                        } else if message.isToolExecution {
-                            if let toolCallId = message.toolCallId,
-                               let latestForId = displayedMessages.last(where: { $0.toolCallId == toolCallId }) {
-                                if message.id != latestForId.id {
-                                    EmptyView()
-                                } else {
-                                    MessageView(
-                                        message: message,
-                                        fontSize: fontSize,
-                                        fontFamily: fontFamily,
-                                        isReasoningHidden: reasoningHiddenBinding(for: message.id)
-                                    )
-                                    .id(message.id)
-                                }
-                            } else {
-                                MessageView(
-                                    message: message,
-                                    fontSize: fontSize,
-                                    fontFamily: fontFamily,
-                                    isReasoningHidden: reasoningHiddenBinding(for: message.id)
-                                )
-                                .id(message.id)
-                            }
-                        } else {
+                    ForEach(messages) { message in
+                        if filterCoordinator.shouldDisplayMessage(message, in: messages) {
                             MessageView(
                                 message: message,
                                 fontSize: fontSize,
@@ -161,19 +51,7 @@ struct MessageListView: View {
                     }
 
                     if isSending {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                            Text(localized("chat.typing"))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color.gray.opacity(0.15))
-                        .cornerRadius(16)
-                        .frame(maxWidth: 400)
+                        typingIndicator
                     }
 
                     Color.clear
@@ -195,6 +73,24 @@ struct MessageListView: View {
             }
         }
     }
+
+    // MARK: - Private Components
+
+    private var typingIndicator: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .scaleEffect(0.8)
+            Text(localized("chat.typing"))
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.gray.opacity(0.15))
+        .cornerRadius(16)
+        .frame(maxWidth: 400)
+    }
 }
 
 struct MessageView: View {
@@ -202,216 +98,32 @@ struct MessageView: View {
     var fontSize: Double
     var fontFamily: String
     @Binding var isReasoningHidden: Bool
-    @State private var isExpanded = false
-    @State private var showFullReasoning = false
 
-    private func localized(_ key: String) -> String {
-        NSLocalizedString(key, comment: "")
+    private let contentCoordinator: MessageContentCoordinator
+
+    init(message: ChatMessage, fontSize: Double, fontFamily: String, isReasoningHidden: Binding<Bool>) {
+        self.message = message
+        self.fontSize = fontSize
+        self.fontFamily = fontFamily
+        self._isReasoningHidden = isReasoningHidden
+        self.contentCoordinator = MessageContentCoordinator(
+            message: message,
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            isReasoningHidden: isReasoningHidden
+        )
     }
-    
+
     var body: some View {
         HStack {
             if message.role == .user {
                 Spacer()
             }
-            
+
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
-                // Tool Execution Message
-                if message.isToolExecution {
-                    // Only show the message if it's the latest for this tool call ID or if it's currently executing
-                    // However, we don't have access to the full message list here.
-                    // Let's assume the parent (MessageListView) handles filtering for consolidation if needed,
-                    // but for now, we'll fix the double box by making it look like a single unit.
-                    
-                    VStack(alignment: .leading, spacing: 0) {
-                        // Header (Always Visible)
-                        HStack(spacing: 6) {
-                            statusIcon
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(message.toolName ?? localized("tool.default_name"))
-                                    .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .medium))
-                                    .foregroundColor(.primary)
+                roleLabel
+                contentCoordinator.makeMessageContent()
 
-                                if let file = message.targetFile {
-                                    Text(file)
-                                        .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                }
-
-                                if message.toolStatus == .executing {
-                                    let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    if !trimmed.isEmpty {
-                                        let lastLine = trimmed.split(separator: "\n", omittingEmptySubsequences: false).last.map(String.init) ?? trimmed
-                                        Text(lastLine)
-                                            .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                                            .foregroundColor(.secondary)
-                                            .lineLimit(1)
-                                            .truncationMode(.tail)
-                                    }
-                                }
-                            }
-                            
-                            Spacer()
-                            
-                            if message.toolStatus == .executing {
-                                Button {
-                                    // Handle cancellation - this requires passing an action down
-                                    NotificationCenter.default.post(name: NSNotification.Name("CancelToolExecution"), object: nil, userInfo: ["toolCallId": message.toolCallId ?? ""])
-                                } label: {
-                                    Image(systemName: "stop.circle.fill")
-                                        .foregroundColor(.red)
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.plain)
-                                .help(localized("tool.cancel_help"))
-                            }
-                            
-                            // Chevron for expansion
-                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(8)
-                        .background(statusColor.opacity(0.1))
-                        .cornerRadius(8, corners: isExpanded ? [.topLeft, .topRight] : .allCorners)
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isExpanded.toggle()
-                            }
-                        }
-                        
-                        // Details/Output (Collapsible)
-                        if isExpanded {
-                            VStack(alignment: .leading) {
-                                Divider()
-                                Text(message.content)
-                                    .font(resolveFont(size: fontSize - 2, family: fontFamily))
-                                    .foregroundColor(.secondary)
-                                    .padding(8)
-                            }
-                            .background(Color(NSColor.textBackgroundColor))
-                            .cornerRadius(8, corners: [.bottomLeft, .bottomRight])
-                            .transition(.opacity)
-                        }
-                    }
-                    .frame(maxWidth: 400) // Limit width of tool outputs
-                } 
-                // Standard Chat Message
-                else {
-                    let isMessageEmpty = message.role == .assistant && 
-                                        message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && 
-                                        (message.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) && 
-                                        (message.toolCalls?.isEmpty ?? true)
-                    
-                    if !isMessageEmpty {
-                        VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
-                            Text(message.role == .user ? localized("chat.role.you") : localized("chat.role.assistant"))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-
-                            if message.role == .assistant, let reasoning = message.reasoning, !reasoning.isEmpty, !isReasoningHidden {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "brain")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-
-                                    Text(localized("chat.reasoning.title"))
-                                        .font(resolveFont(size: max(10, fontSize - 2), family: fontFamily))
-                                        .foregroundColor(.secondary)
-
-                                    Spacer()
-
-                                    Image(systemName: showFullReasoning ? "chevron.up" : "chevron.down")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        showFullReasoning.toggle()
-                                    }
-                                }
-
-                                Text(showFullReasoning ? reasoning : reasoningPreview(reasoning))
-                                    .font(resolveFont(size: max(9, fontSize - 3), family: fontFamily))
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(showFullReasoning ? nil : 5)
-
-                                HStack(spacing: 8) {
-                                    Button(showFullReasoning ? localized("common.show_less") : localized("common.show_more")) {
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            showFullReasoning.toggle()
-                                        }
-                                    }
-                                    .buttonStyle(.borderless)
-
-                                    Button(localized("common.hide")) {
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            isReasoningHidden = true
-                                        }
-                                    }
-                                    .buttonStyle(.borderless)
-
-                                    Spacer()
-                                }
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(Color.gray.opacity(0.12))
-                            .cornerRadius(14)
-                            .frame(maxWidth: 400)
-                        }
-                        
-                        if message.role == .assistant {
-                            MarkdownMessageView(
-                                content: message.content,
-                                fontSize: fontSize,
-                                fontFamily: fontFamily
-                            )
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(backgroundColor(for: message))
-                                .foregroundColor(foregroundColor(for: message))
-                                .cornerRadius(16)
-                                .textSelection(.enabled)
-                                .contextMenu {
-                                    Button {
-                                        NSPasteboard.general.clearContents()
-                                        NSPasteboard.general.setString(message.content, forType: .string)
-                                    } label: {
-                                        Text(localized("chat.copy_message"))
-                                        Image(systemName: "doc.on.doc")
-                                    }
-                                }
-                        } else {
-                            Text(message.content)
-                                .font(.system(size: CGFloat(fontSize)))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(backgroundColor(for: message))
-                                .foregroundColor(foregroundColor(for: message))
-                                .cornerRadius(16)
-                                .textSelection(.enabled)
-                                .contextMenu {
-                                    Button {
-                                        NSPasteboard.general.clearContents()
-                                        NSPasteboard.general.setString(message.content, forType: .string)
-                                    } label: {
-                                        Text(localized("chat.copy_message"))
-                                        Image(systemName: "doc.on.doc")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
                 if let codeContext = message.codeContext {
                     CodePreviewView(
                         code: codeContext,
@@ -420,63 +132,23 @@ struct MessageView: View {
                     )
                 }
             }
-            
+
             if message.role == .assistant {
                 Spacer()
             }
         }
     }
-    
-    private func resolveFont(size: Double, family: String) -> Font {
-        if let nsFont = NSFont(name: family, size: CGFloat(size)) {
-            return Font(nsFont)
-        }
-        return .system(size: CGFloat(size), weight: .regular, design: .monospaced)
-    }
-    
-    private var statusIcon: some View {
-        Group {
-            if message.toolStatus == .executing {
-                ProgressView()
-                    .scaleEffect(0.5)
-                    .frame(width: 12, height: 12)
-            } else if message.toolStatus == .completed {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-                    .font(.caption)
-            } else if message.toolStatus == .failed {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.red)
-                    .font(.caption)
-            } else {
-                Image(systemName: "gear")
-                    .foregroundColor(.gray)
-                    .font(.caption)
-            }
-        }
-    }
-    
-    private var statusColor: Color {
-        switch message.toolStatus {
-        case .executing: return .orange
-        case .completed: return .green
-        case .failed: return .red
-        default: return .gray
-        }
-    }
-    
-    private func backgroundColor(for message: ChatMessage) -> Color {
-        return message.role == .user ? Color.blue : Color.gray.opacity(0.2)
-    }
-    
-    private func foregroundColor(for message: ChatMessage) -> Color {
-        return message.role == .user ? .white : .primary
+
+    // MARK: - Private Components
+
+    private var roleLabel: some View {
+        Text(message.role == .user ? localized("chat.role.you") : localized("chat.role.assistant"))
+            .font(.caption)
+            .foregroundColor(.secondary)
     }
 
-    private func reasoningPreview(_ text: String) -> String {
-        let lines = text.split(whereSeparator: \.isNewline)
-        if lines.count <= 5 { return text }
-        return lines.prefix(5).joined(separator: "\n") + "\n…"
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
     }
 }
 

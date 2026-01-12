@@ -57,6 +57,18 @@ final class SettingsGeneralUITests: XCTestCase {
         let editor = app.textViews["CodeEditorTextView"]
         skipIfElementNotDiscoverable(editor, name: "Code editor", timeout: 5)
 
+        // Given: Settings window is opened
+        let settingsWindow = openSettingsWindow(app: app)
+        
+        // When: Settings controls are interacted with
+        interactWithSettingsControls(app: app, settingsWindow: settingsWindow)
+        
+        // Then: Editor should still exist and be focused
+        verifyEditorStillExists(editor: editor)
+    }
+    
+    /// Opens the settings window and returns it
+    private func openSettingsWindow(app: XCUIApplication) -> XCUIElement {
         // Open Settings (Cmd+,)
         app.typeKey(",", modifierFlags: [.command])
 
@@ -67,43 +79,57 @@ final class SettingsGeneralUITests: XCTestCase {
         // Verify settings window opened
         XCTAssertTrue(settingsWindow.exists, "Settings window should be open")
         XCTAssertFalse(settingsWindow.title.isEmpty, "Settings window should have a title")
-
+        
         // Look for any scroll views (settings content is usually in a scroll view)
         let scrollViews = settingsWindow.scrollViews
         let hasContent = scrollViews.count > 0 || settingsWindow.staticTexts.count > 0
         XCTAssertTrue(hasContent, "Settings window should contain UI elements")
-
-        // Try to find specific controls (may not be discoverable in all environments)
+        
+        return settingsWindow
+    }
+    
+    /// Interacts with discoverable settings controls
+    private func interactWithSettingsControls(app: XCUIApplication, settingsWindow: XCUIElement) {
         let themeControl = app.segmentedControls["Settings.Theme"]
         let fontSizeSlider = app.sliders["Settings.FontSize"]
         let wordWrapToggle = app.switches["Settings.WordWrap"]
 
-        let themeExists = themeControl.waitForExistence(timeout: 2)
-        let sliderExists = fontSizeSlider.waitForExistence(timeout: 2)
-        let toggleExists = wordWrapToggle.waitForExistence(timeout: 2)
-
         // If controls are discoverable, interact with them
-        if sliderExists {
-            let initialSliderValue = fontSizeSlider.value as? String ?? ""
-            fontSizeSlider.adjust(toNormalizedSliderPosition: 0.7)
-
-            waitForValueChange(of: fontSizeSlider, from: initialSliderValue, timeout: 2.0)
-
-            let adjustedSliderValue = fontSizeSlider.value as? String ?? ""
-            XCTAssertNotEqual(initialSliderValue, adjustedSliderValue, "Font size slider value should change after adjustment")
+        if fontSizeSlider.waitForExistence(timeout: 2) {
+            testFontSizeSlider(slider: fontSizeSlider)
         }
-
-        if toggleExists {
-            let initialToggleValue = wordWrapToggle.value as? String ?? ""
-            wordWrapToggle.click()
-
-            waitForValueChange(of: wordWrapToggle, from: initialToggleValue, timeout: 2.0)
-
-            let toggledValue = wordWrapToggle.value as? String ?? ""
-            XCTAssertNotEqual(initialToggleValue, toggledValue, "Word wrap toggle value should change")
+        
+        if wordWrapToggle.waitForExistence(timeout: 2) {
+            testWordWrapToggle(toggle: wordWrapToggle)
         }
+    }
+    
+    /// Tests font size slider interaction
+    private func testFontSizeSlider(slider: XCUIElement) {
+        let initialSliderValue = slider.value as? String ?? ""
+        slider.adjust(toNormalizedSliderPosition: 0.7)
 
+        waitForValueChange(of: slider, from: initialSliderValue, timeout: 2.0)
+
+        let adjustedSliderValue = slider.value as? String ?? ""
+        XCTAssertNotEqual(initialSliderValue, adjustedSliderValue, "Font size slider value should change after adjustment")
+    }
+    
+    /// Tests word wrap toggle interaction
+    private func testWordWrapToggle(toggle: XCUIElement) {
+        let initialToggleValue = toggle.value as? String ?? ""
+        toggle.click()
+
+        waitForValueChange(of: toggle, from: initialToggleValue, timeout: 2.0)
+
+        let toggledValue = toggle.value as? String ?? ""
+        XCTAssertNotEqual(initialToggleValue, toggledValue, "Word wrap toggle value should change")
+    }
+    
+    /// Verifies that the editor still exists and is focused
+    private func verifyEditorStillExists(editor: XCUIElement) {
         // Close settings window
+        let app = XCUIApplication()
         app.typeKey("w", modifierFlags: [.command])
 
         // Verify editor still exists and is focused

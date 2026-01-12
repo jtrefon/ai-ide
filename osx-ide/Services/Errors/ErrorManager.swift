@@ -21,6 +21,10 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
     
     /// Handle an error with appropriate UI feedback
     func handle(_ error: AppError) {
+        handle(error, operation: "ErrorManager.handle(AppError)", file: #fileID, function: #function, line: #line)
+    }
+
+    private func handle(_ error: AppError, operation: String, file: String, function: String, line: Int) {
         pendingAutoDismissTask?.cancel()
         pendingAutoDismissTask = nil
 
@@ -34,7 +38,7 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
         }
         
         // Log the error
-        logError(error)
+        logError(error, operation: operation, file: file, function: function, line: line)
         
         // Auto-dismiss info and warning errors after delay
         if error.severity == .info || error.severity == .warning {
@@ -53,6 +57,10 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
     
     /// Handle generic Error by converting to AppError
     func handle(_ error: Error, context: String = "") {
+        handle(error, context: context, file: #fileID, function: #function, line: #line)
+    }
+
+    private func handle(_ error: Error, context: String, file: String, function: String, line: Int) {
         let appError: AppError
         if let appErr = error as? AppError {
             appError = appErr
@@ -64,7 +72,10 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
                 appError = .unknown("\(trimmedContext): \(error.localizedDescription)")
             }
         }
-        handle(appError)
+        let trimmedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
+        let operation = trimmedContext.isEmpty ? "ErrorManager.handle(Error)" : trimmedContext
+        logCrashCapture(error, operation: operation, file: file, function: function, line: line)
+        handle(appError, operation: operation, file: file, function: function, line: line)
     }
     
     /// Dismiss current error
@@ -85,20 +96,36 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
         errorHistory.removeAll()
     }
     
-    private func logError(_ error: AppError) {
+    private func logError(_ error: AppError, operation: String, file: String, function: String, line: Int) {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let logMessage = "[\(timestamp)] [\(error.severity)] \(error.localizedDescription)"
 
         Task {
             await AppLogger.shared.error(category: .error, message: "app.error", metadata: [
                 "severity": String(describing: error.severity),
-                "description": error.localizedDescription
+                "description": error.localizedDescription,
+                "operation": operation
             ])
         }
+
+        logCrashCapture(error, operation: operation, file: file, function: function, line: line)
         
         #if DEBUG
         print(logMessage)
         #endif
+    }
+
+    private func logCrashCapture(_ error: Error, operation: String, file: String, function: String, line: Int) {
+        Task {
+            await CrashReporter.shared.capture(
+                error,
+                context: CrashReportContext(operation: operation),
+                metadata: nil,
+                file: file,
+                function: function,
+                line: line
+            )
+        }
     }
 }
 

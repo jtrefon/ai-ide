@@ -34,6 +34,16 @@ public actor IndexLogger {
             internalLog("Project Root: \(projectRoot.path)")
             internalLog("Log File: \(fileURL.path)")
         } catch {
+            Task {
+                await CrashReporter.shared.capture(
+                    error,
+                    context: CrashReportContext(operation: "IndexLogger.setup"),
+                    metadata: ["projectRoot": projectRoot.path],
+                    file: #fileID,
+                    function: #function,
+                    line: #line
+                )
+            }
             print("[IndexLogger] CRITICAL ERROR: Could not setup logs directory: \(error)")
         }
     }

@@ -23,11 +23,11 @@ struct IndexAndToolsTests {
         try FileManager.default.createDirectory(at: srcFile.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
         try "export const x = 1\n".write(to: srcFile, atomically: true, encoding: .utf8)
 
-        let patterns = IndexCoordinator.loadExcludePatterns(projectRoot: tempRoot, defaultPatterns: IndexConfiguration.default.excludePatterns)
+        let patterns = IndexExcludePatternManager.loadExcludePatterns(projectRoot: tempRoot, defaultPatterns: IndexConfiguration.default.excludePatterns)
         let excludeFile = tempRoot.appendingPathComponent(".ide").appendingPathComponent("index_exclude")
         #expect(FileManager.default.fileExists(atPath: excludeFile.path), "Expected .ide/index_exclude to be created")
 
-        let files = IndexCoordinator.enumerateProjectFiles(rootURL: tempRoot, excludePatterns: patterns)
+        let files = IndexFileEnumerator.enumerateProjectFiles(rootURL: tempRoot, excludePatterns: patterns)
 
         #expect(files.contains(where: { $0.standardizedFileURL.path == srcFile.standardizedFileURL.path }), "Expected src file to be enumerated")
         #expect(!files.contains(where: { $0.path.contains("node_modules") }), "Expected node_modules tree to be excluded from enumeration")
@@ -44,8 +44,8 @@ struct IndexAndToolsTests {
         try FileManager.default.createDirectory(at: tsxFile.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
         try "export default function RegistrationPage() { return null }\n".write(to: tsxFile, atomically: true, encoding: .utf8)
 
-        let patterns = IndexCoordinator.loadExcludePatterns(projectRoot: tempRoot, defaultPatterns: IndexConfiguration.default.excludePatterns)
-        let files = IndexCoordinator.enumerateProjectFiles(rootURL: tempRoot, excludePatterns: patterns)
+        let patterns = IndexExcludePatternManager.loadExcludePatterns(projectRoot: tempRoot, defaultPatterns: IndexConfiguration.default.excludePatterns)
+        let files = IndexFileEnumerator.enumerateProjectFiles(rootURL: tempRoot, excludePatterns: patterns)
 
         #expect(files.contains(where: { $0.standardizedFileURL.path == tsxFile.standardizedFileURL.path }), "Expected .tsx file to be enumerated")
     }

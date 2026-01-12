@@ -4,127 +4,21 @@
 //
 //  Created by AI Assistant on 21/12/2025.
 //
+// NOTE: This file has been refactored. Individual tools are now in separate files:
+// - ReadFileTool.swift
+// - WriteFileTool.swift
+// - WriteFilesTool.swift
+// - CreateFileTool.swift
+// - ListFilesTool.swift
+// - DeleteFileTool.swift
+// - ReplaceInFileTool.swift
+//
 
 import Foundation
 import Combine
 
-/// Read content of a file
-struct ReadFileTool: AITool {
-    let name = "read_file"
-    let description = "Read the contents of a file at the specified path."
-    var parameters: [String: Any] {
-        [
-            "type": "object",
-            "properties": [
-                "path": [
-                    "type": "string",
-                    "description": "The absolute path to the file to read."
-                ]
-            ],
-            "required": ["path"]
-        ]
-    }
-    
-    let fileSystemService: FileSystemService
-    let pathValidator: PathValidator
-    
-    func execute(arguments: ToolArguments) async throws -> String {
-        let arguments = arguments.raw
-        guard let path = arguments["path"] as? String else {
-            throw AppError.aiServiceError("Missing 'path' argument for read_file")
-        }
-        let url = try pathValidator.validateAndResolve(path)
-        return try fileSystemService.readFile(at: url)
-    }
-}
-
-struct WriteFileTool: AITool {
-    let name = "write_file"
-    let description = "Write content to a file at the specified path. Overwrites if it exists."
-    var parameters: [String: Any] {
-        [
-            "type": "object",
-            "properties": [
-                "path": [
-                    "type": "string",
-                    "description": "The absolute path to the file."
-                ],
-                "content": [
-                    "type": "string",
-                    "description": "The content to write to the file."
-                ],
-                "mode": [
-                    "type": "string",
-                    "description": "One of: apply, propose. Default: apply.",
-                    "enum": ["apply", "propose"]
-                ],
-                "patch_set_id": [
-                    "type": "string",
-                    "description": "Patch set identifier to stage into when mode=propose."
-                ]
-            ],
-            "required": ["path", "content"]
-        ]
-    }
-    
-    let fileSystemService: FileSystemService
-    let pathValidator: PathValidator
-    let eventBus: EventBusProtocol
-
-    func execute(arguments: ToolArguments) async throws -> String {
-        let arguments = arguments.raw
-        guard let path = arguments["path"] as? String, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            let keys = arguments.keys.sorted().joined(separator: ", ")
-            throw AppError.aiServiceError(
-                "Missing 'path' argument for write_file. Provided keys: [\(keys)]. "
-                    + "Fix: include a non-empty path (absolute or project-root-relative). Example:\n"
-                    + "{\n  \"path\": \"src/App.css\",\n  \"content\": \"/* ... */\"\n}"
-            )
-        }
-        guard let content = arguments["content"] as? String else {
-            throw AppError.aiServiceError("Missing 'content' argument for write_file")
-        }
-
-        let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
-        let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
-        let patchSetId = (arguments["patch_set_id"] as? String)
-            ?? (arguments["_conversation_id"] as? String)
-            ?? "default"
-
-        let url = try pathValidator.validateAndResolve(path)
-        let relativePath = pathValidator.relativePath(for: url)
-
-        if mode == "propose" {
-            try await PatchSetStore.shared.stageWrite(
-                patchSetId: patchSetId,
-                toolCallId: toolCallId,
-                relativePath: relativePath,
-                content: content
-            )
-            await AIToolTraceLogger.shared.log(type: "fs.write_file_proposed", data: [
-                "path": relativePath,
-                "bytes": content.utf8.count,
-                "patchSetId": patchSetId
-            ])
-            return "Proposed write to \(relativePath) (patch_set_id=\(patchSetId))."
-        }
-
-        await AIToolTraceLogger.shared.log(type: "fs.write_file", data: [
-            "path": relativePath,
-            "bytes": content.utf8.count
-        ])
-        let existed = FileManager.default.fileExists(atPath: url.path)
-        try fileSystemService.writeFile(content: content, to: url)
-        Task { @MainActor in
-            if existed {
-                eventBus.publish(FileModifiedEvent(url: url))
-            } else {
-                eventBus.publish(FileCreatedEvent(url: url))
-            }
-        }
-        return "Successfully wrote to \(relativePath)"
-    }
-}
+// This file now serves as a registry for all file-related tools
+// The individual tool implementations have been moved to separate files for better modularity
 
 /// Write content to multiple files (preferred for scaffolding a project)
 struct WriteFilesTool: AITool {

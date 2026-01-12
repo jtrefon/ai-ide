@@ -121,16 +121,17 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 fontFamily: context.ui.fontFamily
             )
             .background(Color(NSColor.windowBackgroundColor))
-            .contextMenu {
-                Button(localized("file_tree.context.new_file")) {
-                    newFileName = ""
-                    isShowingNewFileSheet = true
-                }
-                Button(localized("file_tree.context.new_folder")) {
-                    newFolderName = ""
-                    isShowingNewFolderSheet = true
-                }
-            }
+            // SwiftUI context menu disabled to allow NSOutlineView native menu
+            // .contextMenu {
+            //     Button(localized("file_tree.context.new_file")) {
+            //         newFileName = ""
+            //         isShowingNewFileSheet = true
+            //     }
+            //     Button(localized("file_tree.context.new_folder")) {
+            //         newFolderName = ""
+            //         isShowingNewFolderSheet = true
+            //     }
+            // }
             .sheet(isPresented: $isShowingNewFileSheet) {
                 VStack(spacing: 20) {
                     Text(localized("file_tree.create_file.title"))

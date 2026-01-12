@@ -233,6 +233,16 @@ public actor AppLogger {
                 try append(line: line, to: projectLogFileURL)
             }
         } catch {
+            Task {
+                await CrashReporter.shared.capture(
+                    error,
+                    context: CrashReportContext(operation: "AppLogger.write"),
+                    metadata: nil,
+                    file: #fileID,
+                    function: #function,
+                    line: #line
+                )
+            }
         }
     }
 

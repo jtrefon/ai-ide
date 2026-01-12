@@ -70,7 +70,14 @@ public actor ExecutionLogStore {
                 try append(line: line, to: projectFileURL)
             }
         } catch {
-            _ = error
+            await CrashReporter.shared.capture(
+                error,
+                context: CrashReportContext(operation: "ExecutionLogStore.append"),
+                metadata: ["conversationId": conversationId],
+                file: #fileID,
+                function: #function,
+                line: #line
+            )
         }
     }
 
