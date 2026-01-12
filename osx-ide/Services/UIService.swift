@@ -88,6 +88,33 @@ final class UIService: UIServiceProtocol {
         eventBus.publish(ChatPanelWidthChangedEvent(width: width))
     }
     
+    // MARK: - Terminal Settings
+    
+    /// Update terminal font size
+    func setTerminalFontSize(_ size: Double) {
+        settingsStore.set(size, forKey: "terminalFontSize")
+    }
+    
+    /// Update terminal font family
+    func setTerminalFontFamily(_ family: String) {
+        settingsStore.set(family, forKey: "terminalFontFamily")
+    }
+    
+    /// Update terminal foreground color
+    func setTerminalForegroundColor(_ color: String) {
+        settingsStore.set(color, forKey: "terminalForegroundColor")
+    }
+    
+    /// Update terminal background color
+    func setTerminalBackgroundColor(_ color: String) {
+        settingsStore.set(color, forKey: "terminalBackgroundColor")
+    }
+    
+    /// Update terminal shell
+    func setTerminalShell(_ shell: String) {
+        settingsStore.set(shell, forKey: "terminalShell")
+    }
+    
     // MARK: - Settings Persistence
     
     /// Load settings from UserDefaults
@@ -110,6 +137,14 @@ final class UIService: UIServiceProtocol {
         let storedCliTimeout = settingsStore.double(forKey: AppConstants.Storage.cliTimeoutSecondsKey)
         let cliTimeoutSeconds = storedCliTimeout == 0 ? 30 : storedCliTimeout
         
+        // Load terminal settings
+        let terminalFontSize = settingsStore.double(forKey: "terminalFontSize")
+        let terminalFontSizeValue = terminalFontSize == 0 ? 12 : terminalFontSize
+        let terminalFontFamily = settingsStore.string(forKey: "terminalFontFamily") ?? "SF Mono"
+        let terminalForegroundColor = settingsStore.string(forKey: "terminalForegroundColor") ?? "#00FF00"
+        let terminalBackgroundColor = settingsStore.string(forKey: "terminalBackgroundColor") ?? "#000000"
+        let terminalShell = settingsStore.string(forKey: "terminalShell") ?? "/bin/zsh"
+        
         return UISettings(
             selectedTheme: storedTheme,
             fontSize: fontSize,
@@ -121,7 +156,12 @@ final class UIService: UIServiceProtocol {
             minimapVisible: minimapVisible,
             sidebarWidth: sidebarWidth,
             terminalHeight: terminalHeight,
-            chatPanelWidth: chatPanelWidth
+            chatPanelWidth: chatPanelWidth,
+            terminalFontSize: terminalFontSizeValue,
+            terminalFontFamily: terminalFontFamily,
+            terminalForegroundColor: terminalForegroundColor,
+            terminalBackgroundColor: terminalBackgroundColor,
+            terminalShell: terminalShell
         )
     }
     
@@ -138,6 +178,13 @@ final class UIService: UIServiceProtocol {
         setSidebarWidth(settings.sidebarWidth)
         setTerminalHeight(settings.terminalHeight)
         setChatPanelWidth(settings.chatPanelWidth)
+        
+        // Save terminal settings
+        setTerminalFontSize(settings.terminalFontSize)
+        setTerminalFontFamily(settings.terminalFontFamily)
+        setTerminalForegroundColor(settings.terminalForegroundColor)
+        setTerminalBackgroundColor(settings.terminalBackgroundColor)
+        setTerminalShell(settings.terminalShell)
     }
     
     /// Reset all settings to defaults
@@ -151,10 +198,11 @@ final class UIService: UIServiceProtocol {
         keys.forEach { settingsStore.removeObject(forKey: $0) }
     }
     
-    /// Export current settings
+    /// Export all settings as dictionary
     func exportSettings() -> [String: Any] {
         let settings = loadSettings()
         return [
+            "selectedTheme": settings.selectedTheme.rawValue,
             "fontSize": settings.fontSize,
             "fontFamily": settings.fontFamily,
             "indentationStyle": settings.indentationStyle.rawValue,
@@ -164,7 +212,12 @@ final class UIService: UIServiceProtocol {
             "minimapVisible": settings.minimapVisible,
             "sidebarWidth": settings.sidebarWidth,
             "terminalHeight": settings.terminalHeight,
-            "chatPanelWidth": settings.chatPanelWidth
+            "chatPanelWidth": settings.chatPanelWidth,
+            "terminalFontSize": settings.terminalFontSize,
+            "terminalFontFamily": settings.terminalFontFamily,
+            "terminalForegroundColor": settings.terminalForegroundColor,
+            "terminalBackgroundColor": settings.terminalBackgroundColor,
+            "terminalShell": settings.terminalShell
         ]
     }
     
@@ -181,6 +234,13 @@ final class UIService: UIServiceProtocol {
         applySidebarWidth(from: settings)
         applyTerminalHeight(from: settings)
         applyChatPanelWidth(from: settings)
+        
+        // Apply terminal settings
+        applyTerminalFontSize(from: settings)
+        applyTerminalFontFamily(from: settings)
+        applyTerminalForegroundColor(from: settings)
+        applyTerminalBackgroundColor(from: settings)
+        applyTerminalShell(from: settings)
     }
 
     private func applyTheme(from settings: [String: Any]) {
@@ -243,6 +303,33 @@ final class UIService: UIServiceProtocol {
         guard let width = settings["chatPanelWidth"] as? Double else { return }
         setChatPanelWidth(width)
     }
+    
+    // MARK: - Terminal Settings Apply Methods
+    
+    private func applyTerminalFontSize(from settings: [String: Any]) {
+        guard let size = settings["terminalFontSize"] as? Double else { return }
+        setTerminalFontSize(size)
+    }
+    
+    private func applyTerminalFontFamily(from settings: [String: Any]) {
+        guard let family = settings["terminalFontFamily"] as? String else { return }
+        setTerminalFontFamily(family)
+    }
+    
+    private func applyTerminalForegroundColor(from settings: [String: Any]) {
+        guard let color = settings["terminalForegroundColor"] as? String else { return }
+        setTerminalForegroundColor(color)
+    }
+    
+    private func applyTerminalBackgroundColor(from settings: [String: Any]) {
+        guard let color = settings["terminalBackgroundColor"] as? String else { return }
+        setTerminalBackgroundColor(color)
+    }
+    
+    private func applyTerminalShell(from settings: [String: Any]) {
+        guard let shell = settings["terminalShell"] as? String else { return }
+        setTerminalShell(shell)
+    }
 }
 
 struct UISettings {
@@ -257,6 +344,13 @@ struct UISettings {
     let sidebarWidth: Double
     let terminalHeight: Double
     let chatPanelWidth: Double
+    
+    // Terminal settings
+    let terminalFontSize: Double
+    let terminalFontFamily: String
+    let terminalForegroundColor: String
+    let terminalBackgroundColor: String
+    let terminalShell: String
 }
 
 /// Application theme options

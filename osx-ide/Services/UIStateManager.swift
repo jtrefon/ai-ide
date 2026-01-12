@@ -30,6 +30,14 @@ class UIStateManager: ObservableObject {
     @Published var fontSize: Double = AppConstants.Editor.defaultFontSize
     @Published var fontFamily: String = AppConstants.Editor.defaultFontFamily
     @Published var indentationStyle: IndentationStyle = .tabs
+    
+    // MARK: - Terminal Settings
+    
+    @Published var terminalFontSize: Double = 12
+    @Published var terminalFontFamily: String = "SF Mono"
+    @Published var terminalForegroundColor: String = "#00FF00" // Green
+    @Published var terminalBackgroundColor: String = "#000000" // Black
+    @Published var terminalShell: String = "/bin/zsh"
 
     // MARK: - Agent Settings
 
@@ -149,6 +157,34 @@ class UIStateManager: ObservableObject {
         uiService.setIndentationStyle(style)
     }
     
+    // MARK: - Terminal Settings
+    
+    func updateTerminalFontSize(_ size: Double) {
+        guard size >= 8 && size <= 72 else { return }
+        terminalFontSize = size
+        uiService.setTerminalFontSize(size)
+    }
+    
+    func updateTerminalFontFamily(_ family: String) {
+        terminalFontFamily = family
+        uiService.setTerminalFontFamily(family)
+    }
+    
+    func updateTerminalForegroundColor(_ color: String) {
+        terminalForegroundColor = color
+        uiService.setTerminalForegroundColor(color)
+    }
+    
+    func updateTerminalBackgroundColor(_ color: String) {
+        terminalBackgroundColor = color
+        uiService.setTerminalBackgroundColor(color)
+    }
+    
+    func updateTerminalShell(_ shell: String) {
+        terminalShell = shell
+        uiService.setTerminalShell(shell)
+    }
+    
     // MARK: - Theme Management
     
     func setTheme(_ theme: AppTheme) {
@@ -195,6 +231,13 @@ class UIStateManager: ObservableObject {
         terminalHeight = settings.terminalHeight
         chatPanelWidth = settings.chatPanelWidth
         
+        // Load terminal settings
+        terminalFontSize = settings.terminalFontSize
+        terminalFontFamily = settings.terminalFontFamily
+        terminalForegroundColor = settings.terminalForegroundColor
+        terminalBackgroundColor = settings.terminalBackgroundColor
+        terminalShell = settings.terminalShell
+        
         updateTheme()
     }
     
@@ -216,6 +259,13 @@ class UIStateManager: ObservableObject {
         indentationStyle = .tabs
         cliTimeoutSeconds = 30
         selectedTheme = .system
+        
+        // Reset terminal settings to defaults
+        terminalFontSize = 12
+        terminalFontFamily = "SF Mono"
+        terminalForegroundColor = "#00FF00" // Green
+        terminalBackgroundColor = "#000000" // Black
+        terminalShell = "/bin/zsh"
         
         updateTheme()
     }

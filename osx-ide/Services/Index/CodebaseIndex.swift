@@ -48,7 +48,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     }
 
     private static func resolveConfiguration(projectRoot: URL, config: IndexConfiguration) -> ResolvedIndexConfiguration {
-        let resolvedExcludePatterns = IndexCoordinator.loadExcludePatterns(projectRoot: projectRoot, defaultPatterns: config.excludePatterns)
+        let resolvedExcludePatterns = IndexExcludePatternManager.loadExcludePatterns(projectRoot: projectRoot, defaultPatterns: config.excludePatterns)
         let resolvedConfig = IndexConfiguration(enabled: config.enabled, debounceMs: config.debounceMs, excludePatterns: resolvedExcludePatterns)
         return ResolvedIndexConfiguration(configuration: resolvedConfig, excludePatterns: resolvedExcludePatterns)
     }

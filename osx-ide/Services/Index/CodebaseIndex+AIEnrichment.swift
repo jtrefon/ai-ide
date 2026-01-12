@@ -52,7 +52,7 @@ extension CodebaseIndex {
     }
 
     private func aiEnrichmentFiles() -> [URL] {
-        IndexCoordinator
+        IndexFileEnumerator
             .enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns)
             .filter { Self.isAIEnrichableFile($0) }
     }
@@ -93,6 +93,14 @@ extension CodebaseIndex {
             try await database.markAIEnriched(resourceId: file.absoluteString, score: Double(score), summary: summary)
             await IndexLogger.shared.log("Successfully enriched \(file.lastPathComponent) (Score: \(score))")
         } catch {
+            await CrashReporter.shared.capture(
+                error,
+                context: CrashReportContext(operation: "CodebaseIndex.enrichFileForAI"),
+                metadata: ["file": file.path],
+                file: #fileID,
+                function: #function,
+                line: #line
+            )
             await IndexLogger.shared.log("Failed to enrich \(file.lastPathComponent): \(error)")
         }
     }

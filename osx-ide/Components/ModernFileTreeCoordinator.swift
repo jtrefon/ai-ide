@@ -5,6 +5,11 @@ import AppKit
 @MainActor
 final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
     let dataSource = FileTreeDataSource()
+    
+    // Specialized coordinators
+    private let dialogCoordinator: FileTreeDialogCoordinator
+    private let searchCoordinator: FileTreeSearchCoordinator
+    private var appearanceCoordinator: FileTreeAppearanceCoordinator
 
     struct Configuration {
         let expandedRelativePaths: Binding<Set<String>>
@@ -26,17 +31,22 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     private let onRenameItem: (URL, String) -> Void
     private let onRevealInFinder: (URL) -> Void
     private weak var outlineView: NSOutlineView?
-    private var pendingSearchTask: Task<Void, Never>?
-    private var searchGeneration: Int = 0
-    var refreshToken: Int = 0
+    private var refreshToken: Int = 0
     private var lastRootPath: String?
     private var lastRootURL: URL?
     private var lastSearchQuery: String = ""
     private var lastShowHiddenFiles: Bool = false
     private var fontSize: Double = 13
-    private var fontFamily: String = AppConstants.Editor.defaultFontFamily
+    private var fontFamily: String = "SF Mono"
+    private var pendingSearchTask: Task<Void, Never>?
+    private var searchGeneration: Int = 0
 
     init(configuration: Configuration) {
+        // Initialize specialized coordinators
+        self.dialogCoordinator = FileTreeDialogCoordinator()
+        self.searchCoordinator = FileTreeSearchCoordinator(dataSource: dataSource)
+        self.appearanceCoordinator = FileTreeAppearanceCoordinator(outlineView: NSOutlineView()) // Temporary, will be updated in attach
+        
         self.expandedRelativePaths = configuration.expandedRelativePaths
         self.selectedRelativePath = configuration.selectedRelativePath
         self.onOpenFile = configuration.onOpenFile
@@ -50,11 +60,23 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
     func attach(outlineView: NSOutlineView) {
         self.outlineView = outlineView
-        dataSource.outlineView = outlineView
-
-        let menu = NSMenu()
-        menu.delegate = self
-        outlineView.menu = menu
+        
+        // Update appearance coordinator with the outline view
+        appearanceCoordinator = FileTreeAppearanceCoordinator(outlineView: outlineView)
+        
+        outlineView.dataSource = dataSource
+        outlineView.delegate = self
+        
+        // Set up contextual menu with delegate
+        let contextMenu = NSMenu()
+        contextMenu.delegate = self
+        outlineView.menu = contextMenu
+        
+        outlineView.target = self
+        outlineView.doubleAction = #selector(onDoubleClick)
+        
+        // Apply initial appearance
+        appearanceCoordinator.applyAppearanceToVisibleRows()
     }
 
     private func clickedFileTreeItem() -> FileTreeItem? {
@@ -62,44 +84,6 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         let row = outlineView.clickedRow
         guard row >= 0 else { return nil }
         return outlineView.item(atRow: row) as? FileTreeItem
-    }
-
-    private func promptForRename(initialName: String) -> String? {
-        let alert = NSAlert()
-        alert.messageText = NSLocalizedString("file_tree.rename.title", comment: "")
-        alert.informativeText = NSLocalizedString("file_tree.rename.info", comment: "")
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: NSLocalizedString("file_tree.rename.button", comment: ""))
-        alert.addButton(withTitle: NSLocalizedString("common.cancel", comment: ""))
-
-        let textField = NSTextField(string: initialName)
-        textField.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
-        alert.accessoryView = textField
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return nil }
-
-        let trimmed = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private func promptForNewItem(title: String, informativeText: String) -> String? {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = informativeText
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: NSLocalizedString("file_tree.create.button", comment: ""))
-        alert.addButton(withTitle: NSLocalizedString("common.cancel", comment: ""))
-
-        let textField = NSTextField(string: "")
-        textField.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
-        alert.accessoryView = textField
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return nil }
-
-        let trimmed = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func directoryForCreate() -> URL? {
@@ -182,102 +166,61 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     private func applyAppearanceToVisibleRows() {
         guard let outlineView else { return }
 
-        outlineView.rowSizeStyle = .default
-        outlineView.rowHeight = max(18, CGFloat(fontSize) + 6)
-
-        let resolvedFont = NSFont(name: fontFamily, size: CGFloat(fontSize)) ?? NSFont.systemFont(ofSize: CGFloat(fontSize), weight: .regular)
-        guard outlineView.numberOfRows > 0 else { return }
-
-        let visibleRect = outlineView.visibleRect
-        let visibleRange = outlineView.rows(in: visibleRect)
-        guard visibleRange.length > 0 else { return }
-
-        let start = max(0, visibleRange.location)
-        let end = min(outlineView.numberOfRows, visibleRange.location + visibleRange.length)
-        guard start < end else { return }
-
-        for row in start..<end {
-            if let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView {
-                cell.textField?.font = resolvedFont
-            }
-        }
-
-        outlineView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: start..<end))
     }
-
+    
     private func setSearchQuery(_ value: String) {
-        let wasSearching = dataSource.isSearching
-        dataSource.setSearchQuery(value)
-
-        if dataSource.isSearching {
-            scheduleSearch(query: value)
-        } else if wasSearching {
-            dataSource.resetCaches()
-        }
+        searchCoordinator.setSearchQuery(value)
     }
-
+    
     @objc func onDoubleClick(_ sender: Any?) {
-        guard let outlineView else { return }
-        let row = outlineView.clickedRow
-        guard row >= 0, let item = outlineView.item(atRow: row) as? FileTreeItem else { return }
-
-        if dataSource.isDirectory(item.url) {
-            if outlineView.isItemExpanded(item) {
-                outlineView.collapseItem(item)
-            } else {
-                outlineView.expandItem(item)
-            }
-            applyAppearanceToVisibleRows()
-        } else {
-            onOpenFile(item.url as URL)
-        }
+        guard let item = clickedFileTreeItem() else { return }
+        performOpen(for: item)
     }
-
+    
     private func performOpen(for item: FileTreeItem) {
-        guard let outlineView else { return }
-        if dataSource.isDirectory(item.url) {
-            if outlineView.isItemExpanded(item) {
-                outlineView.collapseItem(item)
-            } else {
-                outlineView.expandItem(item)
-            }
-            applyAppearanceToVisibleRows()
-            return
-        }
-
         onOpenFile(item.url as URL)
     }
-
-    // MARK: - NSMenuDelegate
-
+    
     @objc func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-
-        menu.addItem(withTitle: NSLocalizedString("file_tree.context.new_file", comment: ""), action: #selector(onContextNewFile(_:)), keyEquivalent: "")
-        menu.addItem(withTitle: NSLocalizedString("file_tree.context.new_folder", comment: ""), action: #selector(onContextNewFolder(_:)), keyEquivalent: "")
-
-        if let item = clickedFileTreeItem() {
-            let url = item.url as URL
-            menu.addItem(.separator())
-            menu.addItem(withTitle: NSLocalizedString("file_tree.context.open", comment: ""), action: #selector(onContextOpen(_:)), keyEquivalent: "")
-            menu.addItem(.separator())
-            menu.addItem(withTitle: NSLocalizedString("file_tree.context.rename", comment: ""), action: #selector(onContextRename(_:)), keyEquivalent: "")
-            menu.addItem(withTitle: NSLocalizedString("file_tree.context.delete", comment: ""), action: #selector(onContextDelete(_:)), keyEquivalent: "")
-            menu.addItem(.separator())
-            menu.addItem(withTitle: NSLocalizedString("file_tree.context.show_in_finder", comment: ""), action: #selector(onContextRevealInFinder(_:)), keyEquivalent: "")
-
-            for menuItem in menu.items {
-                menuItem.target = self
-                menuItem.representedObject = url
-            }
-            return
-        }
-
-        for menuItem in menu.items {
-            menuItem.target = self
-        }
+        
+        guard let item = clickedFileTreeItem() else { return }
+        let url = item.url
+        
+        // Add file operations
+        let openItem = NSMenuItem(title: NSLocalizedString("file_tree.context.open", comment: ""), action: #selector(onContextOpen(_:)), keyEquivalent: "")
+        openItem.target = self
+        openItem.representedObject = url
+        menu.addItem(openItem)
+        
+        let renameItem = NSMenuItem(title: NSLocalizedString("file_tree.context.rename", comment: ""), action: #selector(onContextRename(_:)), keyEquivalent: "")
+        renameItem.target = self
+        renameItem.representedObject = url
+        menu.addItem(renameItem)
+        
+        let deleteItem = NSMenuItem(title: NSLocalizedString("file_tree.context.delete", comment: ""), action: #selector(onContextDelete(_:)), keyEquivalent: "")
+        deleteItem.target = self
+        deleteItem.representedObject = url
+        menu.addItem(deleteItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        let revealItem = NSMenuItem(title: NSLocalizedString("file_tree.context.show_in_finder", comment: ""), action: #selector(onContextRevealInFinder(_:)), keyEquivalent: "")
+        revealItem.target = self
+        revealItem.representedObject = url
+        menu.addItem(revealItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        let newFileItem = NSMenuItem(title: NSLocalizedString("file_tree.context.new_file", comment: ""), action: #selector(onContextNewFile(_:)), keyEquivalent: "")
+        newFileItem.target = self
+        menu.addItem(newFileItem)
+        
+        let newFolderItem = NSMenuItem(title: NSLocalizedString("file_tree.context.new_folder", comment: ""), action: #selector(onContextNewFolder(_:)), keyEquivalent: "")
+        newFolderItem.target = self
+        menu.addItem(newFolderItem)
     }
-
+    
     @objc private func onContextOpen(_ sender: NSMenuItem) {
         guard let item = clickedFileTreeItem() else { return }
         performOpen(for: item)
@@ -291,7 +234,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     @objc private func onContextRename(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
         let initialName = url.lastPathComponent
-        guard let newName = promptForRename(initialName: initialName) else { return }
+        guard let newName = dialogCoordinator.promptForRename(initialName: initialName) else { return }
         onRenameItem(url, newName)
     }
 
@@ -302,7 +245,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
     @objc private func onContextNewFile(_ sender: NSMenuItem) {
         guard let directory = directoryForCreate() else { return }
-        guard let name = promptForNewItem(
+        guard let name = dialogCoordinator.promptForNewItem(
             title: NSLocalizedString("file_tree.create_file.title", comment: ""),
             informativeText: NSLocalizedString("file_tree.create_file.info", comment: "")
         ) else { return }
@@ -311,7 +254,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
     @objc private func onContextNewFolder(_ sender: NSMenuItem) {
         guard let directory = directoryForCreate() else { return }
-        guard let name = promptForNewItem(
+        guard let name = dialogCoordinator.promptForNewItem(
             title: NSLocalizedString("file_tree.create_folder.title", comment: ""),
             informativeText: NSLocalizedString("file_tree.create_folder.info", comment: "")
         ) else { return }
@@ -539,5 +482,50 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         let index = labelNumber - 1
         guard index >= 0, index < colors.count else { return nil }
         return colors[index]
+    }
+}
+
+// MARK: - Dialog Handling
+
+private extension ModernFileTreeCoordinator {
+    
+    /// Prompts user for renaming an item
+    func promptForRename(initialName: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString("file_tree.rename.title", comment: "")
+        alert.informativeText = NSLocalizedString("file_tree.rename.info", comment: "")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: NSLocalizedString("file_tree.rename.button", comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("common.cancel", comment: ""))
+
+        let textField = NSTextField(string: initialName)
+        textField.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
+        alert.accessoryView = textField
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return nil }
+
+        let trimmed = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+    
+    /// Prompts user for creating a new item
+    func promptForNewItem(title: String, informativeText: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = informativeText
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: NSLocalizedString("file_tree.create.button", comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("common.cancel", comment: ""))
+
+        let textField = NSTextField(string: "")
+        textField.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
+        alert.accessoryView = textField
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return nil }
+
+        let trimmed = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

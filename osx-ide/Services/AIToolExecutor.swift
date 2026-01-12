@@ -9,6 +9,7 @@ import Foundation
 import SwiftUI
 
 /// Handles the execution of AI tools and manages the result reporting.
+/// Refactored to use specialized services for better maintainability.
 @MainActor
 public final class AIToolExecutor {
     private final class StringAccumulator: @unchecked Sendable {
@@ -23,11 +24,11 @@ public final class AIToolExecutor {
         }
     }
 
-    private let fileSystemService: FileSystemService
-    private let errorManager: any ErrorManagerProtocol
-    private let projectRoot: URL
+    // Specialized services
+    private let logger: ToolExecutionLogger
+    private let argumentResolver: ToolArgumentResolver
+    private let messageBuilder: ToolMessageBuilder
     private let scheduler: ToolScheduler
-    private let defaultFilePathProvider: (@MainActor () -> String?)?
     
     public init(
         fileSystemService: FileSystemService,
@@ -35,56 +36,29 @@ public final class AIToolExecutor {
         projectRoot: URL,
         defaultFilePathProvider: (@MainActor () -> String?)? = nil
     ) {
-        self.fileSystemService = fileSystemService
-        self.errorManager = errorManager
-        self.projectRoot = projectRoot
+        // Initialize specialized services
+        self.logger = ToolExecutionLogger(errorManager: errorManager)
+        self.argumentResolver = ToolArgumentResolver(
+            fileSystemService: fileSystemService,
+            projectRoot: projectRoot,
+            defaultFilePathProvider: defaultFilePathProvider
+        )
+        self.messageBuilder = ToolMessageBuilder()
         self.scheduler = ToolScheduler()
-        self.defaultFilePathProvider = defaultFilePathProvider
     }
 
+    // MARK: - Helper Methods (using specialized services)
+    
     private func isWriteLikeTool(_ toolName: String) -> Bool {
-        switch toolName {
-        case "write_file", "write_files", "create_file", "delete_file", "replace_in_file":
-            return true
-        case "run_command":
-            return true
-        default:
-            return false
-        }
+        return argumentResolver.isWriteLikeTool(toolName)
     }
 
     private func pathKey(for toolCall: AIToolCall) -> String {
-        if toolCall.name == "run_command" {
-            return "run_command"
-        }
-        if let path = toolCall.arguments["path"] as? String, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return path
-        }
-        if let path = toolCall.arguments["targetPath"] as? String, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return path
-        }
-        if let paths = toolCall.arguments["paths"] as? [String], let first = paths.first {
-            return first
-        }
-        return toolCall.name
+        return argumentResolver.pathKey(for: toolCall)
     }
 
     private func resolveTargetFile(for toolCall: AIToolCall) -> String? {
-        if toolCall.name == "run_command" {
-            return toolCall.arguments["command"] as? String
-        }
-
-        let candidates: [Any?] = [
-            toolCall.arguments["path"],
-            toolCall.arguments["targetPath"],
-            toolCall.arguments["target_path"],
-            toolCall.arguments["file_path"],
-            toolCall.arguments["file"],
-            toolCall.arguments["target"],
-        ]
-        return candidates
-            .compactMap { $0 as? String }
-            .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        return argumentResolver.resolveTargetFile(for: toolCall)
     }
 
     private nonisolated static func isFilePathLikeTool(_ toolName: String) -> Bool {
@@ -303,15 +277,6 @@ public final class AIToolExecutor {
         ])
     }
 
-    private func resolveInjectedPath(toolName: String, explicitPath: String?) async -> String? {
-        guard explicitPath == nil else { return explicitPath }
-        guard Self.isFilePathLikeTool(toolName) else { return nil }
-        guard defaultFilePathProvider != nil else { return nil }
-        return await MainActor.run {
-            self.defaultFilePathProvider?()?.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-    }
-
     private func buildMergedArguments(toolCall: AIToolCall, conversationId: String?) async -> [String: Any] {
         var mergedArguments = toolCall.arguments
         mergedArguments["_tool_call_id"] = toolCall.id
@@ -319,10 +284,15 @@ public final class AIToolExecutor {
             mergedArguments["_conversation_id"] = conversationId
         }
 
-        let explicitPath = Self.explicitFilePath(from: mergedArguments)
-        let injectedPath = await resolveInjectedPath(toolName: toolCall.name, explicitPath: explicitPath)
-        if let injectedPath, !injectedPath.isEmpty, mergedArguments["path"] == nil {
-            mergedArguments["path"] = injectedPath
+        // Use the argument resolver to handle file path injection
+        let resolvedArguments = await argumentResolver.buildMergedArguments(
+            toolCall: toolCall,
+            conversationId: conversationId
+        )
+        
+        // Merge the resolved arguments
+        for (key, value) in resolvedArguments {
+            mergedArguments[key] = value
         }
 
         return mergedArguments

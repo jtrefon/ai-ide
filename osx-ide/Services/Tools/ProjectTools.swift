@@ -168,14 +168,16 @@ struct FindFileRegexTool: AITool {
         var matches: [String] = []
         
         for case let fileURL as URL in enumerator {
-            let isDirectory = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if !isDirectory {
-                let fileName = fileURL.lastPathComponent
-                let range = NSRange(location: 0, length: fileName.utf16.count)
-                if regex.firstMatch(in: fileName, options: [], range: range) != nil {
-                    let relativePath = fileURL.path.replacingOccurrences(of: projectRoot.path + "/", with: "")
-                    matches.append(relativePath)
-                }
+            if !isFile(fileURL: fileURL) {
+                continue
+            }
+            
+            let fileName = fileURL.lastPathComponent
+            let range = NSRange(location: 0, length: fileName.utf16.count)
+            
+            if regex.firstMatch(in: fileName, options: [], range: range) != nil {
+                let relativePath = fileURL.path.replacingOccurrences(of: projectRoot.path + "/", with: "")
+                matches.append(relativePath)
             }
         }
         
@@ -184,5 +186,14 @@ struct FindFileRegexTool: AITool {
         }
         
         return "Found \(matches.count) file(s):\n" + matches.joined(separator: "\n")
+    }
+    
+    private func isFile(fileURL: URL) -> Bool {
+        do {
+            let resourceValues = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
+            return resourceValues.isRegularFile ?? false
+        } catch {
+            return false
+        }
     }
 }

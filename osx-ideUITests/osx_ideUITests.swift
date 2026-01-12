@@ -60,38 +60,66 @@ final class osx_ideUITests: XCTestCase {
     func testAppLaunchAndBasicUI() throws {
         let app = makeLaunchedApp()
 
-        // Verify main window exists
+        // Given: App is launched
+        let mainWindow = verifyMainWindowExists(app: app)
+        let codeEditor = verifyCodeEditorExists(app: app)
+        let menuBar = verifyMenuBarExists(app: app)
+        
+        // When: Basic UI elements are verified
+        let windowTitle = verifyWindowTitle(mainWindow: mainWindow)
+        let menuAccessibility = verifyMenuAccessibility(app: app)
+        
+        // Then: App should be in proper state
+        verifyAppState(app: app)
+    }
+    
+    /// Verifies that the main window exists and returns it
+    private func verifyMainWindowExists(app: XCUIApplication) -> XCUIElement {
         let mainWindow = app.windows.firstMatch
         skipIfElementNotDiscoverable(mainWindow, name: "Main window", timeout: 5)
         XCTAssertTrue(mainWindow.exists, "Main window should exist")
-
-        // Verify code editor area exists
+        return mainWindow
+    }
+    
+    /// Verifies that the code editor exists and returns it
+    private func verifyCodeEditorExists(app: XCUIApplication) -> XCUIElement {
         let codeEditor = app.textViews["CodeEditorTextView"]
         skipIfElementNotDiscoverable(codeEditor, name: "Code editor", timeout: 5)
         XCTAssertTrue(codeEditor.exists, "Code editor should exist")
-
-        // Verify menu bar exists
+        return codeEditor
+    }
+    
+    /// Verifies that the menu bar exists and returns it
+    private func verifyMenuBarExists(app: XCUIApplication) -> XCUIElement {
         let menuBar = app.menuBars.firstMatch
         XCTAssertTrue(menuBar.exists, "Menu bar should exist")
-
-        // Verify app is in foreground
-        XCTAssertEqual(app.state, .runningForeground, "App should be in foreground state")
-
-        // Verify window has a title
+        return menuBar
+    }
+    
+    /// Verifies that the window has a title
+    private func verifyWindowTitle(mainWindow: XCUIElement) -> String {
         let windowTitle = mainWindow.title
         XCTAssertFalse(windowTitle.isEmpty, "Main window should have a title")
-
-        // Try to verify menu items (may not be discoverable in all environments)
+        return windowTitle
+    }
+    
+    /// Verifies menu accessibility (File, Edit, View menus)
+    private func verifyMenuAccessibility(app: XCUIApplication) -> Bool {
         let fileMenu = app.menuItems["File"]
         let editMenu = app.menuItems["Edit"]
         let viewMenu = app.menuItems["View"]
-
+        
         // Only verify if at least one menu is accessible
-        if fileMenu.exists || editMenu.exists || viewMenu.exists {
-            let menuExists = fileMenu.exists || editMenu.exists || viewMenu.exists
+        let menuExists = fileMenu.exists || editMenu.exists || viewMenu.exists
+        if menuExists {
             XCTAssertTrue(menuExists, "At least one main menu (File, Edit, View) should be accessible")
         }
-        // If menus are not discoverable, we still pass the test since the main UI elements exist
+        return menuExists
+    }
+    
+    /// Verifies that the app is in the proper state
+    private func verifyAppState(app: XCUIApplication) {
+        XCTAssertEqual(app.state, .runningForeground, "App should be in foreground state")
     }
 
     @MainActor

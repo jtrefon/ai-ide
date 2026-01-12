@@ -3,9 +3,9 @@ import Foundation
 extension CodebaseIndex {
     public func getStats() async throws -> IndexStats {
         let counts = try await database.getIndexStatsCounts()
-        let totalProjectFileCount = IndexCoordinator.enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns).count
+        let totalProjectFileCount = IndexFileEnumerator.enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns).count
 
-        let aiEnrichableProjectFileCount = IndexCoordinator
+        let aiEnrichableProjectFileCount = IndexFileEnumerator
             .enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns)
             .filter { Self.isAIEnrichableFile($0) }
             .count
