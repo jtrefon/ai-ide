@@ -65,19 +65,6 @@ struct WriteFilesTool: AITool {
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
 
-    private func executionContext(
-        from arguments: [String: Any]
-    ) -> (mode: String, toolCallId: String, patchSetId: String) {
-        let mode = (arguments["mode"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased() ?? "apply"
-        let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
-        let patchSetId = (arguments["patch_set_id"] as? String)
-            ?? (arguments["_conversation_id"] as? String)
-            ?? "default"
-        return (mode: mode, toolCallId: toolCallId, patchSetId: patchSetId)
-    }
-
     private func resolvedWriteFileEntry(
         from entry: [String: Any]
     ) throws -> (url: URL, relativePath: String, content: String) {
@@ -133,7 +120,7 @@ struct WriteFilesTool: AITool {
             throw AppError.aiServiceError("Missing 'files' argument for write_files")
         }
 
-        let context = executionContext(from: arguments)
+        let context = ToolInvocationContext.from(arguments: arguments)
         let mode = context.mode
         let toolCallId = context.toolCallId
         let patchSetId = context.patchSetId
@@ -219,13 +206,10 @@ struct CreateFileTool: AITool {
             throw AppError.aiServiceError("Missing 'path' argument for create_file")
         }
 
-        let mode = (arguments["mode"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased() ?? "apply"
-        let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
-        let patchSetId = (arguments["patch_set_id"] as? String)
-            ?? (arguments["_conversation_id"] as? String)
-            ?? "default"
+        let context = ToolInvocationContext.from(arguments: arguments)
+        let mode = context.mode
+        let toolCallId = context.toolCallId
+        let patchSetId = context.patchSetId
 
         let url = try pathValidator.validateAndResolve(path)
         let fileManager = FileManager.default
@@ -322,13 +306,10 @@ struct DeleteFileTool: AITool {
             throw AppError.aiServiceError("Missing 'path' argument for delete_file")
         }
 
-        let mode = (arguments["mode"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased() ?? "apply"
-        let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
-        let patchSetId = (arguments["patch_set_id"] as? String)
-            ?? (arguments["_conversation_id"] as? String)
-            ?? "default"
+        let context = ToolInvocationContext.from(arguments: arguments)
+        let mode = context.mode
+        let toolCallId = context.toolCallId
+        let patchSetId = context.patchSetId
 
         let url = try pathValidator.validateAndResolve(path)
 
@@ -442,13 +423,10 @@ struct ReplaceInFileTool: AITool {
         let oldText = try requiredString("old_text", in: arguments)
         let newText = try requiredString("new_text", in: arguments)
 
-        let mode = (arguments["mode"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased() ?? "apply"
-        let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
-        let patchSetId = (arguments["patch_set_id"] as? String)
-            ?? (arguments["_conversation_id"] as? String)
-            ?? "default"
+        let context = ToolInvocationContext.from(arguments: arguments)
+        let mode = context.mode
+        let toolCallId = context.toolCallId
+        let patchSetId = context.patchSetId
         
         let url = try pathValidator.validateAndResolve(path)
         let relativePath = pathValidator.relativePath(for: url)
