@@ -1,10 +1,5 @@
 import Foundation
 
-protocol EditorLanguageDetecting {
-    func detectLanguageForUntitledContent(currentLanguage: String, content: String) -> String?
-    func languageForFileExtension(_ fileExtension: String) -> String
-}
-
 struct DefaultEditorLanguageDetector: EditorLanguageDetecting {
     func detectLanguageForUntitledContent(currentLanguage: String, content: String) -> String? {
         guard currentLanguage == "swift" || currentLanguage == "text" else { return nil }
