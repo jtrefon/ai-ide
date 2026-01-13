@@ -401,35 +401,6 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
     }
 }
 
-private struct ResizeCursorView: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        CursorRectNSView(cursor: .resizeUpDown)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-    }
-}
-
-private final class CursorRectNSView: NSView {
-    private let cursor: NSCursor
-
-    init(cursor: NSCursor) {
-        self.cursor = cursor
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        addCursorRect(bounds, cursor: cursor)
-    }
-}
-
 private struct WindowSetupView: View {
     @ObservedObject var appState: AppState
 

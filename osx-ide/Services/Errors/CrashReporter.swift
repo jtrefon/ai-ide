@@ -1,38 +1,5 @@
 import Foundation
 
-public struct CrashReportContext: Sendable {
-    public let operation: String
-
-    public init(operation: String) {
-        self.operation = operation
-    }
-}
-
-public protocol CrashReporting: Sendable {
-    func setProjectRoot(_ root: URL) async
-
-    func capture(
-        _ error: Error,
-        context: CrashReportContext,
-        metadata: [String: String]?,
-        file: String,
-        function: String,
-        line: Int
-    ) async
-}
-
-public struct CrashReportEvent: Codable, Sendable {
-    public let ts: String
-    public let session: String
-    public let operation: String
-    public let errorType: String
-    public let errorDescription: String
-    public let file: String
-    public let function: String
-    public let line: Int
-    public let metadata: [String: String]?
-}
-
 public actor CrashReporter: CrashReporting {
     public static let shared = CrashReporter()
 
