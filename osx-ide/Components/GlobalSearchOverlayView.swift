@@ -33,48 +33,44 @@ struct GlobalSearchOverlayView: View {
     }
 
     var body: some View {
-        OverlayCard {
-            VStack(spacing: 12) {
-                OverlayHeaderView(
-                    title: localized("global_search.title"),
-                    placeholder: localized("global_search.placeholder"),
-                    query: $query,
-                    textFieldMinWidth: AppConstants.Overlay.searchFieldMinWidth,
-                    showsProgress: isSearching,
-                    onSubmit: {
-                        triggerSearch()
-                    },
-                    onClose: {
-                        close()
-                    }
-                )
+        OverlayScaffold(
+            title: localized("global_search.title"),
+            placeholder: localized("global_search.placeholder"),
+            query: $query,
+            textFieldMinWidth: AppConstants.Overlay.searchFieldMinWidth,
+            showsProgress: isSearching,
+            onSubmit: {
+                triggerSearch()
+            },
+            onClose: {
+                close()
+            }
+        ) {
+            List {
+                ForEach(resultsByFile) { group in
+                    Section(group.file) {
+                        ForEach(group.matches) { match in
+                            Button(action: {
+                                open(match: match, openToSide: false)
+                            }) {
+                                HStack {
+                                    Text("\(match.line)")
+                                        .font(.system(.body, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 60, alignment: .trailing)
 
-                List {
-                    ForEach(resultsByFile) { group in
-                        Section(group.file) {
-                            ForEach(group.matches) { match in
-                                Button(action: {
-                                    open(match: match, openToSide: false)
-                                }) {
-                                    HStack {
-                                        Text("\(match.line)")
-                                            .font(.system(.body, design: .monospaced))
-                                            .foregroundColor(.secondary)
-                                            .frame(width: 60, alignment: .trailing)
+                                    Text(match.snippet)
+                                        .lineLimit(2)
 
-                                        Text(match.snippet)
-                                            .lineLimit(2)
-
-                                        Spacer()
-                                    }
+                                    Spacer()
                                 }
-                                .buttonStyle(.plain)
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
-                .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
             }
+            .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
         .onAppear {
             if query.isEmpty {

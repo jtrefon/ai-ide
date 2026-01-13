@@ -23,49 +23,45 @@ struct GoToSymbolOverlayView: View {
     }
 
     var body: some View {
-        OverlayCard {
-            VStack(spacing: 12) {
-                OverlayHeaderView(
-                    title: OverlayLocalizer.localized("go_to_symbol.title"),
-                    placeholder: OverlayLocalizer.localized("go_to_symbol.placeholder"),
-                    query: $query,
-                    textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
-                    showsProgress: isSearching,
-                    onSubmit: {
-                        openFirst(openToSide: NSEvent.modifierFlags.contains(.command))
-                    },
-                    onClose: {
-                        close()
-                    }
-                )
-
-                List {
-                    ForEach(results, id: \.id) { item in
-                        Button(action: {
-                            open(item: item, openToSide: NSEvent.modifierFlags.contains(.command))
-                        }) {
-                            HStack(spacing: AppConstants.Overlay.listItemSpacing) {
-                                Text(item.kind.rawValue)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                                    .frame(width: AppConstants.Overlay.listItemKindWidth, alignment: .leading)
-
-                                Text(item.name)
-                                    .lineLimit(1)
-
-                                Spacer(minLength: 0)
-
-                                Text("\(item.relativePath):\(item.line)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
+        OverlayScaffold(
+            title: OverlayLocalizer.localized("go_to_symbol.title"),
+            placeholder: OverlayLocalizer.localized("go_to_symbol.placeholder"),
+            query: $query,
+            textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
+            showsProgress: isSearching,
+            onSubmit: {
+                openFirst(openToSide: NSEvent.modifierFlags.contains(.command))
+            },
+            onClose: {
+                close()
             }
+        ) {
+            List {
+                ForEach(results, id: \.id) { item in
+                    Button(action: {
+                        open(item: item, openToSide: NSEvent.modifierFlags.contains(.command))
+                    }) {
+                        HStack(spacing: AppConstants.Overlay.listItemSpacing) {
+                            Text(item.kind.rawValue)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .frame(width: AppConstants.Overlay.listItemKindWidth, alignment: .leading)
+
+                            Text(item.name)
+                                .lineLimit(1)
+
+                            Spacer(minLength: 0)
+
+                            Text("\(item.relativePath):\(item.line)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
         .onAppear {
             if searchService == nil {

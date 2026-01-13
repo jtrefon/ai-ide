@@ -40,41 +40,37 @@ struct CommandPaletteOverlayView: View {
     @State private var items: [CommandPaletteItem] = []
 
     var body: some View {
-        OverlayCard {
-            VStack(spacing: 12) {
-                OverlayHeaderView(
-                    title: localized("command_palette.title"),
-                    placeholder: localized("command_palette.placeholder"),
-                    query: $query,
-                    textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
-                    showsProgress: false,
-                    onSubmit: {
-                        runFirstMatch()
-                    },
-                    onClose: {
-                        close()
-                    }
-                )
-
-                List {
-                    ForEach(items) { item in
-                        Button(action: {
-                            run(item.command)
-                        }) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.title)
-                                    .lineLimit(1)
-                                Text(item.subtitle)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
+        OverlayScaffold(
+            title: localized("command_palette.title"),
+            placeholder: localized("command_palette.placeholder"),
+            query: $query,
+            textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
+            showsProgress: false,
+            onSubmit: {
+                runFirstMatch()
+            },
+            onClose: {
+                close()
             }
+        ) {
+            List {
+                ForEach(items) { item in
+                    Button(action: {
+                        run(item.command)
+                    }) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.title)
+                                .lineLimit(1)
+                            Text(item.subtitle)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
         .onAppear {
             query = ""
