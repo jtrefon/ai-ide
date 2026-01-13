@@ -60,14 +60,7 @@ open class RegexLanguageModule: LanguageModule, @unchecked Sendable {
     }
     
     open func highlight(_ code: String, font: NSFont) -> NSAttributedString {
-        let attributed = NSMutableAttributedString(string: code)
-        let fullRange = NSRange(location: 0, length: (code as NSString).length)
-        
-        attributed.addAttributes([
-            .font: font,
-            .foregroundColor: NSColor.labelColor
-        ], range: fullRange)
-        
+        let (attributed, _) = AttributedStringStyler.makeBaseAttributedString(code: code, font: font)
         return attributed
     }
     
@@ -86,15 +79,7 @@ open class RegexLanguageModule: LanguageModule, @unchecked Sendable {
         font: NSFont,
         textColor: NSColor = NSColor.labelColor
     ) -> (attributed: NSMutableAttributedString, fullRange: NSRange) {
-        let attributed = NSMutableAttributedString(string: code)
-        let fullRange = NSRange(location: 0, length: (code as NSString).length)
-
-        attributed.addAttributes([
-            .font: font,
-            .foregroundColor: textColor
-        ], range: fullRange)
-
-        return (attributed: attributed, fullRange: fullRange)
+        AttributedStringStyler.makeBaseAttributedString(code: code, font: font, textColor: textColor)
     }
 
     public func applyDoubleAndSingleQuotedStringHighlighting(

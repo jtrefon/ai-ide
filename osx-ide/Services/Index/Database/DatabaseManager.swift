@@ -205,20 +205,33 @@ public class DatabaseManager {
         try queryExecutor.searchFTS(query: query, limit: limit)
     }
 
+    private func withPreparedStatement<T>(
+        sql: String,
+        parameters: [Any],
+        work: (OpaquePointer) throws -> T
+    ) throws -> T {
+        var statement: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
+            throw DatabaseError.prepareFailed
+        }
+        guard let statement else {
+            throw DatabaseError.prepareFailed
+        }
+        defer { sqlite3_finalize(statement) }
+
+        for (index, parameter) in parameters.enumerated() {
+            try bindParameter(statement: statement, index: Int32(index + 1), value: parameter)
+        }
+
+        return try work(statement)
+    }
+
     public func execute(sql: String, parameters: [Any]) throws {
         try syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-            
-            for (index, parameter) in parameters.enumerated() {
-                try bindParameter(statement: statement!, index: Int32(index + 1), value: parameter)
-            }
-            
-            if sqlite3_step(statement) != SQLITE_DONE {
-                throw DatabaseError.stepFailed
+            _ = try withPreparedStatement(sql: sql, parameters: parameters) { statement in
+                if sqlite3_step(statement) != SQLITE_DONE {
+                    throw DatabaseError.stepFailed
+                }
             }
         }
     }
@@ -277,20 +290,12 @@ public class DatabaseManager {
     internal func scalarInt(sql: String, parameters: [Any] = []) throws -> Int {
         var result: Int = 0
         try syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
+            result = try withPreparedStatement(sql: sql, parameters: parameters) { statement in
+                guard sqlite3_step(statement) == SQLITE_ROW else {
+                    throw DatabaseError.stepFailed
+                }
+                return Int(sqlite3_column_int(statement, 0))
             }
-            defer { sqlite3_finalize(statement) }
-
-            for (index, parameter) in parameters.enumerated() {
-                try bindParameter(statement: statement!, index: Int32(index + 1), value: parameter)
-            }
-
-            guard sqlite3_step(statement) == SQLITE_ROW else {
-                throw DatabaseError.stepFailed
-            }
-            result = Int(sqlite3_column_int(statement, 0))
         }
         return result
     }
@@ -298,20 +303,12 @@ public class DatabaseManager {
     internal func scalarDouble(sql: String, parameters: [Any] = []) throws -> Double {
         var result: Double = 0
         try syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
+            result = try withPreparedStatement(sql: sql, parameters: parameters) { statement in
+                guard sqlite3_step(statement) == SQLITE_ROW else {
+                    throw DatabaseError.stepFailed
+                }
+                return sqlite3_column_double(statement, 0)
             }
-            defer { sqlite3_finalize(statement) }
-
-            for (index, parameter) in parameters.enumerated() {
-                try bindParameter(statement: statement!, index: Int32(index + 1), value: parameter)
-            }
-
-            guard sqlite3_step(statement) == SQLITE_ROW else {
-                throw DatabaseError.stepFailed
-            }
-            result = sqlite3_column_double(statement, 0)
         }
         return result
     }

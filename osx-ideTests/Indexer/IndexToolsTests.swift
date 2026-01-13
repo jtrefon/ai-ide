@@ -113,13 +113,13 @@ final class IndexToolsTests: XCTestCase {
     }
 
     func testIndexReadFileTool_withRange() async throws {
-        codebaseIndex.mockReadFileResult = """
-        2 |
-        3 | class MyClass {
-        4 |     func hello() {
-        5 |         print("Hello")
-        6 |     }
-        """
+        codebaseIndex.mockReadFileResult = [
+            "2 | ",
+            "3 | class MyClass {",
+            "4 |     func hello() {",
+            "5 |         print(\"Hello\")",
+            "6 |     }"
+        ].joined(separator: "\n")
 
         let result = try await indexReadFileTool.execute(arguments: ToolArguments([
             "path": "src/main.swift",
