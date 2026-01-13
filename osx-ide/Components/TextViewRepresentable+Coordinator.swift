@@ -384,22 +384,6 @@ extension TextViewRepresentable {
             let fullRange = NSRange(location: 0, length: attributed.length)
             var unique: Set<String> = []
 
-            func normalizeLanguage(_ raw: String) -> String {
-                var s = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                if s.hasPrefix("language_") {
-                    s.removeFirst("language_".count)
-                }
-                if s.hasPrefix(".") {
-                    s.removeFirst()
-                }
-                switch s {
-                case "js": return "javascript"
-                case "ts": return "typescript"
-                case "py": return "python"
-                default: return s
-                }
-            }
-
             func rgbaKey(for color: NSColor) -> String? {
                 guard let rgb = color.usingColorSpace(.deviceRGB) else { return nil }
                 return "\(rgb.redComponent),\(rgb.greenComponent),\(rgb.blueComponent),\(rgb.alphaComponent)"
@@ -417,7 +401,7 @@ extension TextViewRepresentable {
                 return unique.contains(targetKey)
             }
 
-            let normalized = normalizeLanguage(language)
+            let normalized = LanguageIdentifierNormalizer.normalize(language)
 
             let languageEnum = CodeLanguage(rawValue: normalized) ?? .unknown
             let module = LanguageModuleManager.shared.getModule(for: languageEnum)
