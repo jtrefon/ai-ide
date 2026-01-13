@@ -119,18 +119,24 @@ final class HighlightingPerformanceTests: XCTestCase {
             let name = "Swift"
         }
         """
-        
-        // First highlight
-        let firstResult = syntaxHighlighter.highlight(originalCode, language: "swift", font: font)
-        
+
+        let originalRequest = SyntaxHighlighter.HighlightIncrementalRequest(
+            code: originalCode,
+            language: "swift",
+            font: font,
+            previousResult: nil
+        )
+        let original = await syntaxHighlighter.highlightIncremental(originalRequest)
+
+        let modifiedRequest = SyntaxHighlighter.HighlightIncrementalRequest(
+            code: modifiedCode,
+            language: "swift",
+            font: font,
+            previousResult: original
+        )
         measure {
             Task {
-                _ = await syntaxHighlighter.highlightIncremental(
-                    code: modifiedCode,
-                    language: "swift",
-                    font: font,
-                    previousResult: firstResult
-                )
+                _ = await syntaxHighlighter.highlightIncremental(modifiedRequest)
             }
         }
     }

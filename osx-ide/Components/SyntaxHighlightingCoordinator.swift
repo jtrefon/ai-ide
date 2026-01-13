@@ -32,25 +32,27 @@ class SyntaxHighlightingCoordinator {
         // Task inherits @MainActor from caller
         currentHighlightTask = Task {
             // Use incremental highlighting for better performance
-            let attributedString = await syntaxHighlighter.highlightIncremental(
+            let request = SyntaxHighlighter.HighlightIncrementalRequest(
                 code: text,
                 language: language,
                 font: font,
                 previousResult: self.lastHighlightResult
             )
+            let attributedString = await syntaxHighlighter.highlightIncremental(request)
             
             if Task.isCancelled { return }
             
             // Do NOT replace the entire attributed string (can conflict with AppKit edits on Enter).
             // Instead, apply highlighting in-place by updating attributes only.
             if let textStorage = textView.textStorage {
-                await applyHighlightAttributesIncremental(
+                let request = ApplyHighlightAttributesRequest(
                     attributedString: attributedString,
-                    to: textStorage,
+                    textStorage: textStorage,
                     selectedRange: selectedRange,
                     typingAttributes: typingAttributes,
                     textView: textView
                 )
+                await applyHighlightAttributesIncremental(request)
             }
             
             self.lastHighlightResult = attributedString
@@ -71,21 +73,26 @@ class SyntaxHighlightingCoordinator {
     // MARK: - Private Methods
     
     /// Applies highlighting attributes incrementally to avoid conflicts with AppKit edits
+    private struct ApplyHighlightAttributesRequest {
+        let attributedString: NSAttributedString
+        let textStorage: NSTextStorage
+        let selectedRange: NSRange
+        let typingAttributes: [NSAttributedString.Key: Any]
+        let textView: NSTextView
+    }
+
     private func applyHighlightAttributesIncremental(
-        attributedString: NSAttributedString,
-        to textStorage: NSTextStorage,
-        selectedRange: NSRange,
-        typingAttributes: [NSAttributedString.Key: Any],
-        textView: NSTextView
+        _ request: ApplyHighlightAttributesRequest
     ) async {
         // Apply attributes incrementally to avoid conflicts
+        let textStorage = request.textStorage
         let fullRange = NSRange(location: 0, length: textStorage.length)
         
         await MainActor.run {
             textStorage.beginEditing()
             
             // Apply attributes from the highlighted string
-            attributedString.enumerateAttributes(in: fullRange, options: []) { attributes, range, _ in
+            request.attributedString.enumerateAttributes(in: fullRange, options: []) { attributes, range, _ in
                 if range.location < textStorage.length {
                     let adjustedRange = NSRange(
                         location: range.location,
@@ -98,10 +105,10 @@ class SyntaxHighlightingCoordinator {
             textStorage.endEditing()
             
             // Restore selection and typing attributes
-            if selectedRange.location <= textStorage.length {
-                textView.selectedRange = selectedRange
+            if request.selectedRange.location <= textStorage.length {
+                request.textView.selectedRange = request.selectedRange
             }
-            textView.typingAttributes = typingAttributes
+            request.textView.typingAttributes = request.typingAttributes
         }
     }
 }
