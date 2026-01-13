@@ -16,10 +16,19 @@ final class DatabaseSymbolManagerTests: XCTestCase {
     }
 
     func testSearchSymbolsWithPathsReturnsPathAndSymbol() throws {
-        let db = try makeTempDatabaseManager()
+        let databaseManager = try makeTempDatabaseManager()
 
-        try db.execute(
-            sql: "INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score, quality_details, ai_enriched, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        let insertResourceSQL =
+            "INSERT INTO resources (id, path, language, last_modified, content_hash, " +
+            "quality_score, quality_details, ai_enriched, summary) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"
+
+        let insertSymbolSQL =
+            "INSERT INTO symbols (id, resource_id, name, kind, line_start, line_end, description) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?);"
+
+        try databaseManager.execute(
+            sql: insertResourceSQL,
             parameters: [
                 "r1",
                 "/tmp/project/src/main.swift",
@@ -33,8 +42,8 @@ final class DatabaseSymbolManagerTests: XCTestCase {
             ]
         )
 
-        try db.execute(
-            sql: "INSERT INTO symbols (id, resource_id, name, kind, line_start, line_end, description) VALUES (?, ?, ?, ?, ?, ?, ?);",
+        try databaseManager.execute(
+            sql: insertSymbolSQL,
             parameters: [
                 "s1",
                 "r1",
@@ -46,7 +55,7 @@ final class DatabaseSymbolManagerTests: XCTestCase {
             ]
         )
 
-        let symbols = DatabaseSymbolManager(database: db)
+        let symbols = DatabaseSymbolManager(database: databaseManager)
         let results = try symbols.searchSymbolsWithPaths(nameLike: "My", limit: 50)
 
         XCTAssertEqual(results.count, 1)
@@ -56,10 +65,19 @@ final class DatabaseSymbolManagerTests: XCTestCase {
     }
 
     func testSearchSymbolsWithPathsRespectsLimit() throws {
-        let db = try makeTempDatabaseManager()
+        let databaseManager = try makeTempDatabaseManager()
 
-        try db.execute(
-            sql: "INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score, quality_details, ai_enriched, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        let insertResourceSQL =
+            "INSERT INTO resources (id, path, language, last_modified, content_hash, " +
+            "quality_score, quality_details, ai_enriched, summary) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"
+
+        let insertSymbolSQL =
+            "INSERT INTO symbols (id, resource_id, name, kind, line_start, line_end, description) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?);"
+
+        try databaseManager.execute(
+            sql: insertResourceSQL,
             parameters: [
                 "r1",
                 "/tmp/project/src/a.swift",
@@ -73,13 +91,13 @@ final class DatabaseSymbolManagerTests: XCTestCase {
             ]
         )
 
-        for i in 0..<3 {
-            try db.execute(
-                sql: "INSERT INTO symbols (id, resource_id, name, kind, line_start, line_end, description) VALUES (?, ?, ?, ?, ?, ?, ?);",
+        for symbolIndex in 0..<3 {
+            try databaseManager.execute(
+                sql: insertSymbolSQL,
                 parameters: [
-                    "s\(i)",
+                    "s\(symbolIndex)",
                     "r1",
-                    "Sym\(i)",
+                    "Sym\(symbolIndex)",
                     "function",
                     1,
                     1,
@@ -88,7 +106,7 @@ final class DatabaseSymbolManagerTests: XCTestCase {
             )
         }
 
-        let symbols = DatabaseSymbolManager(database: db)
+        let symbols = DatabaseSymbolManager(database: databaseManager)
         let results = try symbols.searchSymbolsWithPaths(nameLike: "Sym", limit: 2)
 
         XCTAssertEqual(results.count, 2)

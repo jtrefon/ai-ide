@@ -10,7 +10,7 @@ import XCTest
 
 @MainActor
 final class HighlightingPerformanceTests: XCTestCase {
-    
+
     func testHighlightingPerformanceSmallFile() {
         let syntaxHighlighter = SyntaxHighlighter.shared
         let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -26,7 +26,7 @@ final class HighlightingPerformanceTests: XCTestCase {
             _ = syntaxHighlighter.highlight(smallCode, language: "swift", font: font)
         }
     }
-    
+
     func testHighlightingPerformanceMediumFile() {
         let syntaxHighlighter = SyntaxHighlighter.shared
         let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -34,46 +34,46 @@ final class HighlightingPerformanceTests: XCTestCase {
         func calculateSum(_ numbers: [Int]) -> Int {
             return numbers.reduce(0, +)
         }
-        
+
         func fibonacci(_ n: Int) -> Int {
             if n <= 1 { return n }
             return fibonacci(n - 1) + fibonacci(n - 2)
         }
-        
+
         class Calculator {
             private var history: [String] = []
-            
+
             func add(_ a: Double, _ b: Double) -> Double {
                 let result = a + b
                 history.add("\\(a) + \\(b) = \\(result)")
                 return result
             }
-            
+
             func multiply(_ a: Double, _ b: Double) -> Double {
                 let result = a * b
                 history.add("\\(a) * \\(b) = \\(result)")
                 return result
             }
         }
-        
+
         """, count: 10)
-        
+
         measure {
             _ = syntaxHighlighter.highlight(mediumCode, language: "swift", font: font)
         }
     }
-    
+
     func testHighlightingPerformanceLargeFile() {
         let syntaxHighlighter = SyntaxHighlighter.shared
         let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         let largeCode = String(repeating: """
         import Foundation
         import UIKit
-        
+
         class DataProcessor {
             private let queue = DispatchQueue(label: "com.example.processor", qos: .userInitiated)
             private var cache: [String: Any] = [:]
-            
+
             func process(data: [String]) async -> [String] {
                 return await withTaskGroup(of: String.self) { group in
                     for item in data {
@@ -81,7 +81,7 @@ final class HighlightingPerformanceTests: XCTestCase {
                             await processItem(item)
                         }
                     }
-                    
+
                     var results: [String] = []
                     for await result in group {
                         results.append(result)
@@ -89,21 +89,21 @@ final class HighlightingPerformanceTests: XCTestCase {
                     return results
                 }
             }
-            
+
             private func processItem(_ item: String) async -> String {
                 // Simulate processing
                 try? await Task.sleep(nanoseconds: 1_000_000)
                 return item.uppercased()
             }
         }
-        
+
         """, count: 50)
-        
+
         measure {
             _ = syntaxHighlighter.highlight(largeCode, language: "swift", font: font)
         }
     }
-    
+
     func testIncrementalHighlightingPerformance() async {
         let syntaxHighlighter = SyntaxHighlighter.shared
         let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -112,7 +112,7 @@ final class HighlightingPerformanceTests: XCTestCase {
             print("Hello")
         }
         """
-        
+
         let modifiedCode = """
         func hello() {
             print("Hello, World!")

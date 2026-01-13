@@ -30,11 +30,11 @@ struct IndexAndToolsTests {
         let files = IndexFileEnumerator.enumerateProjectFiles(rootURL: tempRoot, excludePatterns: patterns)
 
         #expect(
-            files.contains(where: { $0.standardizedFileURL.path == srcFile.standardizedFileURL.path }), 
+            files.contains(where: { $0.standardizedFileURL.path == srcFile.standardizedFileURL.path }),
             "Expected src file to be enumerated"
         )
         #expect(
-            !files.contains(where: { $0.path.contains("node_modules") }), 
+            !files.contains(where: { $0.path.contains("node_modules") }),
             "Expected node_modules tree to be excluded from enumeration"
         )
     }
@@ -54,7 +54,7 @@ struct IndexAndToolsTests {
         let files = IndexFileEnumerator.enumerateProjectFiles(rootURL: tempRoot, excludePatterns: patterns)
 
         #expect(
-            files.contains(where: { $0.standardizedFileURL.path == tsxFile.standardizedFileURL.path }), 
+            files.contains(where: { $0.standardizedFileURL.path == tsxFile.standardizedFileURL.path }),
             "Expected .tsx file to be enumerated"
         )
     }
@@ -62,35 +62,35 @@ struct IndexAndToolsTests {
     @Test func testIndexReadFileFallsBackToDiskWhenNotIndexed() async throws {
         struct LocalMockAIService: AIService, @unchecked Sendable {
             func sendMessage(
-                _ message: String, 
-                context: String?, 
-                tools: [AITool]?, 
-                mode: AIMode?
-            ) async throws -> AIServiceResponse { 
-                AIServiceResponse(content: nil, toolCalls: nil) 
+                _: String,
+                context _: String?,
+                tools _: [AITool]?,
+                mode _: AIMode?
+            ) async throws -> AIServiceResponse {
+                AIServiceResponse(content: nil, toolCalls: nil)
             }
             func sendMessage(
-                _ message: String, 
-                context: String?, 
-                tools: [AITool]?, 
-                mode: AIMode?, 
-                projectRoot: URL?
-            ) async throws -> AIServiceResponse { 
-                AIServiceResponse(content: nil, toolCalls: nil) 
+                _: String,
+                context _: String?,
+                tools _: [AITool]?,
+                mode _: AIMode?,
+                projectRoot _: URL?
+            ) async throws -> AIServiceResponse {
+                AIServiceResponse(content: nil, toolCalls: nil)
             }
             func sendMessage(
-                _ messages: [ChatMessage], 
-                context: String?, 
-                tools: [AITool]?, 
-                mode: AIMode?, 
-                projectRoot: URL?
-            ) async throws -> AIServiceResponse { 
-                AIServiceResponse(content: nil, toolCalls: nil) 
+                _: [ChatMessage],
+                context _: String?,
+                tools _: [AITool]?,
+                mode _: AIMode?,
+                projectRoot _: URL?
+            ) async throws -> AIServiceResponse {
+                AIServiceResponse(content: nil, toolCalls: nil)
             }
-            func explainCode(_ code: String) async throws -> String { "" }
-            func refactorCode(_ code: String, instructions: String) async throws -> String { "" }
-            func generateCode(_ prompt: String) async throws -> String { "" }
-            func fixCode(_ code: String, error: String) async throws -> String { "" }
+            func explainCode(_: String) async throws -> String { "" }
+            func refactorCode(_: String, instructions _: String) async throws -> String { "" }
+            func generateCode(_: String) async throws -> String { "" }
+            func fixCode(_: String, error _: String) async throws -> String { "" }
         }
 
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_index_read_fallback_\(UUID().uuidString)")
