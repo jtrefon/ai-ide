@@ -83,11 +83,11 @@ struct SyntaxHighlighterTests {
         class LargeClass {
         """
 
-        for i in 0..<100 {
+        for methodIndex in 0..<100 {
             largeCode += """
 
-            func method\(i)() -> Int {
-                return \(i)
+            func method\(methodIndex)() -> Int {
+                return \(methodIndex)
             }
             """
         }

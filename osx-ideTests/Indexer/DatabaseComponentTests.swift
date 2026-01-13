@@ -16,32 +16,43 @@ final class DatabaseComponentTests: XCTestCase {
     }
 
     func testDatabaseQueryExecutorListResourcePathsAndHasResourcePath() throws {
-        let db = try makeTempDatabaseManager()
+        let databaseManager = try makeTempDatabaseManager()
 
-        try db.execute(sql: "INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score, quality_details, ai_enriched, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);", parameters: [
-            "r1",
-            "/tmp/project/src/a.swift",
-            "swift",
-            1.0,
-            "hash",
-            0.0,
-            NSNull(),
-            0,
-            NSNull()
-        ])
-        try db.execute(sql: "INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score, quality_details, ai_enriched, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);", parameters: [
-            "r2",
-            "/tmp/project/src/b.tsx",
-            "tsx",
-            1.0,
-            "hash2",
-            0.0,
-            NSNull(),
-            0,
-            NSNull()
-        ])
+        let insertResourceSQL =
+            "INSERT INTO resources (id, path, language, last_modified, content_hash, " +
+            "quality_score, quality_details, ai_enriched, summary) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"
 
-        let executor = DatabaseQueryExecutor(database: db)
+        try databaseManager.execute(
+            sql: insertResourceSQL,
+            parameters: [
+                "r1",
+                "/tmp/project/src/a.swift",
+                "swift",
+                1.0,
+                "hash",
+                0.0,
+                NSNull(),
+                0,
+                NSNull()
+            ]
+        )
+        try databaseManager.execute(
+            sql: insertResourceSQL,
+            parameters: [
+                "r2",
+                "/tmp/project/src/b.tsx",
+                "tsx",
+                1.0,
+                "hash2",
+                0.0,
+                NSNull(),
+                0,
+                NSNull()
+            ]
+        )
+
+        let executor = DatabaseQueryExecutor(database: databaseManager)
 
         let all = try executor.listResourcePaths(matching: nil, limit: 10, offset: 0)
         XCTAssertEqual(all.count, 2)
@@ -56,21 +67,29 @@ final class DatabaseComponentTests: XCTestCase {
     }
 
     func testDatabaseQueryExecutorFindResourceMatchesReturnsAIAndScore() throws {
-        let db = try makeTempDatabaseManager()
+        let databaseManager = try makeTempDatabaseManager()
 
-        try db.execute(sql: "INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score, quality_details, ai_enriched, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);", parameters: [
-            "r1",
-            "/tmp/project/src/a.swift",
-            "swift",
-            1.0,
-            "hash",
-            0.75,
-            NSNull(),
-            1,
-            NSNull()
-        ])
+        let insertResourceSQL =
+            "INSERT INTO resources (id, path, language, last_modified, content_hash, " +
+            "quality_score, quality_details, ai_enriched, summary) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"
 
-        let executor = DatabaseQueryExecutor(database: db)
+        try databaseManager.execute(
+            sql: insertResourceSQL,
+            parameters: [
+                "r1",
+                "/tmp/project/src/a.swift",
+                "swift",
+                1.0,
+                "hash",
+                0.75,
+                NSNull(),
+                1,
+                NSNull()
+            ]
+        )
+
+        let executor = DatabaseQueryExecutor(database: databaseManager)
         let matches = try executor.findResourceMatches(query: "a.swift", limit: 10)
 
         XCTAssertEqual(matches.count, 1)
@@ -80,33 +99,44 @@ final class DatabaseComponentTests: XCTestCase {
     }
 
     func testDatabaseAIEnrichmentManagerMarkAndReadValues() throws {
-        let db = try makeTempDatabaseManager()
+        let databaseManager = try makeTempDatabaseManager()
 
-        try db.execute(sql: "INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score, quality_details, ai_enriched, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);", parameters: [
-            "r1",
-            "/tmp/project/src/a.swift",
-            "swift",
-            1.0,
-            "hash",
-            0.0,
-            NSNull(),
-            0,
-            NSNull()
-        ])
+        let insertResourceSQL =
+            "INSERT INTO resources (id, path, language, last_modified, content_hash, " +
+            "quality_score, quality_details, ai_enriched, summary) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"
 
-        let ai = DatabaseAIEnrichmentManager(database: db)
-        try ai.markAIEnriched(resourceId: "r1", score: 0.9, summary: "Great file")
+        try databaseManager.execute(
+            sql: insertResourceSQL,
+            parameters: [
+                "r1",
+                "/tmp/project/src/a.swift",
+                "swift",
+                1.0,
+                "hash",
+                0.0,
+                NSNull(),
+                0,
+                NSNull()
+            ]
+        )
 
-        XCTAssertEqual(try ai.getQualityScore(resourceId: "r1"), 0.9)
-        XCTAssertEqual(try db.isResourceAIEnriched(resourceId: "r1"), true)
+        let enrichmentManager = DatabaseAIEnrichmentManager(database: databaseManager)
+        try enrichmentManager.markAIEnriched(resourceId: "r1", score: 0.9, summary: "Great file")
 
-        let summaries = try ai.getAIEnrichedSummaries(projectRoot: URL(fileURLWithPath: "/tmp/project"), limit: 10)
+        XCTAssertEqual(try enrichmentManager.getQualityScore(resourceId: "r1"), 0.9)
+        XCTAssertEqual(try databaseManager.isResourceAIEnriched(resourceId: "r1"), true)
+
+        let summaries = try enrichmentManager.getAIEnrichedSummaries(
+            projectRoot: URL(fileURLWithPath: "/tmp/project"),
+            limit: 10
+        )
         XCTAssertEqual(summaries.count, 1)
         XCTAssertEqual(summaries.first?.path, "/tmp/project/src/a.swift")
         XCTAssertEqual(summaries.first?.summary, "Great file")
 
         // Ensure score=0 does not clobber existing score.
-        try ai.markAIEnriched(resourceId: "r1", score: 0.0, summary: "")
-        XCTAssertEqual(try ai.getQualityScore(resourceId: "r1"), 0.9)
+        try enrichmentManager.markAIEnriched(resourceId: "r1", score: 0.0, summary: "")
+        XCTAssertEqual(try enrichmentManager.getQualityScore(resourceId: "r1"), 0.9)
     }
 }

@@ -17,10 +17,10 @@ struct SearchNavigationTests {
     }
 
     @Test func testWorkspaceSearchParseIndexedMatchLine() async throws {
-        let m = WorkspaceSearchService.parseIndexedMatchLine("src/main.swift:42: print(\"hi\")")
-        #expect(m?.relativePath == "src/main.swift")
-        #expect(m?.line == 42)
-        #expect(m?.snippet == "print(\"hi\")")
+        let parsedMatch = WorkspaceSearchService.parseIndexedMatchLine("src/main.swift:42: print(\"hi\")")
+        #expect(parsedMatch?.relativePath == "src/main.swift")
+        #expect(parsedMatch?.line == 42)
+        #expect(parsedMatch?.snippet == "print(\"hi\")")
     }
 
     @Test func testWorkspaceSearchFallbackFindsMatches() async throws {
@@ -118,13 +118,13 @@ struct SearchNavigationTests {
 
     @Test func testDiagnosticsParserParsesXcodebuildErrorLine() async throws {
         let line = "/Users/me/Project/Foo.swift:42:13: error: Cannot find 'Bar' in scope"
-        let d = DiagnosticsParser.parseXcodebuildLine(line)
-        #expect(d != nil)
-        #expect(d?.relativePath == "/Users/me/Project/Foo.swift")
-        #expect(d?.line == 42)
-        #expect(d?.column == 13)
-        #expect(d?.severity == .error)
-        #expect(d?.message.contains("Cannot find") == true)
+        let parsedDiagnostic = DiagnosticsParser.parseXcodebuildLine(line)
+        #expect(parsedDiagnostic != nil)
+        #expect(parsedDiagnostic?.relativePath == "/Users/me/Project/Foo.swift")
+        #expect(parsedDiagnostic?.line == 42)
+        #expect(parsedDiagnostic?.column == 13)
+        #expect(parsedDiagnostic?.severity == .error)
+        #expect(parsedDiagnostic?.message.contains("Cannot find") == true)
     }
 
     @Test func testCodeFoldingRangeFinderFindsBraceFoldRangeAtCursor() async throws {
@@ -139,12 +139,12 @@ struct SearchNavigationTests {
 
         let ns = content as NSString
         let cursor = ns.range(of: "print(\"b\")").location
-        let r = CodeFoldingRangeFinder.foldRange(at: cursor, in: content)
-        #expect(r != nil)
-        #expect(r?.length ?? 0 > 0)
+        let foldRange = CodeFoldingRangeFinder.foldRange(at: cursor, in: content)
+        #expect(foldRange != nil)
+        #expect(foldRange?.length ?? 0 > 0)
 
         // The smallest containing fold should be the inner `if` block, not the outer function.
-        let foldedText = ns.substring(with: r!)
+        let foldedText = ns.substring(with: foldRange!)
         #expect(foldedText.contains("print(\"b\")"))
         #expect(!foldedText.contains("print(\"a\")"))
     }
