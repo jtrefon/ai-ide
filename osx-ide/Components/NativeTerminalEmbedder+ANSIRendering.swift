@@ -211,7 +211,9 @@ extension NativeTerminalEmbedder {
         handleDeleteCharacters(parameters)
     }
 
-    func handleCursorHorizontalAbsolute(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
+    func handleCursorHorizontalAbsolute(
+        _ parameters: [Int]
+    ) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         let col = max(1, parameters.first ?? 1)
         cursorColumn = max(0, col - 1)
         return ([:], true)

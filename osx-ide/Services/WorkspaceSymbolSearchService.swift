@@ -30,7 +30,10 @@ final class WorkspaceSymbolSearchService {
 
         if needle.isEmpty {
             guard let currentFilePath, let currentContent, let currentLanguage else { return [] }
-            guard let rel = Self.relativePath(projectRoot: projectRoot, absolutePath: currentFilePath) else { return [] }
+            guard let rel = Self.relativePath(
+                    projectRoot: projectRoot, 
+                    absolutePath: currentFilePath
+                ) else { return [] }
             let parsed = parseSymbols(
                 language: currentLanguage,
                 content: currentContent,

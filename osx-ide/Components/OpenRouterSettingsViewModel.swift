@@ -79,7 +79,9 @@ final class OpenRouterSettingsViewModel: ObservableObject {
                 appName: appName,
                 referer: referer
             )
-            let sorted = models.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            let sorted = models.sorted { 
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending 
+            }
             self.models = sorted
             hasLoadedModels = true
             updateModelQuery()
@@ -171,7 +173,8 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             filteredModels = []
         } else {
             filteredModels = models.filter {
-                $0.displayName.localizedCaseInsensitiveContains(trimmed) || $0.id.localizedCaseInsensitiveContains(trimmed)
+                $0.displayName.localizedCaseInsensitiveContains(trimmed) || 
+                $0.id.localizedCaseInsensitiveContains(trimmed)
             }
             filteredModels = Array(filteredModels.prefix(60))
         }

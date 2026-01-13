@@ -183,28 +183,110 @@ public actor AppLogger {
         }
     }
 
-    public func trace(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
-        log(.trace, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
+    public func trace(
+        category: LogCategory, 
+        message: String, 
+        metadata: [String: Any]? = nil, 
+        file: String = #fileID, 
+        function: String = #function, 
+        line: Int = #line
+    ) {
+        log(
+                .trace, 
+                category: category, 
+                message: message, 
+                metadata: metadata, 
+                file: file, 
+                function: function, 
+                line: line
+            )
     }
 
-    public func debug(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
-        log(.debug, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
+    public func debug(
+        category: LogCategory, 
+        message: String, 
+        metadata: [String: Any]? = nil, 
+        file: String = #fileID, 
+        function: String = #function, 
+        line: Int = #line
+    ) {
+        log(
+                .debug, 
+                category: category, 
+                message: message, 
+                metadata: metadata, 
+                file: file, 
+                function: function, 
+                line: line
+            )
     }
 
-    public func info(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
+    public func info(
+        category: LogCategory, 
+        message: String, 
+        metadata: [String: Any]? = nil, 
+        file: String = #fileID, 
+        function: String = #function, 
+        line: Int = #line
+    ) {
         log(.info, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
     }
 
-    public func warning(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
-        log(.warning, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
+    public func warning(
+        category: LogCategory, 
+        message: String, 
+        metadata: [String: Any]? = nil, 
+        file: String = #fileID, 
+        function: String = #function, 
+        line: Int = #line
+    ) {
+        log(
+                .warning, 
+                category: category, 
+                message: message, 
+                metadata: metadata, 
+                file: file, 
+                function: function, 
+                line: line
+            )
     }
 
-    public func error(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
-        log(.error, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
+    public func error(
+        category: LogCategory, 
+        message: String, 
+        metadata: [String: Any]? = nil, 
+        file: String = #fileID, 
+        function: String = #function, 
+        line: Int = #line
+    ) {
+        log(
+                .error, 
+                category: category, 
+                message: message, 
+                metadata: metadata, 
+                file: file, 
+                function: function, 
+                line: line
+            )
     }
 
-    public func critical(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
-        log(.critical, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
+    public func critical(
+        category: LogCategory, 
+        message: String, 
+        metadata: [String: Any]? = nil, 
+        file: String = #fileID, 
+        function: String = #function, 
+        line: Int = #line
+    ) {
+        log(
+                .critical, 
+                category: category, 
+                message: message, 
+                metadata: metadata, 
+                file: file, 
+                function: function, 
+                line: line
+            )
     }
 
     private func shouldLog(_ level: LogLevel) -> Bool {

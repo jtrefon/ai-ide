@@ -83,7 +83,8 @@ struct ToolExecutionTimelineView: View {
                             Button {
                                 toggleExpanded(toolCallId: entry.id)
                             } label: {
-                                Image(systemName: expandedToolCallIds.contains(entry.id) ? "chevron.up" : "chevron.down")
+                                Image(systemName: expandedToolCallIds.contains(entry.id) ? 
+                                "chevron.up" : "chevron.down")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             }

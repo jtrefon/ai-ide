@@ -61,11 +61,22 @@ public actor CheckpointManager {
                 continue
             }
 
-            let backupURL = checkpointDir.appendingPathComponent("files", isDirectory: true).appendingPathComponent(normalized)
-            try FileManager.default.createDirectory(at: backupURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let backupURL = checkpointDir
+                .appendingPathComponent("files", isDirectory: true)
+                .appendingPathComponent(normalized)
+            try FileManager.default.createDirectory(
+                at: backupURL.deletingLastPathComponent(), 
+                withIntermediateDirectories: true
+            )
 
             try copyFile(source: sourceURL, destination: backupURL)
-            entries.append(CheckpointEntry(relativePath: normalized, existed: true, stagedRelativeBackupPath: "files/\(normalized)"))
+            entries.append(
+                CheckpointEntry(
+                    relativePath: normalized, 
+                    existed: true, 
+                    stagedRelativeBackupPath: "files/\(normalized)"
+                )
+            )
         }
 
         let manifest = CheckpointManifest(id: checkpointId, createdAt: Date(), entries: entries)
@@ -95,7 +106,10 @@ public actor CheckpointManager {
             guard FileManager.default.fileExists(atPath: backupURL.path) else { return false }
 
             let targetURL = root.appendingPathComponent(entry.relativePath)
-            try FileManager.default.createDirectory(at: targetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                    at: targetURL.deletingLastPathComponent(), 
+                    withIntermediateDirectories: true
+                )
             try copyFile(source: backupURL, destination: targetURL)
             return true
         }

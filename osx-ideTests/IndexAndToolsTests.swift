@@ -29,8 +29,14 @@ struct IndexAndToolsTests {
 
         let files = IndexFileEnumerator.enumerateProjectFiles(rootURL: tempRoot, excludePatterns: patterns)
 
-        #expect(files.contains(where: { $0.standardizedFileURL.path == srcFile.standardizedFileURL.path }), "Expected src file to be enumerated")
-        #expect(!files.contains(where: { $0.path.contains("node_modules") }), "Expected node_modules tree to be excluded from enumeration")
+        #expect(
+            files.contains(where: { $0.standardizedFileURL.path == srcFile.standardizedFileURL.path }), 
+            "Expected src file to be enumerated"
+        )
+        #expect(
+            !files.contains(where: { $0.path.contains("node_modules") }), 
+            "Expected node_modules tree to be excluded from enumeration"
+        )
     }
 
     @Test func testIndexEnumeratesTSX() async throws {
@@ -47,14 +53,40 @@ struct IndexAndToolsTests {
         let patterns = IndexExcludePatternManager.loadExcludePatterns(projectRoot: tempRoot, defaultPatterns: IndexConfiguration.default.excludePatterns)
         let files = IndexFileEnumerator.enumerateProjectFiles(rootURL: tempRoot, excludePatterns: patterns)
 
-        #expect(files.contains(where: { $0.standardizedFileURL.path == tsxFile.standardizedFileURL.path }), "Expected .tsx file to be enumerated")
+        #expect(
+            files.contains(where: { $0.standardizedFileURL.path == tsxFile.standardizedFileURL.path }), 
+            "Expected .tsx file to be enumerated"
+        )
     }
 
     @Test func testIndexReadFileFallsBackToDiskWhenNotIndexed() async throws {
         struct LocalMockAIService: AIService, @unchecked Sendable {
-            func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws -> AIServiceResponse { AIServiceResponse(content: nil, toolCalls: nil) }
-            func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse { AIServiceResponse(content: nil, toolCalls: nil) }
-            func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse { AIServiceResponse(content: nil, toolCalls: nil) }
+            func sendMessage(
+                _ message: String, 
+                context: String?, 
+                tools: [AITool]?, 
+                mode: AIMode?
+            ) async throws -> AIServiceResponse { 
+                AIServiceResponse(content: nil, toolCalls: nil) 
+            }
+            func sendMessage(
+                _ message: String, 
+                context: String?, 
+                tools: [AITool]?, 
+                mode: AIMode?, 
+                projectRoot: URL?
+            ) async throws -> AIServiceResponse { 
+                AIServiceResponse(content: nil, toolCalls: nil) 
+            }
+            func sendMessage(
+                _ messages: [ChatMessage], 
+                context: String?, 
+                tools: [AITool]?, 
+                mode: AIMode?, 
+                projectRoot: URL?
+            ) async throws -> AIServiceResponse { 
+                AIServiceResponse(content: nil, toolCalls: nil) 
+            }
             func explainCode(_ code: String) async throws -> String { "" }
             func refactorCode(_ code: String, instructions: String) async throws -> String { "" }
             func generateCode(_ prompt: String) async throws -> String { "" }

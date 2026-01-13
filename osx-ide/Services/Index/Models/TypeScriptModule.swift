@@ -27,7 +27,10 @@ public final class TypeScriptModule: RegexLanguageModule, @unchecked Sendable {
         let jsKeywords = [
             "break","case","catch","class","const","continue","debugger","default","delete","do","else","export","extends","finally","for","function","if","import","in","instanceof","let","new","return","super","switch","this","throw","try","typeof","var","void","while","with","yield","async","await"
         ]
-        let tsKeywords = ["interface","type","implements","namespace","abstract","public","private","protected","readonly"]
+        let tsKeywords = [
+                    "interface","type","implements","namespace",
+                    "abstract","public","private","protected","readonly"
+                ]
         
         highlightWholeWords(jsKeywords, color: NSColor.systemBlue, in: attr, code: code)
         highlightWholeWords(tsKeywords, color: NSColor.systemPurple, in: attr, code: code)

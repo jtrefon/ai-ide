@@ -92,7 +92,12 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     }
     
     /// Embed terminal in the specified parent view
-    func embedTerminal(in parentView: NSView, directory: URL? = nil, fontSize: Double? = nil, fontFamily: String? = nil) {
+    func embedTerminal(
+        in parentView: NSView, 
+        directory: URL? = nil, 
+        fontSize: Double? = nil, 
+        fontFamily: String? = nil
+    ) {
         if let fontSize = fontSize {
             self.fontSize = CGFloat(fontSize)
         }
@@ -105,7 +110,9 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         // If we already have a terminal view and process, check if we just need to change dir
         if let existingView = terminalView {
             if existingView.enclosingScrollView?.superview == parentView || existingView.superview == parentView {
-                if let current = self.currentDirectory?.standardizedFileURL, let new = newDir, current.path != new.path {
+                if let current = self.currentDirectory?.standardizedFileURL, 
+               let new = newDir, 
+               current.path != new.path {
                     Task { @MainActor [weak self] in
                         self?.currentDirectory = new
                     }
@@ -322,7 +329,11 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         return parsed.newIndex
     }
 
-    private func consumeLineBreakIfPresent(_ text: String, at index: String.Index, into textStorage: NSTextStorage) -> String.Index? {
+    private func consumeLineBreakIfPresent(
+        _ text: String, 
+        at index: String.Index, 
+        into textStorage: NSTextStorage
+    ) -> String.Index? {
         let ch = text[index]
         if ch == "\n" {
             appendNewline(into: textStorage)
@@ -336,7 +347,11 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         return nil
     }
 
-    private func consumeEditingControlIfPresent(_ text: String, at index: String.Index, into textStorage: NSTextStorage) -> String.Index? {
+    private func consumeEditingControlIfPresent(
+        _ text: String, 
+        at index: String.Index, 
+        into textStorage: NSTextStorage
+    ) -> String.Index? {
         let ch = text[index]
         if ch == "\u{08}" || ch == "\u{7F}" {
             handleBackspace()
@@ -398,17 +413,25 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     func eraseToEndOfLine(in textStorage: NSTextStorage) {
         let full = textStorage.string as NSString
         let startIndex = max(0, currentLineStartLocation + cursorColumn)
-        let searchRange = NSRange(location: currentLineStartLocation, length: max(0, full.length - currentLineStartLocation))
+        let searchRange = NSRange(
+            location: currentLineStartLocation, 
+            length: max(0, full.length - currentLineStartLocation)
+        )
         let newlineRange = full.range(of: "\n", options: [], range: searchRange)
         let lineEnd = (newlineRange.location == NSNotFound) ? full.length : newlineRange.location
         if startIndex < lineEnd {
-            textStorage.deleteCharacters(in: NSRange(location: startIndex, length: lineEnd - startIndex))
+            textStorage.deleteCharacters(
+                in: NSRange(location: startIndex, length: lineEnd - startIndex)
+            )
         }
     }
 
     func eraseInLine(mode: Int, in textStorage: NSTextStorage) {
         let full = textStorage.string as NSString
-        let lineRange = NSRange(location: currentLineStartLocation, length: max(0, full.length - currentLineStartLocation))
+        let lineRange = NSRange(
+            location: currentLineStartLocation, 
+            length: max(0, full.length - currentLineStartLocation)
+        )
         let newlineRange = full.range(of: "\n", options: [], range: lineRange)
         let lineEnd = (newlineRange.location == NSNotFound) ? full.length : newlineRange.location
         let cursorIndex = max(0, min(currentLineStartLocation + cursorColumn, lineEnd))
@@ -419,14 +442,24 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         case 1:
             // From start of line to cursor (inclusive in terminals, but inclusive isn't critical for us).
             if currentLineStartLocation < cursorIndex {
-                textStorage.deleteCharacters(in: NSRange(location: currentLineStartLocation, length: cursorIndex - currentLineStartLocation))
+                textStorage.deleteCharacters(
+                    in: NSRange(
+                        location: currentLineStartLocation, 
+                        length: cursorIndex - currentLineStartLocation
+                    )
+                )
                 currentLineStartLocation = max(0, currentLineStartLocation)
                 cursorColumn = 0
             }
         case 2:
             // Entire line.
             if currentLineStartLocation < lineEnd {
-                textStorage.deleteCharacters(in: NSRange(location: currentLineStartLocation, length: lineEnd - currentLineStartLocation))
+                textStorage.deleteCharacters(
+                    in: NSRange(
+                        location: currentLineStartLocation, 
+                        length: lineEnd - currentLineStartLocation
+                    )
+                )
             }
             cursorColumn = 0
         default:
@@ -437,7 +470,10 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     func deleteCharacters(_ count: Int, in textStorage: NSTextStorage) {
         guard count > 0 else { return }
         let full = textStorage.string as NSString
-        let lineRange = NSRange(location: currentLineStartLocation, length: max(0, full.length - currentLineStartLocation))
+        let lineRange = NSRange(
+            location: currentLineStartLocation, 
+            length: max(0, full.length - currentLineStartLocation)
+        )
         let newlineRange = full.range(of: "\n", options: [], range: lineRange)
         let lineEnd = (newlineRange.location == NSNotFound) ? full.length : newlineRange.location
         let cursorIndex = max(0, min(currentLineStartLocation + cursorColumn, lineEnd))
@@ -452,17 +488,29 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
 
         // Find end-of-line (or end-of-buffer) so we overwrite within the line.
         let full = textStorage.string as NSString
-        let searchRange = NSRange(location: currentLineStartLocation, length: max(0, full.length - currentLineStartLocation))
+        let searchRange = NSRange(
+                location: currentLineStartLocation, 
+                length: max(0, full.length - currentLineStartLocation)
+            )
         let newlineRange = full.range(of: "\n", options: [], range: searchRange)
         let lineEnd = (newlineRange.location == NSNotFound) ? full.length : newlineRange.location
 
         if absoluteCursor < lineEnd {
             // Overwrite within existing line.
-            textStorage.replaceCharacters(in: NSRange(location: absoluteCursor, length: 1), with: NSAttributedString(string: character, attributes: currentTextAttributes))
+            textStorage.replaceCharacters(
+                in: NSRange(location: absoluteCursor, length: 1),
+                with: NSAttributedString(
+                    string: character,
+                    attributes: currentTextAttributes
+                )
+            )
         } else {
             // Append at end of line (before newline if present).
             let insertLocation = lineEnd
-            textStorage.insert(NSAttributedString(string: character, attributes: currentTextAttributes), at: insertLocation)
+            textStorage.insert(
+                NSAttributedString(string: character, attributes: currentTextAttributes), 
+                at: insertLocation
+            )
         }
 
         cursorColumn += 1

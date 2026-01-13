@@ -23,7 +23,10 @@ struct AIChatPanel: View {
                     .padding(.horizontal)
                 Spacer()
                 if let selected = currentSelection, !selected.isEmpty {
-                    Text(String(format: localized("ai_chat.context_format"), "\(selected.prefix(30))\(selected.count > 30 ? "..." : "")"))
+                    Text(String(
+                    format: localized("ai_chat.context_format"), 
+                    "\(selected.prefix(30))\(selected.count > 30 ? "..." : "")"
+                ))
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.horizontal)
@@ -156,7 +159,9 @@ struct AIChatPanel: View {
     private func sendMessage() {
         // Use selected code as context if available
         let context = currentSelection
-        conversationManager.currentInput = conversationManager.currentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        conversationManager.currentInput = conversationManager.currentInput.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
         conversationManager.sendMessage(context: context)
     }
 
@@ -189,7 +194,10 @@ struct AIChatPanel: View {
         AIChatPanel(
             selectionContext: ctx,
             conversationManager: container.conversationManager,
-            ui: UIStateManager(uiService: UIService(errorManager: ErrorManager(), eventBus: EventBus()), eventBus: EventBus())
+            ui: UIStateManager(
+                uiService: UIService(errorManager: ErrorManager(), eventBus: EventBus()), 
+                eventBus: EventBus()
+            )
         )
     }
 }

@@ -355,7 +355,11 @@ public final class AIToolExecutor {
         return try await tool.execute(arguments: ToolArguments(mergedArguments))
     }
 
-    private func makeToolCallFinalMessage(result: Result<String, Error>, toolCall: AIToolCall, targetFile: String?) -> ChatMessage {
+    private func makeToolCallFinalMessage(
+            result: Result<String, Error>, 
+            toolCall: AIToolCall, 
+            targetFile: String?
+        ) -> ChatMessage {
         switch result {
         case .success(let content):
             return Self.makeToolExecutionMessage(
@@ -392,14 +396,18 @@ public final class AIToolExecutor {
             do {
                 let mergedArguments = await buildMergedArguments(toolCall: toolCall, conversationId: conversationId)
                 let content = try await executeToolAndCaptureResult(
-                    tool: tool,
-                    toolCall: toolCall,
-                    mergedArguments: mergedArguments,
-                    conversationId: conversationId,
-                    targetFile: targetFile,
+                    tool: tool, 
+                    toolCall: toolCall, 
+                    mergedArguments: mergedArguments, 
+                    conversationId: conversationId, 
+                    targetFile: targetFile, 
                     onProgress: onProgress
                 )
-                await logToolExecuteSuccess(conversationId: conversationId, toolCall: toolCall, resultLength: content.count)
+                await logToolExecuteSuccess(
+                    conversationId: conversationId, 
+                    toolCall: toolCall, 
+                    resultLength: content.count
+                )
                 result = .success(content)
             } catch {
                 await logToolExecuteError(conversationId: conversationId, toolCall: toolCall, error: error)

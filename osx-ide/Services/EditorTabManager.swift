@@ -7,7 +7,11 @@ final class EditorTabManager {
         closeTabByID(tabs[idx].id)
     }
 
-    func activateTabByFilePath(filePath: String, tabs: [EditorPaneStateManager.EditorTab], activateTabByID: (UUID) -> Void) {
+    func activateTabByFilePath(
+            filePath: String, 
+            tabs: [EditorPaneStateManager.EditorTab], 
+            activateTabByID: (UUID) -> Void
+        ) {
         guard let idx = tabs.firstIndex(where: { $0.filePath == filePath }) else { return }
         activateTabByID(tabs[idx].id)
     }

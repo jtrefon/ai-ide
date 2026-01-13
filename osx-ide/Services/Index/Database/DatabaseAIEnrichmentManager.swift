@@ -10,7 +10,9 @@ final class DatabaseAIEnrichmentManager {
 
     func markAIEnriched(resourceId: String, score: Double, summary: String?) throws {
         // Preserve heuristic scores: an AI score of 0 means "unknown" and must not clobber an existing score.
-        let sql = "UPDATE resources SET ai_enriched = 1, quality_score = CASE WHEN ? > 0 THEN ? ELSE quality_score END, summary = ? WHERE id = ?;"
+        let sql = "UPDATE resources SET ai_enriched = 1, " +
+            "quality_score = CASE WHEN ? > 0 THEN ? ELSE quality_score END, " +
+            "summary = ? WHERE id = ?;"
         let summaryValue: Any = summary ?? NSNull()
         try database.execute(sql: sql, parameters: [score, score, summaryValue, resourceId])
     }
@@ -55,7 +57,8 @@ final class DatabaseAIEnrichmentManager {
         let rootPath = projectRoot.standardizedFileURL.path
         let rootPrefix = rootPath.hasSuffix("/") ? rootPath : (rootPath + "/")
 
-        let sql = "SELECT path, summary FROM resources WHERE ai_enriched = 1 AND path LIKE ? AND summary IS NOT NULL AND summary != '' ORDER BY quality_score DESC LIMIT ?;"
+        let sql = "SELECT path, summary FROM resources WHERE ai_enriched = 1 AND path LIKE ? " +
+            "AND summary IS NOT NULL AND summary != '' ORDER BY quality_score DESC LIMIT ?;"
 
         var results: [(path: String, summary: String)] = []
         try database.syncOnQueue {
@@ -105,7 +108,8 @@ final class DatabaseAIEnrichmentManager {
             .sorted()
             .joined(separator: " OR ")
 
-        let sql = "SELECT AVG(quality_score) FROM resources WHERE ai_enriched = 1 AND quality_score > 0 AND path LIKE ? AND (\(extPredicates));"
+        let sql = "SELECT AVG(quality_score) FROM resources WHERE ai_enriched = 1 " +
+                "AND quality_score > 0 AND path LIKE ? AND (\(extPredicates));"
 
         var parameters: [Any] = [rootPrefix + "%"]
         parameters.append(contentsOf: allowedExtensions.sorted().map { "%.\($0)" })

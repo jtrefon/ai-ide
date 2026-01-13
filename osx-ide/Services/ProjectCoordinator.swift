@@ -98,7 +98,10 @@ class ProjectCoordinator {
             let shmURL = URL(fileURLWithPath: dbURL.path + "-shm")
 
             do {
-                try FileManager.default.createDirectory(at: dbURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    at: dbURL.deletingLastPathComponent(), 
+                    withIntermediateDirectories: true
+                )
                 for url in [dbURL, walURL, shmURL] {
                     if FileManager.default.fileExists(atPath: url.path) {
                         try FileManager.default.removeItem(at: url)
@@ -123,9 +126,15 @@ class ProjectCoordinator {
             }
 
             if isIndexEnabled {
-                index.reindexProject(aiEnrichmentEnabled: aiEnrichment)
+                index.reindexProject(
+                    aiEnrichmentEnabled: aiEnrichment
+                )
             } else {
-                Task { await IndexLogger.shared.log("ProjectCoordinator: Reindex requested but Codebase Index is disabled") }
+                Task { 
+                await IndexLogger.shared.log(
+                    "ProjectCoordinator: Reindex requested but Codebase Index is disabled"
+                ) 
+            }
             }
         } catch {
             self.codebaseIndex = nil
@@ -147,7 +156,10 @@ class ProjectCoordinator {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard let self = self else { return }
             
-            let aiEnrichmentEnabled = settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, default: false)
+            let aiEnrichmentEnabled = settingsStore.bool(
+                    forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, 
+                    default: false
+                )
             self.reindexProject(aiEnrichment: aiEnrichmentEnabled)
         }
     }

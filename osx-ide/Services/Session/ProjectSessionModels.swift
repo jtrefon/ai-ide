@@ -448,12 +448,18 @@ extension ProjectSession {
             )
             
             let editorConfig = EditorConfiguration(
-                selectedThemeRawValue: try container.decodeIfPresent(String.self, forKey: .selectedThemeRawValue) ?? "system",
-                showLineNumbers: try container.decodeIfPresent(Bool.self, forKey: .showLineNumbers) ?? true,
-                wordWrap: try container.decodeIfPresent(Bool.self, forKey: .wordWrap) ?? false,
-                minimapVisible: try container.decodeIfPresent(Bool.self, forKey: .minimapVisible) ?? false,
-                showHiddenFilesInFileTree: try container.decodeIfPresent(Bool.self, forKey: .showHiddenFilesInFileTree) ?? false
-            )
+                    selectedThemeRawValue: try container.decodeIfPresent(
+                        String.self, 
+                        forKey: .selectedThemeRawValue
+                    ) ?? "system",
+                    showLineNumbers: try container.decodeIfPresent(Bool.self, forKey: .showLineNumbers) ?? true,
+                    wordWrap: try container.decodeIfPresent(Bool.self, forKey: .wordWrap) ?? false,
+                    minimapVisible: try container.decodeIfPresent(Bool.self, forKey: .minimapVisible) ?? false,
+                    showHiddenFilesInFileTree: try container.decodeIfPresent(
+                        Bool.self, 
+                        forKey: .showHiddenFilesInFileTree
+                    ) ?? false
+                )
             
             let fileStateConfig = FileState(
                 lastOpenFileRelativePath: try container.decodeIfPresent(String.self, forKey: .lastOpenFileRelativePath),
@@ -464,10 +470,22 @@ extension ProjectSession {
             let splitEditorConfig = SplitEditorState(
                 isSplitEditor: try container.decodeIfPresent(Bool.self, forKey: .isSplitEditor) ?? false,
                 splitAxisRawValue: try container.decodeIfPresent(String.self, forKey: .splitAxisRawValue) ?? "vertical",
-                focusedEditorPaneRawValue: try container.decodeIfPresent(String.self, forKey: .focusedEditorPaneRawValue) ?? "primary",
-                primaryOpenTabRelativePaths: try container.decodeIfPresent([String].self, forKey: .primaryOpenTabRelativePaths) ?? [],
-                primaryActiveTabRelativePath: try container.decodeIfPresent(String.self, forKey: .primaryActiveTabRelativePath),
-                secondaryOpenTabRelativePaths: try container.decodeIfPresent([String].self, forKey: .secondaryOpenTabRelativePaths) ?? [],
+                focusedEditorPaneRawValue: try container.decodeIfPresent(
+                        String.self, 
+                        forKey: .focusedEditorPaneRawValue
+                    ) ?? "primary",
+                primaryOpenTabRelativePaths: try container.decodeIfPresent(
+                        [String].self, 
+                        forKey: .primaryOpenTabRelativePaths
+                    ) ?? [],
+                primaryActiveTabRelativePath: try container.decodeIfPresent(
+                        String.self, 
+                        forKey: .primaryActiveTabRelativePath
+                    ),
+                secondaryOpenTabRelativePaths: try container.decodeIfPresent(
+                        [String].self, 
+                        forKey: .secondaryOpenTabRelativePaths
+                    ) ?? [],
                 secondaryActiveTabRelativePath: try container.decodeIfPresent(String.self, forKey: .secondaryActiveTabRelativePath)
             )
             

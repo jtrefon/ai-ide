@@ -64,7 +64,10 @@ public extension CodebaseIndexProtocol {
         }
     }
 
-    func searchSymbolsWithPathsResult(nameLike query: String, limit: Int) async -> Result<[SymbolSearchResult], AppError> {
+    func searchSymbolsWithPathsResult(
+            nameLike query: String, 
+            limit: Int
+        ) async -> Result<[SymbolSearchResult], AppError> {
         do {
             return .success(try await searchSymbolsWithPaths(nameLike: query, limit: limit))
         } catch {

@@ -3,7 +3,10 @@ import Foundation
 extension CodebaseIndex {
     public func getStats() async throws -> IndexStats {
         let counts = try await database.getIndexStatsCounts()
-        let totalProjectFileCount = IndexFileEnumerator.enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns).count
+        let totalProjectFileCount = IndexFileEnumerator.enumerateProjectFiles(
+                    rootURL: projectRoot, 
+                    excludePatterns: excludePatterns
+                ).count
 
         let aiEnrichableProjectFileCount = IndexFileEnumerator
             .enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns)
@@ -38,11 +41,22 @@ extension CodebaseIndex {
         )
     }
 
-    private func loadScopedStats(fallbackIndexedCount: Int) async -> (indexedCount: Int, aiEnrichedCount: Int, avgAIQuality: Double) {
+    private func loadScopedStats(
+            fallbackIndexedCount: Int
+        ) async -> (indexedCount: Int, aiEnrichedCount: Int, avgAIQuality: Double) {
         let allowed = AppConstants.Indexing.allowedExtensions
-        let indexedCount = (try? await database.getIndexedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowed)) ?? fallbackIndexedCount
-        let aiEnrichedCount = (try? await database.getAIEnrichedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowed)) ?? 0
-        let avgAIQuality = (try? await database.getAverageAIQualityScoreScoped(projectRoot: projectRoot, allowedExtensions: allowed)) ?? 0
+        let indexedCount = (try? await database.getIndexedResourceCountScoped(
+            projectRoot: projectRoot,
+            allowedExtensions: allowed
+        )) ?? fallbackIndexedCount
+        let aiEnrichedCount = (try? await database.getAIEnrichedResourceCountScoped(
+                    projectRoot: projectRoot, 
+                    allowedExtensions: allowed
+                )) ?? 0
+        let avgAIQuality = (try? await database.getAverageAIQualityScoreScoped(
+                    projectRoot: projectRoot, 
+                    allowedExtensions: allowed
+                )) ?? 0
         return (indexedCount, aiEnrichedCount, avgAIQuality)
     }
 
@@ -62,7 +76,9 @@ extension CodebaseIndex {
         return (sizeBytes, isInWorkspace)
     }
 
-    private func symbolKindStats(_ kindCounts: [String: Int]) -> (classCount: Int, structCount: Int, enumCount: Int, protocolCount: Int, functionCount: Int, variableCount: Int) {
+    private func symbolKindStats(
+        _ kindCounts: [String: Int]
+    ) -> (classCount: Int, structCount: Int, enumCount: Int, protocolCount: Int, functionCount: Int, variableCount: Int) {
         return (
             classCount: kindCounts[SymbolKind.class.rawValue] ?? 0,
             structCount: kindCounts[SymbolKind.struct.rawValue] ?? 0,

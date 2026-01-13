@@ -5,11 +5,12 @@ extension CodebaseIndex {
         return """
         Analyze the following source file and provide a quality score and a concise summary.
 
-        The summary should be 1-2 sentences describing the main purpose of the file or the primary class/struct it contains.
-        Focus on "what" and "why", not just "how".
+        The summary should be 1-2 sentences describing the main purpose of the file " +
+                "or the primary class/struct it contains. Focus on \"what\" and \"why\", not just \"how\"."
 
         Return ONLY a single line JSON object like:
-        {"score": 85, "summary": "Manages the SQLite database for the codebase index, handling table creation and thread-safe operations."}
+        {"score": 85, "summary": "Manages the SQLite database for the " +
+                "codebase index, handling table creation and thread-safe operations."}
 
         Where score is an integer from 0 to 100.
 

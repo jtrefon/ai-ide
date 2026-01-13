@@ -147,7 +147,9 @@ final class ProjectSessionCoordinator {
         let focused = FileEditorStateManager.PaneID(rawValue: session.focusedEditorPaneRawValue) ?? .primary
         fileEditor.focusedPane = focused
 
-        let primaryRelPaths = !session.primaryOpenTabRelativePaths.isEmpty ? session.primaryOpenTabRelativePaths : session.openTabRelativePaths
+        let primaryRelPaths = !session.primaryOpenTabRelativePaths.isEmpty 
+                ? session.primaryOpenTabRelativePaths 
+                : session.openTabRelativePaths
         let primaryActiveRel = session.primaryActiveTabRelativePath ?? session.activeTabRelativePath
 
         if !primaryRelPaths.isEmpty {
@@ -171,7 +173,9 @@ final class ProjectSessionCoordinator {
                 fileEditor.focus(.secondary)
                 for rel in secondaryRelPaths {
                     let url = projectRoot.appendingPathComponent(rel)
-                    let isDir = (try? url.resourceValues(forKeys: [URLResourceKey.isDirectoryKey]))?.isDirectory ?? false
+                    let isDir = (try? url.resourceValues(
+                        forKeys: [URLResourceKey.isDirectoryKey]
+                    ))?.isDirectory ?? false
                     if FileManager.default.fileExists(atPath: url.path), !isDir {
                         loadFileFromURL(url)
                     }
@@ -187,7 +191,9 @@ final class ProjectSessionCoordinator {
 
         if primaryRelPaths.isEmpty, let rel = session.lastOpenFileRelativePath {
             let url = projectRoot.appendingPathComponent(rel)
-            let isDir = (try? url.resourceValues(forKeys: [URLResourceKey.isDirectoryKey]))?.isDirectory ?? false
+            let isDir = (try? url.resourceValues(
+                forKeys: [URLResourceKey.isDirectoryKey]
+            ))?.isDirectory ?? false
             if FileManager.default.fileExists(atPath: url.path), !isDir {
                 loadFileFromURL(url)
             }
@@ -205,27 +211,36 @@ final class ProjectSessionCoordinator {
 
         let focusedPaneState = fileEditor.focusedPaneState
 
-        if let activeID = focusedPaneState.activeTabID, let activeTab = focusedPaneState.tabs.first(where: { $0.id == activeID }) {
+        if let activeID = focusedPaneState.activeTabID, 
+                let activeTab = focusedPaneState.tabs.first(where: { $0.id == activeID }) {
             activeRelative = relativePathForURL(URL(fileURLWithPath: activeTab.filePath))
         } else {
             activeRelative = nil
         }
 
-        openTabRelatives = focusedPaneState.tabs.compactMap { relativePathForURL(URL(fileURLWithPath: $0.filePath)) }
+        openTabRelatives = focusedPaneState.tabs.compactMap { 
+                relativePathForURL(URL(fileURLWithPath: $0.filePath)) 
+            }
         lastOpenRelative = activeRelative
 
-        let primaryTabs = fileEditor.primaryPane.tabs.compactMap { relativePathForURL(URL(fileURLWithPath: $0.filePath)) }
-        let secondaryTabs = fileEditor.secondaryPane.tabs.compactMap { relativePathForURL(URL(fileURLWithPath: $0.filePath)) }
+        let primaryTabs = fileEditor.primaryPane.tabs.compactMap { 
+                relativePathForURL(URL(fileURLWithPath: $0.filePath)) 
+            }
+        let secondaryTabs = fileEditor.secondaryPane.tabs.compactMap { 
+                relativePathForURL(URL(fileURLWithPath: $0.filePath)) 
+            }
 
         let primaryActive: String?
-        if let activeID = fileEditor.primaryPane.activeTabID, let tab = fileEditor.primaryPane.tabs.first(where: { $0.id == activeID }) {
+        if let activeID = fileEditor.primaryPane.activeTabID, 
+                let tab = fileEditor.primaryPane.tabs.first(where: { $0.id == activeID }) {
             primaryActive = relativePathForURL(URL(fileURLWithPath: tab.filePath))
         } else {
             primaryActive = nil
         }
 
         let secondaryActive: String?
-        if let activeID = fileEditor.secondaryPane.activeTabID, let tab = fileEditor.secondaryPane.tabs.first(where: { $0.id == activeID }) {
+        if let activeID = fileEditor.secondaryPane.activeTabID, 
+                let tab = fileEditor.secondaryPane.tabs.first(where: { $0.id == activeID }) {
             secondaryActive = relativePathForURL(URL(fileURLWithPath: tab.filePath))
         } else {
             secondaryActive = nil

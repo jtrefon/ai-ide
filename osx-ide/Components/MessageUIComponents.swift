@@ -44,7 +44,13 @@ struct MessageUIComponents {
             // Top edge to top-right
             if corners.contains(.topRight) {
                 path.addLine(to: CGPoint(x: p2.x - radius, y: p2.y))
-                path.addArc(center: CGPoint(x: p2.x - radius, y: p2.y + radius), radius: radius, startAngle: Angle(degrees: -90), endAngle: Angle(degrees: 0), clockwise: false)
+                path.addArc(
+                    center: CGPoint(x: p2.x - radius, y: p2.y + radius),
+                    radius: radius,
+                    startAngle: Angle(degrees: -90),
+                    endAngle: Angle(degrees: 0),
+                    clockwise: false
+                )
             } else {
                 path.addLine(to: p2)
             }
@@ -52,7 +58,13 @@ struct MessageUIComponents {
             // Right edge to bottom-right
             if corners.contains(.bottomRight) {
                 path.addLine(to: CGPoint(x: p3.x - radius, y: p3.y))
-                path.addArc(center: CGPoint(x: p3.x - radius, y: p3.y - radius), radius: radius, startAngle: Angle(degrees: 0), endAngle: Angle(degrees: 90), clockwise: false)
+                path.addArc(
+                    center: CGPoint(x: p3.x - radius, y: p3.y - radius),
+                    radius: radius,
+                    startAngle: Angle(degrees: 0),
+                    endAngle: Angle(degrees: 90),
+                    clockwise: false
+                )
             } else {
                 path.addLine(to: p3)
             }
@@ -60,7 +72,13 @@ struct MessageUIComponents {
             // Bottom edge to bottom-left
             if corners.contains(.bottomLeft) {
                 path.addLine(to: CGPoint(x: p4.x + radius, y: p4.y))
-                path.addArc(center: CGPoint(x: p4.x + radius, y: p4.y - radius), radius: radius, startAngle: Angle(degrees: 90), endAngle: Angle(degrees: 180), clockwise: false)
+                path.addArc(
+                    center: CGPoint(x: p4.x + radius, y: p4.y - radius),
+                    radius: radius,
+                    startAngle: Angle(degrees: 90),
+                    endAngle: Angle(degrees: 180),
+                    clockwise: false
+                )
             } else {
                 path.addLine(to: p4)
             }
@@ -68,7 +86,13 @@ struct MessageUIComponents {
             // Left edge back to top-left
             if corners.contains(.topLeft) {
                 path.addLine(to: CGPoint(x: p1.x + radius, y: p1.y))
-                path.addArc(center: CGPoint(x: p1.x + radius, y: p1.y + radius), radius: radius, startAngle: Angle(degrees: 180), endAngle: Angle(degrees: 270), clockwise: false)
+                path.addArc(
+                    center: CGPoint(x: p1.x + radius, y: p1.y + radius),
+                    radius: radius,
+                    startAngle: Angle(degrees: 180),
+                    endAngle: Angle(degrees: 270),
+                    clockwise: false
+                )
             } else {
                 path.addLine(to: p1)
             }

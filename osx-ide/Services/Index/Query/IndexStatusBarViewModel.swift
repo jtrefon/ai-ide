@@ -70,7 +70,9 @@ final class IndexStatusBarViewModel: ObservableObject {
         }
 
         let size = formatBytes(stats.databaseSizeBytes)
-        let score = stats.aiEnrichedResourceCount > 0 && stats.averageAIQualityScore > 0 ? stats.averageAIQualityScore : stats.averageQualityScore
+        let score = stats.aiEnrichedResourceCount > 0 && stats.averageAIQualityScore > 0 
+                ? stats.averageAIQualityScore 
+                : stats.averageQualityScore
         let quality = score > 0 ? String(format: "%.0f", score) : "0"
         return "C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | M \(stats.memoryCount) (LT \(stats.longTermMemoryCount)) | DB \(size)"
     }

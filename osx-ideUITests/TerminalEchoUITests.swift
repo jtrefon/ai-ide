@@ -121,7 +121,8 @@ final class TerminalEchoUITests: XCTestCase {
         }
     }
 
-    /// Repro: after typing the second character, the first character appears duplicated in the rendered terminal output.
+    /// Repro: after typing the second character, the first character appears duplicated in the
+    /// rendered terminal output.
     /// Example: typing 'l' then 's' displays 'lls'. Uses screenshot OCR to capture visual output.
     /// Note: keeping this method name stable ensures xcodebuild -only-testing targets it reliably.
     func testTerminalFirstLetterNotDuplicated_Rendered() throws {
@@ -152,7 +153,12 @@ final class TerminalEchoUITests: XCTestCase {
                 attachment.lifetime = .keepAlways
                 add(attachment)
             }
-            XCTAssertFalse(ocr.contains("lls"), "Terminal should not display duplicated first letter (must not show 'lls' after typing 'l' then 's'). OCR text was: \n\(ocr)")
+            XCTAssertFalse(
+                ocr.contains("lls"),
+                "Terminal should not display duplicated first letter " +
+                    "(must not show 'lls' after typing 'l' then 's'). " +
+                    "OCR text was: \n\(ocr)"
+            )
         } else {
             XCTSkip("Terminal view not found - skipping rendered first-letter duplication repro")
         }

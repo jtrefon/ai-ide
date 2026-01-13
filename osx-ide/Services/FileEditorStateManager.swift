@@ -28,7 +28,11 @@ final class FileEditorStateManager: ObservableObject {
     let primaryPane: EditorPaneStateManager
     let secondaryPane: EditorPaneStateManager
 
-    init(fileEditorService: FileEditorServiceProtocol, fileDialogService: FileDialogServiceProtocol, fileSystemService: FileSystemService) {
+    init(
+            fileEditorService: FileEditorServiceProtocol, 
+            fileDialogService: FileDialogServiceProtocol, 
+            fileSystemService: FileSystemService
+        ) {
         self.primaryPane = EditorPaneStateManager(
             fileEditorService: fileEditorService,
             fileDialogService: fileDialogService,

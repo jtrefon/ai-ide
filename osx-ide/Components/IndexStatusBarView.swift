@@ -4,9 +4,18 @@ struct IndexStatusBarView: View {
     @ObservedObject private var appState: AppState
     @StateObject private var viewModel: IndexStatusBarViewModel
 
-    init(appState: AppState, codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?, eventBus: EventBusProtocol) {
+    init(
+            appState: AppState, 
+            codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?, 
+            eventBus: EventBusProtocol
+        ) {
         self.appState = appState
-        self._viewModel = StateObject(wrappedValue: IndexStatusBarViewModel(codebaseIndexProvider: codebaseIndexProvider, eventBus: eventBus))
+        self._viewModel = StateObject(
+                wrappedValue: IndexStatusBarViewModel(
+                    codebaseIndexProvider: codebaseIndexProvider, 
+                    eventBus: eventBus
+                )
+            )
     }
 
     @State private var isShowingMetricsInfo: Bool = false
@@ -24,13 +33,21 @@ struct IndexStatusBarView: View {
 
     private var activeLanguageLabel: String {
         guard let filePath = activeFilePath else { return "" }
-        let effective = appState.effectiveLanguageIdentifier(forAbsoluteFilePath: filePath)
+        let effective = appState.effectiveLanguageIdentifier(
+                forAbsoluteFilePath: filePath
+            )
         return displayName(for: effective)
     }
 
     private var languageChoices: [LanguageChoice] {
         var choices: [LanguageChoice] = []
-        choices.append(LanguageChoice(id: "auto", title: NSLocalizedString("status.language_mode.auto_detect", comment: ""), languageIdentifier: nil))
+        choices.append(
+            LanguageChoice(
+                id: "auto", 
+                title: NSLocalizedString("status.language_mode.auto_detect", comment: ""), 
+                languageIdentifier: nil
+            )
+        )
 
         // Core friendly list (keep simple; include React variants for common mis-detections).
         choices.append(LanguageChoice(id: "swift", title: "Swift", languageIdentifier: "swift"))
@@ -103,7 +120,10 @@ struct IndexStatusBarView: View {
                             ForEach(languageChoices) { choice in
                                 Button {
                                     guard let filePath = activeFilePath else { return }
-                                    appState.setLanguageOverride(forAbsoluteFilePath: filePath, languageIdentifier: choice.languageIdentifier)
+                                    appState.setLanguageOverride(
+                                    forAbsoluteFilePath: filePath, 
+                                    languageIdentifier: choice.languageIdentifier
+                                )
                                     isShowingLanguagePicker = false
                                 } label: {
                                     Text(choice.title)

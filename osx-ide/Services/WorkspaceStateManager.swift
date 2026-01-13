@@ -114,7 +114,9 @@ class WorkspaceStateManager: ObservableObject {
             workspaceService.currentDirectory = projectURL
             currentDirectory = projectURL
         } catch {
-            workspaceService.handleError(.invalidFilePath("Failed to create project directory: \(error.localizedDescription)"))
+            workspaceService.handleError(
+                .invalidFilePath("Failed to create project directory: \(error.localizedDescription)")
+            )
         }
     }
     
@@ -211,7 +213,8 @@ class WorkspaceStateManager: ObservableObject {
         }
         
         // Check for leading/trailing spaces or dots
-        if trimmedName.hasPrefix(" ") || trimmedName.hasPrefix(".") || trimmedName.hasSuffix(" ") || trimmedName.hasSuffix(".") {
+        if trimmedName.hasPrefix(" ") || trimmedName.hasPrefix(".") 
+                || trimmedName.hasSuffix(" ") || trimmedName.hasSuffix(".") {
             return false
         }
         

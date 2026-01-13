@@ -68,7 +68,8 @@ final class ToolArgumentResolver {
     /// Checks if a tool requires file path injection
     private static func isFilePathLikeTool(_ toolName: String) -> Bool {
         switch toolName {
-        case "read_file", "write_file", "write_files", "create_file", "delete_file", "replace_in_file", "index_read_file":
+        case "read_file", "write_file", "write_files", "create_file", 
+                "delete_file", "replace_in_file", "index_read_file":
             return true
         default:
             return false
