@@ -88,8 +88,17 @@ open class RegexLanguageModule: LanguageModule, @unchecked Sendable {
         applyRegex(pattern, color: color, in: attr, code: code)
     }
     
-    public func applyRegex(_ pattern: String, color: NSColor, in attr: NSMutableAttributedString, code: String, captureGroup: Int? = nil) {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else { return }
+    public func applyRegex(
+            _ pattern: String, 
+            color: NSColor, 
+            in attr: NSMutableAttributedString, 
+            code: String, 
+            captureGroup: Int? = nil
+        ) {
+        guard let regex = try? NSRegularExpression(
+                    pattern: pattern, 
+                    options: [.dotMatchesLineSeparators]
+                ) else { return }
         let ns = code as NSString
         let fullRange = NSRange(location: 0, length: ns.length)
         let matches = regex.matches(in: code, options: [], range: fullRange)

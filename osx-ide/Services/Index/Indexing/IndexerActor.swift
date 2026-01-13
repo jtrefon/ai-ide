@@ -29,7 +29,9 @@ public actor IndexerActor {
 
         // Basic metadata extraction for Phase 1
         let resourceId = url.absoluteString
-        let fileModTime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
+        let fileModTime = (try? url.resourceValues(
+                    forKeys: [.contentModificationDateKey]
+                ))?.contentModificationDate?.timeIntervalSince1970
 
         let existingModTime = try? await database.getResourceLastModified(resourceId: resourceId)
         if let fileModTime,
@@ -41,14 +43,20 @@ public actor IndexerActor {
             let existingHash = (try? await database.getResourceContentHash(resourceId: resourceId)) ?? nil
 
             if let existingHash, !existingHash.isEmpty, existingHash == currentHash {
-                await IndexLogger.shared.log("IndexerActor: File \(url.lastPathComponent) already indexed (hash match), skipping")
+                await IndexLogger.shared.log(
+                    "IndexerActor: File \(url.lastPathComponent) already indexed (hash match), skipping"
+                )
                 return
             }
 
             // If hash differs (or missing), continue indexing using the content we already loaded.
-            await IndexLogger.shared.log("IndexerActor: File \(url.lastPathComponent) modtime matched but hash differs; reindexing")
+            await IndexLogger.shared.log(
+                    "IndexerActor: File \(url.lastPathComponent) modtime matched but hash differs; reindexing"
+                )
 
-            await IndexLogger.shared.log("IndexerActor: Indexing \(url.lastPathComponent) (Language: \(language.rawValue))")
+            await IndexLogger.shared.log(
+                    "IndexerActor: Indexing \(url.lastPathComponent) (Language: \(language.rawValue))"
+                )
             let timestamp = fileModTime
 
             try await database.upsertResourceAndFTS(
@@ -69,7 +77,9 @@ public actor IndexerActor {
             }
 
             if !symbols.isEmpty {
-                await IndexLogger.shared.log("IndexerActor: Extracted \(symbols.count) symbols from \(url.lastPathComponent)")
+                await IndexLogger.shared.log(
+                    "IndexerActor: Extracted \(symbols.count) symbols from \(url.lastPathComponent)"
+                )
                 try await database.deleteSymbols(for: resourceId)
                 try await database.saveSymbolsBatched(symbols)
             }
@@ -77,7 +87,9 @@ public actor IndexerActor {
             return
         }
 
-        await IndexLogger.shared.log("IndexerActor: Indexing \(url.lastPathComponent) (Language: \(language.rawValue))")
+        await IndexLogger.shared.log(
+                    "IndexerActor: Indexing \(url.lastPathComponent) (Language: \(language.rawValue))"
+                )
         let timestamp = fileModTime ?? Date().timeIntervalSince1970
         
         // Read file content
@@ -111,7 +123,9 @@ public actor IndexerActor {
         }
 
         if !symbols.isEmpty {
-            await IndexLogger.shared.log("IndexerActor: Extracted \(symbols.count) symbols from \(url.lastPathComponent)")
+            await IndexLogger.shared.log(
+                    "IndexerActor: Extracted \(symbols.count) symbols from \(url.lastPathComponent)"
+                )
             try await database.deleteSymbols(for: resourceId)
             try await database.saveSymbolsBatched(symbols)
         }

@@ -48,7 +48,11 @@ struct GrepTool: AITool {
         let fileManager = FileManager.default
         var results: [String] = []
         
-        let enumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])
+        let enumerator = fileManager.enumerator(
+                    at: url, 
+                    includingPropertiesForKeys: [.isRegularFileKey], 
+                    options: [.skipsHiddenFiles]
+                )
         
         while let fileURL = enumerator?.nextObject() as? URL {
             if await !isRegularFile(fileURL: fileURL) {
@@ -98,18 +102,21 @@ struct GrepTool: AITool {
 
 struct FindFileTool: AITool {
     let name = "find_file"
-    let description = "Find files matching a simple name pattern recursively (case insensitive). Use this to locate files when you don't know the exact path."
+    let description = "Find files matching a simple name pattern recursively (case insensitive). " +
+        "Use this to locate files when you don't know the exact path."
     var parameters: [String: Any] {
         [
             "type": "object",
             "properties": [
                 "pattern": [
                     "type": "string",
-                    "description": "The name pattern to search for (e.g., 'train_cli', 'ProfileView'). Partial matches allowed."
+                    "description": "The name pattern to search for (e.g., 'train_cli', 'ProfileView'). " +
+                    "Partial matches allowed."
                 ],
                 "path": [
                     "type": "string",
-                    "description": "The absolute path to start searching from (defaults to project root if context aware, otherwise required)."
+                    "description": "The absolute path to start searching from " +
+                    "(defaults to project root if context aware, otherwise required)."
                 ]
             ],
             "required": ["pattern", "path"]
@@ -128,7 +135,11 @@ struct FindFileTool: AITool {
         }
         
         let url = try pathValidator.validateAndResolve(path)
-        let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])
+        let enumerator = FileManager.default.enumerator(
+                    at: url, 
+                    includingPropertiesForKeys: [.isRegularFileKey], 
+                    options: [.skipsHiddenFiles]
+                )
         
         var matches: [String] = []
         let lowerPattern = pattern.lowercased()

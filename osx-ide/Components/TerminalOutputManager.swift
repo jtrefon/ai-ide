@@ -27,7 +27,12 @@ class TerminalOutputManager {
     
     // MARK: - Initialization
     
-    init(terminalView: NSTextView?, eventBus: EventBusProtocol, ansiRenderer: TerminalANSIRenderer, fontManager: TerminalFontManager) {
+    init(
+        terminalView: NSTextView?, 
+        eventBus: EventBusProtocol, 
+        ansiRenderer: TerminalANSIRenderer, 
+        fontManager: TerminalFontManager
+    ) {
         self.terminalView = terminalView
         self.eventBus = eventBus
         self.ansiRenderer = ansiRenderer
@@ -75,7 +80,10 @@ class TerminalOutputManager {
             if currentLineStartLocation > originalLength {
                 pendingEraseToEndOfLine = false
             } else {
-                let eraseRange = NSRange(location: currentLineStartLocation, length: originalLength - currentLineStartLocation)
+                let eraseRange = NSRange(
+                    location: currentLineStartLocation, 
+                    length: originalLength - currentLineStartLocation
+                )
                 if eraseRange.location + eraseRange.length <= storage.length {
                     storage.deleteCharacters(in: eraseRange)
                 }
@@ -88,7 +96,11 @@ class TerminalOutputManager {
 
         // Update cursor tracking
         if let newLineRange = processedText.string.range(of: "\n", options: .backwards) {
-            currentLineStartLocation = originalLength + processedText.string.distance(from: processedText.string.startIndex, to: newLineRange.upperBound)
+            currentLineStartLocation = originalLength +
+                processedText.string.distance(
+                    from: processedText.string.startIndex,
+                    to: newLineRange.upperBound
+                )
         }
 
         storage.endEditing()
@@ -117,7 +129,10 @@ class TerminalOutputManager {
         guard let terminalView = terminalView else { return }
         
         let storage = terminalView.textStorage!
-        let eraseRange = NSRange(location: currentLineStartLocation, length: storage.length - currentLineStartLocation)
+        let eraseRange = NSRange(
+            location: currentLineStartLocation,
+            length: storage.length - currentLineStartLocation
+        )
         
         storage.beginEditing()
         storage.deleteCharacters(in: eraseRange)

@@ -55,12 +55,16 @@ class ChatPromptBuilder {
     /// This helps auto-retry with a stricter instruction.
     static func isLowQualityReasoning(text: String) -> Bool {
         let split = splitReasoning(from: text)
-        guard let reasoning = split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines), !reasoning.isEmpty else {
+        guard let reasoning = split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines), 
+                !reasoning.isEmpty else {
             return false
         }
 
         // If the model literally copied placeholder example text, treat as low quality.
-        if reasoning.contains("Analyze:...") || reasoning.contains("Research:...") || reasoning.contains("Plan:...") || reasoning.contains("Reflect:...") {
+        if reasoning.contains("Analyze:...") ||
+            reasoning.contains("Research:...") ||
+            reasoning.contains("Plan:...") ||
+            reasoning.contains("Reflect:...") {
             return true
         }
 

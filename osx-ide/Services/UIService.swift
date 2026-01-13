@@ -148,7 +148,9 @@ final class UIService: UIServiceProtocol {
         return UISettings(
             selectedTheme: storedTheme,
             fontSize: fontSize,
-            fontFamily: settingsStore.string(forKey: AppConstants.Storage.fontFamilyKey) ?? AppConstants.Editor.defaultFontFamily,
+            fontFamily: settingsStore.string(
+                    forKey: AppConstants.Storage.fontFamilyKey
+                ) ?? AppConstants.Editor.defaultFontFamily,
             indentationStyle: indentationStyle,
             cliTimeoutSeconds: cliTimeoutSeconds,
             showLineNumbers: showLineNumbers,

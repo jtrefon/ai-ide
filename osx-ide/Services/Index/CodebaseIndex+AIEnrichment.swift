@@ -27,19 +27,37 @@ extension CodebaseIndex {
                 }
 
                 await IndexLogger.shared.log("Enriching file \(processed + 1)/\(total): \(file.lastPathComponent)")
-                await eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
+                await eventBus.publish(
+                    AIEnrichmentProgressEvent(
+                        processedCount: processed, 
+                        totalCount: total, 
+                        currentFile: file
+                    )
+                )
 
                 if await shouldSkipAIEnrichment(for: file) {
                     await IndexLogger.shared.log("Skipping \(file.lastPathComponent) (already enriched)")
                     processed += 1
-                    await eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
+                    await eventBus.publish(
+                    AIEnrichmentProgressEvent(
+                        processedCount: processed, 
+                        totalCount: total, 
+                        currentFile: file
+                    )
+                )
                     continue
                 }
 
                 await enrichFileForAI(file, scoringEngine: scoringEngine)
 
                 processed += 1
-                await eventBus.publish(AIEnrichmentProgressEvent(processedCount: processed, totalCount: total, currentFile: file))
+                await eventBus.publish(
+                    AIEnrichmentProgressEvent(
+                        processedCount: processed, 
+                        totalCount: total, 
+                        currentFile: file
+                    )
+                )
             }
 
             if Task.isCancelled { return }
@@ -58,7 +76,9 @@ extension CodebaseIndex {
     }
 
     private func shouldSkipAIEnrichment(for file: URL) async -> Bool {
-        let fileModTime = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
+        let fileModTime = (try? file.resourceValues(
+                    forKeys: [.contentModificationDateKey]
+                ))?.contentModificationDate?.timeIntervalSince1970
         let existingModTime = try? await database.getResourceLastModified(resourceId: file.absoluteString)
 
         guard let fileModTime, let existingModTime else { return false }
@@ -71,7 +91,11 @@ extension CodebaseIndex {
             let content = try String(contentsOf: file, encoding: .utf8)
             let relPath = makeRelativePath(file)
 
-            let assessment = await scoringEngine.score(language: LanguageDetector.detect(at: file), path: relPath, content: content)
+            let assessment = await scoringEngine.score(
+                    language: LanguageDetector.detect(at: file), 
+                    path: relPath, 
+                    content: content
+                )
             let heuristicScore = max(0, min(100, assessment.score))
             await persistHeuristicQuality(heuristicScore, assessment: assessment, file: file, relPath: relPath)
 
@@ -112,7 +136,12 @@ extension CodebaseIndex {
         return file.path
     }
 
-    private func persistHeuristicQuality(_ score: Double, assessment: QualityAssessment, file: URL, relPath: String) async {
+    private func persistHeuristicQuality(
+            _ score: Double, 
+            assessment: QualityAssessment, 
+            file: URL, 
+            relPath: String
+        ) async {
         do {
             let jsonData = try JSONEncoder().encode(assessment)
             let json = String(data: jsonData, encoding: .utf8)
@@ -125,7 +154,10 @@ extension CodebaseIndex {
         }
     }
 
-    private func withTimeout<T: Sendable>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T {
+    private func withTimeout<T: Sendable>(
+            seconds: TimeInterval, 
+            operation: @escaping @Sendable () async throws -> T
+        ) async throws -> T {
         try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask {
                 try await operation()

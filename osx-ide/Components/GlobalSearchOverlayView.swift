@@ -131,7 +131,9 @@ struct GlobalSearchOverlayView: View {
         guard let root = workspace.currentDirectory?.standardizedFileURL else { return }
 
         do {
-            let url = try appState.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(match.relativePath)
+            let url = try appState.workspaceService
+                .makePathValidator(projectRoot: root)
+                .validateAndResolve(match.relativePath)
             if openToSide {
                 fileEditor.openInOtherPane(from: url)
             } else {

@@ -41,7 +41,11 @@ final class SyntaxHighlighter {
     ///   - language: The programming language identifier (e.g., "swift", "javascript", "python")
     ///   - font: The font to use for the highlighted text
     /// - Returns: An NSAttributedString with syntax highlighting applied
-    func highlight(_ code: String, language: String = "text", font: NSFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)) -> NSAttributedString {
+    func highlight(
+        _ code: String, 
+        language: String = "text", 
+        font: NSFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    ) -> NSAttributedString {
         let langStr = normalizeLanguageIdentifier(language)
 
         #if DEBUG
@@ -50,7 +54,9 @@ final class SyntaxHighlighter {
         
         // Try to use modular language support if enabled
         if let module = LanguageModuleManager.shared.getModule(forExtension: langStr) ??
-            LanguageModuleManager.shared.getModule(for: CodeLanguage(rawValue: langStr) ?? .unknown) {
+            LanguageModuleManager.shared.getModule(
+                for: CodeLanguage(rawValue: langStr) ?? .unknown
+            ) {
             #if DEBUG
             print("[Highlighter] using module id=\(module.id.rawValue) extensions=\(module.fileExtensions)")
             #endif
@@ -142,7 +148,10 @@ final class SyntaxHighlighter {
             "class","struct","enum","protocol","extension","func","var","let","if","else","for","while","repeat","switch","case","default","break","continue","defer","do","catch","throw","throws","rethrows","try","in","where","return","as","is","nil","true","false","init","deinit","subscript","typealias","associatedtype","mutating","nonmutating","static","final","open","public","internal","fileprivate","private","guard","some","any","actor","await","async","yield","inout"
         ]
         let types = [
-            "Int","Int8","Int16","Int32","Int64","UInt","UInt8","UInt16","UInt32","UInt64","Float","Double","Bool","String","Character","Array","Dictionary","Set","Optional","Void","Any","AnyObject"
+            "Int", "Int8", "Int16", "Int32", "Int64",
+            "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
+            "Float", "Double", "Bool", "String", "Character",
+            "Array", "Dictionary", "Set", "Optional", "Void", "Any", "AnyObject"
         ]
         highlightWholeWords(keywords, color: NSColor.systemBlue, in: attr, code: code)
         highlightWholeWords(types, color: NSColor.systemPurple, in: attr, code: code)
@@ -158,7 +167,10 @@ final class SyntaxHighlighter {
 
     private func applyTypeScriptHighlighting(in attr: NSMutableAttributedString, code: String) {
         applyJavaScriptHighlighting(in: attr, code: code)
-        let tsKeywords = ["interface","type","implements","namespace","abstract","public","private","protected","readonly"]
+        let tsKeywords = [
+                "interface","type","implements","namespace","abstract",
+                "public","private","protected","readonly"
+            ]
         highlightWholeWords(tsKeywords, color: NSColor.systemPurple, in: attr, code: code)
     }
 
@@ -191,7 +203,12 @@ final class SyntaxHighlighter {
         applyRegex("(?m)^[ \t]*:root\\b", color: NSColor.systemGreen, in: attr, code: code)
         applyRegex("(?m)^[ \t]*@[-a-zA-Z]+", color: NSColor.systemGreen, in: attr, code: code)
         applyRegex("(?m)^[ \t]*[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
-        applyRegex("(?m)^[ \t]*\\.[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
+        applyRegex(
+            "(?m)^[ \t]*\\.[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", 
+            color: NSColor.systemGreen, 
+            in: attr, 
+            code: code
+        )
         applyRegex("(?m)^[ \t]*#[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
         applyRegex("(?m)^[ \t]*:{1,2}[a-zA-Z-]+\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
 
@@ -199,7 +216,13 @@ final class SyntaxHighlighter {
         applyRegex("[\\{\\}\\[\\]\\(\\);:,]", color: NSColor.systemMint, in: attr, code: code)
 
         // 3. Property Keys (including custom properties: --foo)
-        applyRegex("(?<=[\\{\\s;])(--[a-zA-Z0-9-]+|[a-zA-Z-][a-zA-Z0-9-]*)\\s*(?=:)", color: NSColor.systemBlue, in: attr, code: code, captureGroup: 1)
+        applyRegex(
+            "(?<=[\\{\\s;])(--[a-zA-Z0-9-]+|[a-zA-Z-][a-zA-Z0-9-]*)\\s*(?=:)",
+            color: NSColor.systemBlue,
+            in: attr,
+            code: code,
+            captureGroup: 1
+        )
 
         // 4. Custom property references
         applyRegex("--[a-zA-Z0-9-]+", color: NSColor.systemBlue, in: attr, code: code)
@@ -211,10 +234,21 @@ final class SyntaxHighlighter {
         applyRegex("#[0-9a-fA-F]{3,8}\\b", color: NSColor.systemOrange, in: attr, code: code)
 
         // 7. Numbers and Units
-        applyRegex("\\b-?\\d+(?:\\.\\d+)?(px|em|rem|%|vh|vw|s|ms|deg)?\\b", color: NSColor.systemYellow, in: attr, code: code)
+        applyRegex(
+            "\\b-?\\d+(?:\\.\\d+)?(px|em|rem|%|vh|vw|s|ms|deg)?\\b", 
+            color: NSColor.systemYellow, 
+            in: attr, 
+            code: code
+        )
 
         // 8. Quoted values (inside)
-        applyRegex("\"([^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"", color: NSColor.systemCyan, in: attr, code: code, captureGroup: 1)
+        applyRegex(
+            "\"([^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"", 
+            color: NSColor.systemCyan, 
+            in: attr, 
+            code: code, 
+            captureGroup: 1
+        )
         applyRegex("'([^'\\\\]*(?:\\\\.[^'\\\\]*)*)'", color: NSColor.systemCyan, in: attr, code: code, captureGroup: 1)
 
         // 9. Quotes
@@ -222,7 +256,13 @@ final class SyntaxHighlighter {
         applyRegex("'", color: NSColor.systemBrown, in: attr, code: code)
 
         // 10. Bare identifiers in values
-        applyRegex("(?<=:)\\s*([a-zA-Z_-][a-zA-Z0-9_-]*)\\b", color: NSColor.systemCyan, in: attr, code: code, captureGroup: 1)
+        applyRegex(
+            "(?<=:)\\s*([a-zA-Z_-][a-zA-Z0-9_-]*)\\b", 
+            color: NSColor.systemCyan, 
+            in: attr, 
+            code: code, 
+            captureGroup: 1
+        )
 
         // 11. Comments
         applyRegex("/\\*[\\s\\S]*?\\*/", color: NSColor.tertiaryLabelColor, in: attr, code: code)
@@ -232,7 +272,8 @@ final class SyntaxHighlighter {
         #if DEBUG
         print("[Highlighter] applyJSONHighlighting triggered")
         #endif
-        let palette = (LanguageModuleManager.shared.getModule(for: .json) as? HighlightPaletteProviding)?.highlightPalette
+        let palette = (LanguageModuleManager.shared.getModule(for: .json) as? HighlightPaletteProviding)?
+            .highlightPalette
 
         let keyColor = palette?.color(for: .key) ?? NSColor.systemIndigo
         let stringValueColor = palette?.color(for: .string) ?? NSColor.systemRed
@@ -287,7 +328,12 @@ final class SyntaxHighlighter {
 
     // MARK: - Helpers
 
-    private func highlightWholeWords(_ words: [String], color: NSColor, in attr: NSMutableAttributedString, code: String) {
+    private func highlightWholeWords(
+            _ words: [String], 
+            color: NSColor, 
+            in attr: NSMutableAttributedString, 
+            code: String
+        ) {
         guard !words.isEmpty else { return }
         // Build a regex like: \b(word1|word2|...)\b
         let escaped = words.map { NSRegularExpression.escapedPattern(for: $0) }
@@ -295,8 +341,17 @@ final class SyntaxHighlighter {
         applyRegex(pattern, color: color, in: attr, code: code)
     }
 
-    private func applyRegex(_ pattern: String, color: NSColor, in attr: NSMutableAttributedString, code: String, captureGroup: Int? = nil) {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else { return }
+    private func applyRegex(
+            _ pattern: String, 
+            color: NSColor, 
+            in attr: NSMutableAttributedString, 
+            code: String, 
+            captureGroup: Int? = nil
+        ) {
+        guard let regex = try? NSRegularExpression(
+                pattern: pattern, 
+                options: [.dotMatchesLineSeparators]
+            ) else { return }
         let ns = code as NSString
         let fullRange = NSRange(location: 0, length: ns.length)
         let matches = regex.matches(in: code, options: [], range: fullRange)

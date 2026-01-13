@@ -41,7 +41,7 @@ final class ConversationManagerTests: XCTestCase {
     
     func testWelcomeMessage() {
         XCTAssertTrue(manager.messages.count >= 1)
-        XCTAssertEqual(manager.messages.first?.role, .assistant)
+        XCTAssertEqual(manager.messages.first?.role, MessageRole.assistant)
     }
     
     func testSendMessageFlow() async throws {
@@ -56,7 +56,9 @@ final class ConversationManagerTests: XCTestCase {
             .sink { _ in
                 // Using a small delay to allow state to actually change after notification
                 Task { @MainActor in
-                    if self.manager.messages.contains(where: { $0.role == .assistant && $0.content == "Mock response" }) {
+                    if self.manager.messages.contains(where: {
+                        $0.role == MessageRole.assistant && $0.content == "Mock response"
+                    }) {
                         aiResponded.fulfill()
                     }
                 }
@@ -105,11 +107,22 @@ final class ConversationManagerTests: XCTestCase {
 // MARK: - Mocks
 
 final class MockAIService: AIService, @unchecked Sendable {
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws -> AIServiceResponse {
+    func sendMessage(
+            _ message: String, 
+            context: String?, 
+            tools: [AITool]?, 
+            mode: AIMode?
+        ) async throws -> AIServiceResponse {
         return AIServiceResponse(content: "Mock response", toolCalls: nil)
     }
     
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+    func sendMessage(
+            _ message: String, 
+            context: String?, 
+            tools: [AITool]?, 
+            mode: AIMode?, 
+            projectRoot: URL?
+        ) async throws -> AIServiceResponse {
         return AIServiceResponse(content: "Mock response", toolCalls: nil)
     }
     

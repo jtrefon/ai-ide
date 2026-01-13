@@ -51,7 +51,9 @@ public final class LanguageModuleManager: ObservableObject {
     }
     
     public func toggleModule(_ language: CodeLanguage, enabled: Bool) {
-        var enabledLangs = settingsStore.stringArray(forKey: AppConstants.Storage.enabledLanguageModulesKey) ?? allModules.keys.map { $0.rawValue }
+        var enabledLangs = settingsStore.stringArray(
+                    forKey: AppConstants.Storage.enabledLanguageModulesKey
+                ) ?? allModules.keys.map { $0.rawValue }
         
         if enabled {
             if !enabledLangs.contains(language.rawValue) {
@@ -87,7 +89,9 @@ public final class LanguageModuleManager: ObservableObject {
     }
     
     private func updateEnabledModules() {
-        let enabledLangs = settingsStore.stringArray(forKey: AppConstants.Storage.enabledLanguageModulesKey) ?? allModules.keys.map { $0.rawValue }
+        let enabledLangs = settingsStore.stringArray(
+                    forKey: AppConstants.Storage.enabledLanguageModulesKey
+                ) ?? allModules.keys.map { $0.rawValue }
         enabledModules = allModules.filter { enabledLangs.contains($0.key.rawValue) }
     }
     

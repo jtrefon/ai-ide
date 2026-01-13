@@ -11,7 +11,8 @@ import Foundation
 /// This is the preferred way to resolve "what file is X?" before any text search.
 struct IndexFindFilesTool: AITool {
     let name = "index_find_files"
-    let description = "Find files by name/path using the Codebase Index (paths only, not content). Returns ranked matches and includes ai_enriched/quality_score metadata when available."
+    let description = "Find files by name/path using the Codebase Index (paths only, not content). " +
+        "Returns ranked matches and includes ai_enriched/quality_score metadata when available."
 
     var parameters: [String: Any] {
         [
@@ -19,7 +20,8 @@ struct IndexFindFilesTool: AITool {
             "properties": [
                 "query": [
                     "type": "string",
-                    "description": "Filename, basename, or path substring (e.g. 'train_cli', 'DatabaseManager.swift', 'Services/Index')."
+                    "description": "Filename, basename, or path substring " +
+                    "(e.g. 'train_cli', 'DatabaseManager.swift', 'Services/Index')."
                 ],
                 "limit": [
                     "type": "integer",
@@ -58,7 +60,8 @@ struct IndexFindFilesTool: AITool {
 /// Use for file discovery instead of scanning the filesystem.
 struct IndexListFilesTool: AITool {
     let name = "index_list_files"
-    let description = "List files known to the Codebase Index (authoritative). Use for file discovery instead of scanning the filesystem. Supports optional path substring filtering and pagination."
+    let description = "List files known to the Codebase Index (authoritative). Use for file discovery " +
+        "instead of scanning the filesystem. Supports optional path substring filtering and pagination."
 
     var parameters: [String: Any] {
         [
@@ -66,7 +69,8 @@ struct IndexListFilesTool: AITool {
             "properties": [
                 "query": [
                     "type": "string",
-                    "description": "Optional case-insensitive substring filter on path (e.g. 'Services/Index', 'DatabaseManager')."
+                    "description": "Optional case-insensitive substring filter on path " +
+                    "(e.g. 'Services/Index', 'DatabaseManager')."
                 ],
                 "limit": [
                     "type": "integer",
@@ -89,7 +93,11 @@ struct IndexListFilesTool: AITool {
         let limit = max(1, min(500, arguments["limit"] as? Int ?? 50))
         let offset = max(0, arguments["offset"] as? Int ?? 0)
 
-        let results = try await index.listIndexedFiles(matching: query?.isEmpty == true ? nil : query, limit: limit, offset: offset)
+        let results = try await index.listIndexedFiles(
+                    matching: query?.isEmpty == true ? nil : query, 
+                    limit: limit, 
+                    offset: offset
+                )
         return results.isEmpty ? "No indexed files found." : results.joined(separator: "\n")
     }
 }
@@ -98,7 +106,8 @@ struct IndexListFilesTool: AITool {
 /// Returns matches as: relative/path:line: snippet
 struct IndexSearchTextTool: AITool {
     let name = "index_search_text"
-    let description = "Search for a literal substring across indexed files only (authoritative set). Returns matches formatted as 'path:line: snippet'."
+    let description = "Search for a literal substring across indexed files only (authoritative set). " +
+        "Returns matches formatted as 'path:line: snippet'."
 
     var parameters: [String: Any] {
         [
@@ -135,7 +144,8 @@ struct IndexSearchTextTool: AITool {
 /// Designed for patch-style edits (small focused reads using ranges).
 struct IndexReadFileTool: AITool {
     let name = "index_read_file"
-    let description = "Read a file (line-numbered) via the Codebase Index. Provide relative path and optional start_line/end_line to fetch only a small range for patch-based edits."
+    let description = "Read a file (line-numbered) via the Codebase Index. Provide relative path " +
+        "and optional start_line/end_line to fetch only a small range for patch-based edits."
 
     var parameters: [String: Any] {
         [
@@ -175,7 +185,8 @@ struct IndexReadFileTool: AITool {
 /// Search symbols in the Codebase Index.
 struct IndexSearchSymbolsTool: AITool {
     let name = "index_search_symbols"
-    let description = "Search for symbols (classes, functions, etc.) in the Codebase Index. Use to locate relevant files/definitions efficiently."
+    let description = "Search for symbols (classes, functions, etc.) in the Codebase Index. " +
+                "Use to locate relevant files/definitions efficiently."
 
     var parameters: [String: Any] {
         [

@@ -19,22 +19,58 @@ struct AppStateEditorTests {
         // Workspace can be nil until the user explicitly selects a folder.
         if let dir = appState.workspace.currentDirectory {
             var isDir: ObjCBool = false
-            #expect(FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir) && isDir.boolValue, "If set, currentDirectory must exist and be a directory")
+            #expect(
+            FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir) && isDir.boolValue, 
+            "If set, currentDirectory must exist and be a directory"
+        )
         }
     }
 
     @Test func testLanguageDetection() async throws {
-        #expect(FileEditorStateManager.languageForFileExtension("swift") == "swift", "Swift files should detect as swift")
-        #expect(FileEditorStateManager.languageForFileExtension("js") == "javascript", "JS files should detect as javascript")
-        #expect(FileEditorStateManager.languageForFileExtension("jsx") == "jsx", "JSX files should detect as jsx")
-        #expect(FileEditorStateManager.languageForFileExtension("ts") == "typescript", "TS files should detect as typescript")
-        #expect(FileEditorStateManager.languageForFileExtension("tsx") == "tsx", "TSX files should detect as tsx")
-        #expect(FileEditorStateManager.languageForFileExtension("py") == "python", "Python files should detect as python")
-        #expect(FileEditorStateManager.languageForFileExtension("html") == "html", "HTML files should detect as html")
-        #expect(FileEditorStateManager.languageForFileExtension("css") == "css", "CSS files should detect as css")
-        #expect(FileEditorStateManager.languageForFileExtension("json") == "json", "JSON files should detect as json")
-        #expect(FileEditorStateManager.languageForFileExtension("unknown") == "text", "Unknown files should default to text")
-        #expect(FileEditorStateManager.languageForFileExtension("") == "text", "Empty extension should default to text")
+        #expect(
+            FileEditorStateManager.languageForFileExtension("swift") == "swift", 
+            "Swift files should detect as swift"
+        )
+        #expect(
+            FileEditorStateManager.languageForFileExtension("js") == "javascript", 
+            "JS files should detect as javascript"
+        )
+        #expect(
+            FileEditorStateManager.languageForFileExtension("jsx") == "jsx", 
+            "JSX files should detect as jsx"
+        )
+        #expect(
+            FileEditorStateManager.languageForFileExtension("ts") == "typescript", 
+            "TS files should detect as typescript"
+        )
+        #expect(
+            FileEditorStateManager.languageForFileExtension("tsx") == "tsx", 
+            "TSX files should detect as tsx"
+        )
+        #expect(
+            FileEditorStateManager.languageForFileExtension("py") == "python", 
+            "Python files should detect as python"
+        )
+        #expect(
+            FileEditorStateManager.languageForFileExtension("html") == "html", 
+            "HTML files should detect as html"
+        )
+        #expect(
+            FileEditorStateManager.languageForFileExtension("css") == "css", 
+            "CSS files should detect as css"
+        )
+        #expect(
+            FileEditorStateManager.languageForFileExtension("json") == "json", 
+            "JSON files should detect as json"
+        )
+        #expect(
+            FileEditorStateManager.languageForFileExtension("unknown") == "text", 
+            "Unknown files should default to text"
+        )
+        #expect(
+            FileEditorStateManager.languageForFileExtension("") == "text", 
+            "Empty extension should default to text"
+        )
     }
 
     @Test func testNewFileFunctionality() async throws {

@@ -42,11 +42,29 @@ final class ConversationToolProvider {
             tools.append(IndexSearchSymbolsTool(index: codebaseIndex))
         }
 
-        tools.append(WriteFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus))
-        tools.append(WriteFilesTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus))
+        tools.append(
+            WriteFileTool(
+                fileSystemService: fileSystemService, 
+                pathValidator: pathValidator, 
+                eventBus: eventBus
+            )
+        )
+        tools.append(
+            WriteFilesTool(
+                fileSystemService: fileSystemService, 
+                pathValidator: pathValidator, 
+                eventBus: eventBus
+            )
+        )
         tools.append(CreateFileTool(pathValidator: pathValidator, eventBus: eventBus))
         tools.append(DeleteFileTool(pathValidator: pathValidator, eventBus: eventBus))
-        tools.append(ReplaceInFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus))
+        tools.append(
+            ReplaceInFileTool(
+                fileSystemService: fileSystemService, 
+                pathValidator: pathValidator, 
+                eventBus: eventBus
+            )
+        )
         tools.append(RunCommandTool(projectRoot: projectRoot, pathValidator: pathValidator))
 
         tools.append(ArchitectAdvisorTool(aiService: aiService, index: codebaseIndex, projectRoot: projectRoot))

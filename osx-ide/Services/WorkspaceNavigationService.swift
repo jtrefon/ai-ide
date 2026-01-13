@@ -59,7 +59,11 @@ public final class WorkspaceNavigationService {
             let mapped = hits.compactMap { hit -> WorkspaceCodeLocation? in
                 guard let filePath = hit.filePath else { return nil }
                 let rel = Self.relativePath(projectRoot: projectRoot, filePath: filePath)
-                return WorkspaceCodeLocation(relativePath: rel, line: max(1, hit.symbol.lineStart), snippet: "\(hit.symbol.kind.rawValue) \(hit.symbol.name)")
+                return WorkspaceCodeLocation(
+                    relativePath: rel,
+                    line: max(1, hit.symbol.lineStart),
+                    snippet: "\(hit.symbol.kind.rawValue) \(hit.symbol.name)"
+                )
             }
 
             // Prefer exact name matches if index returns fuzzy-like results.
@@ -68,7 +72,11 @@ public final class WorkspaceNavigationService {
                 .compactMap { hit -> WorkspaceCodeLocation? in
                     guard let filePath = hit.filePath else { return nil }
                     let rel = Self.relativePath(projectRoot: projectRoot, filePath: filePath)
-                    return WorkspaceCodeLocation(relativePath: rel, line: max(1, hit.symbol.lineStart), snippet: "\(hit.symbol.kind.rawValue) \(hit.symbol.name)")
+                    return WorkspaceCodeLocation(
+                        relativePath: rel,
+                        line: max(1, hit.symbol.lineStart),
+                        snippet: "\(hit.symbol.kind.rawValue) \(hit.symbol.name)"
+                    )
                 }
             if !exact.isEmpty { return exact }
 
@@ -86,7 +94,13 @@ public final class WorkspaceNavigationService {
         )
 
         let exact = results.filter { $0.name == needle }
-        return exact.map { WorkspaceCodeLocation(relativePath: $0.relativePath, line: $0.line, snippet: "\($0.kind.rawValue) \($0.name)") }
+        return exact.map { 
+                WorkspaceCodeLocation(
+                    relativePath: $0.relativePath, 
+                    line: $0.line, 
+                    snippet: "\($0.kind.rawValue) \($0.name)"
+                ) 
+            }
     }
 
     public func findReferenceLocations(
@@ -104,7 +118,11 @@ public final class WorkspaceNavigationService {
         return filtered.map { WorkspaceCodeLocation(relativePath: $0.relativePath, line: $0.line, snippet: $0.snippet) }
     }
 
-    public func renameInCurrentBuffer(content: String, identifier: String, newName: String) throws -> (updated: String, replacements: Int) {
+    public func renameInCurrentBuffer(
+            content: String, 
+            identifier: String, 
+            newName: String
+        ) throws -> (updated: String, replacements: Int) {
         try Self.renameInCurrentBuffer(content: content, identifier: identifier, newName: newName)
     }
 
@@ -148,7 +166,11 @@ public final class WorkspaceNavigationService {
         return isValidIdentifier(candidate) ? candidate : nil
     }
 
-    public static func renameInCurrentBuffer(content: String, identifier: String, newName: String) throws -> (updated: String, replacements: Int) {
+    public static func renameInCurrentBuffer(
+            content: String, 
+            identifier: String, 
+            newName: String
+        ) throws -> (updated: String, replacements: Int) {
         let old = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         let replacement = newName.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -166,7 +188,11 @@ public final class WorkspaceNavigationService {
 
         let ns = content as NSString
         let matches = regex.numberOfMatches(in: content, range: NSRange(location: 0, length: ns.length))
-        let updated = regex.stringByReplacingMatches(in: content, range: NSRange(location: 0, length: ns.length), withTemplate: replacement)
+        let updated = regex.stringByReplacingMatches(
+                in: content, 
+                range: NSRange(location: 0, length: ns.length), 
+                withTemplate: replacement
+            )
         return (updated, matches)
     }
 

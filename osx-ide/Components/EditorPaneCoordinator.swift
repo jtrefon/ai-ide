@@ -103,7 +103,8 @@ struct EditorPaneCoordinator {
                                     pane.activateTab(id: tab.id)
                                 }) {
                                     HStack(spacing: 6) {
-                                        Text(URL(fileURLWithPath: tab.filePath).lastPathComponent + (tab.isDirty ? " •" : ""))
+                                        Text(URL(fileURLWithPath: tab.filePath).lastPathComponent + 
+                                            (tab.isDirty ? " •" : ""))
                                             .lineLimit(1)
 
                                         Button(action: {

@@ -21,15 +21,44 @@ actor OpenRouterAIService: AIService {
         self.client = client
     }
     
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws -> AIServiceResponse {
-        try await performChat(prompt: message, context: context, tools: tools, mode: mode, projectRoot: nil)
+    func sendMessage(
+        _ message: String,
+        context: String?,
+        tools: [AITool]?,
+        mode: AIMode?
+    ) async throws -> AIServiceResponse {
+        try await performChat(
+            prompt: message,
+            context: context,
+            tools: tools,
+            mode: mode,
+            projectRoot: nil
+        )
     }
     
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
-        try await performChat(prompt: message, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
+    func sendMessage(
+        _ message: String,
+        context: String?,
+        tools: [AITool]?,
+        mode: AIMode?,
+        projectRoot: URL?
+    ) async throws -> AIServiceResponse {
+        try await performChat(
+            prompt: message,
+            context: context,
+            tools: tools,
+            mode: mode,
+            projectRoot: projectRoot
+        )
     }
     
-    func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+    func sendMessage(
+        _ messages: [ChatMessage],
+        context: String?,
+        tools: [AITool]?,
+        mode: AIMode?,
+        projectRoot: URL?
+    ) async throws -> AIServiceResponse {
         let sanitizedMessages = Self.sanitizeToolCallOrdering(messages)
 
         let validToolCallIds: Set<String> = Set(
@@ -47,7 +76,11 @@ actor OpenRouterAIService: AIService {
             case .assistant:
                 if let toolCalls = msg.toolCalls {
                     // Map tool calls
-                    return OpenRouterChatMessage(role: "assistant", content: msg.content.isEmpty ? nil : msg.content, tool_calls: toolCalls)
+                    return OpenRouterChatMessage(
+                            role: "assistant", 
+                            content: msg.content.isEmpty ? nil : msg.content, 
+                            tool_calls: toolCalls
+                        )
                 }
                 return OpenRouterChatMessage(role: "assistant", content: msg.content)
             case .system:
@@ -71,7 +104,13 @@ actor OpenRouterAIService: AIService {
             }
         }
         
-        return try await performChatWithHistory(messages: openRouterMessages, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
+        return try await performChatWithHistory(
+            messages: openRouterMessages, 
+            context: context, 
+            tools: tools, 
+            mode: mode, 
+            projectRoot: projectRoot
+        )
     }
 
     private static func sanitizeToolCallOrdering(_ messages: [ChatMessage]) -> [ChatMessage] {
@@ -103,7 +142,13 @@ actor OpenRouterAIService: AIService {
         return response.content ?? ""
     }
     
-    private func performChat(prompt: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+    private func performChat(
+            prompt: String, 
+            context: String?, 
+            tools: [AITool]?, 
+            mode: AIMode?, 
+            projectRoot: URL?
+        ) async throws -> AIServiceResponse {
         return try await performChatWithHistory(
             messages: [OpenRouterChatMessage(role: "user", content: prompt)],
             context: context,
@@ -113,7 +158,13 @@ actor OpenRouterAIService: AIService {
         )
     }
 
-    private func performChatWithHistory(messages: [OpenRouterChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+    private func performChatWithHistory(
+        messages: [OpenRouterChatMessage],
+        context: String?,
+        tools: [AITool]?,
+        mode: AIMode?,
+        projectRoot: URL?
+    ) async throws -> AIServiceResponse {
         let requestId = UUID().uuidString
         let settings = settingsStore.load()
         let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)

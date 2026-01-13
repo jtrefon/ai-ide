@@ -16,7 +16,10 @@ final class AllowlistedRunCommandToolTests: XCTestCase {
             return "FAKE: \(cmd)"
         }
 
-        func execute(arguments: ToolArguments, onProgress: @Sendable @escaping (String) -> Void) async throws -> String {
+        func execute(
+            arguments: ToolArguments, 
+            onProgress: @Sendable @escaping (String) -> Void
+        ) async throws -> String {
             let arguments = arguments.raw
             let cmd = (arguments["command"] as? String) ?? ""
             onProgress("FAKE_PROGRESS")

@@ -164,7 +164,10 @@ final class osx_ideUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.3)
 
         let contentAfterReplace = codeEditor.value as? String ?? ""
-        XCTAssertTrue(contentAfterReplace.contains("REPLACED"), "Editor should contain replacement text after selection")
+        XCTAssertTrue(
+            contentAfterReplace.contains("REPLACED"),
+            "Editor should contain replacement text after selection"
+        )
         XCTAssertFalse(contentAfterReplace.contains("test"), "Original text should be replaced")
     }
 }

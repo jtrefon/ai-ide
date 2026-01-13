@@ -30,7 +30,12 @@ public final class CSSModule: RegexLanguageModule, @unchecked Sendable {
         applyRegex("(?m)^[ \t]*:root\\b", color: NSColor.systemGreen, in: attr, code: code)
         applyRegex("(?m)^[ \t]*@[-a-zA-Z]+", color: NSColor.systemGreen, in: attr, code: code)
         applyRegex("(?m)^[ \t]*[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
-        applyRegex("(?m)^[ \t]*\\.[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
+        applyRegex(
+                "(?m)^[ \t]*\\.[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", 
+                color: NSColor.systemGreen, 
+                in: attr, 
+                code: code
+            )
         applyRegex("(?m)^[ \t]*#[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
         applyRegex("(?m)^[ \t]*:{1,2}[a-zA-Z-]+\\s*(?=[,{])", color: NSColor.systemGreen, in: attr, code: code)
 
@@ -50,18 +55,41 @@ public final class CSSModule: RegexLanguageModule, @unchecked Sendable {
         applyRegex("#[0-9a-fA-F]{3,8}\\b", color: NSColor.systemOrange, in: attr, code: code)
 
         // 7. Numbers and Units
-        applyRegex("\\b-?\\d+(?:\\.\\d+)?(px|em|rem|%|vh|vw|s|ms|deg)?\\b", color: NSColor.systemYellow, in: attr, code: code)
+        applyRegex(
+                "\\b-?\\d+(?:\\.\\d+)?(px|em|rem|%|vh|vw|s|ms|deg)?\\b", 
+                color: NSColor.systemYellow, 
+                in: attr, 
+                code: code
+            )
 
         // 8. Quoted values (inside)
-        applyRegex("\"([^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"", color: NSColor.systemCyan, in: attr, code: code, captureGroup: 1)
-        applyRegex("'([^'\\\\]*(?:\\\\.[^'\\\\]*)*)'", color: NSColor.systemCyan, in: attr, code: code, captureGroup: 1)
+        applyRegex(
+                "\"([^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"", 
+                color: NSColor.systemCyan, 
+                in: attr, 
+                code: code, 
+                captureGroup: 1
+            )
+        applyRegex(
+                "'([^'\\\\]*(?:\\\\.[^'\\\\]*)*)'", 
+                color: NSColor.systemCyan, 
+                in: attr, 
+                code: code, 
+                captureGroup: 1
+            )
 
         // 9. Quotes
         applyRegex("\"", color: NSColor.systemIndigo, in: attr, code: code)
         applyRegex("'", color: NSColor.systemBrown, in: attr, code: code)
 
         // 10. Bare identifiers in values
-        applyRegex("(?<=:)\\s*([a-zA-Z_-][a-zA-Z0-9_-]*)\\b", color: NSColor.systemCyan, in: attr, code: code, captureGroup: 1)
+        applyRegex(
+                "(?<=:)\\s*([a-zA-Z_-][a-zA-Z0-9_-]*)\\b", 
+                color: NSColor.systemCyan, 
+                in: attr, 
+                code: code, 
+                captureGroup: 1
+            )
 
         // 11. Comments
         applyRegex("/\\*[\\s\\S]*?\\*/", color: NSColor.tertiaryLabelColor, in: attr, code: code)

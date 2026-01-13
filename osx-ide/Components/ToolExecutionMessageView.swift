@@ -61,7 +61,10 @@ struct ToolExecutionMessageView: View {
                 if message.toolStatus == .executing {
                     let trimmed = message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
                     if !trimmed.isEmpty {
-                        let lastLine = trimmed.split(separator: "\n", omittingEmptySubsequences: false).last.map(String.init) ?? trimmed
+                        let lastLine = trimmed.split(
+                        separator: "\n", 
+                        omittingEmptySubsequences: false
+                    ).last.map(String.init) ?? trimmed
                         Text(lastLine)
                             .font(.system(size: CGFloat(max(9, fontSize - 4))))
                             .foregroundColor(.secondary)
@@ -74,7 +77,8 @@ struct ToolExecutionMessageView: View {
             Spacer()
             
             // Expand/Collapse button
-            if message.toolStatus != .executing && !message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
+            if message.toolStatus != .executing && 
+               !message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isExpanded.toggle()

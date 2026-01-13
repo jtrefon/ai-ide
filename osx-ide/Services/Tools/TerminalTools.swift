@@ -81,7 +81,11 @@ struct RunCommandTool: AIToolProgressReporting {
             ?? UUID().uuidString
         let isCancelled = AtomicBool(false)
 
-        let observer = NotificationCenter.default.addObserver(forName: NSNotification.Name("CancelToolExecution"), object: nil, queue: nil) { notification in
+        let observer = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("CancelToolExecution"),
+            object: nil,
+            queue: nil
+        ) { notification in
             if let targetId = notification.userInfo?["toolCallId"] as? String, targetId == toolCallId {
                 isCancelled.set(true)
             }
@@ -99,7 +103,9 @@ struct RunCommandTool: AIToolProgressReporting {
             return storedTimeout == 0 ? 30 : storedTimeout
         }()
         if !(1...300).contains(timeoutSeconds) {
-            throw AppError.aiServiceError("Invalid 'timeout_seconds' for run_command. Must be between 1 and 300.")
+            throw AppError.aiServiceError(
+                "Invalid 'timeout_seconds' for run_command. Must be between 1 and 300."
+            )
         }
 
         let workingDirectoryArg = arguments["working_directory"] as? String
@@ -200,12 +206,17 @@ struct RunCommandTool: AIToolProgressReporting {
             }
 
             if isCancelled.get() || !didExitBeforeTimeout {
-                await AIToolTraceLogger.shared.log(type: isCancelled.get() ? "terminal.run_command_cancelled" : "terminal.run_command_timeout", data: [
-                    "cwd": workingDirectoryURL.path,
-                    "commandLength": command.count,
-                    "commandPreview": commandPreview,
-                    "timeoutSeconds": timeoutSeconds
-                ])
+                await AIToolTraceLogger.shared.log(
+                    type: isCancelled.get()
+                        ? "terminal.run_command_cancelled"
+                        : "terminal.run_command_timeout",
+                    data: [
+                        "cwd": workingDirectoryURL.path,
+                        "commandLength": command.count,
+                        "commandPreview": commandPreview,
+                        "timeoutSeconds": timeoutSeconds
+                    ]
+                )
 
                 if process.isRunning {
                     process.terminate()

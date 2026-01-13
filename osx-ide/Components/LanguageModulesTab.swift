@@ -44,7 +44,10 @@ struct LanguageModulesTab: View {
                     ) {
                         VStack(alignment: .leading, spacing: 12) {
                             if filteredLanguages.isEmpty {
-                                Text(String(format: NSLocalizedString("language_modules.empty", comment: ""), searchText))
+                                Text(String(
+                    format: NSLocalizedString("language_modules.empty", comment: ""), 
+                    searchText
+                ))
                                     .foregroundColor(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .center)
                                     .padding(.vertical, 20)
@@ -59,7 +62,15 @@ struct LanguageModulesTab: View {
                                                 .foregroundStyle(.secondary)
                                             
                                             if let module = moduleManager.getModule(for: language) {
-                                                Text(String(format: NSLocalizedString("language_modules.extensions", comment: ""), module.fileExtensions.joined(separator: ", ")))
+                                                Text(
+                                                    String(
+                                                        format: NSLocalizedString(
+                                                            "language_modules.extensions",
+                                                            comment: ""
+                                                        ),
+                                                        module.fileExtensions.joined(separator: ", ")
+                                                    )
+                                                )
                                                     .font(.system(size: 10, design: .monospaced))
                                                     .foregroundColor(.blue.opacity(0.8))
                                             }
@@ -67,10 +78,18 @@ struct LanguageModulesTab: View {
                                         
                                         Spacer()
                                         
-                                        Toggle("", isOn: Binding(
-                                            get: { moduleManager.isEnabled(language) },
-                                            set: { enabled in moduleManager.toggleModule(language, enabled: enabled) }
-                                        ))
+                                        Toggle(
+                                            "",
+                                            isOn: Binding(
+                                                get: { moduleManager.isEnabled(language) },
+                                                set: { enabled in
+                                                    moduleManager.toggleModule(
+                                                        language,
+                                                        enabled: enabled
+                                                    )
+                                                }
+                                            )
+                                        )
                                         .toggleStyle(.switch)
                                     }
                                     

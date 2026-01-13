@@ -15,7 +15,13 @@ struct CodePreviewView: View {
     var fontFamily: String
     @State private var isCopied = false
     
-    init(code: String, language: String? = nil, title: String = "Code Preview", fontSize: Double = 12, fontFamily: String = AppConstants.Editor.defaultFontFamily) {
+    init(
+        code: String,
+        language: String? = nil,
+        title: String = "Code Preview",
+        fontSize: Double = 12,
+        fontFamily: String = AppConstants.Editor.defaultFontFamily
+    ) {
         self.code = code
         self.language = language
         self.title = title

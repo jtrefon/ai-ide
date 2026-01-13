@@ -65,7 +65,9 @@ struct NavigationLocationsOverlayView: View {
         guard let root = workspace.currentDirectory?.standardizedFileURL else { return }
 
         do {
-            let url = try appState.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(loc.relativePath)
+            let url = try appState.workspaceService
+                .makePathValidator(projectRoot: root)
+                .validateAndResolve(loc.relativePath)
             if openToSide {
                 fileEditor.openInOtherPane(from: url)
             } else {

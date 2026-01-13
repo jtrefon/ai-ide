@@ -13,9 +13,26 @@ public struct AIServiceResponse: Sendable {
 }
 
 public protocol AIService: Sendable {
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws -> AIServiceResponse
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse
-    func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse
+    func sendMessage(
+            _ message: String, 
+            context: String?, 
+            tools: [AITool]?, 
+            mode: AIMode?
+        ) async throws -> AIServiceResponse
+    func sendMessage(
+            _ message: String, 
+            context: String?, 
+            tools: [AITool]?, 
+            mode: AIMode?, 
+            projectRoot: URL?
+        ) async throws -> AIServiceResponse
+    func sendMessage(
+            _ messages: [ChatMessage], 
+            context: String?, 
+            tools: [AITool]?, 
+            mode: AIMode?, 
+            projectRoot: URL?
+        ) async throws -> AIServiceResponse
     func explainCode(_ code: String) async throws -> String
     func refactorCode(_ code: String, instructions: String) async throws -> String
     func generateCode(_ prompt: String) async throws -> String
@@ -30,7 +47,12 @@ public extension AIService {
         mode: AIMode?
     ) async -> Result<AIServiceResponse, AppError> {
         do {
-            let response = try await sendMessage(message, context: context, tools: tools, mode: mode)
+            let response = try await sendMessage(
+                message, 
+                context: context, 
+                tools: tools, 
+                mode: mode
+            )
             return .success(response)
         } catch {
             return .failure(Self.mapToAppError(error, operation: "sendMessage"))
@@ -45,7 +67,13 @@ public extension AIService {
         projectRoot: URL?
     ) async -> Result<AIServiceResponse, AppError> {
         do {
-            let response = try await sendMessage(message, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
+            let response = try await sendMessage(
+                message, 
+                context: context, 
+                tools: tools, 
+                mode: mode, 
+                projectRoot: projectRoot
+            )
             return .success(response)
         } catch {
             return .failure(Self.mapToAppError(error, operation: "sendMessageWithProjectRoot"))
@@ -60,7 +88,13 @@ public extension AIService {
         projectRoot: URL?
     ) async -> Result<AIServiceResponse, AppError> {
         do {
-            let response = try await sendMessage(messages, context: context, tools: tools, mode: mode, projectRoot: projectRoot)
+            let response = try await sendMessage(
+                messages, 
+                context: context, 
+                tools: tools, 
+                mode: mode, 
+                projectRoot: projectRoot
+            )
             return .success(response)
         } catch {
             return .failure(Self.mapToAppError(error, operation: "sendMessageHistory"))

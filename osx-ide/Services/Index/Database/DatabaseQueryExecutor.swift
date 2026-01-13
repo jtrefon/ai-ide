@@ -102,7 +102,8 @@ final class DatabaseQueryExecutor {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return [] }
 
-        let sql = "SELECT path, ai_enriched, quality_score FROM resources WHERE LOWER(path) LIKE LOWER(?) ORDER BY path LIMIT ?;"
+        let sql = "SELECT path, ai_enriched, quality_score FROM resources " +
+                "WHERE LOWER(path) LIKE LOWER(?) ORDER BY path LIMIT ?;"
 
         var results: [IndexedFileMatch] = []
         try database.syncOnQueue {
@@ -195,7 +196,12 @@ final class DatabaseQueryExecutor {
         return result
     }
 
-    func getIndexStatsCounts() throws -> (indexedResourceCount: Int, symbolCount: Int, memoryCount: Int, longTermMemoryCount: Int) {
+    func getIndexStatsCounts() throws -> (
+            indexedResourceCount: Int, 
+            symbolCount: Int, 
+            memoryCount: Int, 
+            longTermMemoryCount: Int
+        ) {
         let resourceCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM resources;")
         let symbolCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM symbols;")
         let memoryCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM memories;")

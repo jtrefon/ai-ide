@@ -6,14 +6,24 @@ struct MarkdownView<CodeBlockContent: View>: View {
     private let fontSize: Double?
     private let fontFamily: String?
 
-    init(markdown: String, fontSize: Double? = nil, fontFamily: String? = nil, @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent) {
+    init(
+        markdown: String, 
+        fontSize: Double? = nil, 
+        fontFamily: String? = nil, 
+        @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent
+    ) {
         self.document = MarkdownDocument.parse(markdown)
         self.codeBlock = codeBlock
         self.fontSize = fontSize
         self.fontFamily = fontFamily
     }
 
-    init(document: MarkdownDocument, fontSize: Double? = nil, fontFamily: String? = nil, @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent) {
+    init(
+        document: MarkdownDocument, 
+        fontSize: Double? = nil, 
+        fontFamily: String? = nil, 
+        @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent
+    ) {
         self.document = document
         self.codeBlock = codeBlock
         self.fontSize = fontSize

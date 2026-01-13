@@ -25,7 +25,10 @@ actor ConversationPlanStore {
         cache[conversationId] = plan
         guard let url = planFileURL(conversationId: conversationId) else { return }
         do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(), 
+                    withIntermediateDirectories: true
+                )
             try plan.data(using: .utf8)?.write(to: url, options: [.atomic])
         } catch {
         }

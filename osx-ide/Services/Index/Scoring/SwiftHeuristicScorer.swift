@@ -5,7 +5,11 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
 
     public init() {}
 
-    public func scoreFile(path: String, content: String, context: QualityScoringContext) async -> QualityAssessment {
+    public func scoreFile(
+        path: String, 
+        content: String, 
+        context: QualityScoringContext
+    ) async -> QualityAssessment {
         let lines = content.components(separatedBy: .newlines)
         let resourceId = URL(fileURLWithPath: path).absoluteString
         let symbols: [Symbol]
@@ -15,8 +19,12 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
             symbols = []
         }
 
-        let typeKinds: Set<SymbolKind> = [.class, .struct, .enum, .protocol, .extension]
-        let functionKinds: Set<SymbolKind> = [.function, .initializer]
+        let typeKinds: Set<SymbolKind> = [
+            .class, .struct, .enum, .protocol, .extension
+        ]
+        let functionKinds: Set<SymbolKind> = [
+            .function, .initializer
+        ]
 
         let typeSymbols = symbols.filter { typeKinds.contains($0.kind) }
             .sorted { $0.lineStart < $1.lineStart }
@@ -36,7 +44,9 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
                 typeEnd = lines.count
             }
 
-            let methodsInType = functionSymbols.filter { $0.lineStart >= typeStart && $0.lineStart <= typeEnd }
+            let methodsInType = functionSymbols.filter { 
+                $0.lineStart >= typeStart && $0.lineStart <= typeEnd 
+            }
 
             var methodAssessments: [QualityAssessment] = []
             var typeIssues: [QualityIssue] = []
@@ -49,13 +59,25 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
                 let methodLines = slice(lines: lines, start: methodStart, end: methodEnd)
                 let methodName = method.kind == .initializer ? "init" : method.name
 
-                let methodAssessment = scoreMethod(name: methodName, startLine: methodStart, endLine: methodEnd, lines: methodLines)
+                let methodAssessment = scoreMethod(
+                    name: methodName, 
+                    startLine: methodStart, 
+                    endLine: methodEnd, 
+                    lines: methodLines
+                )
                 methodAssessments.append(methodAssessment)
                 typeIssues.append(contentsOf: methodAssessment.issues)
             }
 
-            let typeScore = aggregate(parentName: typeSymbol.name, children: methodAssessments, kind: .type)
-            let typeBreakdown = QualityBreakdown(categoryScores: typeScore.breakdown.categoryScores, metrics: typeScore.breakdown.metrics)
+            let typeScore = aggregate(
+                parentName: typeSymbol.name, 
+                children: methodAssessments, 
+                kind: .type
+            )
+            let typeBreakdown = QualityBreakdown(
+                categoryScores: typeScore.breakdown.categoryScores, 
+                metrics: typeScore.breakdown.metrics
+            )
 
             let typeAssessment = QualityAssessment(
                 entityType: .type,
@@ -78,7 +100,13 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         let fileAggregate = aggregate(parentName: path, children: children, kind: .file)
 
         if fileAggregate.score <= 0 {
-            fileIssues.append(QualityIssue(severity: .critical, category: .maintainability, message: "File score computed as 0; scorer malfunction"))
+            fileIssues.append(
+                QualityIssue(
+                    severity: .critical, 
+                    category: .maintainability, 
+                    message: "File score computed as 0; scorer malfunction"
+                )
+            )
         }
 
         return QualityAssessment(
@@ -99,10 +127,22 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
 
         if loc > 800 {
             score -= 30
-            issues.append(QualityIssue(severity: .warning, category: .maintainability, message: "Large file (\(loc) non-empty lines)") )
+            issues.append(
+                QualityIssue(
+                    severity: .warning, 
+                    category: .maintainability, 
+                    message: "Large file (\(loc) non-empty lines)"
+                )
+            )
         } else if loc > 400 {
             score -= 15
-            issues.append(QualityIssue(severity: .info, category: .maintainability, message: "Moderately large file (\(loc) non-empty lines)") )
+            issues.append(
+                QualityIssue(
+                    severity: .info, 
+                    category: .maintainability, 
+                    message: "Moderately large file (\(loc) non-empty lines)"
+                )
+            )
         }
 
         let breakdown = QualityBreakdown(categoryScores: [
@@ -129,7 +169,10 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
     private func scoreMethod(name: String, startLine: Int, endLine: Int, lines: [String]) -> QualityAssessment {
         let loc = nonEmptyLineCount(lines)
         let nesting = maxBraceNesting(lines)
-        let hasTODO = lines.contains { $0.localizedCaseInsensitiveContains("TODO") || $0.localizedCaseInsensitiveContains("FIXME") }
+        let hasTODO = lines.contains { 
+                $0.localizedCaseInsensitiveContains("TODO") || 
+                $0.localizedCaseInsensitiveContains("FIXME") 
+            }
         let switchCount = lines.filter { $0.contains("switch ") }.count
         let ifCount = lines.filter { $0.contains("if ") }.count
         let guardCount = lines.filter { $0.contains("guard ") }.count
@@ -139,7 +182,14 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
 
         if loc > 80 {
             score -= 35
-            issues.append(QualityIssue(severity: .warning, category: .complexity, message: "Long method (\(loc) non-empty lines)", line: startLine))
+            issues.append(
+                QualityIssue(
+                    severity: .warning, 
+                    category: .complexity, 
+                    message: "Long method (\(loc) non-empty lines)", 
+                    line: startLine
+                )
+            )
         } else if loc > 40 {
             score -= 18
             issues.append(QualityIssue(severity: .info, category: .complexity, message: "Moderately long method (\(loc) non-empty lines)", line: startLine))
@@ -147,15 +197,36 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
 
         if nesting >= 5 {
             score -= 20
-            issues.append(QualityIssue(severity: .warning, category: .complexity, message: "Deep nesting (max nesting \(nesting))", line: startLine))
+            issues.append(
+                QualityIssue(
+                    severity: .warning, 
+                    category: .complexity, 
+                    message: "Deep nesting (max nesting \(nesting))", 
+                    line: startLine
+                )
+            )
         } else if nesting >= 3 {
             score -= 10
-            issues.append(QualityIssue(severity: .info, category: .complexity, message: "Nesting depth \(nesting)", line: startLine))
+            issues.append(
+                QualityIssue(
+                    severity: .info, 
+                    category: .complexity, 
+                    message: "Nesting depth \(nesting)", 
+                    line: startLine
+                )
+            )
         }
 
         if hasTODO {
             score -= 5
-            issues.append(QualityIssue(severity: .info, category: .maintainability, message: "Contains TODO/FIXME", line: startLine))
+            issues.append(
+                QualityIssue(
+                    severity: .info, 
+                    category: .maintainability, 
+                    message: "Contains TODO/FIXME", 
+                    line: startLine
+                )
+            )
         }
 
         let branches = switchCount + ifCount + guardCount
@@ -196,7 +267,11 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         case type
     }
 
-    private func aggregate(parentName: String, children: [QualityAssessment], kind: AggregateKind) -> QualityAssessment {
+    private func aggregate(
+            parentName: String, 
+            children: [QualityAssessment], 
+            kind: AggregateKind
+        ) -> QualityAssessment {
         guard !children.isEmpty else {
             let breakdown = QualityBreakdown(categoryScores: [
                 .readability: 50,
@@ -206,7 +281,13 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
                 .architecture: 50
             ])
             let entityType: QualityEntityType = (kind == .file) ? .file : .type
-            return QualityAssessment(entityType: entityType, entityName: parentName, language: .swift, score: 50, breakdown: breakdown)
+            return QualityAssessment(
+                    entityType: entityType, 
+                    entityName: parentName, 
+                    language: .swift, 
+                    score: 50, 
+                    breakdown: breakdown
+                )
         }
 
         let avg = children.map { $0.score }.reduce(0, +) / Double(children.count)

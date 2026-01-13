@@ -43,7 +43,8 @@ struct WriteFileTool: AITool {
 
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
-        guard let path = arguments["path"] as? String, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard let path = arguments["path"] as? String, 
+                !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             let keys = arguments.keys.sorted().joined(separator: ", ")
             throw AppError.aiServiceError(
                 "Missing 'path' argument for write_file. Provided keys: [\(keys)]. "
@@ -55,7 +56,9 @@ struct WriteFileTool: AITool {
             throw AppError.aiServiceError("Missing 'content' argument for write_file")
         }
 
-        let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
+        let mode = (arguments["mode"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() ?? "apply"
         let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
         let patchSetId = (arguments["patch_set_id"] as? String)
             ?? (arguments["_conversation_id"] as? String)

@@ -31,7 +31,12 @@ extension CodebaseIndex {
         }
     }
 
-    private func calculateMatchScore(relPath: String, needle: String, aiEnriched: Bool, qualityScore: Double?) -> Double {
+    private func calculateMatchScore(
+            relPath: String, 
+            needle: String, 
+            aiEnriched: Bool, 
+            qualityScore: Double?
+        ) -> Double {
         let lowerRel = relPath.lowercased()
         let base = URL(fileURLWithPath: relPath).lastPathComponent.lowercased()
 

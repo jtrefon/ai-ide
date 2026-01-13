@@ -112,7 +112,11 @@ final class SettingsGeneralUITests: XCTestCase {
         waitForValueChange(of: slider, from: initialSliderValue, timeout: 2.0)
 
         let adjustedSliderValue = slider.value as? String ?? ""
-        XCTAssertNotEqual(initialSliderValue, adjustedSliderValue, "Font size slider value should change after adjustment")
+        XCTAssertNotEqual(
+            initialSliderValue, 
+            adjustedSliderValue, 
+            "Font size slider value should change after adjustment"
+        )
     }
     
     /// Tests word wrap toggle interaction

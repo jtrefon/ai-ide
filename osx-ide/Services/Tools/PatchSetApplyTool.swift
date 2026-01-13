@@ -79,6 +79,7 @@ struct PatchSetApplyTool: AITool {
         if touched.isEmpty {
             return "Applied patch set \(id). Created checkpoint \(checkpointId)."
         }
-        return "Applied patch set \(id). Created checkpoint \(checkpointId). Touched files:\n" + touched.joined(separator: "\n")
+        return "Applied patch set \(id). Created checkpoint \(checkpointId). " +
+                "Touched files:\n" + touched.joined(separator: "\n")
     }
 }
