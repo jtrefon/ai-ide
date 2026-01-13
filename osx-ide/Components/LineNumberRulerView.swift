@@ -77,8 +77,7 @@ final class ModernLineNumberRulerView: NSRulerView {
         let firstCharIndex = layoutManager.characterIndexForGlyph(at: glyphRange.location)
 
         let lineNumber = Self.startingLineNumber(string: string, firstCharIndex: firstCharIndex)
-        drawLineNumbers(
-            in: rect,
+        let context = DrawLineNumbersContext(
             textView: textView,
             string: string,
             layoutManager: layoutManager,
@@ -87,31 +86,33 @@ final class ModernLineNumberRulerView: NSRulerView {
             relativePoint: relativePoint,
             startingLineNumber: lineNumber
         )
+        drawLineNumbers(context: context)
     }
 
-    private func drawLineNumbers(
-        in rect: NSRect,
-        textView: NSTextView,
-        string: NSString,
-        layoutManager: NSLayoutManager,
-        textContainer: NSTextContainer,
-        glyphRange: NSRange,
-        relativePoint: NSPoint,
-        startingLineNumber: Int
-    ) {
-        var lineNumber = startingLineNumber
+    private struct DrawLineNumbersContext {
+        let textView: NSTextView
+        let string: NSString
+        let layoutManager: NSLayoutManager
+        let textContainer: NSTextContainer
+        let glyphRange: NSRange
+        let relativePoint: NSPoint
+        let startingLineNumber: Int
+    }
+
+    private func drawLineNumbers(context: DrawLineNumbersContext) {
+        var lineNumber = context.startingLineNumber
 
         let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: textColor
         ]
 
-        var glyphIndex = glyphRange.location
-        while glyphIndex < NSMaxRange(glyphRange) {
-            let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        var glyphIndex = context.glyphRange.location
+        while glyphIndex < NSMaxRange(context.glyphRange) {
+            let charIndex = context.layoutManager.characterIndexForGlyph(at: glyphIndex)
             var lineStart: Int = 0
             var lineEnd: Int = 0
-            string.getLineStart(
+            context.string.getLineStart(
                 &lineStart, 
                 end: &lineEnd, 
                 contentsEnd: nil, 
@@ -119,17 +120,17 @@ final class ModernLineNumberRulerView: NSRulerView {
             )
 
             let charRange = NSRange(location: lineStart, length: max(0, lineEnd - lineStart))
-            let lineGlyphRange = layoutManager.glyphRange(forCharacterRange: charRange, actualCharacterRange: nil)
-            var lineRect = layoutManager.boundingRect(forGlyphRange: lineGlyphRange, in: textContainer)
-            lineRect.origin.x += relativePoint.x
-            lineRect.origin.y += relativePoint.y
+            let lineGlyphRange = context.layoutManager.glyphRange(forCharacterRange: charRange, actualCharacterRange: nil)
+            var lineRect = context.layoutManager.boundingRect(forGlyphRange: lineGlyphRange, in: context.textContainer)
+            lineRect.origin.x += context.relativePoint.x
+            lineRect.origin.y += context.relativePoint.y
 
             let label = "\(lineNumber)" as NSString
             let labelSize = label.size(withAttributes: attrs)
             let y = lineRect.minY + (lineRect.height - labelSize.height) / 2
             let x = ruleThickness - 6 - labelSize.width
 
-            if charIndex == textView.selectedRange.location {
+            if charIndex == context.textView.selectedRange.location {
                 let highlightRect = NSRect(x: 0, y: lineRect.minY, width: ruleThickness, height: lineRect.height)
                 selectionColor.setFill()
                 highlightRect.fill()

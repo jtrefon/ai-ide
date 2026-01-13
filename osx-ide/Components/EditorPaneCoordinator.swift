@@ -18,15 +18,8 @@ struct EditorPaneCoordinator {
     let workspace: WorkspaceStateManager
     let ui: UIStateManager
     let appState: AppState
-    
+
     // MARK: - Initialization
-    
-    init(fileEditor: FileEditorStateManager, workspace: WorkspaceStateManager, ui: UIStateManager, appState: AppState) {
-        self.fileEditor = fileEditor
-        self.workspace = workspace
-        self.ui = ui
-        self.appState = appState
-    }
     
     // MARK: - Public Methods
     

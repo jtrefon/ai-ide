@@ -101,22 +101,18 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
     func update(
         rootURL: URL,
-        searchQuery: String,
-        showHiddenFiles: Bool,
-        refreshToken: Int,
-        fontSize: Double,
-        fontFamily: String
+        parameters: UpdateParameters
     ) {
         var needsReload = false
 
-        if self.fontSize != fontSize || self.fontFamily != fontFamily {
-            self.fontSize = fontSize
-            self.fontFamily = fontFamily
+        if self.fontSize != parameters.fontSize || self.fontFamily != parameters.fontFamily {
+            self.fontSize = parameters.fontSize
+            self.fontFamily = parameters.fontFamily
             needsReload = true
         }
 
-        if self.refreshToken != refreshToken {
-            self.refreshToken = refreshToken
+        if self.refreshToken != parameters.refreshToken {
+            self.refreshToken = parameters.refreshToken
             dataSource.resetCaches()
             needsReload = true
         }
@@ -129,15 +125,15 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
             needsReload = true
         }
 
-        if lastSearchQuery != searchQuery {
-            lastSearchQuery = searchQuery
-            setSearchQuery(searchQuery)
+        if lastSearchQuery != parameters.searchQuery {
+            lastSearchQuery = parameters.searchQuery
+            setSearchQuery(parameters.searchQuery)
             needsReload = true
         }
 
-        if lastShowHiddenFiles != showHiddenFiles {
-            lastShowHiddenFiles = showHiddenFiles
-            dataSource.setShowHiddenFiles(showHiddenFiles)
+        if lastShowHiddenFiles != parameters.showHiddenFiles {
+            lastShowHiddenFiles = parameters.showHiddenFiles
+            dataSource.setShowHiddenFiles(parameters.showHiddenFiles)
             needsReload = true
         }
 
@@ -175,6 +171,14 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     private func applyAppearanceToVisibleRows() {
         guard let outlineView else { return }
 
+    }
+
+    struct UpdateParameters {
+        let searchQuery: String
+        let showHiddenFiles: Bool
+        let refreshToken: Int
+        let fontSize: Double
+        let fontFamily: String
     }
     
     private func setSearchQuery(_ value: String) {
