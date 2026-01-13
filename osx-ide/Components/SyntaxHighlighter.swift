@@ -48,7 +48,7 @@ final class SyntaxHighlighter {
         language: String = "text", 
         font: NSFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     ) -> NSAttributedString {
-        let langStr = normalizeLanguageIdentifier(language)
+        let langStr = LanguageIdentifierNormalizer.normalize(language)
 
         #if DEBUG
         print("[Highlighter] highlight raw=\(language) normalized=\(langStr) len=\((code as NSString).length)")
@@ -106,36 +106,6 @@ final class SyntaxHighlighter {
         // In a full implementation, this would analyze changes and only re-highlight affected parts
         return highlight(request.code, language: request.language, font: request.font)
     }
-
-    private func normalizeLanguageIdentifier(_ raw: String) -> String {
-        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-        // Common forms:
-        // - "LANGUAGE_SWIFT" -> "swift"
-        // - "language_swift" -> "swift"
-        // - ".swift" -> "swift"
-        // - "swift" -> "swift"
-        if s.hasPrefix("language_") {
-            s.removeFirst("language_".count)
-        }
-        if s.hasPrefix(".") {
-            s.removeFirst()
-        }
-
-        // Some callers may provide file extensions like "ts"/"js"; map common aliases.
-        switch s {
-        case "js":
-            return "javascript"
-        case "ts":
-            return "typescript"
-        case "py":
-            return "python"
-        default:
-            return s
-        }
-    }
-
-    // MARK: - Language Highlighting
 
     private func resolveModule(for languageIdentifier: String) -> (any LanguageModule)? {
         LanguageModuleManager.shared.getModule(forExtension: languageIdentifier) ??
@@ -226,46 +196,36 @@ final class SyntaxHighlighter {
         #if DEBUG
         print("[Highlighter] applyJSONHighlighting triggered")
         #endif
-        let palette = (LanguageModuleManager.shared.getModule(for: .json) as? HighlightPaletteProviding)?
-            .highlightPalette
+        let palette = (LanguageModuleManager.shared.getModule(for: .json) as? HighlightPaletteProviding)?.highlightPalette
+        let defaultColors = JSONTokenHighlighter.DefaultColors(colors: [
+            .key: NSColor.systemIndigo,
+            .string: NSColor.systemRed,
+            .number: NSColor.systemOrange,
+            .boolean: NSColor.systemBlue,
+            .null: NSColor.systemGray,
+            .quote: NSColor.systemPink,
+            .brace: NSColor.systemTeal,
+            .bracket: NSColor.systemPurple,
+            .comma: NSColor.systemBrown,
+            .colon: NSColor.systemYellow
+        ])
 
-        let keyColor = palette?.color(for: .key) ?? NSColor.systemIndigo
-        let stringValueColor = palette?.color(for: .string) ?? NSColor.systemRed
-        let numberValueColor = palette?.color(for: .number) ?? NSColor.systemOrange
-        let booleanValueColor = palette?.color(for: .boolean) ?? NSColor.systemBlue
-        let nullValueColor = palette?.color(for: .null) ?? NSColor.systemGray
-        let quoteColor = palette?.color(for: .quote) ?? NSColor.systemPink
-        let curlyBraceColor = palette?.color(for: .brace) ?? NSColor.systemTeal
-        let squareBracketColor = palette?.color(for: .bracket) ?? NSColor.systemPurple
-        let commaColor = palette?.color(for: .comma) ?? NSColor.systemBrown
-        let colonColor = palette?.color(for: .colon) ?? NSColor.systemYellow
+        let callbacks = JSONTokenHighlighter.Callbacks(
+            applyRegex: { [weak self] pattern, color, captureGroup in
+                self?.applyRegex(pattern, color: color, in: attr, code: code, captureGroup: captureGroup)
+            },
+            highlightWholeWords: { [weak self] words, color in
+                self?.highlightWholeWords(words, color: color, in: attr, code: code)
+            }
+        )
 
-        // 1. Strings (apply generic string color first - Red)
-        applyRegex("\"(?:\\.|[^\"\\])*\"", color: stringValueColor, in: attr, code: code)
-
-        // 2. Braces, brackets, commas, colons (structural tokens)
-        applyRegex("[\\{\\}]", color: curlyBraceColor, in: attr, code: code)
-        applyRegex("[\\[\\]]", color: squareBracketColor, in: attr, code: code)
-        applyRegex(",", color: commaColor, in: attr, code: code)
-        applyRegex(":", color: colonColor, in: attr, code: code)
-
-        // 3. Keys - override strings with indigo (just the content)
-        applyRegex("\"([^\"]+)\"\\s*:", color: keyColor, in: attr, code: code, captureGroup: 1)
-
-        // 4. String values (content only, after colons) - ensures values stay red
-        applyRegex(":\\s*\"([^\"]+)\"", color: stringValueColor, in: attr, code: code, captureGroup: 1)
-
-        // 5. Numbers
-        applyRegex("\\b-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b", color: numberValueColor, in: attr, code: code)
-
-        // 6. Boolean values
-        highlightWholeWords(["true", "false"], color: booleanValueColor, in: attr, code: code)
-
-        // 7. Null value
-        highlightWholeWords(["null"], color: nullValueColor, in: attr, code: code)
-        
-        // 8. Quotes - color all quotes pink
-        applyRegex("\"", color: quoteColor, in: attr, code: code)
+        JSONTokenHighlighter.applyAll(
+            in: attr,
+            code: code,
+            palette: palette,
+            defaultColors: defaultColors,
+            callbacks: callbacks
+        )
     }
 
     private func applyGenericHighlighting(in attr: NSMutableAttributedString, code: String) {

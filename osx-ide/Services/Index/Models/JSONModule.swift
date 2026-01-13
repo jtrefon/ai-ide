@@ -58,43 +58,35 @@ public final class JSONModule: RegexLanguageModule,
             .foregroundColor: NSColor.labelColor
         ], range: fullRange)
 
-        let keyColor = highlightPalette.color(for: .key) ?? .labelColor
-        let stringValueColor = highlightPalette.color(for: .string) ?? .labelColor
-        let numberValueColor = highlightPalette.color(for: .number) ?? .labelColor
-        let booleanValueColor = highlightPalette.color(for: .boolean) ?? .labelColor
-        let nullValueColor = highlightPalette.color(for: .null) ?? .labelColor
-        let quoteColor = highlightPalette.color(for: .quote) ?? .labelColor
-        let curlyBraceColor = highlightPalette.color(for: .brace) ?? .labelColor
-        let squareBracketColor = highlightPalette.color(for: .bracket) ?? .labelColor
-        let commaColor = highlightPalette.color(for: .comma) ?? .labelColor
-        let colonColor = highlightPalette.color(for: .colon) ?? .labelColor
+        let defaultColors = JSONTokenHighlighter.DefaultColors(colors: [
+            .key: NSColor.labelColor,
+            .string: NSColor.labelColor,
+            .number: NSColor.labelColor,
+            .boolean: NSColor.labelColor,
+            .null: NSColor.labelColor,
+            .quote: NSColor.labelColor,
+            .brace: NSColor.labelColor,
+            .bracket: NSColor.labelColor,
+            .comma: NSColor.labelColor,
+            .colon: NSColor.labelColor
+        ])
 
-        // 1. Strings (apply generic string color first)
-        applyRegex("\"(?:\\\\.|[^\"\\\\])*\"", color: stringValueColor, in: attr, code: code)
+        let callbacks = JSONTokenHighlighter.Callbacks(
+            applyRegex: { [weak self] pattern, color, captureGroup in
+                self?.applyRegex(pattern, color: color, in: attr, code: code, captureGroup: captureGroup)
+            },
+            highlightWholeWords: { [weak self] words, color in
+                self?.highlightWholeWords(words, color: color, in: attr, code: code)
+            }
+        )
 
-        // 2. Braces, brackets, commas, colons (structural tokens)
-        applyRegex("[\\{\\}]", color: curlyBraceColor, in: attr, code: code)
-        applyRegex("[\\[\\]]", color: squareBracketColor, in: attr, code: code)
-        applyRegex(",", color: commaColor, in: attr, code: code)
-        applyRegex(":", color: colonColor, in: attr, code: code)
-
-        // 3. Keys - override strings with indigo (just the content)
-        applyRegex("\"([^\"]+)\"\\s*:", color: keyColor, in: attr, code: code, captureGroup: 1)
-
-        // 4. String values (content only, after colons)
-        applyRegex(":\\s*\"([^\"]+)\"", color: stringValueColor, in: attr, code: code, captureGroup: 1)
-
-        // 5. Numbers
-        applyRegex("\\b-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b", color: numberValueColor, in: attr, code: code)
-
-        // 6. Boolean values
-        highlightWholeWords(["true", "false"], color: booleanValueColor, in: attr, code: code)
-
-        // 7. Null value
-        highlightWholeWords(["null"], color: nullValueColor, in: attr, code: code)
-        
-        // 8. Quotes
-        applyRegex("\"", color: quoteColor, in: attr, code: code)
+        JSONTokenHighlighter.applyAll(
+            in: attr,
+            code: code,
+            palette: highlightPalette,
+            defaultColors: defaultColors,
+            callbacks: callbacks
+        )
 
         return attr
     }

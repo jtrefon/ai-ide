@@ -36,6 +36,13 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     private var pendingSearchTask: Task<Void, Never>?
     private var searchGeneration: Int = 0
 
+    private func performDeferredUIUpdate(_ work: @MainActor @escaping () -> Void) {
+        Task { @MainActor in
+            await Task.yield()
+            work()
+        }
+    }
+
     init(configuration: Configuration) {
         self.dialogCoordinator = FileTreeDialogCoordinator()
         self.searchCoordinator = FileTreeSearchCoordinator(dataSource: dataSource)
@@ -291,8 +298,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     func outlineViewItemDidExpand(_ notification: Notification) {
         guard !dataSource.isSearching, let item = notification.userInfo?["NSObject"] as? FileTreeItem else { return }
         if let relative = dataSource.relativePath(for: item.url) {
-            Task { @MainActor in
-                await Task.yield()
+            performDeferredUIUpdate {
                 if !self.configuration.expandedRelativePaths.wrappedValue.contains(relative) {
                     self.configuration.expandedRelativePaths.wrappedValue.insert(relative)
                 }
@@ -304,8 +310,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     func outlineViewItemDidCollapse(_ notification: Notification) {
         guard !dataSource.isSearching, let item = notification.userInfo?["NSObject"] as? FileTreeItem else { return }
         if let relative = dataSource.relativePath(for: item.url) {
-            Task { @MainActor in
-                await Task.yield()
+            performDeferredUIUpdate {
                 if self.configuration.expandedRelativePaths.wrappedValue.contains(relative) {
                     self.configuration.expandedRelativePaths.wrappedValue.remove(relative)
                     self.configuration.expandedRelativePaths.wrappedValue = self.configuration.expandedRelativePaths.wrappedValue
@@ -320,22 +325,19 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         guard !dataSource.isSearching, let outlineView = notification.object as? NSOutlineView else { return }
         let row = outlineView.selectedRow
         guard row >= 0, let item = outlineView.item(atRow: row) as? FileTreeItem else {
-            Task { @MainActor in
-                await Task.yield()
+            performDeferredUIUpdate {
                 self.configuration.selectedRelativePath.wrappedValue = nil
             }
             return
         }
 
         if dataSource.isDirectory(item.url) {
-            Task { @MainActor in
-                await Task.yield()
+            performDeferredUIUpdate {
                 self.configuration.selectedRelativePath.wrappedValue = nil
             }
         } else {
             let relative = dataSource.relativePath(for: item.url)
-            Task { @MainActor in
-                await Task.yield()
+            performDeferredUIUpdate {
                 if self.configuration.selectedRelativePath.wrappedValue != relative {
                     self.configuration.selectedRelativePath.wrappedValue = relative
                 }
@@ -511,50 +513,5 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         let index = labelNumber - 1
         guard index >= 0, index < colors.count else { return nil }
         return colors[index]
-    }
-}
-
-// MARK: - Dialog Handling
-
-private extension ModernFileTreeCoordinator {
-    
-    /// Prompts user for renaming an item
-    func promptForRename(initialName: String) -> String? {
-        let alert = NSAlert()
-        alert.messageText = NSLocalizedString("file_tree.rename.title", comment: "")
-        alert.informativeText = NSLocalizedString("file_tree.rename.info", comment: "")
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: NSLocalizedString("file_tree.rename.button", comment: ""))
-        alert.addButton(withTitle: NSLocalizedString("common.cancel", comment: ""))
-
-        let textField = NSTextField(string: initialName)
-        textField.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
-        alert.accessoryView = textField
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return nil }
-
-        let trimmed = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-    
-    /// Prompts user for creating a new item
-    func promptForNewItem(title: String, informativeText: String) -> String? {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = informativeText
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: NSLocalizedString("file_tree.create.button", comment: ""))
-        alert.addButton(withTitle: NSLocalizedString("common.cancel", comment: ""))
-
-        let textField = NSTextField(string: "")
-        textField.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
-        alert.accessoryView = textField
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return nil }
-
-        let trimmed = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

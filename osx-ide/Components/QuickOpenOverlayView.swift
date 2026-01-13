@@ -7,10 +7,6 @@ struct QuickOpenOverlayView: View {
     @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
 
-    private func localized(_ key: String) -> String {
-        NSLocalizedString(key, comment: "")
-    }
-
     @State private var query: String = ""
     @State private var results: [String] = []
     @State private var isSearching: Bool = false
@@ -27,8 +23,8 @@ struct QuickOpenOverlayView: View {
         OverlayCard {
             VStack(spacing: 12) {
                 OverlayHeaderView(
-                    title: localized("quick_open.title"),
-                    placeholder: localized("quick_open.placeholder"),
+                    title: OverlayLocalizer.localized("quick_open.title"),
+                    placeholder: OverlayLocalizer.localized("quick_open.placeholder"),
                     query: $query,
                     textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
                     showsProgress: isSearching,
@@ -42,7 +38,7 @@ struct QuickOpenOverlayView: View {
 
                 List {
                     if !recentCandidates().isEmpty && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Section(localized("quick_open.recent")) {
+                        Section(OverlayLocalizer.localized("quick_open.recent")) {
                             ForEach(recentCandidates(), id: \.self) { path in
                                 Button(action: { open(path: path, openToSide: false) }) {
                                     Text(path)
@@ -52,7 +48,7 @@ struct QuickOpenOverlayView: View {
                         }
                     }
 
-                    Section(localized("quick_open.results")) {
+                    Section(OverlayLocalizer.localized("quick_open.results")) {
                         ForEach(results, id: \.self) { path in
                             Button(action: { open(path: path, openToSide: NSEvent.modifierFlags.contains(.command)) }) {
                                 Text(path)
@@ -77,11 +73,13 @@ struct QuickOpenOverlayView: View {
     }
 
     private func debounceSearch() {
-        searchTask?.cancel()
-        searchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds)
-            await refreshResults()
-        }
+        OverlaySearchDebouncer.reschedule(
+            searchTask: &searchTask,
+            debounceNanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds,
+            action: {
+                await refreshResults()
+            }
+        )
     }
 
     private func refreshResults() async {

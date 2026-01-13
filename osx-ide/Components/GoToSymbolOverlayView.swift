@@ -8,10 +8,6 @@ struct GoToSymbolOverlayView: View {
     @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
 
-    private func localized(_ key: String) -> String {
-        NSLocalizedString(key, comment: "")
-    }
-
     @State private var query: String = ""
     @State private var results: [WorkspaceSymbolLocation] = []
     @State private var isSearching: Bool = false
@@ -30,8 +26,8 @@ struct GoToSymbolOverlayView: View {
         OverlayCard {
             VStack(spacing: 12) {
                 OverlayHeaderView(
-                    title: localized("go_to_symbol.title"),
-                    placeholder: localized("go_to_symbol.placeholder"),
+                    title: OverlayLocalizer.localized("go_to_symbol.title"),
+                    placeholder: OverlayLocalizer.localized("go_to_symbol.placeholder"),
                     query: $query,
                     textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
                     showsProgress: isSearching,
@@ -87,11 +83,13 @@ struct GoToSymbolOverlayView: View {
     }
 
     private func debounceSearch() {
-        searchTask?.cancel()
-        searchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds)
-            refreshResults()
-        }
+        OverlaySearchDebouncer.reschedule(
+            searchTask: &searchTask,
+            debounceNanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds,
+            action: {
+                refreshResults()
+            }
+        )
     }
 
     private func refreshResults() {
