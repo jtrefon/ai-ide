@@ -70,10 +70,24 @@ struct TextViewRepresentable: NSViewRepresentable {
         let scrollView = NSScrollView()
         let textView = NSTextView()
 
+        let resolvedFont = Self.resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize)
+        configureTextView(textView, resolvedFont: resolvedFont)
+        configureTextContainerSizing(for: textView)
+        setInitialText(in: textView, coordinator: context.coordinator)
+        attachCoordinator(context.coordinator, to: textView)
+        configureScrollView(scrollView, documentView: textView)
+        scheduleInitialWordWrapApply(scrollView, textView: textView)
+        configureLineNumbersIfNeeded(scrollView, textView: textView)
+        scheduleInitialHighlight(textView: textView, coordinator: context.coordinator, font: resolvedFont)
+        
+        return scrollView
+    }
+
+    private func configureTextView(_ textView: NSTextView, resolvedFont: NSFont) {
         textView.isEditable = true
         textView.isSelectable = true
         textView.allowsUndo = true
-        textView.font = Self.resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize)
+        textView.font = resolvedFont
         textView.backgroundColor = NSColor.textBackgroundColor
         textView.insertionPointColor = NSColor.labelColor
         textView.isAutomaticQuoteSubstitutionEnabled = false
@@ -82,60 +96,69 @@ struct TextViewRepresentable: NSViewRepresentable {
         // UI Tests need a stable identifier; otherwise `app.textViews.firstMatch` can
         // accidentally match the AI chat input instead of the editor.
         textView.setAccessibilityIdentifier("CodeEditorTextView")
-        
+    }
+
+    private func configureTextContainerSizing(for textView: NSTextView) {
         textView.minSize = NSSize(width: 0, height: 0)
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = true
         textView.textContainer?.containerSize = NSSize(
-                width: CGFloat.greatestFiniteMagnitude, 
-                height: CGFloat.greatestFiniteMagnitude
-            )
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
         textView.textContainer?.widthTracksTextView = false
-        
-        // Set initial text without syntax highlighting to avoid initialization issues
-        context.coordinator.isProgrammaticUpdate = true
-        textView.string = text
-        context.coordinator.isProgrammaticUpdate = false
+    }
 
+    private func setInitialText(in textView: NSTextView, coordinator: Coordinator) {
+        // Set initial text without syntax highlighting to avoid initialization issues
+        coordinator.isProgrammaticUpdate = true
+        textView.string = text
+        coordinator.isProgrammaticUpdate = false
+    }
+
+    private func attachCoordinator(_ coordinator: Coordinator, to textView: NSTextView) {
         // Assign delegate only after initial programmatic setup to avoid publishing SwiftUI state during view updates.
-        textView.delegate = context.coordinator
-        context.coordinator.attach(textView: textView)
-        textView.textStorage?.delegate = context.coordinator.textStorageDelegateProxy
-        
-        scrollView.documentView = textView
+        textView.delegate = coordinator
+        coordinator.attach(textView: textView)
+        textView.textStorage?.delegate = coordinator.textStorageDelegateProxy
+    }
+
+    private func configureScrollView(_ scrollView: NSScrollView, documentView: NSTextView) {
+        scrollView.documentView = documentView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = false
+    }
 
+    private func scheduleInitialWordWrapApply(_ scrollView: NSScrollView, textView: NSTextView) {
         Task { @MainActor in
             Self.applyWordWrap(wordWrap, to: scrollView, textView: textView)
         }
+    }
 
-        if showLineNumbers {
-            scrollView.hasVerticalRuler = true
-            scrollView.rulersVisible = true
-            scrollView.verticalRulerView = ModernLineNumberRulerView(scrollView: scrollView, textView: textView)
-
-            // Ensure the ruler is laid out and painted on first draw (otherwise it can appear only after scrolling).
-            Task { @MainActor in
-                scrollView.tile()
-                scrollView.verticalRulerView?.needsDisplay = true
-            }
+    private func configureLineNumbersIfNeeded(_ scrollView: NSScrollView, textView: NSTextView) {
+        guard showLineNumbers else {
+            return
         }
-        
+
+        scrollView.hasVerticalRuler = true
+        scrollView.rulersVisible = true
+        scrollView.verticalRulerView = ModernLineNumberRulerView(scrollView: scrollView, textView: textView)
+
+        // Ensure the ruler is laid out and painted on first draw (otherwise it can appear only after scrolling).
+        Task { @MainActor in
+            scrollView.tile()
+            scrollView.verticalRulerView?.needsDisplay = true
+        }
+    }
+
+    private func scheduleInitialHighlight(textView: NSTextView, coordinator: Coordinator, font: NSFont) {
         // Apply syntax highlighting after the view is set up asynchronously
-        context.coordinator.performAsyncHighlight(
-            for: text,
-            in: textView,
-            language: language,
-            font: Self.resolveEditorFont(
-                fontFamily: fontFamily,
-                fontSize: fontSize
-            )
-        )
-        
-        return scrollView
+        coordinator.performAsyncHighlight(for: text, in: textView, language: language, font: font)
     }
     
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
