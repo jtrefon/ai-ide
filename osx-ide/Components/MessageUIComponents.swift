@@ -28,76 +28,115 @@ struct MessageUIComponents {
 
         func path(in rect: CGRect) -> Path {
             var path = Path()
-            
-            let p1 = CGPoint(x: rect.minX, y: rect.minY)
-            let p2 = CGPoint(x: rect.maxX, y: rect.minY)
-            let p3 = CGPoint(x: rect.maxX, y: rect.maxY)
-            let p4 = CGPoint(x: rect.minX, y: rect.maxY)
-            
+
+            let points = rectCornerPoints(in: rect)
+            moveToStart(&path, topLeft: points.topLeft)
+            addTopEdge(&path, points: points)
+            addRightEdge(&path, points: points)
+            addBottomEdge(&path, points: points)
+            addLeftEdge(&path, points: points)
+
+            return path
+        }
+
+        private struct CornerPoints {
+            let topLeft: CGPoint
+            let topRight: CGPoint
+            let bottomRight: CGPoint
+            let bottomLeft: CGPoint
+        }
+
+        private func rectCornerPoints(in rect: CGRect) -> CornerPoints {
+            CornerPoints(
+                topLeft: CGPoint(x: rect.minX, y: rect.minY),
+                topRight: CGPoint(x: rect.maxX, y: rect.minY),
+                bottomRight: CGPoint(x: rect.maxX, y: rect.maxY),
+                bottomLeft: CGPoint(x: rect.minX, y: rect.maxY)
+            )
+        }
+
+        private func moveToStart(_ path: inout Path, topLeft: CGPoint) {
             // Start from top-left
             if corners.contains(.topLeft) {
-                path.move(to: CGPoint(x: p1.x + radius, y: p1.y))
+                path.move(to: CGPoint(x: topLeft.x + radius, y: topLeft.y))
             } else {
-                path.move(to: p1)
+                path.move(to: topLeft)
             }
-            
+        }
+
+        private func addTopEdge(_ path: inout Path, points: CornerPoints) {
             // Top edge to top-right
             if corners.contains(.topRight) {
-                path.addLine(to: CGPoint(x: p2.x - radius, y: p2.y))
-                path.addArc(
-                    center: CGPoint(x: p2.x - radius, y: p2.y + radius),
-                    radius: radius,
-                    startAngle: Angle(degrees: -90),
-                    endAngle: Angle(degrees: 0),
-                    clockwise: false
+                path.addLine(to: CGPoint(x: points.topRight.x - radius, y: points.topRight.y))
+                addArc(
+                    &path,
+                    center: CGPoint(x: points.topRight.x - radius, y: points.topRight.y + radius),
+                    startDegrees: -90,
+                    endDegrees: 0
                 )
             } else {
-                path.addLine(to: p2)
+                path.addLine(to: points.topRight)
             }
-            
+        }
+
+        private func addRightEdge(_ path: inout Path, points: CornerPoints) {
             // Right edge to bottom-right
             if corners.contains(.bottomRight) {
-                path.addLine(to: CGPoint(x: p3.x - radius, y: p3.y))
-                path.addArc(
-                    center: CGPoint(x: p3.x - radius, y: p3.y - radius),
-                    radius: radius,
-                    startAngle: Angle(degrees: 0),
-                    endAngle: Angle(degrees: 90),
-                    clockwise: false
+                path.addLine(to: CGPoint(x: points.bottomRight.x - radius, y: points.bottomRight.y))
+                addArc(
+                    &path,
+                    center: CGPoint(x: points.bottomRight.x - radius, y: points.bottomRight.y - radius),
+                    startDegrees: 0,
+                    endDegrees: 90
                 )
             } else {
-                path.addLine(to: p3)
+                path.addLine(to: points.bottomRight)
             }
-            
+        }
+
+        private func addBottomEdge(_ path: inout Path, points: CornerPoints) {
             // Bottom edge to bottom-left
             if corners.contains(.bottomLeft) {
-                path.addLine(to: CGPoint(x: p4.x + radius, y: p4.y))
-                path.addArc(
-                    center: CGPoint(x: p4.x + radius, y: p4.y - radius),
-                    radius: radius,
-                    startAngle: Angle(degrees: 90),
-                    endAngle: Angle(degrees: 180),
-                    clockwise: false
+                path.addLine(to: CGPoint(x: points.bottomLeft.x + radius, y: points.bottomLeft.y))
+                addArc(
+                    &path,
+                    center: CGPoint(x: points.bottomLeft.x + radius, y: points.bottomLeft.y - radius),
+                    startDegrees: 90,
+                    endDegrees: 180
                 )
             } else {
-                path.addLine(to: p4)
+                path.addLine(to: points.bottomLeft)
             }
-            
+        }
+
+        private func addLeftEdge(_ path: inout Path, points: CornerPoints) {
             // Left edge back to top-left
             if corners.contains(.topLeft) {
-                path.addLine(to: CGPoint(x: p1.x + radius, y: p1.y))
-                path.addArc(
-                    center: CGPoint(x: p1.x + radius, y: p1.y + radius),
-                    radius: radius,
-                    startAngle: Angle(degrees: 180),
-                    endAngle: Angle(degrees: 270),
-                    clockwise: false
+                path.addLine(to: CGPoint(x: points.topLeft.x + radius, y: points.topLeft.y))
+                addArc(
+                    &path,
+                    center: CGPoint(x: points.topLeft.x + radius, y: points.topLeft.y + radius),
+                    startDegrees: 180,
+                    endDegrees: 270
                 )
             } else {
-                path.addLine(to: p1)
+                path.addLine(to: points.topLeft)
             }
-            
-            return path
+        }
+
+        private func addArc(
+            _ path: inout Path,
+            center: CGPoint,
+            startDegrees: Double,
+            endDegrees: Double
+        ) {
+            path.addArc(
+                center: center,
+                radius: radius,
+                startAngle: Angle(degrees: startDegrees),
+                endAngle: Angle(degrees: endDegrees),
+                clockwise: false
+            )
         }
     }
 }
