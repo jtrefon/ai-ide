@@ -185,7 +185,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         searchCoordinator.setSearchQuery(value)
     }
     
-    @objc func onDoubleClick(_ sender: Any?) {
+    @objc func onDoubleClick(_ _: Any?) {
         guard let item = clickedFileTreeItem() else { return }
         performOpen(for: item)
     }

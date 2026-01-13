@@ -78,11 +78,13 @@ struct ModernFileTreeView: NSViewRepresentable {
 
         coordinator.update(
             rootURL: rootURL,
-            searchQuery: searchQuery,
-            showHiddenFiles: showHiddenFiles,
-            refreshToken: refreshToken,
-            fontSize: fontSize,
-            fontFamily: fontFamily
+            parameters: ModernFileTreeCoordinator.UpdateParameters(
+                searchQuery: searchQuery,
+                showHiddenFiles: showHiddenFiles,
+                refreshToken: refreshToken,
+                fontSize: fontSize,
+                fontFamily: fontFamily
+            )
         )
     }
 
