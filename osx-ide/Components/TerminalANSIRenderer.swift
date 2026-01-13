@@ -69,107 +69,140 @@ class TerminalANSIRenderer {
             _ text: String, 
             from index: Int
         ) -> (attributes: [NSAttributedString.Key: Any], sequenceLength: Int)? {
-        let stringIndex = text.index(text.startIndex, offsetBy: index)
-        
-        guard index + 1 < text.count,
-              text[stringIndex] == "\u{001B}",
-              text[text.index(after: stringIndex)] == "[" else {
+        guard isValidANSIPrefix(text, at: index) else {
             return nil
         }
-        
-        var endIndex = index + 2
-        var parameters: [Int] = []
-        var currentParameter = ""
-        
-        while endIndex < text.count {
-            let charIndex = text.index(text.startIndex, offsetBy: endIndex)
-            let char = text[charIndex]
-            
-            if char.isNumber {
-                currentParameter += String(char)
-            } else if char == ";" {
-                if !currentParameter.isEmpty {
-                    parameters.append(Int(currentParameter) ?? 0)
-                    currentParameter = ""
-                }
-            } else if char.isLetter {
-                if !currentParameter.isEmpty {
-                    parameters.append(Int(currentParameter) ?? 0)
-                }
-                
-                let attributes = processANSIParameters(parameters, command: char)
-                let sequenceLength = endIndex - index + 1
-                
-                return (attributes: attributes, sequenceLength: sequenceLength)
-            } else {
-                break
-            }
-            
-            endIndex += 1
+
+        guard let parsed = parseANSIParametersAndCommand(text, startIndex: index + 2) else {
+            return nil
         }
-        
-        return nil
+
+        let attributes = processANSIParameters(parsed.parameters, command: parsed.command)
+        let sequenceLength = parsed.endIndex - index + 1
+        return (attributes: attributes, sequenceLength: sequenceLength)
     }
     
     /// Processes ANSI parameters and returns text attributes
     private func processANSIParameters(_ parameters: [Int], command: Character) -> [NSAttributedString.Key: Any] {
-        var attributes: [NSAttributedString.Key: Any] = [:]
-        
-        guard !parameters.isEmpty else {
-            switch command {
-            case "m":
-                // Reset all attributes
-                attributes[.foregroundColor] = defaultForegroundColor
-                attributes[.backgroundColor] = defaultBackgroundColor
-                attributes[.font] = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-            default:
-                break
-            }
-            return attributes
+        guard command == "m" else {
+            return [:]
         }
-        
-        switch command {
-        case "m":
-            // SGR (Select Graphic Rendition) parameters
-            for param in parameters {
-                switch param {
-                case 0:
-                    // Reset
-                    attributes[.foregroundColor] = defaultForegroundColor
-                    attributes[.backgroundColor] = defaultBackgroundColor
-                    attributes[.font] = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-                case 1:
-                    // Bold
-                    attributes[.font] = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
-                case 30...37:
-                    // Foreground colors
-                    attributes[.foregroundColor] = colorForANSICode(param)
-                case 40...47:
-                    // Background colors
-                    attributes[.backgroundColor] = colorForANSICode(param)
-                default:
-                    break
-                }
-            }
-        default:
-            break
+
+        if parameters.isEmpty {
+            return resetTextAttributes()
         }
-        
-        return attributes
+
+        return applySGRParameters(parameters)
     }
     
     /// Maps ANSI color codes to NSColor values
     private func colorForANSICode(_ code: Int) -> NSColor {
-        switch code {
-        case 30, 40: return NSColor.black
-        case 31, 41: return NSColor.red
-        case 32, 42: return NSColor.green
-        case 33, 43: return NSColor.yellow
-        case 34, 44: return NSColor.blue
-        case 35, 45: return NSColor.magenta
-        case 36, 46: return NSColor.cyan
-        case 37, 47: return NSColor.white
-        default: return NSColor.green
+        let baseColors: [NSColor] = [
+            .black,
+            .red,
+            .green,
+            .yellow,
+            .blue,
+            .magenta,
+            .cyan,
+            .white
+        ]
+
+        if (30...37).contains(code) {
+            return baseColors[code - 30]
         }
+
+        if (40...47).contains(code) {
+            return baseColors[code - 40]
+        }
+
+        return .green
+    }
+
+    private func isValidANSIPrefix(_ text: String, at index: Int) -> Bool {
+        let stringIndex = text.index(text.startIndex, offsetBy: index)
+
+        guard index + 1 < text.count else {
+            return false
+        }
+
+        return text[stringIndex] == "\u{001B}" && text[text.index(after: stringIndex)] == "["
+    }
+
+    private func parseANSIParametersAndCommand(
+        _ text: String,
+        startIndex: Int
+    ) -> (parameters: [Int], command: Character, endIndex: Int)? {
+        var endIndex = startIndex
+        var parameters: [Int] = []
+        var currentParameter = ""
+
+        while endIndex < text.count {
+            let charIndex = text.index(text.startIndex, offsetBy: endIndex)
+            let char = text[charIndex]
+
+            if char.isNumber {
+                currentParameter += String(char)
+            } else if char == ";" {
+                appendCurrentParameterIfNeeded(&currentParameter, to: &parameters)
+            } else if char.isLetter {
+                appendCurrentParameterIfNeeded(&currentParameter, to: &parameters)
+                return (parameters: parameters, command: char, endIndex: endIndex)
+            } else {
+                return nil
+            }
+
+            endIndex += 1
+        }
+
+        return nil
+    }
+
+    private func appendCurrentParameterIfNeeded(
+        _ currentParameter: inout String,
+        to parameters: inout [Int]
+    ) {
+        guard !currentParameter.isEmpty else {
+            return
+        }
+
+        parameters.append(Int(currentParameter) ?? 0)
+        currentParameter = ""
+    }
+
+    private func resetTextAttributes() -> [NSAttributedString.Key: Any] {
+        [
+            .foregroundColor: defaultForegroundColor,
+            .backgroundColor: defaultBackgroundColor,
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        ]
+    }
+
+    private func applySGRParameters(_ parameters: [Int]) -> [NSAttributedString.Key: Any] {
+        var attributes: [NSAttributedString.Key: Any] = [:]
+
+        for param in parameters {
+            if param == 0 {
+                attributes.merge(resetTextAttributes(), uniquingKeysWith: { _, new in new })
+                continue
+            }
+
+            if param == 1 {
+                attributes[.font] = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
+                continue
+            }
+
+            if (30...37).contains(param) {
+                attributes[.foregroundColor] = colorForANSICode(param)
+                continue
+            }
+
+            if (40...47).contains(param) {
+                attributes[.backgroundColor] = colorForANSICode(param)
+                continue
+            }
+        }
+
+        return attributes
     }
 }

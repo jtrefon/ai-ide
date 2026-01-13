@@ -101,18 +101,18 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
     
     /// Get language identifier for file extension
     static func languageForFileExtension(_ extension: String) -> String {
-        switch `extension`.lowercased() {
-        case "swift": return "swift"
-        case "js": return "javascript"
-        case "jsx": return "jsx"
-        case "ts": return "typescript"
-        case "tsx": return "tsx"
-        case "py": return "python"
-        case "html": return "html"
-        case "css": return "css"
-        case "json": return "json"
-        default: return "text"
-        }
+        let map: [String: String] = [
+            "swift": "swift",
+            "js": "javascript",
+            "jsx": "jsx",
+            "ts": "typescript",
+            "tsx": "tsx",
+            "py": "python",
+            "html": "html",
+            "css": "css",
+            "json": "json"
+        ]
+        return map[`extension`.lowercased()] ?? "text"
     }
     
     /// Check if file can be saved

@@ -2,6 +2,17 @@ import SwiftUI
 import AppKit
 
 /// Modern coordinator for the file tree focusing on UI events and state bridging
+struct ModernFileTreeCoordinatorConfiguration {
+    let expandedRelativePaths: Binding<Set<String>>
+    let selectedRelativePath: Binding<String?>
+    let onOpenFile: (URL) -> Void
+    let onCreateFile: (URL, String) -> Void
+    let onCreateFolder: (URL, String) -> Void
+    let onDeleteItem: (URL) -> Void
+    let onRenameItem: (URL, String) -> Void
+    let onRevealInFinder: (URL) -> Void
+}
+
 @MainActor
 final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
     let dataSource = FileTreeDataSource()
@@ -11,25 +22,9 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     private let searchCoordinator: FileTreeSearchCoordinator
     private var appearanceCoordinator: FileTreeAppearanceCoordinator
 
-    struct Configuration {
-        let expandedRelativePaths: Binding<Set<String>>
-        let selectedRelativePath: Binding<String?>
-        let onOpenFile: (URL) -> Void
-        let onCreateFile: (URL, String) -> Void
-        let onCreateFolder: (URL, String) -> Void
-        let onDeleteItem: (URL) -> Void
-        let onRenameItem: (URL, String) -> Void
-        let onRevealInFinder: (URL) -> Void
-    }
+    typealias Configuration = ModernFileTreeCoordinatorConfiguration
 
-    private let expandedRelativePaths: Binding<Set<String>>
-    private let selectedRelativePath: Binding<String?>
-    private let onOpenFile: (URL) -> Void
-    private let onCreateFile: (URL, String) -> Void
-    private let onCreateFolder: (URL, String) -> Void
-    private let onDeleteItem: (URL) -> Void
-    private let onRenameItem: (URL, String) -> Void
-    private let onRevealInFinder: (URL) -> Void
+    private let configuration: Configuration
     private weak var outlineView: NSOutlineView?
     private var refreshToken: Int = 0
     private var lastRootPath: String?
@@ -42,22 +37,16 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     private var searchGeneration: Int = 0
 
     init(configuration: Configuration) {
-        // Initialize specialized coordinators
         self.dialogCoordinator = FileTreeDialogCoordinator()
         self.searchCoordinator = FileTreeSearchCoordinator(dataSource: dataSource)
-        self.appearanceCoordinator = FileTreeAppearanceCoordinator(
-            outlineView: NSOutlineView()
-        ) // Temporary, will be updated in attach
-        
-        self.expandedRelativePaths = configuration.expandedRelativePaths
-        self.selectedRelativePath = configuration.selectedRelativePath
-        self.onOpenFile = configuration.onOpenFile
-        self.onCreateFile = configuration.onCreateFile
-        self.onCreateFolder = configuration.onCreateFolder
-        self.onDeleteItem = configuration.onDeleteItem
-        self.onRenameItem = configuration.onRenameItem
-        self.onRevealInFinder = configuration.onRevealInFinder
+        self.appearanceCoordinator = Self.makePlaceholderAppearanceCoordinator()
+
+        self.configuration = configuration
         super.init()
+    }
+
+    private static func makePlaceholderAppearanceCoordinator() -> FileTreeAppearanceCoordinator {
+        FileTreeAppearanceCoordinator(outlineView: NSOutlineView())
     }
 
     func attach(outlineView: NSOutlineView) {
@@ -154,7 +143,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     private func applyExpandedStateIfNeeded() {
         guard !dataSource.isSearching, let outlineView else { return }
 
-        let targets = expandedRelativePaths.wrappedValue
+        let targets = configuration.expandedRelativePaths.wrappedValue
             .sorted { a, b in
                 let aDepth = a.split(separator: "/").count
                 let bDepth = b.split(separator: "/").count
@@ -193,71 +182,68 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     }
     
     private func performOpen(for item: FileTreeItem) {
-        onOpenFile(item.url as URL)
+        configuration.onOpenFile(item.url as URL)
     }
     
     @objc func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        
+
         guard let item = clickedFileTreeItem() else { return }
         let url = item.url
-        
-        // Add file operations
-        let openItem = NSMenuItem(
+
+        addFileActionItems(menu, url: url)
+        menu.addItem(NSMenuItem.separator())
+        addRevealItem(menu, url: url)
+        menu.addItem(NSMenuItem.separator())
+        addCreateItems(menu)
+    }
+
+    private func addFileActionItems(_ menu: NSMenu, url: NSURL) {
+        menu.addItem(makeMenuItem(
             title: NSLocalizedString("file_tree.context.open", comment: ""),
             action: #selector(onContextOpen(_:)),
-            keyEquivalent: ""
-        )
-        openItem.target = self
-        openItem.representedObject = url
-        menu.addItem(openItem)
-        
-        let renameItem = NSMenuItem(
+            representedObject: url
+        ))
+        menu.addItem(makeMenuItem(
             title: NSLocalizedString("file_tree.context.rename", comment: ""),
             action: #selector(onContextRename(_:)),
-            keyEquivalent: ""
-        )
-        renameItem.target = self
-        renameItem.representedObject = url
-        menu.addItem(renameItem)
-        
-        let deleteItem = NSMenuItem(
+            representedObject: url
+        ))
+        menu.addItem(makeMenuItem(
             title: NSLocalizedString("file_tree.context.delete", comment: ""),
             action: #selector(onContextDelete(_:)),
-            keyEquivalent: ""
-        )
-        deleteItem.target = self
-        deleteItem.representedObject = url
-        menu.addItem(deleteItem)
-        
-        menu.addItem(NSMenuItem.separator())
-        
-        let revealItem = NSMenuItem(
+            representedObject: url
+        ))
+    }
+
+    private func addRevealItem(_ menu: NSMenu, url: NSURL) {
+        menu.addItem(makeMenuItem(
             title: NSLocalizedString("file_tree.context.show_in_finder", comment: ""),
             action: #selector(onContextRevealInFinder(_:)),
-            keyEquivalent: ""
-        )
-        revealItem.target = self
-        revealItem.representedObject = url
-        menu.addItem(revealItem)
-        
-        menu.addItem(NSMenuItem.separator())
-        
-        let newFileItem = NSMenuItem(
+            representedObject: url
+        ))
+    }
+
+    private func addCreateItems(_ menu: NSMenu) {
+        menu.addItem(makeMenuItem(
             title: NSLocalizedString("file_tree.context.new_file", comment: ""),
-            action: #selector(onContextNewFile(_:)),
-            keyEquivalent: ""
-        )
-        newFileItem.target = self
-        menu.addItem(newFileItem)
-        
-        let newFolderItem = NSMenuItem(
+            action: #selector(onContextNewFile(_:))
+        ))
+        menu.addItem(makeMenuItem(
             title: NSLocalizedString("file_tree.context.new_folder", comment: ""),
-            action: #selector(onContextNewFolder(_:)),
-            keyEquivalent: ""
-        )
-        newFolderItem.target = self
-        menu.addItem(newFolderItem)
+            action: #selector(onContextNewFolder(_:))
+        ))
+    }
+
+    private func makeMenuItem(
+        title: String,
+        action: Selector,
+        representedObject: Any? = nil
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.representedObject = representedObject
+        return item
     }
     
     @objc private func onContextOpen(_ sender: NSMenuItem) {
@@ -267,19 +253,19 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
     @objc private func onContextDelete(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
-        onDeleteItem(url)
+        configuration.onDeleteItem(url)
     }
 
     @objc private func onContextRename(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
         let initialName = url.lastPathComponent
         guard let newName = dialogCoordinator.promptForRename(initialName: initialName) else { return }
-        onRenameItem(url, newName)
+        configuration.onRenameItem(url, newName)
     }
 
     @objc private func onContextRevealInFinder(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
-        onRevealInFinder(url)
+        configuration.onRevealInFinder(url)
     }
 
     @objc private func onContextNewFile(_ sender: NSMenuItem) {
@@ -288,7 +274,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
             title: NSLocalizedString("file_tree.create_file.title", comment: ""),
             informativeText: NSLocalizedString("file_tree.create_file.info", comment: "")
         ) else { return }
-        onCreateFile(directory, name)
+        configuration.onCreateFile(directory, name)
     }
 
     @objc private func onContextNewFolder(_ sender: NSMenuItem) {
@@ -297,7 +283,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
             title: NSLocalizedString("file_tree.create_folder.title", comment: ""),
             informativeText: NSLocalizedString("file_tree.create_folder.info", comment: "")
         ) else { return }
-        onCreateFolder(directory, name)
+        configuration.onCreateFolder(directory, name)
     }
 
     // MARK: - NSOutlineViewDelegate
@@ -307,8 +293,8 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         if let relative = dataSource.relativePath(for: item.url) {
             Task { @MainActor in
                 await Task.yield()
-                if !self.expandedRelativePaths.wrappedValue.contains(relative) {
-                    self.expandedRelativePaths.wrappedValue.insert(relative)
+                if !self.configuration.expandedRelativePaths.wrappedValue.contains(relative) {
+                    self.configuration.expandedRelativePaths.wrappedValue.insert(relative)
                 }
                 self.applyAppearanceToVisibleRows()
             }
@@ -320,9 +306,9 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         if let relative = dataSource.relativePath(for: item.url) {
             Task { @MainActor in
                 await Task.yield()
-                if self.expandedRelativePaths.wrappedValue.contains(relative) {
-                    self.expandedRelativePaths.wrappedValue.remove(relative)
-                    self.expandedRelativePaths.wrappedValue = self.expandedRelativePaths.wrappedValue
+                if self.configuration.expandedRelativePaths.wrappedValue.contains(relative) {
+                    self.configuration.expandedRelativePaths.wrappedValue.remove(relative)
+                    self.configuration.expandedRelativePaths.wrappedValue = self.configuration.expandedRelativePaths.wrappedValue
                         .filter { !$0.hasPrefix(relative + "/") }
                 }
                 self.applyAppearanceToVisibleRows()
@@ -336,7 +322,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         guard row >= 0, let item = outlineView.item(atRow: row) as? FileTreeItem else {
             Task { @MainActor in
                 await Task.yield()
-                self.selectedRelativePath.wrappedValue = nil
+                self.configuration.selectedRelativePath.wrappedValue = nil
             }
             return
         }
@@ -344,14 +330,14 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         if dataSource.isDirectory(item.url) {
             Task { @MainActor in
                 await Task.yield()
-                self.selectedRelativePath.wrappedValue = nil
+                self.configuration.selectedRelativePath.wrappedValue = nil
             }
         } else {
             let relative = dataSource.relativePath(for: item.url)
             Task { @MainActor in
                 await Task.yield()
-                if self.selectedRelativePath.wrappedValue != relative {
-                    self.selectedRelativePath.wrappedValue = relative
+                if self.configuration.selectedRelativePath.wrappedValue != relative {
+                    self.configuration.selectedRelativePath.wrappedValue = relative
                 }
             }
         }
@@ -406,7 +392,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         icon.size = NSSize(width: 16, height: 16)
         cell.imageView?.image = icon
 
-        if let relativePath = dataSource.relativePath(for: url), relativePath == selectedRelativePath.wrappedValue {
+        if let relativePath = dataSource.relativePath(for: url), relativePath == configuration.selectedRelativePath.wrappedValue {
             cell.textField?.textColor = fileLabelColor(for: url) ?? .labelColor
         } else {
             cell.textField?.textColor = fileLabelColor(for: url) ?? .labelColor
