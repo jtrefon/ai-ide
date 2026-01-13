@@ -7,29 +7,29 @@ struct WorkspaceAndChatTests {
 
     private struct ThrowingAIService: AIService {
         func sendMessage(
-            _ message: String, 
-            context: String?, 
-            tools: [AITool]?, 
+            _ message: String,
+            context: String?,
+            tools: [AITool]?,
             mode: AIMode?
         ) async throws -> AIServiceResponse {
             throw NSError(domain: "test.ai", code: 1, userInfo: [NSLocalizedDescriptionKey: "boom"])
         }
 
         func sendMessage(
-            _ message: String, 
-            context: String?, 
-            tools: [AITool]?, 
-            mode: AIMode?, 
+            _ message: String,
+            context: String?,
+            tools: [AITool]?,
+            mode: AIMode?,
             projectRoot: URL?
         ) async throws -> AIServiceResponse {
             throw NSError(domain: "test.ai", code: 2, userInfo: [NSLocalizedDescriptionKey: "boom"])
         }
 
         func sendMessage(
-            _ messages: [ChatMessage], 
-            context: String?, 
-            tools: [AITool]?, 
-            mode: AIMode?, 
+            _ messages: [ChatMessage],
+            context: String?,
+            tools: [AITool]?,
+            mode: AIMode?,
             projectRoot: URL?
         ) async throws -> AIServiceResponse {
             throw NSError(domain: "test.ai", code: 3, userInfo: [NSLocalizedDescriptionKey: "boom"])
@@ -55,7 +55,7 @@ struct WorkspaceAndChatTests {
     @Test func testErrorManagerHandleErrorIncludesContextWhenProvided() async throws {
         let manager = ErrorManager()
         manager.handle(
-            NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Test error"]), 
+            NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Test error"]),
             context: "WorkspaceService.rename"
         )
 
@@ -72,7 +72,10 @@ struct WorkspaceAndChatTests {
 
     @Test func testErrorManagerHandleErrorDoesNotPrefixEmptyContext() async throws {
         let manager = ErrorManager()
-        manager.handle(NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Test error"]), context: "")
+        manager.handle(
+            NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Test error"]),
+            context: ""
+        )
 
         let description = manager.currentError?.errorDescription ?? ""
         #expect(description == "Unknown error: Test error", "Expected empty context to not add additional prefixes")
@@ -121,7 +124,8 @@ struct WorkspaceAndChatTests {
         let eventBus = EventBus()
         let workspaceService = WorkspaceService(errorManager: errorManager, eventBus: eventBus)
 
-        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_workspace_rename_\(UUID().uuidString)")
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("osx_ide_workspace_rename_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
@@ -142,10 +146,14 @@ struct WorkspaceAndChatTests {
         #expect(newURL != nil, "Expected rename to return new URL")
 
         #expect(!FileManager.default.fileExists(atPath: file.path), "Expected old path to be gone")
-        #expect(FileManager.default.fileExists(atPath: newURL!.path), "Expected new path to exist")
+        guard let newURL else {
+            Issue.record("Expected rename to return new URL")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: newURL.path), "Expected new path to exist")
 
         #expect(capturedOld?.standardizedFileURL.path == file.standardizedFileURL.path, "Expected event oldUrl to match")
-        #expect(capturedNew?.standardizedFileURL.path == newURL!.standardizedFileURL.path, "Expected event newUrl to match")
+        #expect(capturedNew?.standardizedFileURL.path == newURL.standardizedFileURL.path, "Expected event newUrl to match")
     }
 
     @Test func testWorkspaceServiceDeletePublishesEventAndRemovesFile() async throws {
@@ -153,7 +161,8 @@ struct WorkspaceAndChatTests {
         let eventBus = EventBus()
         let workspaceService = WorkspaceService(errorManager: errorManager, eventBus: eventBus)
 
-        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_workspace_delete_\(UUID().uuidString)")
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("osx_ide_workspace_delete_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
@@ -170,7 +179,13 @@ struct WorkspaceAndChatTests {
 
         workspaceService.deleteItem(at: file)
 
-        #expect(!FileManager.default.fileExists(atPath: file.path), "Expected file to be removed from original location")
-        #expect(capturedDeleted?.standardizedFileURL.path == file.standardizedFileURL.path, "Expected delete event to reference the removed file")
+        #expect(
+            !FileManager.default.fileExists(atPath: file.path),
+            "Expected file to be removed from original location"
+        )
+        #expect(
+            capturedDeleted?.standardizedFileURL.path == file.standardizedFileURL.path,
+            "Expected delete event to reference the removed file"
+        )
     }
 }

@@ -12,9 +12,12 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             self.responses = responses
         }
 
-        func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws
-            -> AIServiceResponse
-        {
+        func sendMessage(
+            _ message: String,
+            context: String?,
+            tools: [AITool]?,
+            mode: AIMode?
+        ) async throws -> AIServiceResponse {
             _ = message
             _ = context
             _ = tools
@@ -22,9 +25,13 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             return dequeueResponse()
         }
 
-        func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws
-            -> AIServiceResponse
-        {
+        func sendMessage(
+            _ message: String,
+            context: String?,
+            tools: [AITool]?,
+            mode: AIMode?,
+            projectRoot: URL?
+        ) async throws -> AIServiceResponse {
             _ = message
             _ = context
             _ = tools
@@ -33,9 +40,13 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             return dequeueResponse()
         }
 
-        func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws
-            -> AIServiceResponse
-        {
+        func sendMessage(
+            _ messages: [ChatMessage],
+            context: String?,
+            tools: [AITool]?,
+            mode: AIMode?,
+            projectRoot: URL?
+        ) async throws -> AIServiceResponse {
             _ = messages
             _ = context
             _ = tools
@@ -89,14 +100,17 @@ final class ConversationSendCoordinatorTests: XCTestCase {
     }
 
     func testSendExecutesToolLoopAndAppendsFinalAssistantMessage() async throws {
+        let toolReasoningPrefix =
+            "<ide_reasoning>Analyze: Details\nResearch: Details\nPlan: Details\n" +
+            "Reflect: Details</ide_reasoning>"
         let toolCallId = UUID().uuidString
         let toolCalls = [
             AIToolCall(id: toolCallId, name: "fake_tool", arguments: ["a": 1])
         ]
 
         let aiService = SequenceAIService(responses: [
-            AIServiceResponse(content: "<ide_reasoning>Analyze: Details\nResearch: Details\nPlan: Details\nReflect: Details</ide_reasoning>Call tool", toolCalls: toolCalls),
-            AIServiceResponse(content: "<ide_reasoning>Analyze: Details\nResearch: Details\nPlan: Details\nReflect: Details</ide_reasoning>Done", toolCalls: nil),
+            AIServiceResponse(content: toolReasoningPrefix + "Call tool", toolCalls: toolCalls),
+            AIServiceResponse(content: toolReasoningPrefix + "Done", toolCalls: nil)
         ])
 
         let historyManager = ChatHistoryManager()
@@ -131,21 +145,40 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             cancelledToolCallIds: { [] }
         )
 
-        XCTAssertTrue(historyCoordinator.messages.contains(where: { $0.role == .assistant && $0.toolCalls?.isEmpty == false }))
+        XCTAssertTrue(
+            historyCoordinator.messages.contains(where: { $0.role == .assistant && $0.toolCalls?.isEmpty == false })
+        )
 
         let toolMessages = historyCoordinator.messages.filter {
             $0.role == .tool && $0.toolCallId == toolCallId
         }
 
+        let observedToolMessages = historyCoordinator.messages
+            .filter { $0.role == .tool }
+            .map {
+                "\($0.toolName ?? "nil"):" +
+                    "\($0.toolStatus?.rawValue ?? "nil"):" +
+                    "\($0.toolCallId ?? "nil")"
+            }
+
         XCTAssertFalse(
             toolMessages.isEmpty,
-            "Expected tool messages for toolCallId=\(toolCallId). Observed tool messages: \(historyCoordinator.messages.filter { $0.role == .tool }.map { "\($0.toolName ?? "nil"):\($0.toolStatus?.rawValue ?? "nil"):\($0.toolCallId ?? "nil")" })"
+            "Expected tool messages for toolCallId=\(toolCallId). " +
+                "Observed tool messages: \(observedToolMessages)"
         )
+
+        let observedToolStatuses = toolMessages.map {
+            "\($0.toolName ?? "nil"):" +
+                "\($0.toolStatus?.rawValue ?? "nil")"
+        }
 
         XCTAssertTrue(
             toolMessages.contains(where: { $0.toolStatus == .completed }),
-            "Expected at least one completed tool message for toolCallId=\(toolCallId). Observed: \(toolMessages.map { "\($0.toolName ?? "nil"):\($0.toolStatus?.rawValue ?? "nil")" })"
+            "Expected at least one completed tool message for toolCallId=\(toolCallId). " +
+                "Observed: \(observedToolStatuses)"
         )
-        XCTAssertTrue(historyCoordinator.messages.contains(where: { $0.role == .assistant && $0.content.contains("Done") }))
+        XCTAssertTrue(
+            historyCoordinator.messages.contains(where: { $0.role == .assistant && $0.content.contains("Done") })
+        )
     }
 }

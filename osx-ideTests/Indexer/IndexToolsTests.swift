@@ -93,7 +93,7 @@ final class IndexToolsTests: XCTestCase {
     func testIndexReadFileTool_success() async throws {
         codebaseIndex.mockReadFileResult = """
         1 | import Foundation
-        2 | 
+        2 |
         3 | class MyClass {
         4 |     func hello() {
         5 |         print("Hello")
@@ -114,7 +114,7 @@ final class IndexToolsTests: XCTestCase {
 
     func testIndexReadFileTool_withRange() async throws {
         codebaseIndex.mockReadFileResult = """
-        2 | 
+        2 |
         3 | class MyClass {
         4 |     func hello() {
         5 |         print("Hello")
@@ -177,11 +177,25 @@ final class IndexToolsTests: XCTestCase {
     func testIndexSearchSymbolsTool_success() async throws {
         codebaseIndex.mockSearchSymbolsWithPathsResult = [
             SymbolSearchResult(
-                symbol: Symbol(id: UUID().uuidString, resourceId: "res1", name: "MyClass", kind: .class, lineStart: 1, lineEnd: 10),
+                symbol: Symbol(
+                    id: UUID().uuidString,
+                    resourceId: "res1",
+                    name: "MyClass",
+                    kind: .class,
+                    lineStart: 1,
+                    lineEnd: 10
+                ),
                 filePath: "src/main.swift"
             ),
             SymbolSearchResult(
-                symbol: Symbol(id: UUID().uuidString, resourceId: "res1", name: "hello", kind: .function, lineStart: 4, lineEnd: 6),
+                symbol: Symbol(
+                    id: UUID().uuidString,
+                    resourceId: "res1",
+                    name: "hello",
+                    kind: .function,
+                    lineStart: 4,
+                    lineEnd: 6
+                ),
                 filePath: "src/main.swift"
             )
         ]
