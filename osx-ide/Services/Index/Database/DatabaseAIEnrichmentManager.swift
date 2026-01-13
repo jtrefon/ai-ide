@@ -8,6 +8,37 @@ final class DatabaseAIEnrichmentManager {
         self.database = database
     }
 
+    private func withPreparedStatement<T>(
+        sql: String,
+        work: (OpaquePointer) throws -> T
+    ) throws -> T {
+        try database.syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            guard let statement else {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            return try work(statement)
+        }
+    }
+
+    private func withPreparedStatement<T>(
+        sql: String,
+        parameters: [Any],
+        work: (OpaquePointer) throws -> T
+    ) throws -> T {
+        try withPreparedStatement(sql: sql) { statement in
+            for (index, parameter) in parameters.enumerated() {
+                try database.bindParameter(statement: statement, index: Int32(index + 1), value: parameter)
+            }
+            return try work(statement)
+        }
+    }
+
     func markAIEnriched(resourceId: String, score: Double, summary: String?) throws {
         // Preserve heuristic scores: an AI score of 0 means "unknown" and must not clobber an existing score.
         let sql = "UPDATE resources SET ai_enriched = 1, " +
@@ -30,22 +61,10 @@ final class DatabaseAIEnrichmentManager {
 
     func getQualityScore(resourceId: String) throws -> Double? {
         let sql = "SELECT quality_score FROM resources WHERE id = ? LIMIT 1;"
-        var result: Double? = nil
-
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
-            try database.bindParameter(statement: statement!, index: 1, value: resourceId)
-            if sqlite3_step(statement) == SQLITE_ROW {
-                result = sqlite3_column_double(statement, 0)
-            }
+        return try withPreparedStatement(sql: sql, parameters: [resourceId]) { statement in
+            guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+            return sqlite3_column_double(statement, 0)
         }
-
-        return result
     }
 
     func getAverageQualityScore() throws -> Double {
@@ -60,26 +79,17 @@ final class DatabaseAIEnrichmentManager {
         let sql = "SELECT path, summary FROM resources WHERE ai_enriched = 1 AND path LIKE ? " +
             "AND summary IS NOT NULL AND summary != '' ORDER BY quality_score DESC LIMIT ?;"
 
-        var results: [(path: String, summary: String)] = []
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
-            try database.bindParameter(statement: statement!, index: 1, value: rootPrefix + "%")
-            try database.bindParameter(statement: statement!, index: 2, value: limit)
-
+        let parameters: [Any] = [rootPrefix + "%", limit]
+        return try withPreparedStatement(sql: sql, parameters: parameters) { statement in
+            var results: [(path: String, summary: String)] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 if let pathPtr = sqlite3_column_text(statement, 0),
                    let summaryPtr = sqlite3_column_text(statement, 1) {
                     results.append((String(cString: pathPtr), String(cString: summaryPtr)))
                 }
             }
+            return results
         }
-
-        return results
     }
 
     func getAIEnrichedResourceCountScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Int {

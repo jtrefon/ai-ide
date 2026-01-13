@@ -8,6 +8,37 @@ final class DatabaseQueryExecutor {
         self.database = database
     }
 
+    private func withPreparedStatement<T>(
+        sql: String,
+        work: (OpaquePointer) throws -> T
+    ) throws -> T {
+        try database.syncOnQueue {
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
+                throw DatabaseError.prepareFailed
+            }
+            guard let statement else {
+                throw DatabaseError.prepareFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            return try work(statement)
+        }
+    }
+
+    private func withPreparedStatement<T>(
+        sql: String,
+        parameters: [Any],
+        work: (OpaquePointer) throws -> T
+    ) throws -> T {
+        try withPreparedStatement(sql: sql) { statement in
+            for (index, parameter) in parameters.enumerated() {
+                try database.bindParameter(statement: statement, index: Int32(index + 1), value: parameter)
+            }
+            return try work(statement)
+        }
+    }
+
     func listResourcePaths(matching query: String?, limit: Int, offset: Int) throws -> [String] {
         let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasQuery = !(trimmed?.isEmpty ?? true)
@@ -22,26 +53,15 @@ final class DatabaseQueryExecutor {
             parameters = [limit, offset]
         }
 
-        var results: [String] = []
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
-            for (index, parameter) in parameters.enumerated() {
-                try database.bindParameter(statement: statement!, index: Int32(index + 1), value: parameter)
-            }
-
+        return try withPreparedStatement(sql: sql, parameters: parameters) { statement in
+            var results: [String] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 if let ptr = sqlite3_column_text(statement, 0) {
                     results.append(String(cString: ptr))
                 }
             }
+            return results
         }
-
-        return results
     }
 
     func candidatePathsForFTS(query: String, limit: Int) throws -> [String] {
@@ -56,46 +76,26 @@ final class DatabaseQueryExecutor {
         LIMIT ?;
         """
 
-        var paths: [String] = []
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
+        return try withPreparedStatement(sql: sql) { statement in
             sqlite3_bind_text(statement, 1, q, -1, nil)
             sqlite3_bind_int(statement, 2, Int32(limit))
 
+            var paths: [String] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 if let pathPtr = sqlite3_column_text(statement, 0) {
                     paths.append(String(cString: pathPtr))
                 }
             }
+            return paths
         }
-
-        return paths
     }
 
     func hasResourcePath(_ absolutePath: String) throws -> Bool {
         let sql = "SELECT 1 FROM resources WHERE path = ? LIMIT 1;"
-        var found = false
-
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
+        return try withPreparedStatement(sql: sql) { statement in
             sqlite3_bind_text(statement, 1, (absolutePath as NSString).utf8String, -1, nil)
-
-            if sqlite3_step(statement) == SQLITE_ROW {
-                found = true
-            }
+            return sqlite3_step(statement) == SQLITE_ROW
         }
-
-        return found
     }
 
     func findResourceMatches(query: String, limit: Int) throws -> [IndexedFileMatch] {
@@ -105,17 +105,9 @@ final class DatabaseQueryExecutor {
         let sql = "SELECT path, ai_enriched, quality_score FROM resources " +
                 "WHERE LOWER(path) LIKE LOWER(?) ORDER BY path LIMIT ?;"
 
-        var results: [IndexedFileMatch] = []
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
-            try database.bindParameter(statement: statement!, index: 1, value: "%\(trimmed)%")
-            try database.bindParameter(statement: statement!, index: 2, value: limit)
-
+        let parameters: [Any] = ["%\(trimmed)%", limit]
+        return try withPreparedStatement(sql: sql, parameters: parameters) { statement in
+            var results: [IndexedFileMatch] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 guard let pathPtr = sqlite3_column_text(statement, 0) else { continue }
                 let path = String(cString: pathPtr)
@@ -126,74 +118,36 @@ final class DatabaseQueryExecutor {
 
                 results.append(IndexedFileMatch(path: path, aiEnriched: ai, qualityScore: score))
             }
+            return results
         }
-
-        return results
     }
 
     func getResourceLastModified(resourceId: String) throws -> Double? {
         let sql = "SELECT last_modified FROM resources WHERE id = ? LIMIT 1;"
-        var result: Double?
-
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
+        return try withPreparedStatement(sql: sql) { statement in
             sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, nil)
-
-            if sqlite3_step(statement) == SQLITE_ROW {
-                result = sqlite3_column_double(statement, 0)
-            }
+            guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+            return sqlite3_column_double(statement, 0)
         }
-
-        return result
     }
 
     func getResourceContentHash(resourceId: String) throws -> String? {
         let sql = "SELECT content_hash FROM resources WHERE id = ? LIMIT 1;"
-        var result: String?
-
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
+        return try withPreparedStatement(sql: sql) { statement in
             sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, nil)
-
-            if sqlite3_step(statement) == SQLITE_ROW {
-                if let ptr = sqlite3_column_text(statement, 0) {
-                    result = String(cString: ptr)
-                }
-            }
+            guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+            guard let ptr = sqlite3_column_text(statement, 0) else { return nil }
+            return String(cString: ptr)
         }
-
-        return result
     }
 
     func isResourceAIEnriched(resourceId: String) throws -> Bool {
         let sql = "SELECT ai_enriched FROM resources WHERE id = ? LIMIT 1;"
-        var result = false
-
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
+        return try withPreparedStatement(sql: sql) { statement in
             sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, nil)
-
-            if sqlite3_step(statement) == SQLITE_ROW {
-                result = sqlite3_column_int(statement, 0) != 0
-            }
+            guard sqlite3_step(statement) == SQLITE_ROW else { return false }
+            return sqlite3_column_int(statement, 0) != 0
         }
-
-        return result
     }
 
     func getIndexStatsCounts() throws -> (
@@ -218,24 +172,18 @@ final class DatabaseQueryExecutor {
         LIMIT ?;
         """
 
-        var results: [(path: String, snippet: String)] = []
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
+        return try withPreparedStatement(sql: sql) { statement in
             sqlite3_bind_text(statement, 1, query, -1, nil)
             sqlite3_bind_int(statement, 2, Int32(limit))
 
+            var results: [(path: String, snippet: String)] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 if let pathPtr = sqlite3_column_text(statement, 0),
                    let snippetPtr = sqlite3_column_text(statement, 1) {
                     results.append((String(cString: pathPtr), String(cString: snippetPtr)))
                 }
             }
+            return results
         }
-        return results
     }
 }

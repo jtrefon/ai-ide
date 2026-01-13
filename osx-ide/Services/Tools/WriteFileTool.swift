@@ -79,19 +79,14 @@ struct WriteFileTool: AITool {
             return "Proposed write to \(relativePath) (patch_set_id=\(patchSetId))."
         }
 
-        await AIToolTraceLogger.shared.log(type: "fs.write_file", data: [
-            "path": relativePath,
-            "bytes": content.utf8.count
-        ])
-        let existed = FileManager.default.fileExists(atPath: url.path)
-        try fileSystemService.writeFile(content: content, to: url)
-        Task { @MainActor in
-            if existed {
-                eventBus.publish(FileModifiedEvent(url: url))
-            } else {
-                eventBus.publish(FileCreatedEvent(url: url))
-            }
-        }
+        try await FileToolWriteApplier.applyWrite(
+            fileSystemService: fileSystemService,
+            eventBus: eventBus,
+            url: url,
+            relativePath: relativePath,
+            content: content,
+            traceType: "fs.write_file"
+        )
         return "Successfully wrote to \(relativePath)"
     }
 }

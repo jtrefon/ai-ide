@@ -63,11 +63,11 @@ public actor ExecutionLogStore {
             line.append(json)
             line.append(Data("\n".utf8))
 
-            try append(line: line, to: fileURL)
+            try NDJSONLogFileWriter.append(line: line, to: fileURL)
 
             if let projectDir = projectConversationDirectory(conversationId: conversationId), let projectFileURL = projectExecutionLogFileURL(conversationId: conversationId) {
                 try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
-                try append(line: line, to: projectFileURL)
+                try NDJSONLogFileWriter.append(line: line, to: projectFileURL)
             }
         } catch {
             await CrashReporter.shared.capture(
@@ -78,17 +78,6 @@ public actor ExecutionLogStore {
                 function: #function,
                 line: #line
             )
-        }
-    }
-
-    private func append(line: Data, to fileURL: URL) throws {
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            let handle = try FileHandle(forWritingTo: fileURL)
-            try handle.seekToEnd()
-            try handle.write(contentsOf: line)
-            try handle.close()
-        } else {
-            try line.write(to: fileURL, options: [.atomic])
         }
     }
 }
