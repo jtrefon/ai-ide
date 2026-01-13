@@ -96,18 +96,12 @@ final class DatabaseSymbolManager {
         let sql = "SELECT id, resource_id, name, kind, line_start, line_end, description " +
                 "FROM symbols WHERE name LIKE ? ORDER BY name LIMIT ?;"
 
-        var results: [Symbol] = []
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
-            let pattern = "%\(query)%" as NSString
+        let pattern = "%\(query)%" as NSString
+        return try database.withPreparedStatement(sql: sql) { statement in
             sqlite3_bind_text(statement, 1, pattern.utf8String, -1, Self.sqliteTransient)
             sqlite3_bind_int(statement, 2, Int32(limit))
 
+            var results: [Symbol] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 let id = String(cString: sqlite3_column_text(statement, 0))
                 let resourceId = String(cString: sqlite3_column_text(statement, 1))
@@ -131,28 +125,21 @@ final class DatabaseSymbolManager {
                     )
                 )
             }
+            return results
         }
-
-        return results
     }
 
     func getSymbolKindCounts() throws -> [String: Int] {
         let sql = "SELECT kind, COUNT(*) FROM symbols GROUP BY kind;"
-        var results: [String: Int] = [:]
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
+        return try database.withPreparedStatement(sql: sql) { statement in
+            var results: [String: Int] = [:]
             while sqlite3_step(statement) == SQLITE_ROW {
                 let kind = String(cString: sqlite3_column_text(statement, 0))
                 let count = Int(sqlite3_column_int(statement, 1))
                 results[kind] = count
             }
+            return results
         }
-        return results
     }
 
     private func prepareStatement(_ sql: String) throws -> OpaquePointer {

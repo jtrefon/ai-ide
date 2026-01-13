@@ -4,39 +4,10 @@ import SQLite3
 final class DatabaseQueryExecutor {
     private unowned let database: DatabaseManager
 
+    private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
     init(database: DatabaseManager) {
         self.database = database
-    }
-
-    private func withPreparedStatement<T>(
-        sql: String,
-        work: (OpaquePointer) throws -> T
-    ) throws -> T {
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            guard let statement else {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
-            return try work(statement)
-        }
-    }
-
-    private func withPreparedStatement<T>(
-        sql: String,
-        parameters: [Any],
-        work: (OpaquePointer) throws -> T
-    ) throws -> T {
-        try withPreparedStatement(sql: sql) { statement in
-            for (index, parameter) in parameters.enumerated() {
-                try database.bindParameter(statement: statement, index: Int32(index + 1), value: parameter)
-            }
-            return try work(statement)
-        }
     }
 
     func listResourcePaths(matching query: String?, limit: Int, offset: Int) throws -> [String] {
@@ -53,7 +24,7 @@ final class DatabaseQueryExecutor {
             parameters = [limit, offset]
         }
 
-        return try withPreparedStatement(sql: sql, parameters: parameters) { statement in
+        return try database.withPreparedStatement(sql: sql, parameters: parameters) { statement in
             var results: [String] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 if let ptr = sqlite3_column_text(statement, 0) {
@@ -76,8 +47,8 @@ final class DatabaseQueryExecutor {
         LIMIT ?;
         """
 
-        return try withPreparedStatement(sql: sql) { statement in
-            sqlite3_bind_text(statement, 1, q, -1, nil)
+        return try database.withPreparedStatement(sql: sql) { statement in
+            sqlite3_bind_text(statement, 1, (q as NSString).utf8String, -1, Self.sqliteTransient)
             sqlite3_bind_int(statement, 2, Int32(limit))
 
             var paths: [String] = []
@@ -92,8 +63,8 @@ final class DatabaseQueryExecutor {
 
     func hasResourcePath(_ absolutePath: String) throws -> Bool {
         let sql = "SELECT 1 FROM resources WHERE path = ? LIMIT 1;"
-        return try withPreparedStatement(sql: sql) { statement in
-            sqlite3_bind_text(statement, 1, (absolutePath as NSString).utf8String, -1, nil)
+        return try database.withPreparedStatement(sql: sql) { statement in
+            sqlite3_bind_text(statement, 1, (absolutePath as NSString).utf8String, -1, Self.sqliteTransient)
             return sqlite3_step(statement) == SQLITE_ROW
         }
     }
@@ -106,7 +77,7 @@ final class DatabaseQueryExecutor {
                 "WHERE LOWER(path) LIKE LOWER(?) ORDER BY path LIMIT ?;"
 
         let parameters: [Any] = ["%\(trimmed)%", limit]
-        return try withPreparedStatement(sql: sql, parameters: parameters) { statement in
+        return try database.withPreparedStatement(sql: sql, parameters: parameters) { statement in
             var results: [IndexedFileMatch] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 guard let pathPtr = sqlite3_column_text(statement, 0) else { continue }
@@ -124,8 +95,8 @@ final class DatabaseQueryExecutor {
 
     func getResourceLastModified(resourceId: String) throws -> Double? {
         let sql = "SELECT last_modified FROM resources WHERE id = ? LIMIT 1;"
-        return try withPreparedStatement(sql: sql) { statement in
-            sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, nil)
+        return try database.withPreparedStatement(sql: sql) { statement -> Double? in
+            sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, Self.sqliteTransient)
             guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
             return sqlite3_column_double(statement, 0)
         }
@@ -133,8 +104,8 @@ final class DatabaseQueryExecutor {
 
     func getResourceContentHash(resourceId: String) throws -> String? {
         let sql = "SELECT content_hash FROM resources WHERE id = ? LIMIT 1;"
-        return try withPreparedStatement(sql: sql) { statement in
-            sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, nil)
+        return try database.withPreparedStatement(sql: sql) { statement -> String? in
+            sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, Self.sqliteTransient)
             guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
             guard let ptr = sqlite3_column_text(statement, 0) else { return nil }
             return String(cString: ptr)
@@ -143,8 +114,8 @@ final class DatabaseQueryExecutor {
 
     func isResourceAIEnriched(resourceId: String) throws -> Bool {
         let sql = "SELECT ai_enriched FROM resources WHERE id = ? LIMIT 1;"
-        return try withPreparedStatement(sql: sql) { statement in
-            sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, nil)
+        return try database.withPreparedStatement(sql: sql) { statement in
+            sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, Self.sqliteTransient)
             guard sqlite3_step(statement) == SQLITE_ROW else { return false }
             return sqlite3_column_int(statement, 0) != 0
         }
@@ -172,8 +143,8 @@ final class DatabaseQueryExecutor {
         LIMIT ?;
         """
 
-        return try withPreparedStatement(sql: sql) { statement in
-            sqlite3_bind_text(statement, 1, query, -1, nil)
+        return try database.withPreparedStatement(sql: sql) { statement in
+            sqlite3_bind_text(statement, 1, (query as NSString).utf8String, -1, Self.sqliteTransient)
             sqlite3_bind_int(statement, 2, Int32(limit))
 
             var results: [(path: String, snippet: String)] = []
