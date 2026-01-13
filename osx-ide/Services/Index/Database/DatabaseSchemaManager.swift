@@ -65,7 +65,11 @@ final class DatabaseSchemaManager {
         try ensureColumnExists(table: "resources", column: "content_hash", columnDefinition: "TEXT")
         try ensureColumnExists(table: "resources", column: "quality_score", columnDefinition: "REAL NOT NULL DEFAULT 0")
         try ensureColumnExists(table: "resources", column: "quality_details", columnDefinition: "TEXT")
-        try ensureColumnExists(table: "resources", column: "ai_enriched", columnDefinition: "INTEGER NOT NULL DEFAULT 0")
+        try ensureColumnExists(
+                    table: "resources", 
+                    column: "ai_enriched", 
+                    columnDefinition: "INTEGER NOT NULL DEFAULT 0"
+                )
         try ensureColumnExists(table: "resources", column: "summary", columnDefinition: "TEXT")
     }
 

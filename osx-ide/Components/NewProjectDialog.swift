@@ -129,7 +129,11 @@ struct NewProjectDialog: View {
         }
         
         // Check reserved names
-        let reservedNames = ["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"]
+        let reservedNames = [
+            "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        ]
         if reservedNames.contains(trimmedName.uppercased()) {
             return false
         }
@@ -143,7 +147,9 @@ struct NewProjectDialog: View {
     }
     
     private func selectLocation() async {
-        if let url = await fileDialogService.promptForNewProjectFolder(defaultName: projectName.isEmpty ? "NewProject" : projectName) {
+        if let url = await fileDialogService.promptForNewProjectFolder(
+                defaultName: projectName.isEmpty ? "NewProject" : projectName
+            ) {
             projectLocation = url.deletingLastPathComponent()
             if projectName.isEmpty {
                 projectName = url.lastPathComponent

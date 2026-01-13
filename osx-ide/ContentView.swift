@@ -62,7 +62,8 @@ struct ContentView: View {
                                     pane.activateTab(id: tab.id)
                                 }) {
                                     HStack(spacing: 6) {
-                                        Text(URL(fileURLWithPath: tab.filePath).lastPathComponent + (tab.isDirty ? " •" : ""))
+                                        Text(URL(fileURLWithPath: tab.filePath).lastPathComponent + 
+                                            (tab.isDirty ? " •" : ""))
                                             .lineLimit(1)
 
                                         Button(action: {
@@ -145,7 +146,11 @@ struct ContentView: View {
         VStack(spacing: 0) {
             WindowSetupView(appState: appState)
             workspaceLayout
-            IndexStatusBarView(appState: appState, codebaseIndexProvider: { appState.codebaseIndex }, eventBus: appState.eventBus)
+            IndexStatusBarView(
+                appState: appState, 
+                codebaseIndexProvider: { appState.codebaseIndex }, 
+                eventBus: appState.eventBus
+            )
         }
     }
 
@@ -376,7 +381,10 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
 
                                     let start = dragStartTerminalHeight ?? terminalHeight
                                     let proposed = start - value.translation.height
-                                    let clamped = max(AppConstants.Layout.minTerminalHeight, min(maxAllowedTerminal, proposed))
+                                    let clamped = max(
+                    AppConstants.Layout.minTerminalHeight, 
+                    min(maxAllowedTerminal, proposed)
+                )
                                     setTerminalHeight(clamped)
                                 }
                                 .onEnded { _ in
@@ -465,7 +473,10 @@ private struct OverlayHostView: View {
                 isPresented: $appState.isCommandPalettePresented,
                 onDismiss: { appState.isCommandPalettePresented = false }
             ) {
-                CommandPaletteOverlayView(commandRegistry: appState.commandRegistry, isPresented: $appState.isCommandPalettePresented)
+                CommandPaletteOverlayView(
+                    commandRegistry: appState.commandRegistry, 
+                    isPresented: $appState.isCommandPalettePresented
+                )
             }
 
             OverlayContainer(
@@ -479,7 +490,10 @@ private struct OverlayHostView: View {
                 isPresented: $appState.isNavigationLocationsPresented,
                 onDismiss: { appState.isNavigationLocationsPresented = false }
             ) {
-                NavigationLocationsOverlayView(appState: appState, isPresented: $appState.isNavigationLocationsPresented)
+                NavigationLocationsOverlayView(
+                    appState: appState, 
+                    isPresented: $appState.isNavigationLocationsPresented
+                )
             }
 
             OverlayContainer(

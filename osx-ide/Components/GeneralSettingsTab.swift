@@ -78,7 +78,8 @@ struct GeneralSettingsTab: View {
                             .frame(width: AppConstants.Settings.sliderWidth)
                             .accessibilityIdentifier("Settings.FontSize")
                             
-                            Text("\(Int(ui.fontSize)) \(NSLocalizedString("settings.editor.font_size.unit", comment: ""))")
+                            Text("\(Int(ui.fontSize)) " +
+                            NSLocalizedString("settings.editor.font_size.unit", comment: ""))
                                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }

@@ -12,7 +12,8 @@ final class DatabaseSymbolManager {
 
     func saveSymbols(_ symbols: [Symbol]) throws {
         try database.transaction {
-            let stmt = "INSERT INTO symbols (id, resource_id, name, kind, line_start, line_end, description) VALUES (?, ?, ?, ?, ?, ?, ?);"
+            let stmt = "INSERT INTO symbols (id, resource_id, name, kind, " +
+                "line_start, line_end, description) VALUES (?, ?, ?, ?, ?, ?, ?);"
             var statement: OpaquePointer?
 
             if sqlite3_prepare_v2(database.db, stmt, -1, &statement, nil) != SQLITE_OK {
@@ -92,7 +93,8 @@ final class DatabaseSymbolManager {
     }
 
     func searchSymbols(nameLike query: String, limit: Int = 50) throws -> [Symbol] {
-        let sql = "SELECT id, resource_id, name, kind, line_start, line_end, description FROM symbols WHERE name LIKE ? ORDER BY name LIMIT ?;"
+        let sql = "SELECT id, resource_id, name, kind, line_start, line_end, description " +
+                "FROM symbols WHERE name LIKE ? ORDER BY name LIMIT ?;"
 
         var results: [Symbol] = []
         try database.syncOnQueue {
@@ -117,7 +119,17 @@ final class DatabaseSymbolManager {
                 let description = descriptionPtr != nil ? String(cString: descriptionPtr!) : nil
 
                 let kind = SymbolKind(rawValue: kindRaw) ?? .unknown
-                results.append(Symbol(id: id, resourceId: resourceId, name: name, kind: kind, lineStart: lineStart, lineEnd: lineEnd, description: description))
+                results.append(
+                    Symbol(
+                        id: id,
+                        resourceId: resourceId,
+                        name: name,
+                        kind: kind,
+                        lineStart: lineStart,
+                        lineEnd: lineEnd,
+                        description: description
+                    )
+                )
             }
         }
 

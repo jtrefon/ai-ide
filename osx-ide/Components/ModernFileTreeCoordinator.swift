@@ -45,7 +45,9 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         // Initialize specialized coordinators
         self.dialogCoordinator = FileTreeDialogCoordinator()
         self.searchCoordinator = FileTreeSearchCoordinator(dataSource: dataSource)
-        self.appearanceCoordinator = FileTreeAppearanceCoordinator(outlineView: NSOutlineView()) // Temporary, will be updated in attach
+        self.appearanceCoordinator = FileTreeAppearanceCoordinator(
+            outlineView: NSOutlineView()
+        ) // Temporary, will be updated in attach
         
         self.expandedRelativePaths = configuration.expandedRelativePaths
         self.selectedRelativePath = configuration.selectedRelativePath
@@ -97,7 +99,14 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         return lastRootURL?.standardizedFileURL
     }
 
-    func update(rootURL: URL, searchQuery: String, showHiddenFiles: Bool, refreshToken: Int, fontSize: Double, fontFamily: String) {
+    func update(
+        rootURL: URL,
+        searchQuery: String,
+        showHiddenFiles: Bool,
+        refreshToken: Int,
+        fontSize: Double,
+        fontFamily: String
+    ) {
         var needsReload = false
 
         if self.fontSize != fontSize || self.fontFamily != fontFamily {
@@ -188,35 +197,59 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         let url = item.url
         
         // Add file operations
-        let openItem = NSMenuItem(title: NSLocalizedString("file_tree.context.open", comment: ""), action: #selector(onContextOpen(_:)), keyEquivalent: "")
+        let openItem = NSMenuItem(
+            title: NSLocalizedString("file_tree.context.open", comment: ""),
+            action: #selector(onContextOpen(_:)),
+            keyEquivalent: ""
+        )
         openItem.target = self
         openItem.representedObject = url
         menu.addItem(openItem)
         
-        let renameItem = NSMenuItem(title: NSLocalizedString("file_tree.context.rename", comment: ""), action: #selector(onContextRename(_:)), keyEquivalent: "")
+        let renameItem = NSMenuItem(
+            title: NSLocalizedString("file_tree.context.rename", comment: ""),
+            action: #selector(onContextRename(_:)),
+            keyEquivalent: ""
+        )
         renameItem.target = self
         renameItem.representedObject = url
         menu.addItem(renameItem)
         
-        let deleteItem = NSMenuItem(title: NSLocalizedString("file_tree.context.delete", comment: ""), action: #selector(onContextDelete(_:)), keyEquivalent: "")
+        let deleteItem = NSMenuItem(
+            title: NSLocalizedString("file_tree.context.delete", comment: ""),
+            action: #selector(onContextDelete(_:)),
+            keyEquivalent: ""
+        )
         deleteItem.target = self
         deleteItem.representedObject = url
         menu.addItem(deleteItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        let revealItem = NSMenuItem(title: NSLocalizedString("file_tree.context.show_in_finder", comment: ""), action: #selector(onContextRevealInFinder(_:)), keyEquivalent: "")
+        let revealItem = NSMenuItem(
+            title: NSLocalizedString("file_tree.context.show_in_finder", comment: ""),
+            action: #selector(onContextRevealInFinder(_:)),
+            keyEquivalent: ""
+        )
         revealItem.target = self
         revealItem.representedObject = url
         menu.addItem(revealItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        let newFileItem = NSMenuItem(title: NSLocalizedString("file_tree.context.new_file", comment: ""), action: #selector(onContextNewFile(_:)), keyEquivalent: "")
+        let newFileItem = NSMenuItem(
+            title: NSLocalizedString("file_tree.context.new_file", comment: ""),
+            action: #selector(onContextNewFile(_:)),
+            keyEquivalent: ""
+        )
         newFileItem.target = self
         menu.addItem(newFileItem)
         
-        let newFolderItem = NSMenuItem(title: NSLocalizedString("file_tree.context.new_folder", comment: ""), action: #selector(onContextNewFolder(_:)), keyEquivalent: "")
+        let newFolderItem = NSMenuItem(
+            title: NSLocalizedString("file_tree.context.new_folder", comment: ""),
+            action: #selector(onContextNewFolder(_:)),
+            keyEquivalent: ""
+        )
         newFolderItem.target = self
         menu.addItem(newFolderItem)
     }
@@ -283,7 +316,8 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
                 await Task.yield()
                 if self.expandedRelativePaths.wrappedValue.contains(relative) {
                     self.expandedRelativePaths.wrappedValue.remove(relative)
-                    self.expandedRelativePaths.wrappedValue = self.expandedRelativePaths.wrappedValue.filter { !$0.hasPrefix(relative + "/") }
+                    self.expandedRelativePaths.wrappedValue = self.expandedRelativePaths.wrappedValue
+                        .filter { !$0.hasPrefix(relative + "/") }
                 }
                 self.applyAppearanceToVisibleRows()
             }
@@ -322,14 +356,23 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         let url = ftItem.url
 
         let identifier = NSUserInterfaceItemIdentifier("cell")
-        let cell: NSTableCellView = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView ?? {
+        let cell: NSTableCellView = outlineView.makeView(
+                withIdentifier: identifier, 
+                owner: nil
+            ) as? NSTableCellView ?? {
             let cell = NSTableCellView(frame: .zero)
             cell.identifier = identifier
 
             let textField = NSTextField(labelWithString: "")
             textField.translatesAutoresizingMaskIntoConstraints = false
             textField.lineBreakMode = .byTruncatingMiddle
-            textField.font = NSFont(name: self.fontFamily, size: CGFloat(self.fontSize)) ?? NSFont.systemFont(ofSize: CGFloat(self.fontSize), weight: .regular)
+            textField.font = NSFont(
+                name: self.fontFamily,
+                size: CGFloat(self.fontSize)
+            ) ?? NSFont.systemFont(
+                ofSize: CGFloat(self.fontSize),
+                weight: .regular
+            )
 
             let imageView = NSImageView()
             imageView.translatesAutoresizingMaskIntoConstraints = false
@@ -348,20 +391,9 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
                 textField.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
                 textField.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
             ])
+
             return cell
         }()
-
-        cell.textField?.stringValue = dataSource.displayName(for: ftItem)
-        cell.textField?.font = NSFont(name: self.fontFamily, size: CGFloat(self.fontSize)) ?? NSFont.systemFont(ofSize: CGFloat(self.fontSize), weight: .regular)
-        if let path = url.path, !path.isEmpty {
-            cell.imageView?.image = NSWorkspace.shared.icon(forFile: path)
-        } else {
-            if dataSource.isDirectory(url) {
-                cell.imageView?.image = NSImage(named: NSImage.folderName)
-            } else {
-                cell.imageView?.image = NSImage(named: NSImage.multipleDocumentsName)
-            }
-        }
 
         if let relativePath = dataSource.relativePath(for: url), relativePath == selectedRelativePath.wrappedValue {
             cell.textField?.textColor = fileLabelColor(for: url) ?? .labelColor

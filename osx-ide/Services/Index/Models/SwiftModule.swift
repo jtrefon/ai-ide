@@ -26,10 +26,19 @@ public final class SwiftModule: RegexLanguageModule, @unchecked Sendable {
         applyGenericHighlighting(in: attr, code: code)
         
         let keywords = [
-            "class","struct","enum","protocol","extension","func","var","let","if","else","for","while","repeat","switch","case","default","break","continue","defer","do","catch","throw","throws","rethrows","try","in","where","return","as","is","nil","true","false","init","deinit","subscript","typealias","associatedtype","mutating","nonmutating","static","final","open","public","internal","fileprivate","private","guard","some","any","actor","await","async","yield","inout"
+            "class", "struct", "enum", "protocol", "extension", "func", "var", "let",
+            "if", "else", "for", "while", "repeat", "switch", "case", "default", "break",
+            "continue", "defer", "do", "catch", "throw", "throws", "rethrows", "try", "in",
+            "where", "return", "as", "is", "nil", "true", "false", "init", "deinit",
+            "subscript", "typealias", "associatedtype", "mutating", "nonmutating", "static",
+            "final", "open", "public", "internal", "fileprivate", "private", "guard", "some",
+            "any", "actor", "await", "async", "yield", "inout"
         ]
         let types = [
-            "Int","Int8","Int16","Int32","Int64","UInt","UInt8","UInt16","UInt32","UInt64","Float","Double","Bool","String","Character","Array","Dictionary","Set","Optional","Void","Any","AnyObject"
+            "Int", "Int8", "Int16", "Int32", "Int64",
+            "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
+            "Float", "Double", "Bool", "String", "Character",
+            "Array", "Dictionary", "Set", "Optional", "Void", "Any", "AnyObject"
         ]
         
         highlightWholeWords(keywords, color: NSColor.systemBlue, in: attr, code: code)

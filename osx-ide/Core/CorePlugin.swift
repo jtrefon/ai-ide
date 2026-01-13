@@ -59,7 +59,11 @@ private struct CoreUIRegistrar<Context: IDEContext & ObservableObject> {
             point: .panelBottom,
             name: "Internal.Logs",
             icon: "doc.text.magnifyingglass",
-            view: LogsPanelView(ui: context.ui, projectRoot: context.workspace.currentDirectory, eventBus: context.eventBus)
+            view: LogsPanelView(
+                ui: context.ui, 
+                projectRoot: context.workspace.currentDirectory, 
+                eventBus: context.eventBus
+            )
         )
 
         registry.register(
@@ -317,7 +321,8 @@ private struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
                 selection: pane.selectedRange
             )
 
-            let userPrompt = "Analyze this code and suggest improvements. If there are any obvious bugs, point them out and propose fixes."
+            let userPrompt = "Analyze this code and suggest improvements. " +
+            "If there are any obvious bugs, point them out and propose fixes."
             context.conversationManager.currentInput = userPrompt
             context.conversationManager.sendMessage(context: selectionContext)
         }
@@ -469,7 +474,9 @@ private struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
     @MainActor
     private func openWorkspaceLocation(_ loc: WorkspaceCodeLocation, projectRoot: URL) {
         do {
-            let url = try context.workspaceService.makePathValidator(projectRoot: projectRoot).validateAndResolve(loc.relativePath)
+            let url = try context.workspaceService
+                .makePathValidator(projectRoot: projectRoot)
+                .validateAndResolve(loc.relativePath)
             context.loadFile(from: url)
             context.fileEditor.selectLine(loc.line)
         } catch {

@@ -71,7 +71,9 @@ struct RenameSymbolOverlayView: View {
     private func computePreviewReplacements() -> Int {
         let old = appState.renameSymbolIdentifier
         if old.isEmpty { return 0 }
-        if !WorkspaceNavigationService.isValidIdentifier(newName.trimmingCharacters(in: .whitespacesAndNewlines)) { return 0 }
+        if !WorkspaceNavigationService.isValidIdentifier(
+                newName.trimmingCharacters(in: .whitespacesAndNewlines)
+            ) { return 0 }
 
         let content = fileEditor.editorContent
         let escaped = NSRegularExpression.escapedPattern(for: old)

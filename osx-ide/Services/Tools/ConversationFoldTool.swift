@@ -2,7 +2,8 @@ import Foundation
 
 struct ConversationFoldTool: AITool {
     let name: String = "conversation_fold"
-    let description: String = "Access folded (condensed) conversation context stored outside the active prompt context. Supports listing folds and reading a fold by id."
+    let description: String = "Access folded (condensed) conversation context stored outside the " +
+        "active prompt context. Supports listing folds and reading a fold by id."
 
     var parameters: [String: Any] {
         [

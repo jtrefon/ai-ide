@@ -37,11 +37,17 @@ public class DatabaseManager {
     }
 
     public func getAIEnrichedResourceCountScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Int {
-        try aiEnrichmentManager.getAIEnrichedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowedExtensions)
+        try aiEnrichmentManager.getAIEnrichedResourceCountScoped(
+                    projectRoot: projectRoot, 
+                    allowedExtensions: allowedExtensions
+                )
     }
 
     public func getAverageAIQualityScoreScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Double {
-        try aiEnrichmentManager.getAverageAIQualityScoreScoped(projectRoot: projectRoot, allowedExtensions: allowedExtensions)
+        try aiEnrichmentManager.getAverageAIQualityScoreScoped(
+                    projectRoot: projectRoot, 
+                    allowedExtensions: allowedExtensions
+                )
     }
     
     deinit {
@@ -55,7 +61,12 @@ public class DatabaseManager {
     }
     
     private func open() throws {
-        if sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) != SQLITE_OK {
+        if sqlite3_open_v2(
+                    dbPath, 
+                    &db, 
+                    SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, 
+                    nil
+                ) != SQLITE_OK {
             throw DatabaseError.openFailed
         }
 
@@ -136,7 +147,12 @@ public class DatabaseManager {
         try symbolManager.searchSymbols(nameLike: query, limit: limit)
     }
 
-    public func getIndexStatsCounts() throws -> (indexedResourceCount: Int, symbolCount: Int, memoryCount: Int, longTermMemoryCount: Int) {
+    public func getIndexStatsCounts() throws -> (
+            indexedResourceCount: Int, 
+            symbolCount: Int, 
+            memoryCount: Int, 
+            longTermMemoryCount: Int
+        ) {
         try queryExecutor.getIndexStatsCounts()
     }
 
@@ -209,7 +225,13 @@ public class DatabaseManager {
     
     func bindParameter(statement: OpaquePointer, index: Int32, value: Any) throws {
         if let string = value as? String {
-            sqlite3_bind_text(statement, index, (string as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+            sqlite3_bind_text(
+                    statement, 
+                    index, 
+                    (string as NSString).utf8String, 
+                    -1, 
+                    unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+                )
         } else if let int = value as? Int {
             sqlite3_bind_int(statement, index, Int32(int))
         } else if let double = value as? Double {
@@ -223,7 +245,13 @@ public class DatabaseManager {
         } else {
             // Fallback for other types
             let stringValue = "\(value)"
-            sqlite3_bind_text(statement, index, (stringValue as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+            sqlite3_bind_text(
+                    statement, 
+                    index, 
+                    (stringValue as NSString).utf8String, 
+                    -1, 
+                    unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+                )
         }
     }
     

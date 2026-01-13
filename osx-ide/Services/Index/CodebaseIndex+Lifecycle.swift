@@ -37,7 +37,9 @@ extension CodebaseIndex {
 
         if aiEnrichmentEnabled {
             aiEnrichmentAfterIndexCancellable?.cancel()
-            aiEnrichmentAfterIndexCancellable = eventBus.subscribe(to: ProjectReindexCompletedEvent.self) { [weak self] _ in
+            aiEnrichmentAfterIndexCancellable = eventBus.subscribe(
+                    to: ProjectReindexCompletedEvent.self
+                ) { [weak self] _ in
                 guard let self else { return }
                 self.aiEnrichmentAfterIndexCancellable?.cancel()
                 self.aiEnrichmentAfterIndexCancellable = nil

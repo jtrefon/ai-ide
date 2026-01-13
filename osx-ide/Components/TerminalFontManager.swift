@@ -21,7 +21,12 @@ class TerminalFontManager {
     
     // MARK: - Initialization
     
-    init(size: CGFloat = 12, family: String = "SF Mono", foregroundColor: NSColor = .green, backgroundColor: NSColor = .black) {
+    init(
+            size: CGFloat = 12, 
+            family: String = "SF Mono", 
+            foregroundColor: NSColor = .green, 
+            backgroundColor: NSColor = .black
+        ) {
         self.fontSize = size
         self.fontFamily = family
         self.foregroundColor = foregroundColor

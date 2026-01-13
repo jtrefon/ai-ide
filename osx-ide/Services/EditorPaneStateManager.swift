@@ -23,7 +23,11 @@ final class EditorPaneStateManager: ObservableObject {
     let tabManager: EditorTabManager
     let fileWatchCoordinator: FileWatchCoordinator
 
-    init(fileEditorService: FileEditorServiceProtocol, fileDialogService: FileDialogServiceProtocol, fileSystemService: FileSystemService) {
+    init(
+            fileEditorService: FileEditorServiceProtocol, 
+            fileDialogService: FileDialogServiceProtocol, 
+            fileSystemService: FileSystemService
+        ) {
         self.fileEditorService = fileEditorService
         self.fileDialogService = fileDialogService
         self.fileSystemService = fileSystemService

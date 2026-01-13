@@ -132,7 +132,13 @@ struct TerminalContentView: NSViewRepresentable {
         private var lastFontSize: Double?
         private var lastFontFamily: String?
 
-        func scheduleEmbed(into view: NSView, directory: URL?, embedder: NativeTerminalEmbedder, fontSize: Double, fontFamily: String) {
+        func scheduleEmbed(
+                into view: NSView, 
+                directory: URL?, 
+                embedder: NativeTerminalEmbedder, 
+                fontSize: Double, 
+                fontFamily: String
+            ) {
             let path = directory?.standardizedFileURL.path
             guard lastEmbeddedPath != path || lastFontSize != fontSize || lastFontFamily != fontFamily else { return }
             lastEmbeddedPath = path
@@ -155,7 +161,10 @@ struct TerminalContentView: NSViewRepresentable {
 #Preview {
     NativeTerminalView(
         currentDirectory: .constant(nil),
-        ui: UIStateManager(uiService: UIService(errorManager: ErrorManager(), eventBus: EventBus()), eventBus: EventBus()),
+        ui: UIStateManager(
+                uiService: UIService(errorManager: ErrorManager(), eventBus: EventBus()), 
+                eventBus: EventBus()
+            ),
         eventBus: EventBus()
     )
     .frame(width: 600, height: 400)

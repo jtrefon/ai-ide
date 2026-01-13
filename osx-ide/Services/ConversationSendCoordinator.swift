@@ -57,7 +57,9 @@ final class ConversationSendCoordinator {
         {
             let followupSystem = ChatMessage(
                 role: .system,
-                content: "You indicated you will implement changes, but you returned no tool calls. In Agent mode, you MUST now proceed by calling the appropriate tools. Return tool calls now."
+                content: "You indicated you will implement changes, but you returned no tool calls. " +
+                    "In Agent mode, you MUST now proceed by calling the appropriate tools. " +
+                    "Return tool calls now."
             )
 
             currentResponse = try await aiInteractionCoordinator
@@ -122,7 +124,11 @@ final class ConversationSendCoordinator {
             // Mark cancelled tool calls immediately.
             let cancelled = cancelledToolCallIds()
             for call in toolCalls where cancelled.contains(call.id) {
-                historyCoordinator.updateMessageStatus(toolCallId: call.id, status: .failed, content: "Cancelled by user")
+                historyCoordinator.updateMessageStatus(
+                    toolCallId: call.id, 
+                    status: .failed, 
+                    content: "Cancelled by user"
+                )
             }
 
             let toolResults = await toolExecutionCoordinator.executeToolCalls(

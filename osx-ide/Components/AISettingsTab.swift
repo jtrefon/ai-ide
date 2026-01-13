@@ -42,7 +42,11 @@ struct AISettingsTab: View {
                     HStack(spacing: 12) {
                         SettingsStatusPill(status: viewModel.keyStatus)
                         Spacer()
-                        Button(showAdvanced ? localized("settings.ai.advanced.hide") : localized("settings.ai.advanced.show")) {
+                        Button(
+                            showAdvanced 
+                                ? localized("settings.ai.advanced.hide") 
+                                : localized("settings.ai.advanced.show")
+                        ) {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 showAdvanced.toggle()
                             }

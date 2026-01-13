@@ -11,7 +11,8 @@ public enum AIPersona: String, Codable, CaseIterable, Identifiable, Sendable {
         case .assistant:
             return "General-purpose coding assistant."
         case .architectAdvisor:
-            return "Focused architecture advisor. Produces implementation guidance emphasizing clean architecture, design patterns, and code quality."
+            return "Focused architecture advisor. Produces implementation guidance " +
+            "emphasizing clean architecture, design patterns, and code quality."
         }
     }
 

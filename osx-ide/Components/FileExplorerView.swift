@@ -83,7 +83,10 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 refreshToken: refreshToken,
                 onOpenFile: { url in
                     Task {
-                        try? await context.commandRegistry.execute(.explorerOpenSelection, args: ExplorerPathArgs(path: url.path))
+                        try? await context.commandRegistry.execute(
+                            .explorerOpenSelection, 
+                            args: ExplorerPathArgs(path: url.path)
+                        )
                     }
                 },
                 onCreateFile: { directory, name in
@@ -96,7 +99,10 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 },
                 onDeleteItem: { url in
                     Task {
-                        try? await context.commandRegistry.execute(.explorerDeleteSelection, args: ExplorerPathArgs(path: url.path))
+                        try? await context.commandRegistry.execute(
+                            .explorerDeleteSelection, 
+                            args: ExplorerPathArgs(path: url.path)
+                        )
                         await MainActor.run {
                             refreshToken += 1
                             syncSelectionFromAppState()
@@ -105,7 +111,10 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 },
                 onRenameItem: { url, newName in
                     Task {
-                        try? await context.commandRegistry.execute(.explorerRenameSelection, args: ExplorerRenameArgs(path: url.path, newName: newName))
+                        try? await context.commandRegistry.execute(
+                            .explorerRenameSelection, 
+                            args: ExplorerRenameArgs(path: url.path, newName: newName)
+                        )
                         await MainActor.run {
                             refreshToken += 1
                             syncSelectionFromAppState()
@@ -114,7 +123,10 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 },
                 onRevealInFinder: { url in
                     Task {
-                        try? await context.commandRegistry.execute(.explorerRevealInFinder, args: ExplorerPathArgs(path: url.path))
+                        try? await context.commandRegistry.execute(
+                            .explorerRevealInFinder, 
+                            args: ExplorerPathArgs(path: url.path)
+                        )
                     }
                 },
                 fontSize: context.ui.fontSize,

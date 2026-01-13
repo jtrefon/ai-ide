@@ -115,7 +115,11 @@ struct LogsPanelView: View {
     }
 
     private static func mostRecentNDJSON(in directory: URL, namePrefix _: String?) -> URL? {
-        guard let items = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else {
+        guard let items = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else {
             return nil
         }
         let ndjson = items.filter {
@@ -123,8 +127,10 @@ struct LogsPanelView: View {
             return true
         }
         return ndjson.max(by: { a, b in
-            let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-            let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey])
+                .contentModificationDate) ?? .distantPast
+            let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey])
+                .contentModificationDate) ?? .distantPast
             return da < db
         })
     }

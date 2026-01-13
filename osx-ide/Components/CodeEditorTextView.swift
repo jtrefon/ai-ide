@@ -25,7 +25,10 @@ final class CodeEditorTextView: NSTextView {
 
     private func reflowForFoldingChange() {
         guard let layoutManager, let textContainer else { return }
-        layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: (string as NSString).length), actualCharacterRange: nil)
+        layoutManager.invalidateLayout(
+                forCharacterRange: NSRange(location: 0, length: (string as NSString).length), 
+                actualCharacterRange: nil
+            )
         layoutManager.ensureLayout(for: textContainer)
 
         enclosingScrollView?.verticalRulerView?.needsDisplay = true
@@ -50,12 +53,23 @@ final class CodeEditorTextView: NSTextView {
         }
 
         let needle = ns.substring(with: needleRange)
-        let fromIndex = max(NSMaxRange(needleRange), NSMaxRange(existingRanges.last ?? needleRange))
-        guard let next = MultiCursorUtilities.nextOccurrenceRange(text: string, needle: needle, fromIndex: fromIndex) else { return }
+        let fromIndex = max(
+                NSMaxRange(needleRange), 
+                NSMaxRange(existingRanges.last ?? needleRange)
+            )
+        guard let next = MultiCursorUtilities.nextOccurrenceRange(
+                text: string, 
+                needle: needle, 
+                fromIndex: fromIndex
+            ) else { return }
 
         var newSelections = existingRanges
         newSelections.append(next)
-        setSelectedRanges(uniqueSorted(newSelections).map { NSValue(range: $0) }, affinity: .downstream, stillSelecting: false)
+        setSelectedRanges(
+                uniqueSorted(newSelections).map { NSValue(range: $0) }, 
+                affinity: .downstream, 
+                stillSelecting: false
+            )
         scrollRangeToVisible(next)
     }
 

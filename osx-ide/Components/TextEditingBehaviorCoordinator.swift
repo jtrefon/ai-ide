@@ -28,7 +28,11 @@ class TextEditingBehaviorCoordinator {
     }
     
     /// Handles text changes in the text view
-    func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
+    func textView(
+            _ textView: NSTextView, 
+            shouldChangeTextIn affectedCharRange: NSRange, 
+            replacementString: String?
+        ) -> Bool {
         if isProgrammaticUpdate { return true }
         guard let replacementString else { return true }
         

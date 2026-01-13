@@ -23,7 +23,8 @@ import Combine
 /// Write content to multiple files (preferred for scaffolding a project)
 struct WriteFilesTool: AITool {
     let name = "write_files"
-    let description = "Write content to multiple files. Overwrites existing files. Preferred for scaffolding multi-file changes in one operation."
+    let description = "Write content to multiple files. Overwrites existing files. " +
+        "Preferred for scaffolding multi-file changes in one operation."
     var parameters: [String: Any] {
         [
             "type": "object",
@@ -64,8 +65,12 @@ struct WriteFilesTool: AITool {
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
 
-    private func executionContext(from arguments: [String: Any]) -> (mode: String, toolCallId: String, patchSetId: String) {
-        let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
+    private func executionContext(
+        from arguments: [String: Any]
+    ) -> (mode: String, toolCallId: String, patchSetId: String) {
+        let mode = (arguments["mode"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() ?? "apply"
         let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
         let patchSetId = (arguments["patch_set_id"] as? String)
             ?? (arguments["_conversation_id"] as? String)
@@ -73,9 +78,13 @@ struct WriteFilesTool: AITool {
         return (mode: mode, toolCallId: toolCallId, patchSetId: patchSetId)
     }
 
-    private func resolvedWriteFileEntry(from entry: [String: Any]) throws -> (url: URL, relativePath: String, content: String) {
+    private func resolvedWriteFileEntry(
+        from entry: [String: Any]
+    ) throws -> (url: URL, relativePath: String, content: String) {
         guard let path = entry["path"] as? String else {
-            throw AppError.aiServiceError("Missing 'path' in a write_files entry")
+            throw AppError.aiServiceError(
+                "Missing 'path' in a write_files entry"
+            )
         }
         guard let content = entry["content"] as? String else {
             throw AppError.aiServiceError("Missing 'content' in a write_files entry")
@@ -86,7 +95,12 @@ struct WriteFilesTool: AITool {
         return (url: url, relativePath: relativePath, content: content)
     }
 
-    private func stageWrite(toolCallId: String, patchSetId: String, relativePath: String, content: String) async throws {
+    private func stageWrite(
+            toolCallId: String, 
+            patchSetId: String, 
+            relativePath: String, 
+            content: String
+        ) async throws {
         try await PatchSetStore.shared.stageWrite(
             patchSetId: patchSetId,
             toolCallId: toolCallId,
@@ -131,10 +145,13 @@ struct WriteFilesTool: AITool {
         var results: [String] = []
         results.reserveCapacity(files.count)
 
-        await AIToolTraceLogger.shared.log(type: mode == "propose" ? "fs.write_files_propose_start" : "fs.write_files_start", data: [
-            "count": files.count,
-            "patchSetId": patchSetId
-        ])
+        await AIToolTraceLogger.shared.log(
+                    type: mode == "propose" ? "fs.write_files_propose_start" : "fs.write_files_start", 
+                    data: [
+                        "count": files.count,
+                        "patchSetId": patchSetId
+                    ]
+                )
 
         for entry in files {
             let resolved = try resolvedWriteFileEntry(from: entry)
@@ -153,10 +170,13 @@ struct WriteFilesTool: AITool {
             results.append(resolved.relativePath)
         }
 
-        await AIToolTraceLogger.shared.log(type: mode == "propose" ? "fs.write_files_propose_done" : "fs.write_files_done", data: [
-            "count": results.count,
-            "patchSetId": patchSetId
-        ])
+        await AIToolTraceLogger.shared.log(
+                    type: mode == "propose" ? "fs.write_files_propose_done" : "fs.write_files_done", 
+                    data: [
+                        "count": results.count,
+                        "patchSetId": patchSetId
+                    ]
+                )
 
         if mode == "propose" {
             return "Proposed \(results.count) file(s) (patch_set_id=\(patchSetId)):\n" + results.joined(separator: "\n")
@@ -199,7 +219,9 @@ struct CreateFileTool: AITool {
             throw AppError.aiServiceError("Missing 'path' argument for create_file")
         }
 
-        let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
+        let mode = (arguments["mode"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() ?? "apply"
         let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
         let patchSetId = (arguments["patch_set_id"] as? String)
             ?? (arguments["_conversation_id"] as? String)
@@ -210,7 +232,12 @@ struct CreateFileTool: AITool {
 
         if mode == "propose" {
             let rel = pathValidator.relativePath(for: url)
-            try await PatchSetStore.shared.stageWrite(patchSetId: patchSetId, toolCallId: toolCallId, relativePath: rel, content: "")
+            try await PatchSetStore.shared.stageWrite(
+                    patchSetId: patchSetId, 
+                    toolCallId: toolCallId, 
+                    relativePath: rel, 
+                    content: ""
+                )
             return "Proposed create file at \(rel) (patch_set_id=\(patchSetId))."
         }
 
@@ -295,7 +322,9 @@ struct DeleteFileTool: AITool {
             throw AppError.aiServiceError("Missing 'path' argument for delete_file")
         }
 
-        let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
+        let mode = (arguments["mode"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() ?? "apply"
         let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
         let patchSetId = (arguments["patch_set_id"] as? String)
             ?? (arguments["_conversation_id"] as? String)
@@ -305,7 +334,11 @@ struct DeleteFileTool: AITool {
 
         if mode == "propose" {
             let rel = pathValidator.relativePath(for: url)
-            try await PatchSetStore.shared.stageDelete(patchSetId: patchSetId, toolCallId: toolCallId, relativePath: rel)
+            try await PatchSetStore.shared.stageDelete(
+                    patchSetId: patchSetId, 
+                    toolCallId: toolCallId, 
+                    relativePath: rel
+                )
             return "Proposed delete \(rel) (patch_set_id=\(patchSetId))."
         }
         let fileManager = FileManager.default
@@ -323,7 +356,8 @@ struct DeleteFileTool: AITool {
 /// Replace specific content in a file (diff-style editing)
 struct ReplaceInFileTool: AITool {
     let name = "replace_in_file"
-    let description = "Replace specific content in a file. Use this instead of write_file for large files to avoid rewriting everything. Specify the exact text to find and what to replace it with."
+    let description = "Replace specific content in a file. Use this instead of write_file for large files " +
+        "to avoid rewriting everything. Specify the exact text to find and what to replace it with."
     var parameters: [String: Any] {
         [
             "type": "object",
@@ -379,9 +413,11 @@ struct ReplaceInFileTool: AITool {
         guard let path else {
             let keys = arguments.keys.sorted().joined(separator: ", ")
             throw AppError.aiServiceError(
-                "Missing 'path' argument for replace_in_file. Provided keys: [\(keys)]. "
-                    + "Fix: include a non-empty file path. Preferred key: 'path'. Accepted aliases: targetPath, target_path, file_path, file, target. Example:\n"
-                    + "{\n  \"path\": \"src/App.css\",\n  \"old_text\": \".old { color: red; }\",\n  \"new_text\": \".old { color: blue; }\"\n}"
+                "Missing 'path' argument for replace_in_file. Provided keys: [\(keys)]. " +
+                    "Fix: include a non-empty file path. Preferred key: 'path'. " +
+                    "Accepted aliases: targetPath, target_path, file_path, file, target. Example:\n" +
+                    "{\n  \"path\": \"src/App.css\",\n  \"old_text\": " +
+                    "\".old { color: red; }\",\n  \"new_text\": \".old { color: blue; }\"\n}"
             )
         }
         
@@ -406,7 +442,9 @@ struct ReplaceInFileTool: AITool {
         let oldText = try requiredString("old_text", in: arguments)
         let newText = try requiredString("new_text", in: arguments)
 
-        let mode = (arguments["mode"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "apply"
+        let mode = (arguments["mode"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() ?? "apply"
         let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
         let patchSetId = (arguments["patch_set_id"] as? String)
             ?? (arguments["_conversation_id"] as? String)

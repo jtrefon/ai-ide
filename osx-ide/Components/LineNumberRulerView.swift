@@ -59,7 +59,9 @@ final class ModernLineNumberRulerView: NSRulerView {
     }
 
     override func drawHashMarksAndLabels(in rect: NSRect) {
-        guard let textView, let layoutManager = textView.layoutManager, let textContainer = textView.textContainer else {
+        guard let textView, 
+              let layoutManager = textView.layoutManager, 
+              let textContainer = textView.textContainer else {
             return
         }
 
@@ -109,7 +111,12 @@ final class ModernLineNumberRulerView: NSRulerView {
             let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
             var lineStart: Int = 0
             var lineEnd: Int = 0
-            string.getLineStart(&lineStart, end: &lineEnd, contentsEnd: nil, for: NSRange(location: charIndex, length: 0))
+            string.getLineStart(
+                &lineStart, 
+                end: &lineEnd, 
+                contentsEnd: nil, 
+                for: NSRange(location: charIndex, length: 0)
+            )
 
             let charRange = NSRange(location: lineStart, length: max(0, lineEnd - lineStart))
             let lineGlyphRange = layoutManager.glyphRange(forCharacterRange: charRange, actualCharacterRange: nil)

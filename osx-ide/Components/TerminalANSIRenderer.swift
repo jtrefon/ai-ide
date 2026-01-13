@@ -53,7 +53,10 @@ class TerminalANSIRenderer {
             }
 
             let char = String(text[stringIndex])
-            let attributedChar = NSAttributedString(string: char, attributes: currentAttributes.isEmpty ? nil : currentAttributes)
+            let attributedChar = NSAttributedString(
+                string: char, 
+                attributes: currentAttributes.isEmpty ? nil : currentAttributes
+            )
             result.append(attributedChar)
             currentIndex += 1
         }
@@ -62,7 +65,10 @@ class TerminalANSIRenderer {
     }
     
     /// Parses ANSI escape sequences and returns rendering attributes
-    private func parseANSISequence(_ text: String, from index: Int) -> (attributes: [NSAttributedString.Key: Any], sequenceLength: Int)? {
+    private func parseANSISequence(
+            _ text: String, 
+            from index: Int
+        ) -> (attributes: [NSAttributedString.Key: Any], sequenceLength: Int)? {
         let stringIndex = text.index(text.startIndex, offsetBy: index)
         
         guard index + 1 < text.count,

@@ -39,7 +39,9 @@ public class ChatHistoryManager: ObservableObject {
         // Skip empty assistant messages at the source
         let isAssistant = message.role == MessageRole.assistant
         let isContentEmpty = message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty
-        let isReasoningEmpty = (message.reasoning?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty ?? true)
+        let isReasoningEmpty = (message.reasoning?
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                .isEmpty ?? true)
         let isToolCallsEmpty = (message.toolCalls?.isEmpty ?? true)
         
         if isAssistant && isContentEmpty && isReasoningEmpty && isToolCallsEmpty {
@@ -100,7 +102,10 @@ public class ChatHistoryManager: ObservableObject {
             messages[index] = ChatMessage(
                 role: oldMessage.role,
                 content: content ?? oldMessage.content,
-                context: ChatMessageContentContext(reasoning: oldMessage.reasoning, codeContext: oldMessage.codeContext),
+                context: ChatMessageContentContext(
+                    reasoning: oldMessage.reasoning, 
+                    codeContext: oldMessage.codeContext
+                ),
                 tool: ChatMessageToolContext(
                     toolName: oldMessage.toolName,
                     toolStatus: status,

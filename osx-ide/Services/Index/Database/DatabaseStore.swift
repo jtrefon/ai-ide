@@ -123,7 +123,12 @@ public actor DatabaseStore {
         try database.getAIEnrichedSummaries(projectRoot: projectRoot, limit: limit)
     }
 
-    public func getIndexStatsCounts() throws -> (indexedResourceCount: Int, symbolCount: Int, memoryCount: Int, longTermMemoryCount: Int) {
+    public func getIndexStatsCounts() throws -> (
+            indexedResourceCount: Int, 
+            symbolCount: Int, 
+            memoryCount: Int, 
+            longTermMemoryCount: Int
+        ) {
         try database.getIndexStatsCounts()
     }
 

@@ -6,15 +6,32 @@ import Foundation
 struct WorkspaceAndChatTests {
 
     private struct ThrowingAIService: AIService {
-        func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws -> AIServiceResponse {
+        func sendMessage(
+            _ message: String, 
+            context: String?, 
+            tools: [AITool]?, 
+            mode: AIMode?
+        ) async throws -> AIServiceResponse {
             throw NSError(domain: "test.ai", code: 1, userInfo: [NSLocalizedDescriptionKey: "boom"])
         }
 
-        func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        func sendMessage(
+            _ message: String, 
+            context: String?, 
+            tools: [AITool]?, 
+            mode: AIMode?, 
+            projectRoot: URL?
+        ) async throws -> AIServiceResponse {
             throw NSError(domain: "test.ai", code: 2, userInfo: [NSLocalizedDescriptionKey: "boom"])
         }
 
-        func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        func sendMessage(
+            _ messages: [ChatMessage], 
+            context: String?, 
+            tools: [AITool]?, 
+            mode: AIMode?, 
+            projectRoot: URL?
+        ) async throws -> AIServiceResponse {
             throw NSError(domain: "test.ai", code: 3, userInfo: [NSLocalizedDescriptionKey: "boom"])
         }
 
@@ -37,11 +54,20 @@ struct WorkspaceAndChatTests {
 
     @Test func testErrorManagerHandleErrorIncludesContextWhenProvided() async throws {
         let manager = ErrorManager()
-        manager.handle(NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Test error"]), context: "WorkspaceService.rename")
+        manager.handle(
+            NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Test error"]), 
+            context: "WorkspaceService.rename"
+        )
 
         let description = manager.currentError?.errorDescription ?? ""
-        #expect(description.contains("WorkspaceService.rename"), "Expected error description to include context")
-        #expect(description.contains("Test error"), "Expected error description to include underlying message")
+        #expect(
+            description.contains("WorkspaceService.rename"), 
+            "Expected error description to include context"
+        )
+        #expect(
+            description.contains("Test error"), 
+            "Expected error description to include underlying message"
+        )
     }
 
     @Test func testErrorManagerHandleErrorDoesNotPrefixEmptyContext() async throws {

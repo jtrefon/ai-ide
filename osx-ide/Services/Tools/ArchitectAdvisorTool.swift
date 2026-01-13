@@ -2,7 +2,8 @@ import Foundation
 
 struct ArchitectAdvisorTool: AITool {
     let name = "architect_advisor"
-    let description = "Get focused, high-quality architecture advice for the current task. Uses Codebase Index context when available. Intended to be called by the Agent during execution."
+    let description = "Get focused, high-quality architecture advice for the current task. " +
+        "Uses Codebase Index context when available. Intended to be called by the Agent during execution."
 
     var parameters: [String: Any] {
         [
@@ -33,7 +34,8 @@ struct ArchitectAdvisorTool: AITool {
 
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
-        guard let task = arguments["task"] as? String, !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard let task = arguments["task"] as? String, 
+                !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw AppError.aiServiceError("Missing 'task' argument for architect_advisor")
         }
         let constraints = (arguments["constraints"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -74,7 +76,13 @@ struct ArchitectAdvisorTool: AITool {
         )
 
         let user = ChatMessage(role: .user, content: task)
-        let response = try await aiService.sendMessage([system, user], context: context, tools: nil, mode: nil, projectRoot: projectRoot)
+        let response = try await aiService.sendMessage(
+                    [system, user], 
+                    context: context, 
+                    tools: nil, 
+                    mode: nil, 
+                    projectRoot: projectRoot
+                )
         return response.content ?? "No response received."
     }
 }

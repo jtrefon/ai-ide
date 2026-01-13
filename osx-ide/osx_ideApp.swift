@@ -14,7 +14,8 @@ struct osx_ideApp: App {
     @StateObject private var appState: AppState
     @StateObject private var errorManager: ErrorManager
     @AppStorage(AppConstants.Storage.codebaseIndexEnabledKey) private var codebaseIndexEnabled: Bool = true
-    @AppStorage(AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey) private var codebaseIndexAIEnrichmentEnabled: Bool = false
+    @AppStorage(AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey) 
+    private var codebaseIndexAIEnrichmentEnabled: Bool = false
     @State private var didInitializeCorePlugin: Bool = false
     
     init() {
@@ -162,7 +163,11 @@ struct osx_ideApp: App {
                             let settings = OpenRouterSettingsStore().load()
                             let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
                             if model.isEmpty {
-                                errorManager.handle(.aiServiceError(localized("menu.tools.ai_enrichment_indexing.missing_model")))
+                                errorManager.handle(
+                                    .aiServiceError(
+                                        localized("menu.tools.ai_enrichment_indexing.missing_model")
+                                    )
+                                )
                                 codebaseIndexAIEnrichmentEnabled = false
                                 return
                             }
@@ -289,18 +294,29 @@ struct osx_ideApp: App {
                 Button(localized("menu.go.add_cursor_above")) {
                     Task { try? await appState.commandRegistry.execute(.editorAddCursorAbove) }
                 }
-                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), modifiers: [.command, .option])
+                .keyboardShortcut(
+                    KeyEquivalent(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 
+                    modifiers: [.command, .option]
+                )
 
                 Button(localized("menu.go.add_cursor_below")) {
                     Task { try? await appState.commandRegistry.execute(.editorAddCursorBelow) }
                 }
-                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), modifiers: [.command, .option])
+                .keyboardShortcut(
+                    KeyEquivalent(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 
+                    modifiers: [.command, .option]
+                )
             }
 
             CommandMenu(localized("menu.explorer")) {
                 Button(localized("menu.explorer.delete"), action: {
                     guard let url = appState.selectedFileTreeURL() else { return }
-                    Task { try? await appState.commandRegistry.execute(.explorerDeleteSelection, args: ExplorerPathArgs(path: url.path)) }
+                    Task { 
+                        try? await appState.commandRegistry.execute(
+                            .explorerDeleteSelection, 
+                            args: ExplorerPathArgs(path: url.path)
+                        ) 
+                    }
                 })
                 .keyboardShortcut(.delete, modifiers: [.command])
 
@@ -320,13 +336,21 @@ struct osx_ideApp: App {
                     let newName = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !newName.isEmpty else { return }
                     Task {
-                        try? await appState.commandRegistry.execute(.explorerRenameSelection, args: ExplorerRenameArgs(path: url.path, newName: newName))
+                        try? await appState.commandRegistry.execute(
+                            .explorerRenameSelection, 
+                            args: ExplorerRenameArgs(path: url.path, newName: newName)
+                        )
                     }
                 })
 
                 Button(localized("file_tree.context.show_in_finder"), action: {
                     guard let url = appState.selectedFileTreeURL() else { return }
-                    Task { try? await appState.commandRegistry.execute(.explorerRevealInFinder, args: ExplorerPathArgs(path: url.path)) }
+                    Task { 
+                        try? await appState.commandRegistry.execute(
+                            .explorerRevealInFinder, 
+                            args: ExplorerPathArgs(path: url.path)
+                        ) 
+                    }
                 })
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }

@@ -87,7 +87,10 @@ struct TextViewRepresentable: NSViewRepresentable {
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = true
-        textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.containerSize = NSSize(
+                width: CGFloat.greatestFiniteMagnitude, 
+                height: CGFloat.greatestFiniteMagnitude
+            )
         textView.textContainer?.widthTracksTextView = false
         
         // Set initial text without syntax highlighting to avoid initialization issues
@@ -122,7 +125,15 @@ struct TextViewRepresentable: NSViewRepresentable {
         }
         
         // Apply syntax highlighting after the view is set up asynchronously
-        context.coordinator.performAsyncHighlight(for: text, in: textView, language: language, font: Self.resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize))
+        context.coordinator.performAsyncHighlight(
+            for: text,
+            in: textView,
+            language: language,
+            font: Self.resolveEditorFont(
+                fontFamily: fontFamily,
+                fontSize: fontSize
+            )
+        )
         
         return scrollView
     }
@@ -215,7 +226,12 @@ struct TextViewRepresentable: NSViewRepresentable {
             return font
         }
 
-        if let font = NSFontManager.shared.font(withFamily: fontFamily, traits: .fixedPitchFontMask, weight: 5, size: size) {
+        if let font = NSFontManager.shared.font(
+                withFamily: fontFamily, 
+                traits: .fixedPitchFontMask, 
+                weight: 5, 
+                size: size
+            ) {
             return font
         }
 
@@ -228,12 +244,18 @@ struct TextViewRepresentable: NSViewRepresentable {
         if enabled {
             textView.isHorizontallyResizable = false
             container.widthTracksTextView = true
-            container.containerSize = NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+            container.containerSize = NSSize(
+                width: scrollView.contentSize.width, 
+                height: CGFloat.greatestFiniteMagnitude
+            )
             scrollView.hasHorizontalScroller = false
         } else {
             textView.isHorizontallyResizable = true
             container.widthTracksTextView = false
-            container.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            container.containerSize = NSSize(
+                width: CGFloat.greatestFiniteMagnitude, 
+                height: CGFloat.greatestFiniteMagnitude
+            )
             scrollView.hasHorizontalScroller = true
         }
     }

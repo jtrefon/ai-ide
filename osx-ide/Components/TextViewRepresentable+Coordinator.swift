@@ -4,7 +4,12 @@ import AppKit
 final class TextStorageDelegateProxy: NSObject, NSTextStorageDelegate {
     weak var coordinator: TextViewRepresentable.Coordinator?
 
-    func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
+    func textStorage(
+        _ textStorage: NSTextStorage,
+        didProcessEditing editedMask: NSTextStorageEditActions,
+        range editedRange: NSRange,
+        changeInLength delta: Int
+    ) {
         if !editedMask.contains(.editedCharacters) { return }
         let text = textStorage.string
         Task { @MainActor [weak coordinator] in
@@ -38,7 +43,11 @@ extension TextViewRepresentable {
         // MARK: - Real-time editor behaviors
 
         @MainActor
-        func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        func textView(
+            _ textView: NSTextView, 
+            shouldChangeTextIn affectedCharRange: NSRange, 
+            replacementString: String?
+        ) -> Bool {
             if isProgrammaticUpdate { return true }
             guard let replacementString else { return true }
 
@@ -77,7 +86,12 @@ extension TextViewRepresentable {
         }
 
         @MainActor
-        private func handleAutoPair(open: String, close: String, in textView: NSTextView, affectedCharRange: NSRange) -> Bool {
+        private func handleAutoPair(
+            open: String, 
+            close: String, 
+            in textView: NSTextView, 
+            affectedCharRange: NSRange
+        ) -> Bool {
             // If text is selected, wrap it.
             let selected = textView.selectedRange
             if selected.length > 0, let textStorage = textView.textStorage {
@@ -349,7 +363,10 @@ extension TextViewRepresentable {
             }
         }
 
-        private func restoreTypingAttributes(_ typingAttributes: [NSAttributedString.Key: Any], in textView: NSTextView) {
+        private func restoreTypingAttributes(
+            _ typingAttributes: [NSAttributedString.Key: Any], 
+            in textView: NSTextView
+        ) {
             textView.typingAttributes = typingAttributes
         }
 

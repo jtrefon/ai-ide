@@ -60,7 +60,11 @@ final class ChatHistoryCoordinator {
     func updateProjectRoot(
         _ newRoot: URL,
         shouldStartConversationLog: Bool,
-        onStartConversation: @escaping @Sendable (_ conversationId: String, _ mode: String, _ projectRootPath: String) async -> Void
+        onStartConversation: @escaping @Sendable (
+                _ conversationId: String, 
+                _ mode: String, 
+                _ projectRootPath: String
+            ) async -> Void
     ) {
         historyManager.setProjectRoot(newRoot)
 

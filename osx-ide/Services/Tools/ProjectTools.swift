@@ -16,7 +16,8 @@ struct GetProjectStructureTool: AITool {
             "properties": [
                 "max_depth": [
                     "type": "integer",
-                    "description": "Maximum depth to traverse (default: unlimited). Use 2-3 for overview, unlimited for complete structure."
+                    "description": "Maximum depth to traverse (default: unlimited). " +
+                    "Use 2-3 for overview, unlimited for complete structure."
                 ]
             ],
             "required": []
