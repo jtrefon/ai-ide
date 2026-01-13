@@ -52,6 +52,10 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         super.init()
     }
 
+    private func cancelPendingSearchTask() {
+        pendingSearchTask?.cancel()
+    }
+
     private static func makePlaceholderAppearanceCoordinator() -> FileTreeAppearanceCoordinator {
         FileTreeAppearanceCoordinator(outlineView: NSOutlineView())
     }
@@ -394,11 +398,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         icon.size = NSSize(width: 16, height: 16)
         cell.imageView?.image = icon
 
-        if let relativePath = dataSource.relativePath(for: url), relativePath == configuration.selectedRelativePath.wrappedValue {
-            cell.textField?.textColor = fileLabelColor(for: url) ?? .labelColor
-        } else {
-            cell.textField?.textColor = fileLabelColor(for: url) ?? .labelColor
-        }
+        cell.textField?.textColor = fileLabelColor(for: url) ?? .labelColor
 
         return cell
     }
@@ -462,7 +462,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     }
 
     private func beginSearch(query: String) -> SearchContext {
-        pendingSearchTask?.cancel()
+        cancelPendingSearchTask()
         searchGeneration += 1
         return SearchContext(generation: searchGeneration, rootURL: lastRootURL, query: query)
     }
@@ -490,7 +490,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     private func scheduleAsynchronousSearch(_ context: SearchContext) {
         guard let rootURL = context.rootURL else { return }
 
-        pendingSearchTask?.cancel()
+        cancelPendingSearchTask()
         pendingSearchTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 250_000_000)
             guard !Task.isCancelled else { return }
