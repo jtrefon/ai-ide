@@ -7,7 +7,7 @@ final class TextStorageDelegateProxy: NSObject, NSTextStorageDelegate {
     func textStorage(
         _ textStorage: NSTextStorage,
         didProcessEditing editedMask: NSTextStorageEditActions,
-        range editedRange: NSRange,
+        range _: NSRange,
         changeInLength delta: Int
     ) {
         if !editedMask.contains(.editedCharacters) { return }
