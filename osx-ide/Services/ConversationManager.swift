@@ -157,7 +157,9 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         historyCoordinator.updateProjectRoot(
             newRoot,
             shouldStartConversationLog: true,
-            onStartConversation: { _, _, _ in }
+            onStartConversation: { _, _, _ in
+                _ = ()
+            }
         )
 
         conversationLogger.initializeProjectRoot(newRoot)

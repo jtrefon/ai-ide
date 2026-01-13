@@ -66,12 +66,14 @@ extension EditorPaneStateManager {
 
     func updateEditorContent(_ newContent: String) {
         editingStateManager.updateEditorContent(
-            newContent: newContent,
-            selectedFile: selectedFile,
-            currentLanguage: editorLanguage,
-            applyContent: { [weak self] in self?.editorContent = $0 },
-            applyLanguage: { [weak self] in self?.editorLanguage = $0 },
-            updateServiceContent: { [weak self] in self?.fileEditorService.editorContent = $0 }
+            EditingStateManager.UpdateEditorContentRequest(
+                newContent: newContent,
+                selectedFile: selectedFile,
+                currentLanguage: editorLanguage,
+                applyContent: { [weak self] in self?.editorContent = $0 },
+                applyLanguage: { [weak self] in self?.editorLanguage = $0 },
+                updateServiceContent: { [weak self] in self?.fileEditorService.editorContent = $0 }
+            )
         )
     }
 
