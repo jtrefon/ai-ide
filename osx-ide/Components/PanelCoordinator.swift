@@ -16,13 +16,8 @@ struct PanelCoordinator {
     
     let registry: UIRegistry
     let ui: UIStateManager
-    
+
     // MARK: - Initialization
-    
-    init(registry: UIRegistry, ui: UIStateManager) {
-        self.registry = registry
-        self.ui = ui
-    }
     
     // MARK: - Public Methods
     

@@ -15,12 +15,8 @@ struct LayoutCoordinator {
     // MARK: - Properties
     
     let ui: UIStateManager
-    
+
     // MARK: - Initialization
-    
-    init(ui: UIStateManager) {
-        self.ui = ui
-    }
     
     // MARK: - Public Methods
     
