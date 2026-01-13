@@ -70,7 +70,7 @@ class TerminalOutputManager {
             return
         }
 
-        let storage = terminalView.textStorage!
+        guard let storage = terminalView.textStorage else { return }
         let originalLength = storage.length
 
         storage.beginEditing()
@@ -127,8 +127,8 @@ class TerminalOutputManager {
     /// Clears current line
     func clearLine() {
         guard let terminalView = terminalView else { return }
-        
-        let storage = terminalView.textStorage!
+
+        guard let storage = terminalView.textStorage else { return }
         let eraseRange = NSRange(
             location: currentLineStartLocation,
             length: storage.length - currentLineStartLocation

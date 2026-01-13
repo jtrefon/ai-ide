@@ -4,28 +4,30 @@ import Foundation
 final class EditingStateManager {
     private let languageDetector: EditorLanguageDetecting
 
+    struct UpdateEditorContentRequest {
+        let newContent: String
+        let selectedFile: String?
+        let currentLanguage: String
+        let applyContent: (String) -> Void
+        let applyLanguage: (String) -> Void
+        let updateServiceContent: (String) -> Void
+    }
+
     init(languageDetector: EditorLanguageDetecting) {
         self.languageDetector = languageDetector
     }
 
-    func updateEditorContent(
-        newContent: String,
-        selectedFile: String?,
-        currentLanguage: String,
-        applyContent: (String) -> Void,
-        applyLanguage: (String) -> Void,
-        updateServiceContent: (String) -> Void
-    ) {
-        applyContent(newContent)
-        updateServiceContent(newContent)
+    func updateEditorContent(_ request: UpdateEditorContentRequest) {
+        request.applyContent(request.newContent)
+        request.updateServiceContent(request.newContent)
 
-        guard selectedFile == nil else { return }
+        guard request.selectedFile == nil else { return }
         guard let detected = languageDetector.detectLanguageForUntitledContent(
-            currentLanguage: currentLanguage,
-            content: newContent
+            currentLanguage: request.currentLanguage,
+            content: request.newContent
         ) else { return }
 
-        applyLanguage(detected)
+        request.applyLanguage(detected)
     }
 
     func setEditorLanguage(
