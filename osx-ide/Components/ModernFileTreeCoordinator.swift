@@ -170,7 +170,9 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
     private func applyAppearanceToVisibleRows() {
         guard let outlineView else { return }
+        _ = outlineView
 
+        appearanceCoordinator.applyAppearanceToVisibleRows()
     }
 
     struct UpdateParameters {
@@ -398,6 +400,11 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
             return cell
         }()
+
+        cell.textField?.stringValue = (url as URL).lastPathComponent
+        let icon = NSWorkspace.shared.icon(forFile: (url as URL).path)
+        icon.size = NSSize(width: 16, height: 16)
+        cell.imageView?.image = icon
 
         if let relativePath = dataSource.relativePath(for: url), relativePath == selectedRelativePath.wrappedValue {
             cell.textField?.textColor = fileLabelColor(for: url) ?? .labelColor
