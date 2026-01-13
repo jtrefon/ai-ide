@@ -40,46 +40,42 @@ struct CommandPaletteOverlayView: View {
     @State private var items: [CommandPaletteItem] = []
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Text(localized("command_palette.title"))
-                    .font(.headline)
-
-                TextField(localized("command_palette.placeholder"), text: $query)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
-                    .onSubmit {
+        OverlayCard {
+            VStack(spacing: 12) {
+                OverlayHeaderView(
+                    title: localized("command_palette.title"),
+                    placeholder: localized("command_palette.placeholder"),
+                    query: $query,
+                    textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
+                    showsProgress: false,
+                    onSubmit: {
                         runFirstMatch()
+                    },
+                    onClose: {
+                        close()
                     }
+                )
 
-                Button(localized("common.close")) {
-                    close()
-                }
-            }
-
-            List {
-                ForEach(items) { item in
-                    Button(action: {
-                        run(item.command)
-                    }) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.title)
-                                .lineLimit(1)
-                            Text(item.subtitle)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
+                List {
+                    ForEach(items) { item in
+                        Button(action: {
+                            run(item.command)
+                        }) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.title)
+                                    .lineLimit(1)
+                                Text(item.subtitle)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
             }
-            .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
-        .padding(AppConstants.Overlay.containerPadding)
-        .background(.regularMaterial)
-        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
-        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             query = ""
             refreshItems()

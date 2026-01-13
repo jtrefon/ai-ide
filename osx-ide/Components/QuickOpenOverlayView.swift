@@ -24,55 +24,46 @@ struct QuickOpenOverlayView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Text(localized("quick_open.title"))
-                    .font(.headline)
-
-                TextField(localized("quick_open.placeholder"), text: $query)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
-                    .onSubmit {
+        OverlayCard {
+            VStack(spacing: 12) {
+                OverlayHeaderView(
+                    title: localized("quick_open.title"),
+                    placeholder: localized("quick_open.placeholder"),
+                    query: $query,
+                    textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
+                    showsProgress: isSearching,
+                    onSubmit: {
                         openFirst(openToSide: NSEvent.modifierFlags.contains(.command))
+                    },
+                    onClose: {
+                        close()
+                    }
+                )
+
+                List {
+                    if !recentCandidates().isEmpty && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Section(localized("quick_open.recent")) {
+                            ForEach(recentCandidates(), id: \.self) { path in
+                                Button(action: { open(path: path, openToSide: false) }) {
+                                    Text(path)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
 
-                if isSearching {
-                    ProgressView()
-                        .scaleEffect(0.75)
-                }
-
-                Button(localized("common.close")) {
-                    close()
-                }
-            }
-
-            List {
-                if !recentCandidates().isEmpty && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Section(localized("quick_open.recent")) {
-                        ForEach(recentCandidates(), id: \.self) { path in
-                            Button(action: { open(path: path, openToSide: false) }) {
+                    Section(localized("quick_open.results")) {
+                        ForEach(results, id: \.self) { path in
+                            Button(action: { open(path: path, openToSide: NSEvent.modifierFlags.contains(.command)) }) {
                                 Text(path)
                             }
                             .buttonStyle(.plain)
                         }
                     }
                 }
-
-                Section(localized("quick_open.results")) {
-                    ForEach(results, id: \.self) { path in
-                        Button(action: { open(path: path, openToSide: NSEvent.modifierFlags.contains(.command)) }) {
-                            Text(path)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
             }
-            .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
-        .padding(AppConstants.Overlay.containerPadding)
-        .background(.regularMaterial)
-        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
-        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             query = ""
             results = []

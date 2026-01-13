@@ -34,6 +34,8 @@ final class SyntaxHighlighter {
     static let shared = SyntaxHighlighter()
     private init() {}
 
+    private let regexHelper = RegexLanguageModule(id: .unknown, fileExtensions: [])
+
     /// Highlights the given code with syntax highlighting for the specified language.
     ///
     /// - Parameters:
@@ -60,14 +62,7 @@ final class SyntaxHighlighter {
             return module.highlight(code, font: font)
         }
 
-        let attributed = NSMutableAttributedString(string: code)
-        let fullRange = NSRange(location: 0, length: (code as NSString).length)
-
-        // Base style
-        attributed.addAttributes([
-            .font: font,
-            .foregroundColor: NSColor.labelColor
-        ], range: fullRange)
+        let (attributed, _) = AttributedStringStyler.makeBaseAttributedString(code: code, font: font)
 
         // Built-in always-on fallback highlighting (when no module is registered/enabled)
         let fallbackLanguage = CodeLanguage(rawValue: langStr) ?? .unknown
@@ -206,20 +201,20 @@ final class SyntaxHighlighter {
         ]
         highlightWholeWords(keywords, color: NSColor.systemBlue, in: attr, code: code)
         // Python comments (# ...)
-        applyRegex(RegexRule("#.*", color: NSColor.systemGreen), in: attr, code: code)
+        applyRegex("#.*", color: NSColor.systemGreen, in: attr, code: code)
         // Triple-quoted strings
-        applyRegex(RegexRule("\"\"\"[\\s\\S]*?\"\"\"", color: NSColor.systemRed), in: attr, code: code)
-        applyRegex(RegexRule("'''[\\s\\S]*?'''", color: NSColor.systemRed), in: attr, code: code)
+        applyRegex("\"\"\"[\\s\\S]*?\"\"\"", color: NSColor.systemRed, in: attr, code: code)
+        applyRegex("'''[\\s\\S]*?'''", color: NSColor.systemRed, in: attr, code: code)
     }
 
     private func applyHTMLHighlighting(in attr: NSMutableAttributedString, code: String) {
         applyGenericHighlighting(in: attr, code: code)
         // Tags and tag names
-        applyRegex(RegexRule("</?[a-zA-Z][a-zA-Z0-9:-]*", color: NSColor.systemBlue), in: attr, code: code)
+        applyRegex("</?[a-zA-Z][a-zA-Z0-9:-]*", color: NSColor.systemBlue, in: attr, code: code)
         // Attributes
-        applyRegex(RegexRule("[a-zA-Z_:][-a-zA-Z0-9_:.]*(?=\\=)", color: NSColor.systemPurple), in: attr, code: code)
+        applyRegex("[a-zA-Z_:][-a-zA-Z0-9_:.]*(?=\\=)", color: NSColor.systemPurple, in: attr, code: code)
         // Comments
-        applyRegex(RegexRule("<!--[\\s\\S]*?-->", color: NSColor.systemGreen), in: attr, code: code)
+        applyRegex("<!--[\\s\\S]*?-->", color: NSColor.systemGreen, in: attr, code: code)
     }
 
     private func applyCSSHighlighting(in attr: NSMutableAttributedString, code: String) {
@@ -246,22 +241,22 @@ final class SyntaxHighlighter {
         let colonColor = palette?.color(for: .colon) ?? NSColor.systemYellow
 
         // 1. Strings (apply generic string color first - Red)
-        applyRegex(RegexRule("\"(?:\\.|[^\"\\])*\"", color: stringValueColor), in: attr, code: code)
+        applyRegex("\"(?:\\.|[^\"\\])*\"", color: stringValueColor, in: attr, code: code)
 
         // 2. Braces, brackets, commas, colons (structural tokens)
-        applyRegex(RegexRule("[\\{\\}]", color: curlyBraceColor), in: attr, code: code)
-        applyRegex(RegexRule("[\\[\\]]", color: squareBracketColor), in: attr, code: code)
-        applyRegex(RegexRule(",", color: commaColor), in: attr, code: code)
-        applyRegex(RegexRule(":", color: colonColor), in: attr, code: code)
+        applyRegex("[\\{\\}]", color: curlyBraceColor, in: attr, code: code)
+        applyRegex("[\\[\\]]", color: squareBracketColor, in: attr, code: code)
+        applyRegex(",", color: commaColor, in: attr, code: code)
+        applyRegex(":", color: colonColor, in: attr, code: code)
 
         // 3. Keys - override strings with indigo (just the content)
-        applyRegex(RegexRule("\"([^\"]+)\"\\s*:", color: keyColor, captureGroup: 1), in: attr, code: code)
+        applyRegex("\"([^\"]+)\"\\s*:", color: keyColor, in: attr, code: code, captureGroup: 1)
 
         // 4. String values (content only, after colons) - ensures values stay red
-        applyRegex(RegexRule(":\\s*\"([^\"]+)\"", color: stringValueColor, captureGroup: 1), in: attr, code: code)
+        applyRegex(":\\s*\"([^\"]+)\"", color: stringValueColor, in: attr, code: code, captureGroup: 1)
 
         // 5. Numbers
-        applyRegex(RegexRule("\\b-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b", color: numberValueColor), in: attr, code: code)
+        applyRegex("\\b-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b", color: numberValueColor, in: attr, code: code)
 
         // 6. Boolean values
         highlightWholeWords(["true", "false"], color: booleanValueColor, in: attr, code: code)
@@ -270,19 +265,13 @@ final class SyntaxHighlighter {
         highlightWholeWords(["null"], color: nullValueColor, in: attr, code: code)
         
         // 8. Quotes - color all quotes pink
-        applyRegex(RegexRule("\"", color: quoteColor), in: attr, code: code)
+        applyRegex("\"", color: quoteColor, in: attr, code: code)
     }
 
     private func applyGenericHighlighting(in attr: NSMutableAttributedString, code: String) {
-        // Strings (double and single quoted)
-        applyRegex(RegexRule("\"(?:\\\\.|[^\"\\\\])*\"", color: NSColor.systemRed), in: attr, code: code)
-        applyRegex(RegexRule("'(?:\\\\.|[^'\\\\])*'", color: NSColor.systemRed), in: attr, code: code)
-        // Line comments //...
-        applyRegex(RegexRule("//.*", color: NSColor.systemGreen), in: attr, code: code)
-        // Block comments /* ... */
-        applyRegex(RegexRule("/\\*[\\s\\S]*?\\*/", color: NSColor.systemGreen), in: attr, code: code)
-        // Numbers
-        applyRegex(RegexRule("\\b\\d+(?:\\.\\d+)?\\b", color: NSColor.systemOrange), in: attr, code: code)
+        regexHelper.applyDoubleAndSingleQuotedStringHighlighting(color: NSColor.systemRed, in: attr, code: code)
+        regexHelper.applyLineAndBlockCommentHighlighting(color: NSColor.systemGreen, in: attr, code: code)
+        regexHelper.applyDecimalNumberHighlighting(color: NSColor.systemOrange, in: attr, code: code)
     }
 
     // MARK: - Helpers
@@ -293,44 +282,16 @@ final class SyntaxHighlighter {
             in attr: NSMutableAttributedString, 
             code: String
         ) {
-        guard !words.isEmpty else { return }
-        // Build a regex like: \b(word1|word2|...)\b
-        let escaped = words.map { NSRegularExpression.escapedPattern(for: $0) }
-        let pattern = "\\b(?:" + escaped.joined(separator: "|") + ")\\b"
-        applyRegex(RegexRule(pattern, color: color), in: attr, code: code)
-    }
-
-    private struct RegexRule {
-        let pattern: String
-        let color: NSColor
-        let captureGroup: Int?
-
-        init(_ pattern: String, color: NSColor, captureGroup: Int? = nil) {
-            self.pattern = pattern
-            self.color = color
-            self.captureGroup = captureGroup
-        }
+        regexHelper.highlightWholeWords(words, color: color, in: attr, code: code)
     }
 
     private func applyRegex(
-        _ rule: RegexRule,
+        _ pattern: String,
+        color: NSColor,
         in attr: NSMutableAttributedString,
-        code: String
+        code: String,
+        captureGroup: Int? = nil
     ) {
-        guard let regex = try? NSRegularExpression(
-            pattern: rule.pattern,
-            options: [.dotMatchesLineSeparators]
-        ) else { return }
-        let ns = code as NSString
-        let fullRange = NSRange(location: 0, length: ns.length)
-        let matches = regex.matches(in: code, options: [], range: fullRange)
-        for match in matches {
-            let range = rule.captureGroup != nil
-                ? match.range(at: rule.captureGroup!)
-                : match.range
-            if range.location != NSNotFound && range.length > 0 {
-                attr.addAttribute(.foregroundColor, value: rule.color, range: range)
-            }
-        }
+        regexHelper.applyRegex(pattern, color: color, in: attr, code: code, captureGroup: captureGroup)
     }
 }

@@ -4,7 +4,8 @@
 
 PROJECT_NAME="osx-ide"
 SCHEME="osx-ide"
-DERIVED_DATA_PATH="./.build"
+DERIVED_DATA_PATH_APP="./.build"
+DERIVED_DATA_PATH_TEST="./.build-tests"
 
 show_help() {
     echo "Usage: ./run.sh [command]"
@@ -25,13 +26,13 @@ build_app() {
     xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                -scheme "$SCHEME" \
                -configuration Debug \
-               -derivedDataPath "$DERIVED_DATA_PATH" \
+               -derivedDataPath "$DERIVED_DATA_PATH_APP" \
                build
 }
 
 launch_app() {
     # Find the app bundle in derived data
-    APP_PATH=$(find "$DERIVED_DATA_PATH" -name "$PROJECT_NAME.app" -type d | head -n 1)
+    APP_PATH=$(find "$DERIVED_DATA_PATH_APP" -name "$PROJECT_NAME.app" -type d | head -n 1)
     
     if [ -z "$APP_PATH" ]; then
         echo "Error: Could not find built application. Please run './run.sh build' first."
@@ -53,14 +54,14 @@ run_tests() {
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                    -scheme "$SCHEME" \
                    -configuration Debug \
-                   -derivedDataPath "$DERIVED_DATA_PATH" \
+                   -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    test -only-testing:osx-ideTests/"$suite"
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                    -scheme "$SCHEME" \
                    -configuration Debug \
-                   -derivedDataPath "$DERIVED_DATA_PATH" \
+                   -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    test -only-testing:osx-ideTests
     fi
@@ -77,14 +78,14 @@ run_e2e() {
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                    -scheme "$SCHEME" \
                    -configuration Debug \
-                   -derivedDataPath "$DERIVED_DATA_PATH" \
+                   -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    test -only-testing:osx-ideUITests/"$suite"
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                    -scheme "$SCHEME" \
                    -configuration Debug \
-                   -derivedDataPath "$DERIVED_DATA_PATH" \
+                   -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    test -only-testing:osx-ideUITests
     fi
@@ -92,7 +93,7 @@ run_e2e() {
 
 clean() {
     echo "Cleaning build artifacts..."
-    rm -rf "$DERIVED_DATA_PATH"
+    rm -rf "$DERIVED_DATA_PATH_APP" "$DERIVED_DATA_PATH_TEST"
     xcodebuild -project "$PROJECT_NAME.xcodeproj" -scheme "$SCHEME" clean
 }
 

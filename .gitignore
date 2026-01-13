@@ -3,6 +3,8 @@ verify_build_tests_*.txt
 .ide/index/
 .ide/index/**
 .build/
+.build-tests/
+.build-tests/**
 .vscode/
 .codacy/logs/
 .codacy/tools-configs/
