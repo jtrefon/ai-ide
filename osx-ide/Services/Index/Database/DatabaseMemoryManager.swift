@@ -39,18 +39,8 @@ final class DatabaseMemoryManager {
         }
         sql += " ORDER BY timestamp DESC;"
 
-        var memories: [MemoryEntry] = []
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
-            for (index, parameter) in parameters.enumerated() {
-                try database.bindParameter(statement: statement!, index: Int32(index + 1), value: parameter)
-            }
-
+        return try database.withPreparedStatement(sql: sql, parameters: parameters) { statement in
+            var memories: [MemoryEntry] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 let id = String(cString: sqlite3_column_text(statement, 0))
                 let tierStr = String(cString: sqlite3_column_text(statement, 1))
@@ -60,19 +50,20 @@ final class DatabaseMemoryManager {
                 let protectionLevel = Int(sqlite3_column_int(statement, 5))
 
                 if let parsedTier = MemoryTier(rawValue: tierStr) {
-                    memories.append(MemoryEntry(
-                        id: id,
-                        tier: parsedTier,
-                        content: content,
-                        category: category,
-                        timestamp: timestamp,
-                        protectionLevel: protectionLevel
-                    ))
+                    memories.append(
+                        MemoryEntry(
+                            id: id,
+                            tier: parsedTier,
+                            content: content,
+                            category: category,
+                            timestamp: timestamp,
+                            protectionLevel: protectionLevel
+                        )
+                    )
                 }
             }
+            return memories
         }
-
-        return memories
     }
 
     func deleteMemory(id: String) throws {

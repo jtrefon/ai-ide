@@ -77,13 +77,7 @@ final class DatabaseSchemaManager {
         let sql = "PRAGMA table_info(\(table));"
         var existingColumns = Set<String>()
 
-        try database.syncOnQueue {
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(database.db, sql, -1, &statement, nil) != SQLITE_OK {
-                throw DatabaseError.prepareFailed
-            }
-            defer { sqlite3_finalize(statement) }
-
+        try database.withPreparedStatement(sql: sql) { statement in
             while sqlite3_step(statement) == SQLITE_ROW {
                 if let namePtr = sqlite3_column_text(statement, 1) {
                     existingColumns.insert(String(cString: namePtr))
