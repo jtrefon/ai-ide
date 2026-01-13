@@ -60,25 +60,55 @@ fileprivate enum FileToolProposalStager {
     }
 }
 
+fileprivate enum FileToolParameterSchemaBuilder {
+    static func modeProperty() -> [String: Any] {
+        [
+            "type": "string",
+            "description": "One of: apply, propose. Default: apply.",
+            "enum": ["apply", "propose"]
+        ]
+    }
+
+    static func patchSetIdProperty() -> [String: Any] {
+        [
+            "type": "string",
+            "description": "Patch set identifier to stage into when mode=propose."
+        ]
+    }
+
+    static func pathProperty(description: String) -> [String: Any] {
+        [
+            "type": "string",
+            "description": description
+        ]
+    }
+
+    static func objectSchema(properties: [String: Any], required: [String]) -> [String: Any] {
+        [
+            "type": "object",
+            "properties": properties,
+            "required": required
+        ]
+    }
+}
+
 /// Write content to multiple files (preferred for scaffolding a project)
 struct WriteFilesTool: AITool {
     let name = "write_files"
     let description = "Write content to multiple files. Overwrites existing files. " +
         "Preferred for scaffolding multi-file changes in one operation."
     var parameters: [String: Any] {
-        [
-            "type": "object",
-            "properties": [
+        FileToolParameterSchemaBuilder.objectSchema(
+            properties: [
                 "files": [
                     "type": "array",
                     "description": "List of files to write.",
                     "items": [
                         "type": "object",
                         "properties": [
-                            "path": [
-                                "type": "string",
-                                "description": "Absolute path or project-root-relative path to the file."
-                            ],
+                            "path": FileToolParameterSchemaBuilder.pathProperty(
+                                description: "Absolute path or project-root-relative path to the file."
+                            ),
                             "content": [
                                 "type": "string",
                                 "description": "Content to write to the file."
@@ -87,27 +117,26 @@ struct WriteFilesTool: AITool {
                         "required": ["path", "content"]
                     ]
                 ],
-                "mode": [
-                    "type": "string",
-                    "description": "One of: apply, propose. Default: apply.",
-                    "enum": ["apply", "propose"]
-                ],
-                "patch_set_id": [
-                    "type": "string",
-                    "description": "Patch set identifier to stage into when mode=propose."
-                ]
+                "mode": FileToolParameterSchemaBuilder.modeProperty(),
+                "patch_set_id": FileToolParameterSchemaBuilder.patchSetIdProperty()
             ],
-            "required": ["files"]
-        ]
+            required: ["files"]
+        )
     }
 
     let fileSystemService: FileSystemService
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
 
+    private struct WriteFileEntry {
+        let url: URL
+        let relativePath: String
+        let content: String
+    }
+
     private func resolvedWriteFileEntry(
         from entry: [String: Any]
-    ) throws -> (url: URL, relativePath: String, content: String) {
+    ) throws -> WriteFileEntry {
         guard let path = entry["path"] as? String else {
             throw AppError.aiServiceError(
                 "Missing 'path' in a write_files entry"
@@ -119,7 +148,7 @@ struct WriteFilesTool: AITool {
 
         let url = try pathValidator.validateAndResolve(path)
         let relativePath = pathValidator.relativePath(for: url)
-        return (url: url, relativePath: relativePath, content: content)
+        return WriteFileEntry(url: url, relativePath: relativePath, content: content)
     }
 
     private func stageWrite(
@@ -210,25 +239,16 @@ struct CreateFileTool: AITool {
     let name = "create_file"
     let description = "Create a new empty file at the specified path."
     var parameters: [String: Any] {
-        [
-            "type": "object",
-            "properties": [
-                "path": [
-                    "type": "string",
-                    "description": "The absolute path where the file should be created."
-                ],
-                "mode": [
-                    "type": "string",
-                    "description": "One of: apply, propose. Default: apply.",
-                    "enum": ["apply", "propose"]
-                ],
-                "patch_set_id": [
-                    "type": "string",
-                    "description": "Patch set identifier to stage into when mode=propose."
-                ]
+        FileToolParameterSchemaBuilder.objectSchema(
+            properties: [
+                "path": FileToolParameterSchemaBuilder.pathProperty(
+                    description: "The absolute path where the file should be created."
+                ),
+                "mode": FileToolParameterSchemaBuilder.modeProperty(),
+                "patch_set_id": FileToolParameterSchemaBuilder.patchSetIdProperty()
             ],
-            "required": ["path"]
-        ]
+            required: ["path"]
+        )
     }
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
@@ -280,16 +300,14 @@ struct ListFilesTool: AITool {
     let name = "list_files"
     let description = "List files and directories in the specified path."
     var parameters: [String: Any] {
-        [
-            "type": "object",
-            "properties": [
-                "path": [
-                    "type": "string",
-                    "description": "The absolute path to the directory."
-                ]
+        FileToolParameterSchemaBuilder.objectSchema(
+            properties: [
+                "path": FileToolParameterSchemaBuilder.pathProperty(
+                    description: "The absolute path to the directory."
+                )
             ],
-            "required": ["path"]
-        ]
+            required: ["path"]
+        )
     }
     let pathValidator: PathValidator
     
@@ -310,25 +328,16 @@ struct DeleteFileTool: AITool {
     let name = "delete_file"
     let description = "Delete a file at the specified path."
     var parameters: [String: Any] {
-        [
-            "type": "object",
-            "properties": [
-                "path": [
-                    "type": "string",
-                    "description": "The absolute path to the file to delete."
-                ],
-                "mode": [
-                    "type": "string",
-                    "description": "One of: apply, propose. Default: apply.",
-                    "enum": ["apply", "propose"]
-                ],
-                "patch_set_id": [
-                    "type": "string",
-                    "description": "Patch set identifier to stage into when mode=propose."
-                ]
+        FileToolParameterSchemaBuilder.objectSchema(
+            properties: [
+                "path": FileToolParameterSchemaBuilder.pathProperty(
+                    description: "The absolute path to the file to delete."
+                ),
+                "mode": FileToolParameterSchemaBuilder.modeProperty(),
+                "patch_set_id": FileToolParameterSchemaBuilder.patchSetIdProperty()
             ],
-            "required": ["path"]
-        ]
+            required: ["path"]
+        )
     }
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
@@ -373,37 +382,25 @@ struct ReplaceInFileTool: AITool {
     let description = "Replace specific content in a file. Use this instead of write_file for large files " +
         "to avoid rewriting everything. Specify the exact text to find and what to replace it with."
     var parameters: [String: Any] {
-        [
-            "type": "object",
-            "properties": [
-                "path": [
-                    "type": "string",
-                    "description": "The absolute path to the file."
-                ],
-                "targetPath": [
-                    "type": "string",
-                    "description": "Deprecated alias for path. Use path instead."
-                ],
-                "old_text": [
-                    "type": "string",
-                    "description": "The exact text to find and replace. Must match exactly including whitespace."
-                ],
-                "new_text": [
-                    "type": "string",
-                    "description": "The new text to replace the old text with."
-                ],
-                "mode": [
-                    "type": "string",
-                    "description": "One of: apply, propose. Default: apply.",
-                    "enum": ["apply", "propose"]
-                ],
-                "patch_set_id": [
-                    "type": "string",
-                    "description": "Patch set identifier to stage into when mode=propose."
-                ]
+        FileToolParameterSchemaBuilder.objectSchema(
+            properties: [
+                "path": FileToolParameterSchemaBuilder.pathProperty(
+                    description: "The absolute path to the file."
+                ),
+                "targetPath": FileToolParameterSchemaBuilder.pathProperty(
+                    description: "Deprecated alias for path. Use path instead."
+                ),
+                "old_text": FileToolParameterSchemaBuilder.pathProperty(
+                    description: "The exact text to find and replace. Must match exactly including whitespace."
+                ),
+                "new_text": FileToolParameterSchemaBuilder.pathProperty(
+                    description: "The new text to replace the old text with."
+                ),
+                "mode": FileToolParameterSchemaBuilder.modeProperty(),
+                "patch_set_id": FileToolParameterSchemaBuilder.patchSetIdProperty()
             ],
-            "required": ["path", "old_text", "new_text"]
-        ]
+            required: ["path", "old_text", "new_text"]
+        )
     }
     
     let fileSystemService: FileSystemService
