@@ -83,17 +83,17 @@ struct MessageContentCoordinator {
     private func backgroundColor(for message: ChatMessage) -> Color {
         if message.role == .user {
             return Color.accentColor.opacity(0.8)
-        } else {
-            return Color(NSColor.controlBackgroundColor)
         }
+
+        return Color(NSColor.controlBackgroundColor)
     }
     
     private func foregroundColor(for message: ChatMessage) -> Color {
         if message.role == .user {
             return Color.white
-        } else {
-            return Color.primary
         }
+
+        return Color.primary
     }
     
     private var hasReasoning: Bool {
