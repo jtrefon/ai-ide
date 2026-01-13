@@ -30,7 +30,7 @@ class TextEditingBehaviorCoordinator {
     /// Handles text changes in the text view
     func textView(
             _ textView: NSTextView, 
-            shouldChangeTextIn affectedCharRange: NSRange, 
+            shouldChangeTextIn _: NSRange, 
             replacementString: String?
         ) -> Bool {
         if isProgrammaticUpdate { return true }
@@ -58,6 +58,7 @@ class TextEditingBehaviorCoordinator {
     
     /// Handles did process editing events
     func handleDidProcessEditing(text: String) {
+        _ = text
     }
     
     // MARK: - Private Methods
