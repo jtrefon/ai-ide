@@ -13,6 +13,35 @@ final class DatabaseManagerTests: XCTestCase {
     var dbManager: DatabaseManager!
     var tempDBPath: String!
 
+    private let insertResourceSQL = """
+    INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
+    VALUES (?, ?, ?, ?, ?, ?);
+    """
+
+    private func insertResource(path: String, qualityScore: Double = 7.5) throws {
+        try dbManager.execute(
+            sql: insertResourceSQL,
+            parameters: [UUID().uuidString, path, "swift", 0.0, "hash", qualityScore]
+        )
+    }
+
+    private func insertResources(paths: [String]) throws {
+        for path in paths {
+            try insertResource(path: path)
+        }
+    }
+
+    private func insertAIEnrichedResource(path: String, qualityScore: Double) throws {
+        let sql = """
+        INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score, ai_enriched)
+        VALUES (?, ?, ?, ?, ?, ?, 1);
+        """
+        try dbManager.execute(
+            sql: sql,
+            parameters: [UUID().uuidString, path, "swift", 0.0, "hash", qualityScore]
+        )
+    }
+
     override func setUp() async throws {
         try await super.setUp()
         let tempDir = FileManager.default.temporaryDirectory
@@ -39,14 +68,8 @@ final class DatabaseManagerTests: XCTestCase {
             "README.md",
             "docs/guide.md"
         ]
-        for path in paths {
-            let id = UUID().uuidString
-            let sql = """
-            INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-            VALUES (?, ?, ?, ?, ?, ?);
-            """
-            try dbManager.execute(sql: sql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
-        }
+
+        try insertResources(paths: paths)
 
         let results = try dbManager.listResourcePaths(matching: nil, limit: 10, offset: 0)
         XCTAssertEqual(results.count, 4)
@@ -61,14 +84,8 @@ final class DatabaseManagerTests: XCTestCase {
             "README.md",
             "docs/guide.md"
         ]
-        for path in paths {
-            let id = UUID().uuidString
-            let sql = """
-            INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-            VALUES (?, ?, ?, ?, ?, ?);
-            """
-            try dbManager.execute(sql: sql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
-        }
+
+        try insertResources(paths: paths)
 
         let results = try dbManager.listResourcePaths(matching: "swift", limit: 10, offset: 0)
         XCTAssertEqual(results.count, 2)
@@ -76,13 +93,9 @@ final class DatabaseManagerTests: XCTestCase {
     }
 
     func testHasResourcePath() throws {
-        let id = UUID().uuidString
         let path = "src/main.swift"
-        let sql = """
-        INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-        VALUES (?, ?, ?, ?, ?, ?);
-        """
-        try dbManager.execute(sql: sql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
+
+        try insertResource(path: path)
 
         XCTAssertTrue(try dbManager.hasResourcePath(path))
         XCTAssertFalse(try dbManager.hasResourcePath("src/nonexistent.swift"))
@@ -95,14 +108,8 @@ final class DatabaseManagerTests: XCTestCase {
             "README.md",
             "docs/guide.md"
         ]
-        for path in paths {
-            let id = UUID().uuidString
-            let sql = """
-            INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-            VALUES (?, ?, ?, ?, ?, ?);
-            """
-            try dbManager.execute(sql: sql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
-        }
+
+        try insertResources(paths: paths)
 
         let results = try dbManager.findResourceMatches(query: "swift", limit: 10)
         XCTAssertEqual(results.count, 2)
@@ -112,13 +119,9 @@ final class DatabaseManagerTests: XCTestCase {
     }
 
     func testFindResourceMatches_withAIEnriched() throws {
-        let id = UUID().uuidString
         let path = "src/ai_enriched.swift"
-        let sql = """
-        INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score, ai_enriched)
-        VALUES (?, ?, ?, ?, ?, ?, 1);
-        """
-        try dbManager.execute(sql: sql, parameters: [id, path, "swift", 0.0, "hash", 9.2])
+
+        try insertAIEnrichedResource(path: path, qualityScore: 9.2)
 
         let results = try dbManager.findResourceMatches(query: "ai_enriched", limit: 10)
         XCTAssertEqual(results.count, 1)
@@ -127,13 +130,13 @@ final class DatabaseManagerTests: XCTestCase {
     }
 
     func testUpdateQualityScore() throws {
-        let id = UUID().uuidString
         let path = "src/main.swift"
-        let insertSql = """
-        INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-        VALUES (?, ?, ?, ?, ?, ?);
-        """
-        try dbManager.execute(sql: insertSql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
+
+        let id = UUID().uuidString
+        try dbManager.execute(
+            sql: insertResourceSQL,
+            parameters: [id, path, "swift", 0.0, "hash", 7.5]
+        )
 
         try dbManager.updateQualityScore(resourceId: id, score: 8.8)
 
@@ -142,13 +145,13 @@ final class DatabaseManagerTests: XCTestCase {
     }
 
     func testMarkAIEnriched() throws {
-        let id = UUID().uuidString
         let path = "src/main.swift"
-        let insertSql = """
-        INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-        VALUES (?, ?, ?, ?, ?, ?);
-        """
-        try dbManager.execute(sql: insertSql, parameters: [id, path, "swift", 0.0, "hash", 7.5])
+
+        let id = UUID().uuidString
+        try dbManager.execute(
+            sql: insertResourceSQL,
+            parameters: [id, path, "swift", 0.0, "hash", 7.5]
+        )
 
         try dbManager.markAIEnriched(resourceId: id, score: 9.1, summary: "Test summary")
 

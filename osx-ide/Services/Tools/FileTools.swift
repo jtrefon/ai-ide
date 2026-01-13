@@ -20,6 +20,46 @@ import Combine
 // This file now serves as a registry for all file-related tools
 // The individual tool implementations have been moved to separate files for better modularity
 
+fileprivate enum FileToolProposalStager {
+    static func stageWrite(
+        patchSetId: String,
+        toolCallId: String,
+        relativePath: String,
+        content: String
+    ) async throws {
+        try await PatchSetStore.shared.stageWrite(
+            patchSetId: patchSetId,
+            toolCallId: toolCallId,
+            relativePath: relativePath,
+            content: content
+        )
+    }
+
+    static func stageDelete(
+        patchSetId: String,
+        toolCallId: String,
+        relativePath: String
+    ) async throws {
+        try await PatchSetStore.shared.stageDelete(
+            patchSetId: patchSetId,
+            toolCallId: toolCallId,
+            relativePath: relativePath
+        )
+    }
+
+    static func proposedCreateFileMessage(relativePath: String, patchSetId: String) -> String {
+        "Proposed create file at \(relativePath) (patch_set_id=\(patchSetId))."
+    }
+
+    static func proposedDeleteFileMessage(relativePath: String, patchSetId: String) -> String {
+        "Proposed delete \(relativePath) (patch_set_id=\(patchSetId))."
+    }
+
+    static func proposedReplaceMessage(relativePath: String, patchSetId: String) -> String {
+        "Proposed replace in \(relativePath) (patch_set_id=\(patchSetId))."
+    }
+}
+
 /// Write content to multiple files (preferred for scaffolding a project)
 struct WriteFilesTool: AITool {
     let name = "write_files"
@@ -88,7 +128,7 @@ struct WriteFilesTool: AITool {
             relativePath: String, 
             content: String
         ) async throws {
-        try await PatchSetStore.shared.stageWrite(
+        try await FileToolProposalStager.stageWrite(
             patchSetId: patchSetId,
             toolCallId: toolCallId,
             relativePath: relativePath,
@@ -97,21 +137,14 @@ struct WriteFilesTool: AITool {
     }
 
     private func applyWrite(url: URL, relativePath: String, content: String) async throws {
-        await AIToolTraceLogger.shared.log(type: "fs.write_files_entry", data: [
-            "path": relativePath,
-            "bytes": content.utf8.count
-        ])
-
-        let existed = FileManager.default.fileExists(atPath: url.path)
-        try fileSystemService.writeFile(content: content, to: url)
-
-        Task { @MainActor in
-            if existed {
-                eventBus.publish(FileModifiedEvent(url: url))
-            } else {
-                eventBus.publish(FileCreatedEvent(url: url))
-            }
-        }
+        try await FileToolWriteApplier.applyWrite(
+            fileSystemService: fileSystemService,
+            eventBus: eventBus,
+            url: url,
+            relativePath: relativePath,
+            content: content,
+            traceType: "fs.write_files_entry"
+        )
     }
 
     func execute(arguments: ToolArguments) async throws -> String {
@@ -216,13 +249,13 @@ struct CreateFileTool: AITool {
 
         if mode == "propose" {
             let rel = pathValidator.relativePath(for: url)
-            try await PatchSetStore.shared.stageWrite(
-                    patchSetId: patchSetId, 
-                    toolCallId: toolCallId, 
-                    relativePath: rel, 
-                    content: ""
-                )
-            return "Proposed create file at \(rel) (patch_set_id=\(patchSetId))."
+            try await FileToolProposalStager.stageWrite(
+                patchSetId: patchSetId,
+                toolCallId: toolCallId,
+                relativePath: rel,
+                content: ""
+            )
+            return FileToolProposalStager.proposedCreateFileMessage(relativePath: rel, patchSetId: patchSetId)
         }
 
         await AIToolTraceLogger.shared.log(type: "fs.create_file", data: [
@@ -315,12 +348,12 @@ struct DeleteFileTool: AITool {
 
         if mode == "propose" {
             let rel = pathValidator.relativePath(for: url)
-            try await PatchSetStore.shared.stageDelete(
-                    patchSetId: patchSetId, 
-                    toolCallId: toolCallId, 
-                    relativePath: rel
-                )
-            return "Proposed delete \(rel) (patch_set_id=\(patchSetId))."
+            try await FileToolProposalStager.stageDelete(
+                patchSetId: patchSetId,
+                toolCallId: toolCallId,
+                relativePath: rel
+            )
+            return FileToolProposalStager.proposedDeleteFileMessage(relativePath: rel, patchSetId: patchSetId)
         }
         let fileManager = FileManager.default
         if !fileManager.fileExists(atPath: url.path) {
@@ -439,7 +472,7 @@ struct ReplaceInFileTool: AITool {
         let newContent = content.replacingOccurrences(of: oldText, with: newText)
 
         if mode == "propose" {
-            try await PatchSetStore.shared.stageWrite(
+            try await FileToolProposalStager.stageWrite(
                 patchSetId: patchSetId,
                 toolCallId: toolCallId,
                 relativePath: relativePath,
@@ -449,7 +482,7 @@ struct ReplaceInFileTool: AITool {
                 "path": relativePath,
                 "patchSetId": patchSetId
             ])
-            return "Proposed replace in \(relativePath) (patch_set_id=\(patchSetId))."
+            return FileToolProposalStager.proposedReplaceMessage(relativePath: relativePath, patchSetId: patchSetId)
         }
 
         await AIToolTraceLogger.shared.log(type: "fs.replace_in_file", data: [

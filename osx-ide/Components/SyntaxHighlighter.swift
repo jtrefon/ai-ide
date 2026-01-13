@@ -62,7 +62,7 @@ final class SyntaxHighlighter {
             return module.highlight(code, font: font)
         }
 
-        let (attributed, _) = AttributedStringStyler.makeBaseAttributedString(code: code, font: font)
+        let (attributed, _) = regexHelper.makeBaseAttributedString(code: code, font: font)
 
         // Built-in always-on fallback highlighting (when no module is registered/enabled)
         let fallbackLanguage = CodeLanguage(rawValue: langStr) ?? .unknown
@@ -292,6 +292,7 @@ final class SyntaxHighlighter {
         code: String,
         captureGroup: Int? = nil
     ) {
-        regexHelper.applyRegex(pattern, color: color, in: attr, code: code, captureGroup: captureGroup)
+        let group = captureGroup
+        regexHelper.applyRegex(pattern, color: color, in: attr, code: code, captureGroup: group)
     }
 }
