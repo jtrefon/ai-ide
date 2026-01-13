@@ -36,6 +36,16 @@ final class SyntaxHighlighter {
 
     private let regexHelper = RegexLanguageModule(id: .unknown, fileExtensions: [])
 
+    private lazy var fallbackModules: [CodeLanguage: any LanguageModule] = [
+        .swift: SwiftModule(),
+        .javascript: JavaScriptModule(),
+        .typescript: TypeScriptModule(),
+        .python: PythonModule(),
+        .html: HTMLModule(),
+        .css: CSSModule(),
+        .json: JSONModule()
+    ]
+
     /// Highlights the given code with syntax highlighting for the specified language.
     ///
     /// - Parameters:
@@ -73,7 +83,8 @@ final class SyntaxHighlighter {
         applyFallbackHighlighting(
             fallbackLanguage: fallbackLanguage,
             attributed: attributed,
-            code: code
+            code: code,
+            font: font
         )
 
         return attributed
@@ -117,115 +128,63 @@ final class SyntaxHighlighter {
     private func applyFallbackHighlighting(
         fallbackLanguage: CodeLanguage,
         attributed: NSMutableAttributedString,
-        code: String
+        code: String,
+        font: NSFont
     ) {
         let handlers: [CodeLanguage: (NSMutableAttributedString, String) -> Void] = [
-            .swift: { [weak self] attr, code in self?.applySwiftHighlighting(in: attr, code: code) },
-            .javascript: { [weak self] attr, code in self?.applyJavaScriptHighlighting(in: attr, code: code) },
-            .typescript: { [weak self] attr, code in self?.applyTypeScriptHighlighting(in: attr, code: code) },
-            .python: { [weak self] attr, code in self?.applyPythonHighlighting(in: attr, code: code) },
-            .html: { [weak self] attr, code in self?.applyHTMLHighlighting(in: attr, code: code) },
-            .css: { [weak self] attr, code in self?.applyCSSHighlighting(in: attr, code: code) },
-            .json: { [weak self] attr, code in self?.applyJSONHighlighting(in: attr, code: code) }
+            .swift: { [weak self] attr, code in self?.applySwiftHighlighting(in: attr, code: code, font: font) },
+            .javascript: { [weak self] attr, code in self?.applyJavaScriptHighlighting(in: attr, code: code, font: font) },
+            .typescript: { [weak self] attr, code in self?.applyTypeScriptHighlighting(in: attr, code: code, font: font) },
+            .python: { [weak self] attr, code in self?.applyPythonHighlighting(in: attr, code: code, font: font) },
+            .html: { [weak self] attr, code in self?.applyHTMLHighlighting(in: attr, code: code, font: font) },
+            .css: { [weak self] attr, code in self?.applyCSSHighlighting(in: attr, code: code, font: font) },
+            .json: { [weak self] attr, code in self?.applyJSONHighlighting(in: attr, code: code, font: font) }
         ]
 
         handlers[fallbackLanguage]?(attributed, code)
     }
 
-    private func applySwiftHighlighting(in attr: NSMutableAttributedString, code: String) {
-        applyGenericHighlighting(in: attr, code: code)
-        let keywords = [
-            "class","struct","enum","protocol","extension","func","var","let","if","else","for","while","repeat","switch","case","default","break","continue","defer","do","catch","throw","throws","rethrows","try","in","where","return","as","is","nil","true","false","init","deinit","subscript","typealias","associatedtype","mutating","nonmutating","static","final","open","public","internal","fileprivate","private","guard","some","any","actor","await","async","yield","inout"
-        ]
-        let types = [
-            "Int", "Int8", "Int16", "Int32", "Int64",
-            "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
-            "Float", "Double", "Bool", "String", "Character",
-            "Array", "Dictionary", "Set", "Optional", "Void", "Any", "AnyObject"
-        ]
-        highlightWholeWords(keywords, color: NSColor.systemBlue, in: attr, code: code)
-        highlightWholeWords(types, color: NSColor.systemPurple, in: attr, code: code)
+    private func applyModuleHighlighting(
+        language: CodeLanguage,
+        in attr: NSMutableAttributedString,
+        code: String,
+        font: NSFont
+    ) {
+        guard let module = fallbackModules[language] else { return }
+        let highlighted = module.highlight(code, font: font)
+        attr.setAttributedString(highlighted)
     }
 
-    private func applyJavaScriptHighlighting(in attr: NSMutableAttributedString, code: String) {
-        applyGenericHighlighting(in: attr, code: code)
-        let keywords = [
-            "break","case","catch","class","const","continue","debugger","default","delete","do","else","export","extends","finally","for","function","if","import","in","instanceof","let","new","return","super","switch","this","throw","try","typeof","var","void","while","with","yield","async","await"
-        ]
-        highlightWholeWords(keywords, color: NSColor.systemBlue, in: attr, code: code)
+    private func applySwiftHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
+        applyModuleHighlighting(language: .swift, in: attr, code: code, font: font)
     }
 
-    private func applyTypeScriptHighlighting(in attr: NSMutableAttributedString, code: String) {
-        applyJavaScriptHighlighting(in: attr, code: code)
-        let tsKeywords = [
-                "interface","type","implements","namespace","abstract",
-                "public","private","protected","readonly"
-            ]
-        highlightWholeWords(tsKeywords, color: NSColor.systemPurple, in: attr, code: code)
+    private func applyJavaScriptHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
+        applyModuleHighlighting(language: .javascript, in: attr, code: code, font: font)
     }
 
-    private func applyPythonHighlighting(in attr: NSMutableAttributedString, code: String) {
-        applyGenericHighlighting(in: attr, code: code)
-        let keywords = [
-            "False","None","True","and","as","assert","async","await","break","class","continue","def","del","elif","else","except","finally","for","from","global","if","import","in","is","lambda","nonlocal","not","or","pass","raise","return","try","while","with","yield"
-        ]
-        highlightWholeWords(keywords, color: NSColor.systemBlue, in: attr, code: code)
-        // Python comments (# ...)
-        applyRegex("#.*", color: NSColor.systemGreen, in: attr, code: code)
-        // Triple-quoted strings
-        applyRegex("\"\"\"[\\s\\S]*?\"\"\"", color: NSColor.systemRed, in: attr, code: code)
-        applyRegex("'''[\\s\\S]*?'''", color: NSColor.systemRed, in: attr, code: code)
+    private func applyTypeScriptHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
+        applyModuleHighlighting(language: .typescript, in: attr, code: code, font: font)
     }
 
-    private func applyHTMLHighlighting(in attr: NSMutableAttributedString, code: String) {
-        applyGenericHighlighting(in: attr, code: code)
-        // Tags and tag names
-        applyRegex("</?[a-zA-Z][a-zA-Z0-9:-]*", color: NSColor.systemBlue, in: attr, code: code)
-        // Attributes
-        applyRegex("[a-zA-Z_:][-a-zA-Z0-9_:.]*(?=\\=)", color: NSColor.systemPurple, in: attr, code: code)
-        // Comments
-        applyRegex("<!--[\\s\\S]*?-->", color: NSColor.systemGreen, in: attr, code: code)
+    private func applyPythonHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
+        applyModuleHighlighting(language: .python, in: attr, code: code, font: font)
     }
 
-    private func applyCSSHighlighting(in attr: NSMutableAttributedString, code: String) {
+    private func applyHTMLHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
+        applyModuleHighlighting(language: .html, in: attr, code: code, font: font)
+    }
+
+    private func applyCSSHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
         // Match the stronger CSS scheme used by CSSModule so fallback stays consistent.
-        DefaultCSSHighlighter.applyAll(in: attr, code: code)
+        applyModuleHighlighting(language: .css, in: attr, code: code, font: font)
     }
 
-    private func applyJSONHighlighting(in attr: NSMutableAttributedString, code: String) {
+    private func applyJSONHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
         #if DEBUG
         print("[Highlighter] applyJSONHighlighting triggered")
         #endif
-        let palette = (LanguageModuleManager.shared.getModule(for: .json) as? HighlightPaletteProviding)?.highlightPalette
-        let defaultColors = JSONTokenHighlighter.DefaultColors(colors: [
-            .key: NSColor.systemIndigo,
-            .string: NSColor.systemRed,
-            .number: NSColor.systemOrange,
-            .boolean: NSColor.systemBlue,
-            .null: NSColor.systemGray,
-            .quote: NSColor.systemPink,
-            .brace: NSColor.systemTeal,
-            .bracket: NSColor.systemPurple,
-            .comma: NSColor.systemBrown,
-            .colon: NSColor.systemYellow
-        ])
-
-        let callbacks = JSONTokenHighlighter.Callbacks(
-            applyRegex: { [weak self] pattern, color, captureGroup in
-                self?.applyRegex(pattern, color: color, in: attr, code: code, captureGroup: captureGroup)
-            },
-            highlightWholeWords: { [weak self] words, color in
-                self?.highlightWholeWords(words, color: color, in: attr, code: code)
-            }
-        )
-
-        JSONTokenHighlighter.applyAll(
-            in: attr,
-            code: code,
-            palette: palette,
-            defaultColors: defaultColors,
-            callbacks: callbacks
-        )
+        applyModuleHighlighting(language: .json, in: attr, code: code, font: font)
     }
 
     private func applyGenericHighlighting(in attr: NSMutableAttributedString, code: String) {

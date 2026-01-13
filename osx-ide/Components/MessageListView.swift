@@ -8,6 +8,10 @@
 import SwiftUI
 import Foundation
 
+fileprivate func localized(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
 struct MessageListView: View {
     let messages: [ChatMessage]
     let isSending: Bool
@@ -17,8 +21,10 @@ struct MessageListView: View {
 
     private let filterCoordinator = MessageFilterCoordinator()
 
-    private func localized(_ key: String) -> String {
-        NSLocalizedString(key, comment: "")
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            proxy.scrollTo("__bottom__", anchor: .bottom)
+        }
     }
 
     private func reasoningHiddenBinding(for messageId: UUID) -> Binding<Bool> {
@@ -62,14 +68,10 @@ struct MessageListView: View {
             }
             .scrollIndicators(.hidden)
             .onAppear {
-                Task { @MainActor in
-                    proxy.scrollTo("__bottom__", anchor: .bottom)
-                }
+                scrollToBottom(proxy: proxy)
             }
             .onChange(of: messages.last?.id) { _ in
-                Task { @MainActor in
-                    proxy.scrollTo("__bottom__", anchor: .bottom)
-                }
+                scrollToBottom(proxy: proxy)
             }
         }
     }
@@ -145,10 +147,6 @@ struct MessageView: View {
         Text(message.role == .user ? localized("chat.role.you") : localized("chat.role.assistant"))
             .font(.caption)
             .foregroundColor(.secondary)
-    }
-
-    private func localized(_ key: String) -> String {
-        NSLocalizedString(key, comment: "")
     }
 }
 
