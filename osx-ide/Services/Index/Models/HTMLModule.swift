@@ -14,13 +14,8 @@ public final class HTMLModule: RegexLanguageModule, @unchecked Sendable {
     }
     
     public override func highlight(_ code: String, font: NSFont) -> NSAttributedString {
-        let attr = NSMutableAttributedString(string: code)
-        let fullRange = NSRange(location: 0, length: (code as NSString).length)
-        
-        attr.addAttributes([
-            .font: font,
-            .foregroundColor: NSColor.labelColor
-        ], range: fullRange)
+        let base = makeBaseAttributedString(code: code, font: font)
+        let attr = base.attributed
         
         // Tags and tag names
         applyRegex("</?[a-zA-Z][a-zA-Z0-9:-]*", color: NSColor.systemBlue, in: attr, code: code)
@@ -29,7 +24,7 @@ public final class HTMLModule: RegexLanguageModule, @unchecked Sendable {
         // Comments
         applyRegex("<!--[\\s\\S]*?-->", color: NSColor.systemGreen, in: attr, code: code)
         // Attribute values (strings)
-        applyRegex("\"(?:\\\\.|[^\"\\\\])*\"", color: NSColor.systemRed, in: attr, code: code)
+        applyDoubleQuotedStringHighlighting(color: NSColor.systemRed, in: attr, code: code)
         
         return attr
     }
