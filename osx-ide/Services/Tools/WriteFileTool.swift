@@ -56,13 +56,10 @@ struct WriteFileTool: AITool {
             throw AppError.aiServiceError("Missing 'content' argument for write_file")
         }
 
-        let mode = (arguments["mode"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased() ?? "apply"
-        let toolCallId = (arguments["_tool_call_id"] as? String) ?? UUID().uuidString
-        let patchSetId = (arguments["patch_set_id"] as? String)
-            ?? (arguments["_conversation_id"] as? String)
-            ?? "default"
+        let context = ToolInvocationContext.from(arguments: arguments)
+        let mode = context.mode
+        let toolCallId = context.toolCallId
+        let patchSetId = context.patchSetId
 
         let url = try pathValidator.validateAndResolve(path)
         let relativePath = pathValidator.relativePath(for: url)
