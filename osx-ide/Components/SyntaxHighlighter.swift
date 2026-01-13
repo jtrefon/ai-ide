@@ -53,10 +53,7 @@ final class SyntaxHighlighter {
         #endif
         
         // Try to use modular language support if enabled
-        if let module = LanguageModuleManager.shared.getModule(forExtension: langStr) ??
-            LanguageModuleManager.shared.getModule(
-                for: CodeLanguage(rawValue: langStr) ?? .unknown
-            ) {
+        if let module = resolveModule(for: langStr) {
             #if DEBUG
             print("[Highlighter] using module id=\(module.id.rawValue) extensions=\(module.fileExtensions)")
             #endif
@@ -78,24 +75,11 @@ final class SyntaxHighlighter {
         print("[Highlighter] using fallback language=\(fallbackLanguage.rawValue)")
         #endif
 
-        switch fallbackLanguage {
-        case .swift:
-            applySwiftHighlighting(in: attributed, code: code)
-        case .javascript:
-            applyJavaScriptHighlighting(in: attributed, code: code)
-        case .typescript:
-            applyTypeScriptHighlighting(in: attributed, code: code)
-        case .python:
-            applyPythonHighlighting(in: attributed, code: code)
-        case .html:
-            applyHTMLHighlighting(in: attributed, code: code)
-        case .css:
-            applyCSSHighlighting(in: attributed, code: code)
-        case .json:
-            applyJSONHighlighting(in: attributed, code: code)
-        default:
-            break
-        }
+        applyFallbackHighlighting(
+            fallbackLanguage: fallbackLanguage,
+            attributed: attributed,
+            code: code
+        )
 
         return attributed
     }
@@ -158,6 +142,31 @@ final class SyntaxHighlighter {
 
     // MARK: - Language Highlighting
 
+    private func resolveModule(for languageIdentifier: String) -> (any LanguageModule)? {
+        LanguageModuleManager.shared.getModule(forExtension: languageIdentifier) ??
+            LanguageModuleManager.shared.getModule(
+                for: CodeLanguage(rawValue: languageIdentifier) ?? .unknown
+            )
+    }
+
+    private func applyFallbackHighlighting(
+        fallbackLanguage: CodeLanguage,
+        attributed: NSMutableAttributedString,
+        code: String
+    ) {
+        let handlers: [CodeLanguage: (NSMutableAttributedString, String) -> Void] = [
+            .swift: { [weak self] attr, code in self?.applySwiftHighlighting(in: attr, code: code) },
+            .javascript: { [weak self] attr, code in self?.applyJavaScriptHighlighting(in: attr, code: code) },
+            .typescript: { [weak self] attr, code in self?.applyTypeScriptHighlighting(in: attr, code: code) },
+            .python: { [weak self] attr, code in self?.applyPythonHighlighting(in: attr, code: code) },
+            .html: { [weak self] attr, code in self?.applyHTMLHighlighting(in: attr, code: code) },
+            .css: { [weak self] attr, code in self?.applyCSSHighlighting(in: attr, code: code) },
+            .json: { [weak self] attr, code in self?.applyJSONHighlighting(in: attr, code: code) }
+        ]
+
+        handlers[fallbackLanguage]?(attributed, code)
+    }
+
     private func applySwiftHighlighting(in attr: NSMutableAttributedString, code: String) {
         applyGenericHighlighting(in: attr, code: code)
         let keywords = [
@@ -215,6 +224,14 @@ final class SyntaxHighlighter {
 
     private func applyCSSHighlighting(in attr: NSMutableAttributedString, code: String) {
         // Match the stronger CSS scheme used by CSSModule so fallback stays consistent.
+        applyCSSSelectorHighlighting(in: attr, code: code)
+        applyCSSPunctuationHighlighting(in: attr, code: code)
+        applyCSSPropertyHighlighting(in: attr, code: code)
+        applyCSSLiteralHighlighting(in: attr, code: code)
+        applyCSSCommentHighlighting(in: attr, code: code)
+    }
+
+    private func applyCSSSelectorHighlighting(in attr: NSMutableAttributedString, code: String) {
         // 1. Selectors (Classes, IDs, Tags, Pseudo-elements)
         applyRegex(RegexRule("(?m)^[ \t]*:root\\b", color: NSColor.systemGreen), in: attr, code: code)
         applyRegex(RegexRule("(?m)^[ \t]*@[-a-zA-Z]+", color: NSColor.systemGreen), in: attr, code: code)
@@ -229,10 +246,14 @@ final class SyntaxHighlighter {
         )
         applyRegex(RegexRule("(?m)^[ \t]*#[a-zA-Z_][-a-zA-Z0-9_]*\\s*(?=[,{])", color: NSColor.systemGreen), in: attr, code: code)
         applyRegex(RegexRule("(?m)^[ \t]*:{1,2}[a-zA-Z-]+\\s*(?=[,{])", color: NSColor.systemGreen), in: attr, code: code)
+    }
 
+    private func applyCSSPunctuationHighlighting(in attr: NSMutableAttributedString, code: String) {
         // 2. Braces / punctuation
         applyRegex(RegexRule("[\\{\\}\\[\\]\\(\\);:,]", color: NSColor.systemMint), in: attr, code: code)
+    }
 
+    private func applyCSSPropertyHighlighting(in attr: NSMutableAttributedString, code: String) {
         // 3. Property Keys (including custom properties: --foo)
         applyRegex(
             RegexRule(
@@ -249,7 +270,9 @@ final class SyntaxHighlighter {
 
         // 5. Functions
         applyRegex(RegexRule("\\b[a-zA-Z-]+\\s*(?=\\()", color: NSColor.systemBrown), in: attr, code: code)
+    }
 
+    private func applyCSSLiteralHighlighting(in attr: NSMutableAttributedString, code: String) {
         // 6. Hex colors
         applyRegex(RegexRule("#[0-9a-fA-F]{3,8}\\b", color: NSColor.systemOrange), in: attr, code: code)
 
@@ -297,7 +320,9 @@ final class SyntaxHighlighter {
             in: attr,
             code: code
         )
+    }
 
+    private func applyCSSCommentHighlighting(in attr: NSMutableAttributedString, code: String) {
         // 11. Comments
         applyRegex(RegexRule("/\\*[\\s\\S]*?\\*/", color: NSColor.tertiaryLabelColor), in: attr, code: code)
     }
