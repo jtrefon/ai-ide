@@ -20,12 +20,13 @@ public final class JavaScriptModule: RegexLanguageModule, @unchecked Sendable {
         applyDoubleAndSingleQuotedStringHighlighting(color: NSColor.systemRed, in: attr, code: code)
         applyLineAndBlockCommentHighlighting(color: NSColor.systemGreen, in: attr, code: code)
         applyDecimalNumberHighlighting(color: NSColor.systemOrange, in: attr, code: code)
-        
-        let keywords = [
-            "break","case","catch","class","const","continue","debugger","default","delete","do","else","export","extends","finally","for","function","if","import","in","instanceof","let","new","return","super","switch","this","throw","try","typeof","var","void","while","with","yield","async","await"
-        ]
-        
-        highlightWholeWords(keywords, color: NSColor.systemBlue, in: attr, code: code)
+        LanguageKeywordHighlighter.highlight(
+            LanguageKeywordRepository.javascript,
+            color: NSColor.systemBlue,
+            attr: attr,
+            code: code,
+            using: self
+        )
         
         return attr
     }

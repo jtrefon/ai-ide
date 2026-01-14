@@ -19,12 +19,13 @@ public final class PythonModule: RegexLanguageModule, @unchecked Sendable {
 
         applyDoubleAndSingleQuotedStringHighlighting(color: NSColor.systemRed, in: attr, code: code)
         applyDecimalNumberHighlighting(color: NSColor.systemOrange, in: attr, code: code)
-        
-        let keywords = [
-            "False","None","True","and","as","assert","async","await","break","class","continue","def","del","elif","else","except","finally","for","from","global","if","import","in","is","lambda","nonlocal","not","or","pass","raise","return","try","while","with","yield"
-        ]
-        
-        highlightWholeWords(keywords, color: NSColor.systemBlue, in: attr, code: code)
+        LanguageKeywordHighlighter.highlight(
+            LanguageKeywordRepository.python,
+            color: NSColor.systemBlue,
+            attr: attr,
+            code: code,
+            using: self
+        )
         
         // Python specific
         applyRegex("#.*", color: NSColor.systemGreen, in: attr, code: code)
