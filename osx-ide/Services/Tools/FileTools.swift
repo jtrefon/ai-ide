@@ -20,7 +20,7 @@ import Combine
 // This file now serves as a registry for all file-related tools
 // The individual tool implementations have been moved to separate files for better modularity
 
-fileprivate enum FileToolProposalStager {
+enum FileToolProposalStager {
     static func stageWrite(
         patchSetId: String,
         toolCallId: String,
@@ -57,6 +57,39 @@ fileprivate enum FileToolProposalStager {
 
     static func proposedReplaceMessage(relativePath: String, patchSetId: String) -> String {
         "Proposed replace in \(relativePath) (patch_set_id=\(patchSetId))."
+    }
+
+    static func proposedWriteMessage(relativePath: String, patchSetId: String) -> String {
+        "Proposed write to \(relativePath) (patch_set_id=\(patchSetId))."
+    }
+
+    static func stageWriteAndProposedMessage(
+        patchSetId: String,
+        toolCallId: String,
+        relativePath: String,
+        content: String,
+        messageBuilder: (String, String) -> String
+    ) async throws -> String {
+        try await stageWrite(
+            patchSetId: patchSetId,
+            toolCallId: toolCallId,
+            relativePath: relativePath,
+            content: content
+        )
+        return messageBuilder(relativePath, patchSetId)
+    }
+
+    static func stageDeleteAndProposedMessage(
+        patchSetId: String,
+        toolCallId: String,
+        relativePath: String
+    ) async throws -> String {
+        try await stageDelete(
+            patchSetId: patchSetId,
+            toolCallId: toolCallId,
+            relativePath: relativePath
+        )
+        return proposedDeleteFileMessage(relativePath: relativePath, patchSetId: patchSetId)
     }
 }
 
@@ -151,28 +184,16 @@ struct WriteFilesTool: AITool {
         return WriteFileEntry(url: url, relativePath: relativePath, content: content)
     }
 
-    private func stageWrite(
-            toolCallId: String, 
-            patchSetId: String, 
-            relativePath: String, 
-            content: String
-        ) async throws {
-        try await FileToolProposalStager.stageWrite(
-            patchSetId: patchSetId,
-            toolCallId: toolCallId,
-            relativePath: relativePath,
-            content: content
-        )
-    }
-
     private func applyWrite(url: URL, relativePath: String, content: String) async throws {
         try await FileToolWriteApplier.applyWrite(
-            fileSystemService: fileSystemService,
-            eventBus: eventBus,
-            url: url,
-            relativePath: relativePath,
-            content: content,
-            traceType: "fs.write_files_entry"
+            FileToolWriteApplier.ApplyWriteRequest(
+                fileSystemService: fileSystemService,
+                eventBus: eventBus,
+                url: url,
+                relativePath: relativePath,
+                content: content,
+                traceType: "fs.write_files_entry"
+            )
         )
     }
 
@@ -205,13 +226,14 @@ struct WriteFilesTool: AITool {
         for entry in files {
             let resolved = try resolvedWriteFileEntry(from: entry)
             if mode == "propose" {
-                try await stageWrite(
-                    toolCallId: toolCallId,
+                let message = try await FileToolProposalStager.stageWriteAndProposedMessage(
                     patchSetId: patchSetId,
+                    toolCallId: toolCallId,
                     relativePath: resolved.relativePath,
-                    content: resolved.content
+                    content: resolved.content,
+                    messageBuilder: FileToolProposalStager.proposedWriteMessage(relativePath:patchSetId:)
                 )
-                results.append(resolved.relativePath)
+                results.append(message)
                 continue
             }
 

@@ -22,8 +22,12 @@ class DependencyContainer {
         _commandRegistry = CommandRegistry()
         _uiRegistry = UIRegistry()
         _uiService = UIService(errorManager: errorManager, eventBus: _eventBus)
-        _workspaceService = WorkspaceService(errorManager: errorManager, eventBus: _eventBus)
         _fileSystemService = FileSystemService()
+        _workspaceService = WorkspaceService(
+            errorManager: errorManager,
+            eventBus: _eventBus,
+            fileSystemService: _fileSystemService
+        )
         _windowProvider = WindowProvider()
         _fileDialogService = FileDialogService(windowProvider: _windowProvider)
         _fileEditorService = FileEditorService(

@@ -65,7 +65,7 @@ struct WriteFileTool: AITool {
         let relativePath = pathValidator.relativePath(for: url)
 
         if mode == "propose" {
-            try await PatchSetStore.shared.stageWrite(
+            try await FileToolProposalStager.stageWrite(
                 patchSetId: patchSetId,
                 toolCallId: toolCallId,
                 relativePath: relativePath,
@@ -76,16 +76,21 @@ struct WriteFileTool: AITool {
                 "bytes": content.utf8.count,
                 "patchSetId": patchSetId
             ])
-            return "Proposed write to \(relativePath) (patch_set_id=\(patchSetId))."
+            return FileToolProposalStager.proposedWriteMessage(
+                relativePath: relativePath,
+                patchSetId: patchSetId
+            )
         }
 
         try await FileToolWriteApplier.applyWrite(
-            fileSystemService: fileSystemService,
-            eventBus: eventBus,
-            url: url,
-            relativePath: relativePath,
-            content: content,
-            traceType: "fs.write_file"
+            FileToolWriteApplier.ApplyWriteRequest(
+                fileSystemService: fileSystemService,
+                eventBus: eventBus,
+                url: url,
+                relativePath: relativePath,
+                content: content,
+                traceType: "fs.write_file"
+            )
         )
         return "Successfully wrote to \(relativePath)"
     }
