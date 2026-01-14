@@ -33,19 +33,7 @@ struct GlobalSearchOverlayView: View {
     }
 
     var body: some View {
-        OverlayScaffold(
-            title: localized("global_search.title"),
-            placeholder: localized("global_search.placeholder"),
-            query: $query,
-            textFieldMinWidth: AppConstants.Overlay.searchFieldMinWidth,
-            showsProgress: isSearching,
-            onSubmit: {
-                triggerSearch()
-            },
-            onClose: {
-                close()
-            }
-        ) {
+        overlayScaffold(using: overlayHeader) {
             List {
                 ForEach(resultsByFile) { group in
                     Section(group.file) {
@@ -85,15 +73,32 @@ struct GlobalSearchOverlayView: View {
         }
     }
 
-    private func debounceSearch() {
-        searchTask?.cancel()
-        searchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            triggerSearch()
-        }
+    private var overlayHeader: OverlayHeaderConfiguration {
+        OverlayHeaderConfiguration(
+            title: localized("global_search.title"),
+            placeholder: localized("global_search.placeholder"),
+            query: $query,
+            textFieldMinWidth: AppConstants.Overlay.searchFieldMinWidth,
+            showsProgress: isSearching,
+            onSubmit: {
+                Task { await triggerSearch() }
+            },
+            onClose: {
+                close()
+            }
+        )
     }
 
-    private func triggerSearch() {
+    private func debounceSearch() {
+        OverlaySearchDebouncer.reschedule(
+            searchTask: &searchTask,
+            debounceNanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds,
+            action: { await triggerSearch() }
+        )
+    }
+
+    @MainActor
+    private func triggerSearch() async {
         guard let root = workspace.currentDirectory?.standardizedFileURL else {
             resultsByFile = []
             return

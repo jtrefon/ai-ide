@@ -22,20 +22,24 @@ struct GoToSymbolOverlayView: View {
         self._isPresented = isPresented
     }
 
-    var body: some View {
-        OverlayScaffold(
+    private var overlayHeader: OverlayHeaderConfiguration {
+        OverlayHeaderConfiguration(
             title: OverlayLocalizer.localized("go_to_symbol.title"),
             placeholder: OverlayLocalizer.localized("go_to_symbol.placeholder"),
             query: $query,
             textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
             showsProgress: isSearching,
             onSubmit: {
-                openFirst(openToSide: NSEvent.modifierFlags.contains(.command))
+                Task { await refreshResults() }
             },
             onClose: {
                 close()
             }
-        ) {
+        )
+    }
+
+    var body: some View {
+        overlayScaffold(using: overlayHeader) {
             List {
                 ForEach(results, id: \.id) { item in
                     Button(action: {
@@ -68,7 +72,7 @@ struct GoToSymbolOverlayView: View {
                 searchService = WorkspaceSymbolSearchService(codebaseIndexProvider: { appState.codebaseIndex })
             }
             query = ""
-            refreshResults()
+            Task { await refreshResults() }
         }
         .onChange(of: query) { _, _ in
             debounceSearch()
@@ -82,13 +86,12 @@ struct GoToSymbolOverlayView: View {
         OverlaySearchDebouncer.reschedule(
             searchTask: &searchTask,
             debounceNanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds,
-            action: {
-                refreshResults()
-            }
+            action: { await refreshResults() }
         )
     }
 
-    private func refreshResults() {
+    @MainActor
+    private func refreshResults() async {
         guard let root = workspace.currentDirectory?.standardizedFileURL else {
             results = []
             return
@@ -106,18 +109,16 @@ struct GoToSymbolOverlayView: View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
 
         isSearching = true
-        Task { @MainActor in
-            let newResults = await searchService.search(
-                query: trimmed,
-                projectRoot: root,
-                currentFilePath: currentFilePath,
-                currentContent: currentContent,
-                currentLanguage: currentLanguage,
-                limit: 200
-            )
-            self.results = newResults
-            self.isSearching = false
-        }
+        let newResults = await searchService.search(
+            query: trimmed,
+            projectRoot: root,
+            currentFilePath: currentFilePath,
+            currentContent: currentContent,
+            currentLanguage: currentLanguage,
+            limit: 200
+        )
+        self.results = newResults
+        self.isSearching = false
     }
 
     private func openFirst(openToSide: Bool) {
