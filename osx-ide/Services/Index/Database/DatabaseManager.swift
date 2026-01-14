@@ -157,19 +157,14 @@ public class DatabaseManager {
     }
 
     public func getIndexedResourceCountScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Int {
-        let rootPath = projectRoot.standardizedFileURL.path
-        let rootPrefix = rootPath.hasSuffix("/") ? rootPath : (rootPath + "/")
-
-        let extPredicates = allowedExtensions
-            .map { _ in "LOWER(path) LIKE ?" }
-            .sorted()
-            .joined(separator: " OR ")
+        let rootPrefix = DatabaseScopedPathQueryBuilder.rootPrefix(projectRoot: projectRoot)
+        let extPredicates = DatabaseScopedPathQueryBuilder.fileExtensionPredicates(allowedExtensions: allowedExtensions)
 
         let sql = "SELECT COUNT(*) FROM resources WHERE path LIKE ? AND (\(extPredicates));"
-        
+
         var parameters: [Any] = [rootPrefix + "%"]
-        parameters.append(contentsOf: allowedExtensions.sorted().map { "%.\($0)" })
-        
+        parameters.append(contentsOf: DatabaseScopedPathQueryBuilder.fileExtensionParameters(allowedExtensions: allowedExtensions))
+
         return try scalarInt(sql: sql, parameters: parameters)
     }
 

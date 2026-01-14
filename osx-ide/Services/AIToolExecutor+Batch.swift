@@ -69,6 +69,36 @@ extension AIToolExecutor {
         }
     }
 
+    private func runScheduledTask(
+        toolCall: AIToolCall,
+        pathKey: String,
+        work: @escaping @Sendable () async -> ChatMessage
+    ) async throws -> ChatMessage {
+        if isWriteLikeTool(toolCall.name) {
+            return try await scheduler.runWriteTask(pathKey: pathKey) {
+                await work()
+            }
+        }
+
+        return try await scheduler.runReadTask {
+            await work()
+        }
+    }
+
+    private nonisolated static func makeExecuteScheduledFailedMessage(
+        toolCall: AIToolCall,
+        targetFile: String?,
+        error: Error
+    ) -> ChatMessage {
+        Self.makeToolExecutionMessage(
+            content: "Error: \(error.localizedDescription)",
+            toolName: toolCall.name,
+            status: .failed,
+            targetFile: targetFile,
+            toolCallId: toolCall.id
+        )
+    }
+
     nonisolated private static func makeExecutorUnavailableMessage(
         toolCall: AIToolCall,
         targetFile: String?
@@ -105,54 +135,22 @@ extension AIToolExecutor {
         targetFile: String?
     ) async -> ChatMessage {
         let pathKey = self.pathKey(for: toolCall)
-        let run = makeToolCallRunner(
-            toolCall: toolCall,
-            availableTools: availableTools,
-            conversationId: conversationId,
-            onProgress: onProgress,
-            targetFile: targetFile
-        )
-
         do {
-            if isWriteLikeTool(toolCall.name) {
-                return try await scheduler.runWriteTask(pathKey: pathKey) {
-                    await run()
+            return try await runScheduledTask(toolCall: toolCall, pathKey: pathKey) { [weak self] in
+                guard let self else {
+                    return Self.makeExecutorUnavailableMessage(toolCall: toolCall, targetFile: targetFile)
                 }
-            }
 
-            return try await scheduler.runReadTask {
-                await run()
+                return await self.executeToolCall(
+                    toolCall: toolCall,
+                    availableTools: availableTools,
+                    conversationId: conversationId,
+                    onProgress: onProgress,
+                    targetFile: targetFile
+                )
             }
         } catch {
-            return Self.makeToolExecutionMessage(
-                content: "Error: \(error.localizedDescription)",
-                toolName: toolCall.name,
-                status: .failed,
-                targetFile: targetFile,
-                toolCallId: toolCall.id
-            )
-        }
-    }
-
-    private func makeToolCallRunner(
-        toolCall: AIToolCall,
-        availableTools: [AITool],
-        conversationId: String?,
-        onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void,
-        targetFile: String?
-    ) -> @Sendable () async -> ChatMessage {
-        { [weak self] in
-            guard let self else {
-                return Self.makeExecutorUnavailableMessage(toolCall: toolCall, targetFile: targetFile)
-            }
-
-            return await self.executeToolCall(
-                toolCall: toolCall,
-                availableTools: availableTools,
-                conversationId: conversationId,
-                onProgress: onProgress,
-                targetFile: targetFile
-            )
+            return Self.makeExecuteScheduledFailedMessage(toolCall: toolCall, targetFile: targetFile, error: error)
         }
     }
 }
