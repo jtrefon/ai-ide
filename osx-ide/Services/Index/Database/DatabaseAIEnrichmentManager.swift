@@ -62,36 +62,26 @@ final class DatabaseAIEnrichmentManager {
     }
 
     func getAIEnrichedResourceCountScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Int {
-        let rootPath = projectRoot.standardizedFileURL.path
-        let rootPrefix = rootPath.hasSuffix("/") ? rootPath : (rootPath + "/")
-
-        let extPredicates = allowedExtensions
-            .map { _ in "LOWER(path) LIKE ?" }
-            .sorted()
-            .joined(separator: " OR ")
+        let rootPrefix = DatabaseScopedPathQueryBuilder.rootPrefix(projectRoot: projectRoot)
+        let extPredicates = DatabaseScopedPathQueryBuilder.fileExtensionPredicates(allowedExtensions: allowedExtensions)
 
         let sql = "SELECT COUNT(*) FROM resources WHERE ai_enriched = 1 AND path LIKE ? AND (\(extPredicates));"
 
         var parameters: [Any] = [rootPrefix + "%"]
-        parameters.append(contentsOf: allowedExtensions.sorted().map { "%.\($0)" })
+        parameters.append(contentsOf: DatabaseScopedPathQueryBuilder.fileExtensionParameters(allowedExtensions: allowedExtensions))
 
         return try database.scalarInt(sql: sql, parameters: parameters)
     }
 
     func getAverageAIQualityScoreScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Double {
-        let rootPath = projectRoot.standardizedFileURL.path
-        let rootPrefix = rootPath.hasSuffix("/") ? rootPath : (rootPath + "/")
-
-        let extPredicates = allowedExtensions
-            .map { _ in "LOWER(path) LIKE ?" }
-            .sorted()
-            .joined(separator: " OR ")
+        let rootPrefix = DatabaseScopedPathQueryBuilder.rootPrefix(projectRoot: projectRoot)
+        let extPredicates = DatabaseScopedPathQueryBuilder.fileExtensionPredicates(allowedExtensions: allowedExtensions)
 
         let sql = "SELECT AVG(quality_score) FROM resources WHERE ai_enriched = 1 " +
                 "AND quality_score > 0 AND path LIKE ? AND (\(extPredicates));"
 
         var parameters: [Any] = [rootPrefix + "%"]
-        parameters.append(contentsOf: allowedExtensions.sorted().map { "%.\($0)" })
+        parameters.append(contentsOf: DatabaseScopedPathQueryBuilder.fileExtensionParameters(allowedExtensions: allowedExtensions))
 
         return try database.scalarDouble(sql: sql, parameters: parameters)
     }
