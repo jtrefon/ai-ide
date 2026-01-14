@@ -19,8 +19,8 @@ struct QuickOpenOverlayView: View {
         self._isPresented = isPresented
     }
 
-    var body: some View {
-        OverlayScaffold(
+    private var overlayHeader: OverlayHeaderConfiguration {
+        OverlayHeaderConfiguration(
             title: OverlayLocalizer.localized("quick_open.title"),
             placeholder: OverlayLocalizer.localized("quick_open.placeholder"),
             query: $query,
@@ -32,7 +32,11 @@ struct QuickOpenOverlayView: View {
             onClose: {
                 close()
             }
-        ) {
+        )
+    }
+
+    var body: some View {
+        overlayScaffold(using: overlayHeader) {
             List {
                 if !recentCandidates().isEmpty && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Section(OverlayLocalizer.localized("quick_open.recent")) {
