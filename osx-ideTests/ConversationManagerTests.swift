@@ -22,11 +22,17 @@ final class ConversationManagerTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: historyKey)
         mockAIService = MockAIService()
         mockErrorManager = MockErrorManager()
+        let eventBus = EventBus()
+        let fileSystemService = FileSystemService()
         manager = ConversationManager(
             aiService: mockAIService,
             errorManager: mockErrorManager,
-            workspaceService: WorkspaceService(errorManager: mockErrorManager, eventBus: EventBus()),
-            eventBus: EventBus(),
+            workspaceService: WorkspaceService(
+                errorManager: mockErrorManager,
+                eventBus: eventBus,
+                fileSystemService: fileSystemService
+            ),
+            eventBus: eventBus,
             projectRoot: URL(fileURLWithPath: "/tmp")
         )
     }
