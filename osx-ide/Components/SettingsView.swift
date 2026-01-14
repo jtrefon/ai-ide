@@ -14,19 +14,19 @@ struct SettingsView: View {
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }
-    
+
     var body: some View {
         ZStack {
             // Native Glass Background Effects
             SettingsBackgroundView()
-            
+
             VStack(spacing: 16) {
                 TabView {
                     GeneralSettingsTab(ui: ui)
                         .tabItem {
                             Label(localized("settings.tabs.general"), systemImage: "gearshape")
                         }
-                    
+
                     AISettingsTab(viewModel: openRouterViewModel)
                         .tabItem {
                             Label(localized("settings.tabs.ai"), systemImage: "sparkles")
@@ -36,7 +36,7 @@ struct SettingsView: View {
                         .tabItem {
                             Label(localized("settings.tabs.agent"), systemImage: "bolt.fill")
                         }
-                    
+
                     LanguageModulesTab()
                         .tabItem {
                             Label(localized("settings.tabs.modules"), systemImage: "puzzlepiece")
@@ -62,13 +62,13 @@ private struct SettingsBackgroundView: View {
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
-            
+
             RoundedRectangle(cornerRadius: 32, style: .continuous)
                 .fill(Color.white.opacity(0.05))
                 .blur(radius: 40)
                 .offset(x: 180, y: -220)
                 .allowsHitTesting(false)
-            
+
             RoundedRectangle(cornerRadius: 32, style: .continuous)
                 .fill(Color.blue.opacity(0.08))
                 .blur(radius: 60)

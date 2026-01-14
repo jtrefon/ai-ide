@@ -7,9 +7,9 @@ struct MarkdownView<CodeBlockContent: View>: View {
     private let fontFamily: String?
 
     init(
-        markdown: String, 
-        fontSize: Double? = nil, 
-        fontFamily: String? = nil, 
+        markdown: String,
+        fontSize: Double? = nil,
+        fontFamily: String? = nil,
         @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent
     ) {
         self.document = MarkdownDocument.parse(markdown)
@@ -19,9 +19,9 @@ struct MarkdownView<CodeBlockContent: View>: View {
     }
 
     init(
-        document: MarkdownDocument, 
-        fontSize: Double? = nil, 
-        fontFamily: String? = nil, 
+        document: MarkdownDocument,
+        fontSize: Double? = nil,
+        fontFamily: String? = nil,
         @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent
     ) {
         self.document = document
@@ -108,12 +108,12 @@ private struct MarkdownRichTextView: View {
         var out = ""
         out.reserveCapacity(text.count)
 
-        for i in 0..<lines.count {
-            let line = String(lines[i])
+        for index in 0..<lines.count {
+            let line = String(lines[index])
             out += line
 
-            guard i < lines.count - 1 else { break }
-            let nextLine = String(lines[i + 1])
+            guard index < lines.count - 1 else { break }
+            let nextLine = String(lines[index + 1])
 
             if line.isEmpty || nextLine.isEmpty {
                 out += "\n"

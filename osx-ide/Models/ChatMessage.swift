@@ -27,14 +27,14 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
     public let reasoning: String?
     public let codeContext: String?
     public let timestamp: Date
-    
+
     // Tool execution properties
     public let toolName: String?
     public var toolStatus: ToolExecutionStatus?
     public var targetFile: String?
     public var toolCallId: String? // For Tool Output messages (referencing the call)
     public let toolCalls: [AIToolCall]? // For Assistant messages (the calls themselves)
-    
+
     public init(
         role: MessageRole,
         content: String,
@@ -53,7 +53,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         self.toolCallId = tool.toolCallId
         self.toolCalls = tool.toolCalls.isEmpty ? nil : tool.toolCalls
     }
-    
+
     // Helper to check if this is a tool execution message
     public var isToolExecution: Bool {
         return role == .tool && toolName != nil

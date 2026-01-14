@@ -78,7 +78,7 @@ final class DatabaseAIEnrichmentManager {
         let extPredicates = DatabaseScopedPathQueryBuilder.fileExtensionPredicates(allowedExtensions: allowedExtensions)
 
         let sql = "SELECT AVG(quality_score) FROM resources WHERE ai_enriched = 1 " +
-                "AND quality_score > 0 AND path LIKE ? AND (\(extPredicates));"
+            "AND quality_score > 0 AND path LIKE ? AND (\(extPredicates));"
 
         var parameters: [Any] = [rootPrefix + "%"]
         parameters.append(contentsOf: DatabaseScopedPathQueryBuilder.fileExtensionParameters(allowedExtensions: allowedExtensions))

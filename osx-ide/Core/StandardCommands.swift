@@ -35,13 +35,13 @@ extension CommandID {
     public static let fileOpenFolder: CommandID = "file.openFolder"
     public static let fileSave: CommandID = "file.save"
     public static let fileSaveAs: CommandID = "file.saveAs"
-    
+
     // MARK: - File Explorer
     public static let explorerOpenSelection: CommandID = "explorer.openSelection"
     public static let explorerDeleteSelection: CommandID = "explorer.deleteSelection"
     public static let explorerRenameSelection: CommandID = "explorer.renameSelection"
     public static let explorerRevealInFinder: CommandID = "explorer.revealInFinder"
-    
+
     // MARK: - Editor Operations
     public static let editorFormat: CommandID = "editor.format"
 

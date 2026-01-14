@@ -24,9 +24,9 @@ extension TextViewRepresentable {
         let parent: TextViewRepresentable
         var isProgrammaticUpdate = false
         var isProgrammaticSelectionUpdate = false
-        private var currentHighlightTask: Task<Void, Never>?
-        private var pendingHighlightTask: Task<Void, Never>?
-        private weak var attachedTextView: NSTextView?
+        fileprivate var currentHighlightTask: Task<Void, Never>?
+        fileprivate var pendingHighlightTask: Task<Void, Never>?
+        fileprivate weak var attachedTextView: NSTextView?
         let textStorageDelegateProxy: TextStorageDelegateProxy
 
         init(_ parent: TextViewRepresentable) {
@@ -44,18 +44,17 @@ extension TextViewRepresentable {
 
         @MainActor
         func textView(
-            _ textView: NSTextView, 
-            shouldChangeTextIn affectedCharRange: NSRange, 
+            _ textView: NSTextView,
+            shouldChangeTextIn affectedCharRange: NSRange,
             replacementString: String?
         ) -> Bool {
             if isProgrammaticUpdate { return true }
             guard let replacementString else { return true }
 
-
             // Only apply behaviors for simple insertions (typing). Let multi-char replacements go through.
             if replacementString.count != 1 { return true }
 
-            let ch = replacementString
+            let character = replacementString
             let openToClose: [String: String] = [
                 "(": ")",
                 "[": "]",
@@ -67,19 +66,19 @@ extension TextViewRepresentable {
             // Smart newline between braces: `{|}` -> `{
             //   |
             // }`
-            if ch == "\n" || ch == "\r" {
+            if character == "\n" || character == "\r" {
                 return handleContextualNewline(in: textView)
             }
 
             // Auto-close pairs
-            if let close = openToClose[ch] {
-                return handleAutoPair(open: ch, close: close, in: textView, affectedCharRange: affectedCharRange)
+            if let close = openToClose[character] {
+                return handleAutoPair(open: character, close: close, in: textView, affectedCharRange: affectedCharRange)
             }
 
             // Skip over an existing closing token
             let closingTokens: Set<String> = [")", "]", "}", "\"", "'"]
-            if closingTokens.contains(ch) {
-                return handleSkipOverClosingIfPresent(ch, in: textView)
+            if closingTokens.contains(character) {
+                return handleSkipOverClosingIfPresent(character, in: textView)
             }
 
             return true
@@ -87,9 +86,9 @@ extension TextViewRepresentable {
 
         @MainActor
         private func handleAutoPair(
-            open: String, 
-            close: String, 
-            in textView: NSTextView, 
+            open: String,
+            close: String,
+            in textView: NSTextView,
             affectedCharRange: NSRange
         ) -> Bool {
             // If text is selected, wrap it.
@@ -123,11 +122,11 @@ extension TextViewRepresentable {
         }
 
         @MainActor
-        private func handleSkipOverClosingIfPresent(_ ch: String, in textView: NSTextView) -> Bool {
+        private func handleSkipOverClosingIfPresent(_ closingToken: String, in textView: NSTextView) -> Bool {
             let sel = textView.selectedRange
             if sel.length != 0 { return true }
 
-            if nextCharacter(in: textView) == ch {
+            if nextCharacter(in: textView) == closingToken {
                 isProgrammaticSelectionUpdate = true
                 defer { isProgrammaticSelectionUpdate = false }
                 textView.setSelectedRange(NSRange(location: sel.location + 1, length: 0))
@@ -145,13 +144,13 @@ extension TextViewRepresentable {
 
             guard let textStorage = textView.textStorage else { return true }
 
-            let ns = textView.string as NSString
+            let nsString = textView.string as NSString
             let cursor = sel.location
-            let safeCursor = max(0, min(cursor, ns.length))
+            let safeCursor = max(0, min(cursor, nsString.length))
 
             let indentUnit = IndentationStyle.current().indentUnit(tabWidth: AppConstants.Editor.tabWidth)
-            let currentLineRange = ns.lineRange(for: NSRange(location: safeCursor, length: 0))
-            let currentLine = ns.substring(with: currentLineRange)
+            let currentLineRange = nsString.lineRange(for: NSRange(location: safeCursor, length: 0))
+            let currentLine = nsString.substring(with: currentLineRange)
             let baseIndent = leadingWhitespace(of: currentLine)
 
             // Portion of the current line before the cursor
@@ -180,7 +179,7 @@ extension TextViewRepresentable {
             var targetIndent = baseIndent
             if trimmedPrefix.hasSuffix("{") {
                 targetIndent = baseIndent + indentUnit
-            } else if nextNonWhitespaceCharacter(in: ns, from: safeCursor) == "}" {
+            } else if nextNonWhitespaceCharacter(in: nsString, from: safeCursor) == "}" {
                 targetIndent = dropOneIndent(from: baseIndent, indentUnit: indentUnit)
             }
 
@@ -196,15 +195,15 @@ extension TextViewRepresentable {
             return false
         }
 
-        private func nextNonWhitespaceCharacter(in ns: NSString, from index: Int) -> String? {
-            if index < 0 || index >= ns.length { return nil }
-            var i = index
-            while i < ns.length {
-                let ch = ns.substring(with: NSRange(location: i, length: 1))
-                if ch != " " && ch != "\t" && ch != "\n" && ch != "\r" {
-                    return ch
+        private func nextNonWhitespaceCharacter(in nsString: NSString, from index: Int) -> String? {
+            if index < 0 || index >= nsString.length { return nil }
+            var scanIndex = index
+            while scanIndex < nsString.length {
+                let character = nsString.substring(with: NSRange(location: scanIndex, length: 1))
+                if character != " " && character != "\t" && character != "\n" && character != "\r" {
+                    return character
                 }
-                i += 1
+                scanIndex += 1
             }
             return nil
         }
@@ -242,23 +241,23 @@ extension TextViewRepresentable {
 
         @MainActor
         private func currentLineIndent(in textView: NSTextView) -> String {
-            let ns = textView.string as NSString
+            let nsString = textView.string as NSString
             let cursor = textView.selectedRange.location
-            let safeCursor = max(0, min(cursor, ns.length))
+            let safeCursor = max(0, min(cursor, nsString.length))
 
             // Get the range of the current line using NSString APIs (robust and index-safe)
-            let lineRange = ns.lineRange(for: NSRange(location: safeCursor, length: 0))
+            let lineRange = nsString.lineRange(for: NSRange(location: safeCursor, length: 0))
             if lineRange.location == NSNotFound || lineRange.length == 0 { return "" }
 
-            let line = ns.substring(with: lineRange)
+            let line = nsString.substring(with: lineRange)
             return leadingWhitespace(of: line)
         }
 
-        private func leadingWhitespace(of s: String) -> String {
+        private func leadingWhitespace(of text: String) -> String {
             var result = ""
-            for ch in s {
-                if ch == " " || ch == "\t" {
-                    result.append(ch)
+            for character in text {
+                if character == " " || character == "\t" {
+                    result.append(character)
                 } else {
                     break
                 }
@@ -268,271 +267,18 @@ extension TextViewRepresentable {
 
         @MainActor
         private func previousCharacter(in textView: NSTextView) -> String? {
-            let ns = textView.string as NSString
+            let nsString = textView.string as NSString
             let pos = textView.selectedRange.location
-            if pos <= 0 || pos > ns.length { return nil }
-            return ns.substring(with: NSRange(location: pos - 1, length: 1))
+            if pos <= 0 || pos > nsString.length { return nil }
+            return nsString.substring(with: NSRange(location: pos - 1, length: 1))
         }
 
         @MainActor
         private func nextCharacter(in textView: NSTextView) -> String? {
-            let ns = textView.string as NSString
+            let nsString = textView.string as NSString
             let pos = textView.selectedRange.location
-            if pos < 0 || pos >= ns.length { return nil }
-            return ns.substring(with: NSRange(location: pos, length: 1))
-        }
-
-        @MainActor
-        func performAsyncHighlight(for text: String, in textView: NSTextView, language: String, font: NSFont) {
-            currentHighlightTask?.cancel()
-
-            let selectedRange = textView.selectedRange
-            let typingAttributes = textView.typingAttributes
-
-            currentHighlightTask = makeHighlightTask(
-                text: text,
-                language: language,
-                font: font,
-                textView: textView,
-                selectedRange: selectedRange,
-                typingAttributes: typingAttributes
-            )
-        }
-
-        @MainActor
-        private func makeHighlightTask(
-            text: String,
-            language: String,
-            font: NSFont,
-            textView: NSTextView,
-            selectedRange: NSRange,
-            typingAttributes: [NSAttributedString.Key: Any]
-        ) -> Task<Void, Never> {
-            Task {
-                let attributedString = SyntaxHighlighter.shared.highlight(text, language: language, font: font)
-
-                if Task.isCancelled { return }
-
-                self.isProgrammaticUpdate = true
-                applyHighlightResult(
-                    attributedString,
-                    textView: textView,
-                    language: language,
-                    font: font,
-                    selectedRange: selectedRange,
-                    typingAttributes: typingAttributes
-                )
-                self.isProgrammaticUpdate = false
-
-                refreshRulerAfterHighlight(in: textView)
-            }
-        }
-
-        @MainActor
-        private func applyHighlightResult(
-            _ attributedString: NSAttributedString,
-            textView: NSTextView,
-            language: String,
-            font: NSFont,
-            selectedRange: NSRange,
-            typingAttributes: [NSAttributedString.Key: Any]
-        ) {
-            if let textStorage = textView.textStorage {
-                applyHighlightAttributes(textStorage: textStorage, attributedString: attributedString, font: font)
-            }
-
-            if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
-                postHighlightDiagnosticsIfNeeded(from: attributedString, language: language)
-            }
-
-            restoreSelectionIfValid(selectedRange, in: textView)
-            restoreTypingAttributes(typingAttributes, in: textView)
-        }
-
-        func applyHighlightAttributes(textStorage: NSTextStorage, attributedString: NSAttributedString, font: NSFont) {
-            let fullRange = NSRange(location: 0, length: textStorage.length)
-            let applyLength = min(textStorage.length, attributedString.length)
-            let applyRange = NSRange(location: 0, length: applyLength)
-
-            textStorage.beginEditing()
-            textStorage.setAttributes([
-                .font: font,
-                .foregroundColor: NSColor.labelColor
-            ], range: fullRange)
-
-            attributedString.enumerateAttributes(in: applyRange, options: []) { attrs, range, _ in
-                var merged: [NSAttributedString.Key: Any] = [
-                    .font: font
-                ]
-                if let fg = attrs[.foregroundColor] {
-                    merged[.foregroundColor] = fg
-                }
-                textStorage.addAttributes(merged, range: range)
-            }
-
-            textStorage.endEditing()
-        }
-
-        private func postHighlightDiagnosticsIfNeeded(from attributedString: NSAttributedString, language: String) {
-            let diagnostics = Self.buildHighlightDiagnostics(from: attributedString, language: language)
-            NotificationCenter.default.post(
-                name: .editorHighlightDiagnosticsUpdated,
-                object: nil,
-                userInfo: ["diagnostics": diagnostics]
-            )
-        }
-
-        private func restoreSelectionIfValid(_ selectedRange: NSRange, in textView: NSTextView) {
-            if selectedRange.location != NSNotFound,
-               selectedRange.location + selectedRange.length <= (textView.string as NSString).length {
-                textView.setSelectedRange(selectedRange)
-            }
-        }
-
-        private func restoreTypingAttributes(
-            _ typingAttributes: [NSAttributedString.Key: Any], 
-            in textView: NSTextView
-        ) {
-            textView.typingAttributes = typingAttributes
-        }
-
-        private func refreshRulerAfterHighlight(in textView: NSTextView) {
-            if let container = textView.textContainer {
-                textView.layoutManager?.ensureLayout(for: container)
-            }
-            if let scrollView = textView.enclosingScrollView {
-                scrollView.verticalRulerView?.needsDisplay = true
-                scrollView.tile()
-            }
-        }
-
-        static func buildHighlightDiagnostics(from attributed: NSAttributedString, language: String) -> String {
-            let fullRange = NSRange(location: 0, length: attributed.length)
-            var unique: Set<String> = []
-
-            func rgbaKey(for color: NSColor) -> String? {
-                guard let rgb = color.usingColorSpace(.deviceRGB) else { return nil }
-                return "\(rgb.redComponent),\(rgb.greenComponent),\(rgb.blueComponent),\(rgb.alphaComponent)"
-            }
-
-            attributed.enumerateAttribute(.foregroundColor, in: fullRange, options: []) { value, _, _ in
-                guard let c = value as? NSColor else { return }
-                if let key = rgbaKey(for: c) {
-                    unique.insert(key)
-                }
-            }
-
-            func containsColor(_ target: NSColor) -> Bool {
-                guard let targetKey = rgbaKey(for: target) else { return false }
-                return unique.contains(targetKey)
-            }
-
-            let normalized = LanguageIdentifierNormalizer.normalize(language)
-
-            let languageEnum = CodeLanguage(rawValue: normalized) ?? .unknown
-            let module = LanguageModuleManager.shared.getModule(for: languageEnum)
-            let moduleId = module?.id.rawValue ?? "none"
-
-            if let provider = module as? HighlightDiagnosticsPaletteProviding {
-                var parts: [String] = [
-                    "lang=\(normalized)",
-                    "module=\(moduleId)",
-                    "unique=\(unique.count)"
-                ]
-
-                for swatch in provider.highlightDiagnosticsPalette {
-                    parts.append("\(swatch.name)=\(containsColor(swatch.color))")
-                }
-
-                return parts.joined(separator: ";")
-            }
-
-            // Fallback: expose a few known system colors to help debug non-module highlighting.
-            let hasIndigo = containsColor(.systemIndigo)
-            let hasTeal = containsColor(.systemTeal)
-            let hasYellow = containsColor(.systemYellow)
-            let hasPink = containsColor(.systemPink)
-            let hasOrange = containsColor(.systemOrange)
-            let hasBlue = containsColor(.systemBlue)
-            let hasGray = containsColor(.systemGray)
-
-            return "lang=\(normalized);module=\(moduleId);unique=\(unique.count);indigo=\(hasIndigo);teal=\(hasTeal);yellow=\(hasYellow);pink=\(hasPink);orange=\(hasOrange);blue=\(hasBlue);gray=\(hasGray)"
-        }
-
-        @MainActor
-        private func scheduleHighlight(for text: String, in textView: NSTextView, language: String, font: NSFont) {
-            pendingHighlightTask?.cancel()
-            pendingHighlightTask = Task { [weak self, weak textView] in
-                try? await Task.sleep(nanoseconds: 50_000_000)
-                guard !Task.isCancelled else { return }
-                guard let self, let textView else { return }
-                await MainActor.run {
-                    self.performAsyncHighlight(for: text, in: textView, language: language, font: font)
-                }
-            }
-        }
-
-        @MainActor
-        private func editorFont(for textView: NSTextView) -> NSFont {
-            textView.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        }
-
-        @MainActor
-        private func scheduleHighlightForCurrentEditorText(in textView: NSTextView) {
-            scheduleHighlight(
-                for: textView.string,
-                in: textView,
-                language: parent.language,
-                font: editorFont(for: textView)
-            )
-        }
-
-        @MainActor
-        fileprivate func handleDidProcessEditing(text: String) {
-            if isProgrammaticUpdate { return }
-            guard let textView = attachedTextView else { return }
-            scheduleHighlightForCurrentEditorText(in: textView)
-        }
-
-        @MainActor
-        func textDidChange(_ notification: Notification) {
-            if isProgrammaticUpdate { return }
-            guard let textView = notification.object as? NSTextView else { return }
-
-            // Mutate bindings on main actor
-            let newText = textView.string
-            let newRange = textView.selectedRange
-
-            self.parent.text = newText
-            self.parent.selectedRange = newRange
-
-            // Update the selection context with current selected text and range
-            updateSelectionContext(from: textView)
-
-            scheduleHighlightForCurrentEditorText(in: textView)
-        }
-
-        @MainActor
-        func textViewDidChangeSelection(_ notification: Notification) {
-            if isProgrammaticUpdate || isProgrammaticSelectionUpdate { return }
-            guard let textView = notification.object as? NSTextView else { return }
-            self.parent.selectedRange = textView.selectedRange
-            updateSelectionContext(from: textView)
-        }
-
-        @MainActor
-        private func updateSelectionContext(from textView: NSTextView) {
-            let range = textView.selectedRange
-            if range.location != NSNotFound,
-               range.length > 0,
-               range.location + range.length <= (textView.string as NSString).length {
-                let selected = (textView.string as NSString).substring(with: range)
-                parent.selectionContext.selectedText = selected
-                parent.selectionContext.selectedRange = range
-            } else {
-                parent.selectionContext.selectedText = ""
-                parent.selectionContext.selectedRange = nil
-            }
+            if pos < 0 || pos >= nsString.length { return nil }
+            return nsString.substring(with: NSRange(location: pos, length: 1))
         }
     }
 }

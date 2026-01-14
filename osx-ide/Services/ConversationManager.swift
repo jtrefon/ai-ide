@@ -12,7 +12,7 @@ import SwiftUI
 final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published var currentInput: String = ""
     @Published var isSending: Bool = false
-    @Published var error: String? = nil
+    @Published var error: String?
     @Published var currentMode: AIMode = .chat
     @Published var cancelledToolCallIds: Set<String> = []
 

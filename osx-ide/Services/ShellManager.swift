@@ -20,13 +20,13 @@ protocol ShellManagerDelegate: AnyObject {
 @MainActor
 class ShellManager: NSObject {
     weak var delegate: ShellManagerDelegate?
-    
+
     private var shellProcess: Process?
     private var readHandle: FileHandle?
     private var writeHandle: FileHandle?
     private var ptyMasterFD: Int32?
     private var ptySlaveFD: Int32?
-    
+
     private let queue = DispatchQueue(label: "com.osx-ide.shell-manager", qos: .userInitiated)
     private let cleanupLock = NSLock()
     nonisolated(unsafe) private var _isCleaningUp = false
@@ -34,7 +34,7 @@ class ShellManager: NSObject {
         get { cleanupLock.withLock { _isCleaningUp } }
         set { cleanupLock.withLock { _isCleaningUp = newValue } }
     }
-    
+
     /// Start the shell process in the specified directory
     func start(in directory: URL? = nil) {
         start(in: directory, arguments: ["-l", "-i"], environmentOverrides: [:])
@@ -165,8 +165,8 @@ class ShellManager: NSObject {
         if environmentOverrides["PROMPT_EOL_MARK"] == nil {
             environment["PROMPT_EOL_MARK"] = ""
         }
-        for (k, v) in environmentOverrides {
-            environment[k] = v
+        for (key, value) in environmentOverrides {
+            environment[key] = value
         }
         return environment
     }
@@ -185,13 +185,13 @@ class ShellManager: NSObject {
             }
         }
     }
-    
+
     /// Send input string to the shell
     func sendInput(_ text: String) {
         guard let data = text.data(using: .utf8) else { return }
         sendInput(data)
     }
-    
+
     /// Send raw input data to the shell
     func sendInput(_ data: Data) {
         guard !isCleaningUp, let writeHandle = writeHandle else { return }
@@ -212,7 +212,7 @@ class ShellManager: NSObject {
             }
         }
     }
-    
+
     /// Interrupt the current shell process
     func interrupt() {
         if let process = shellProcess, process.isRunning {
@@ -220,20 +220,20 @@ class ShellManager: NSObject {
         }
         sendInput("\u{03}") // Ctrl+C
     }
-    
+
     /// Terminate the shell process
     func terminate() {
         cleanup()
     }
-    
+
     // MARK: - Private Methods
-    
+
     private func setupOutputMonitoring() {
         guard let readHandle = readHandle else { return }
-        
+
         readHandle.readabilityHandler = { [weak self] handle in
             guard let self = self, !self.isCleaningUp else { return }
-            
+
             let data = handle.availableData
             guard !data.isEmpty else {
                 Task { @MainActor [weak self] in
@@ -244,7 +244,7 @@ class ShellManager: NSObject {
                 }
                 return
             }
-            
+
             if let output = String(data: data, encoding: .utf8) {
                 Task { @MainActor [weak self] in
                     guard let self = self, !self.isCleaningUp else { return }
@@ -253,15 +253,15 @@ class ShellManager: NSObject {
             }
         }
     }
-    
+
     private func cleanup() {
         guard !isCleaningUp else { return }
         isCleaningUp = true
-        
+
         let handleToClose = readHandle
         let writeToClose = writeHandle
         readHandle?.readabilityHandler = nil
-        
+
         if let process = shellProcess, process.isRunning {
             process.terminate()
             queue.asyncAfter(deadline: .now() + 0.1) {
@@ -273,14 +273,14 @@ class ShellManager: NSObject {
             try? handleToClose?.close()
             try? writeToClose?.close()
         }
-        
+
         shellProcess = nil
         readHandle = nil
         writeHandle = nil
         ptyMasterFD = nil
         ptySlaveFD = nil
     }
-    
+
     private func notifyError(_ message: String) {
         Task { @MainActor in
             self.delegate?.shellManager(self, didFailWithError: message)

@@ -28,7 +28,7 @@ public class DatabaseManager {
     private lazy var symbolManager = DatabaseSymbolManager(database: self)
     private lazy var queryExecutor = DatabaseQueryExecutor(database: self)
     private lazy var aiEnrichmentManager = DatabaseAIEnrichmentManager(database: self)
-    
+
     public init(path: String) throws {
         self.dbPath = path
         queue.setSpecific(key: queueKey, value: queueID)
@@ -38,18 +38,18 @@ public class DatabaseManager {
 
     public func getAIEnrichedResourceCountScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Int {
         try aiEnrichmentManager.getAIEnrichedResourceCountScoped(
-                    projectRoot: projectRoot, 
-                    allowedExtensions: allowedExtensions
-                )
+            projectRoot: projectRoot,
+            allowedExtensions: allowedExtensions
+        )
     }
 
     public func getAverageAIQualityScoreScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Double {
         try aiEnrichmentManager.getAverageAIQualityScoreScoped(
-                    projectRoot: projectRoot, 
-                    allowedExtensions: allowedExtensions
-                )
+            projectRoot: projectRoot,
+            allowedExtensions: allowedExtensions
+        )
     }
-    
+
     deinit {
         close()
     }
@@ -59,14 +59,14 @@ public class DatabaseManager {
             close()
         }
     }
-    
+
     private func open() throws {
         if sqlite3_open_v2(
-                    dbPath, 
-                    &db, 
-                    SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, 
-                    nil
-                ) != SQLITE_OK {
+            dbPath,
+            &db,
+            SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        ) != SQLITE_OK {
             throw DatabaseError.openFailed
         }
 
@@ -77,18 +77,18 @@ public class DatabaseManager {
         try execute(sql: "PRAGMA synchronous = NORMAL;")
         try execute(sql: "PRAGMA foreign_keys = ON;")
     }
-    
+
     private func close() {
         if db != nil {
             sqlite3_close(db)
             db = nil
         }
     }
-    
+
     private func createTables() throws {
         try schemaManager.createTables()
     }
-    
+
     // MARK: - Memory Operations
 
     public func saveMemory(_ memory: MemoryEntry) throws {
@@ -106,7 +106,7 @@ public class DatabaseManager {
     public func saveSymbols(_ symbols: [Symbol]) throws {
         try symbolManager.saveSymbols(symbols)
     }
-    
+
     public func deleteSymbols(for resourceId: String) throws {
         try symbolManager.deleteSymbols(for: resourceId)
     }
@@ -147,12 +147,7 @@ public class DatabaseManager {
         try symbolManager.searchSymbols(nameLike: query, limit: limit)
     }
 
-    public func getIndexStatsCounts() throws -> (
-            indexedResourceCount: Int, 
-            symbolCount: Int, 
-            memoryCount: Int, 
-            longTermMemoryCount: Int
-        ) {
+    public func getIndexStatsCounts() throws -> IndexStatsCounts {
         try queryExecutor.getIndexStatsCounts()
     }
 
@@ -230,16 +225,16 @@ public class DatabaseManager {
             }
         }
     }
-    
+
     func bindParameter(statement: OpaquePointer, index: Int32, value: Any) throws {
         if let string = value as? String {
             sqlite3_bind_text(
-                    statement, 
-                    index, 
-                    (string as NSString).utf8String, 
-                    -1, 
-                    unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-                )
+                statement,
+                index,
+                (string as NSString).utf8String,
+                -1,
+                unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            )
         } else if let int = value as? Int {
             sqlite3_bind_int(statement, index, Int32(int))
         } else if let double = value as? Double {
@@ -254,15 +249,15 @@ public class DatabaseManager {
             // Fallback for other types
             let stringValue = "\(value)"
             sqlite3_bind_text(
-                    statement, 
-                    index, 
-                    (stringValue as NSString).utf8String, 
-                    -1, 
-                    unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-                )
+                statement,
+                index,
+                (stringValue as NSString).utf8String,
+                -1,
+                unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            )
         }
     }
-    
+
     public func execute(sql: String) throws {
         try syncOnQueue {
             try executeUnsafe(sql: sql)

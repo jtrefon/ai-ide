@@ -20,6 +20,6 @@ public protocol AITool: Sendable {
     var name: String { get }
     var description: String { get }
     var parameters: [String: Any] { get } // JSON Schema
-    
+
     func execute(arguments: ToolArguments) async throws -> String
 }

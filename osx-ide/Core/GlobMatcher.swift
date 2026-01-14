@@ -10,13 +10,13 @@ public enum GlobMatcher {
     public static func match(path: String, pattern: String) -> Bool {
         // Simple implementation using fnmatch for standard glob patterns.
         // For more complex ** support, we might need a custom regex-based matcher.
-        
+
         let pattern = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !pattern.isEmpty else { return false }
-        
+
         // Handle ** by converting to regex or simpler recursive checks if needed.
         // For now, we use fnmatch which handles standard shell globbing.
-        
+
         return fnmatch(pattern, path, 0) == 0
     }
 }

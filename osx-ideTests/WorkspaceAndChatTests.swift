@@ -61,11 +61,11 @@ struct WorkspaceAndChatTests {
 
         let description = manager.currentError?.errorDescription ?? ""
         #expect(
-            description.contains("WorkspaceService.rename"), 
+            description.contains("WorkspaceService.rename"),
             "Expected error description to include context"
         )
         #expect(
-            description.contains("Test error"), 
+            description.contains("Test error"),
             "Expected error description to include underlying message"
         )
     }

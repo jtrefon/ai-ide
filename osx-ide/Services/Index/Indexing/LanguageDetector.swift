@@ -10,7 +10,7 @@ import Foundation
 public struct LanguageDetector {
     public static func detect(at url: URL) -> CodeLanguage {
         let pathExtension = url.pathExtension.lowercased()
-        
+
         switch pathExtension {
         case "swift":
             return .swift

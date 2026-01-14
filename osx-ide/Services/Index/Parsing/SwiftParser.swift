@@ -25,19 +25,19 @@ private enum SwiftRegexParser {
             (.protocol, #"^\s*(?:public\s+|private\s+|internal\s+)*protocol\s+([A-Z][a-zA-Z0-9_]*)"#),
             (.extension, #"^\s*(?:public\s+|private\s+|internal\s+)*extension\s+([A-Z][a-zA-Z0-9_.]*)"#),
             (
-                .function, 
+                .function,
                 #"^\s*(?:final\s+|override\s+|public\s+|private\s+|internal\s+|static\s+|class\s+)*func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:<[^>]+>)?\s*\("#
             ),
             (.initializer, #"^\s*(?:public\s+|private\s+|internal\s+)*init\s*(?:\?|\!)?\s*\("#),
             (
-                .variable, 
+                .variable,
                 "^\\s*(?:public\\s+|private\\s+|internal\\s+|static\\s+|class\\s+|let\\s+|var\\s+)+" +
                     "(?:var|let)\\s+([a-zA-Z0-9_]+)"
             )
         ]
 
-        for (i, line) in lines.enumerated() {
-            let lineNum = i + 1
+        for (index, line) in lines.enumerated() {
+            let lineNum = index + 1
 
             for (kind, pattern) in patterns {
                 if let match = matchRegex(pattern, in: line) {

@@ -84,22 +84,22 @@ struct IndexFileEnumerator {
         let components = normalized.split(separator: "/").map(String.init)
 
         for pattern in excludePatterns {
-            let p = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
-            if p.isEmpty { continue }
+            let trimmedPattern = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedPattern.isEmpty { continue }
 
-            if p.contains("*") {
-                let needle = p.replacingOccurrences(of: "*", with: "")
+            if trimmedPattern.contains("*") {
+                let needle = trimmedPattern.replacingOccurrences(of: "*", with: "")
                 if !needle.isEmpty, normalized.contains(needle) { return true }
                 continue
             }
 
-            if p.contains("/") {
-                let needle = p.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if trimmedPattern.contains("/") {
+                let needle = trimmedPattern.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 if !needle.isEmpty, normalized.contains(needle) { return true }
                 continue
             }
 
-            if components.contains(p) { return true }
+            if components.contains(trimmedPattern) { return true }
         }
 
         return false

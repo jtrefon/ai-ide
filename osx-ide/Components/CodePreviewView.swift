@@ -14,7 +14,7 @@ struct CodePreviewView: View {
     var fontSize: Double
     var fontFamily: String
     @State private var isCopied = false
-    
+
     init(
         code: String,
         language: String? = nil,
@@ -28,14 +28,14 @@ struct CodePreviewView: View {
         self.fontSize = fontSize
         self.fontFamily = fontFamily
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(title)
                     .font(.caption)
                     .foregroundColor(.secondary)
-                
+
                 if let language = language {
                     Text("•")
                         .font(.caption)
@@ -48,9 +48,9 @@ struct CodePreviewView: View {
                         .background(Color.gray.opacity(0.2))
                         .cornerRadius(4)
                 }
-                
+
                 Spacer()
-                
+
                 Button(action: copyCode) {
                     HStack {
                         Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
@@ -61,7 +61,7 @@ struct CodePreviewView: View {
                 .buttonStyle(BorderlessButtonStyle())
                 .foregroundColor(.blue)
             }
-            
+
             Text(code)
                 .font(resolveFont(size: fontSize, family: fontFamily))
                 .padding(8)
@@ -71,19 +71,19 @@ struct CodePreviewView: View {
         }
         .padding(.top, 4)
     }
-    
+
     private func resolveFont(size: Double, family: String) -> Font {
         if let nsFont = NSFont(name: family, size: CGFloat(size)) {
             return Font(nsFont)
         }
         return .system(size: CGFloat(size), weight: .regular, design: .monospaced)
     }
-    
+
     private func copyCode() {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(code, forType: .string)
-        
+
         isCopied = true
         Task {
             try? await Task.sleep(nanoseconds: 2_000_000_000)

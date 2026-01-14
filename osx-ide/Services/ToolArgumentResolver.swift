@@ -13,7 +13,7 @@ final class ToolArgumentResolver {
     private let fileSystemService: FileSystemService
     private let projectRoot: URL
     private let defaultFilePathProvider: (@MainActor () -> String?)?
-    
+
     init(
         fileSystemService: FileSystemService,
         projectRoot: URL,
@@ -23,7 +23,7 @@ final class ToolArgumentResolver {
         self.projectRoot = projectRoot
         self.defaultFilePathProvider = defaultFilePathProvider
     }
-    
+
     /// Resolves the target file for a tool call
     func resolveTargetFile(for toolCall: AIToolCall) -> String? {
         return resolvedOrInjectedFilePath(
@@ -31,14 +31,14 @@ final class ToolArgumentResolver {
             toolName: toolCall.name
         )
     }
-    
+
     /// Builds merged arguments for tool execution
     func buildMergedArguments(
         toolCall: AIToolCall,
         conversationId: String?
     ) async -> [String: Any] {
         var mergedArguments = toolCall.arguments
-        
+
         // Inject file path if needed
         if Self.isFilePathLikeTool(toolCall.name) {
             let explicitPath = Self.explicitFilePath(from: toolCall.arguments)
@@ -49,10 +49,10 @@ final class ToolArgumentResolver {
                 mergedArguments["path"] = injectedPath
             }
         }
-        
+
         return mergedArguments
     }
-    
+
     /// Determines if a file path should be injected for the tool
     private func resolvedOrInjectedFilePath(
         arguments: [String: Any],
@@ -64,23 +64,23 @@ final class ToolArgumentResolver {
         }
         return nil
     }
-    
+
     /// Checks if a tool requires file path injection
     private static func isFilePathLikeTool(_ toolName: String) -> Bool {
         switch toolName {
-        case "read_file", "write_file", "write_files", "create_file", 
-                "delete_file", "replace_in_file", "index_read_file":
+        case "read_file", "write_file", "write_files", "create_file",
+             "delete_file", "replace_in_file", "index_read_file":
             return true
         default:
             return false
         }
     }
-    
+
     /// Extracts explicit file path from tool arguments
     private static func explicitFilePath(from arguments: [String: Any]) -> String? {
         return arguments["path"] as? String
     }
-    
+
     /// Resolves injected path for file-based tools
     private func resolveInjectedPath(
         toolName: String,
@@ -89,11 +89,11 @@ final class ToolArgumentResolver {
         if let explicitPath = explicitPath {
             return explicitPath
         }
-        
+
         // Use default file path provider if available
         return defaultFilePathProvider?()
     }
-    
+
     /// Generates a unique path key for tool scheduling
     func pathKey(for toolCall: AIToolCall) -> String {
         if let targetFile = resolveTargetFile(for: toolCall) {
@@ -101,7 +101,7 @@ final class ToolArgumentResolver {
         }
         return toolCall.name
     }
-    
+
     /// Checks if a tool performs write operations
     func isWriteLikeTool(_ toolName: String) -> Bool {
         switch toolName {

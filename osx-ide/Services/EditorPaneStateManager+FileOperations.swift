@@ -41,9 +41,9 @@ extension EditorPaneStateManager {
             defaultName = "Untitled.swift"
         }
         guard let url = await fileDialogService.saveFile(
-                    defaultFileName: defaultName,
-                    allowedContentTypes: [.swiftSource, .plainText]
-                ) else {
+            defaultFileName: defaultName,
+            allowedContentTypes: [.swiftSource, .plainText]
+        ) else {
             return
         }
         fileEditorService.saveFileAs(to: url)

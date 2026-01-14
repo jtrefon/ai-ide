@@ -8,10 +8,10 @@ final class EditorTabManager {
     }
 
     func activateTabByFilePath(
-            filePath: String, 
-            tabs: [EditorPaneStateManager.EditorTab], 
-            activateTabByID: (UUID) -> Void
-        ) {
+        filePath: String,
+        tabs: [EditorPaneStateManager.EditorTab],
+        activateTabByID: (UUID) -> Void
+    ) {
         guard let idx = tabs.firstIndex(where: { $0.filePath == filePath }) else { return }
         activateTabByID(tabs[idx].id)
     }

@@ -26,7 +26,7 @@ struct GrepTool: AITool {
             "required": ["pattern", "path"]
         ]
     }
-    
+
     let pathValidator: PathValidator
 
     func execute(arguments: ToolArguments) async throws -> String {
@@ -37,40 +37,40 @@ struct GrepTool: AITool {
         guard let path = arguments["path"] as? String else {
             throw AppError.aiServiceError("Missing 'path' argument for grep")
         }
-        
+
         let url = try pathValidator.validateAndResolve(path)
         let results = try await searchInDirectory(url: url, pattern: pattern)
-        
+
         return results.isEmpty ? "No matches found." : results.joined(separator: "\n")
     }
-    
+
     private func searchInDirectory(url: URL, pattern: String) async throws -> [String] {
         let fileManager = FileManager.default
         var results: [String] = []
-        
+
         let enumerator = fileManager.enumerator(
-                    at: url, 
-                    includingPropertiesForKeys: [.isRegularFileKey], 
-                    options: [.skipsHiddenFiles]
-                )
-        
+            at: url,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+
         while let fileURL = enumerator?.nextObject() as? URL {
             if await !isRegularFile(fileURL: fileURL) {
                 continue
             }
-            
+
             let fileResults = await searchInFile(fileURL: fileURL, pattern: pattern)
             results.append(contentsOf: fileResults)
-            
+
             if results.count > 100 {
                 results.append("... too many results, truncated.")
                 break
             }
         }
-        
+
         return results
     }
-    
+
     private func isRegularFile(fileURL: URL) async -> Bool {
         do {
             let resourceValues = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
@@ -79,19 +79,19 @@ struct GrepTool: AITool {
             return false
         }
     }
-    
+
     private func searchInFile(fileURL: URL, pattern: String) async -> [String] {
         do {
             let content = try String(contentsOf: fileURL, encoding: .utf8)
             let lines = content.components(separatedBy: .newlines)
             var results: [String] = []
-            
+
             for (index, line) in lines.enumerated() {
                 if line.contains(pattern) {
                     results.append("\(fileURL.path):\(index + 1): \(line.trimmingCharacters(in: .whitespaces))")
                 }
             }
-            
+
             return results
         } catch {
             // Skip files that can't be read as UTF-8
@@ -111,18 +111,18 @@ struct FindFileTool: AITool {
                 "pattern": [
                     "type": "string",
                     "description": "The name pattern to search for (e.g., 'train_cli', 'ProfileView'). " +
-                    "Partial matches allowed."
+                        "Partial matches allowed."
                 ],
                 "path": [
                     "type": "string",
                     "description": "The absolute path to start searching from " +
-                    "(defaults to project root if context aware, otherwise required)."
+                        "(defaults to project root if context aware, otherwise required)."
                 ]
             ],
             "required": ["pattern", "path"]
         ]
     }
-    
+
     let pathValidator: PathValidator
 
     func execute(arguments: ToolArguments) async throws -> String {
@@ -133,34 +133,34 @@ struct FindFileTool: AITool {
         guard let path = arguments["path"] as? String else {
             throw AppError.aiServiceError("Missing 'path' argument for find_file")
         }
-        
+
         let url = try pathValidator.validateAndResolve(path)
         let enumerator = FileManager.default.enumerator(
-                    at: url, 
-                    includingPropertiesForKeys: [.isRegularFileKey], 
-                    options: [.skipsHiddenFiles]
-                )
-        
+            at: url,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+
         var matches: [String] = []
         let lowerPattern = pattern.lowercased()
-        
+
         while let fileURL = enumerator?.nextObject() as? URL {
             let fileName = fileURL.lastPathComponent.lowercased()
             if fileName.contains(lowerPattern) {
                 let relativePath = fileURL.path.replacingOccurrences(of: url.path + "/", with: "")
                 matches.append(relativePath)
             }
-            
+
             if matches.count >= 50 {
                 matches.append("... (truncated)")
                 break
             }
         }
-        
+
         if matches.isEmpty {
             return "No files found matching '\(pattern)'."
         }
-        
+
         return "Found \(matches.count) file(s):\n" + matches.joined(separator: "\n")
     }
 }

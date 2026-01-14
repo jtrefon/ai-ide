@@ -33,11 +33,11 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: max(10, context.ui.fontSize - 2)))
                         .foregroundColor(.secondary)
-                    
+
                     TextField(localized("file_explorer.search.placeholder"), text: $searchQuery)
                         .textFieldStyle(.plain)
                         .font(.system(size: CGFloat(context.ui.fontSize)))
-                    
+
                     if !searchQuery.isEmpty {
                         Button(action: { searchQuery = "" }) {
                             Image(systemName: "xmark.circle.fill")
@@ -54,12 +54,12 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                     RoundedRectangle(cornerRadius: 6)
                         .stroke(Color.primary.opacity(0.1), lineWidth: 1)
                 )
-                
+
                 Button(action: {
                     refreshToken += 1
                 }) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: max(10, context.ui.fontSize - 2))) 
+                        .font(.system(size: max(10, context.ui.fontSize - 2)))
                 }
                 .buttonStyle(BorderlessButtonStyle())
                 .help(localized("file_explorer.refresh_help"))
@@ -84,7 +84,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 onOpenFile: { url in
                     Task {
                         try? await context.commandRegistry.execute(
-                            .explorerOpenSelection, 
+                            .explorerOpenSelection,
                             args: ExplorerPathArgs(path: url.path)
                         )
                     }
@@ -100,7 +100,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 onDeleteItem: { url in
                     Task {
                         try? await context.commandRegistry.execute(
-                            .explorerDeleteSelection, 
+                            .explorerDeleteSelection,
                             args: ExplorerPathArgs(path: url.path)
                         )
                         await MainActor.run {
@@ -112,7 +112,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 onRenameItem: { url, newName in
                     Task {
                         try? await context.commandRegistry.execute(
-                            .explorerRenameSelection, 
+                            .explorerRenameSelection,
                             args: ExplorerRenameArgs(path: url.path, newName: newName)
                         )
                         await MainActor.run {
@@ -124,7 +124,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 onRevealInFinder: { url in
                     Task {
                         try? await context.commandRegistry.execute(
-                            .explorerRevealInFinder, 
+                            .explorerRevealInFinder,
                             args: ExplorerPathArgs(path: url.path)
                         )
                     }
@@ -221,7 +221,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
         defer { isShowingNewFileSheet = false }
         let trimmedName = newFileName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
         context.workspace.createFile(named: trimmedName)
         refreshToken += 1
     }
@@ -230,7 +230,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
         defer { isShowingNewFolderSheet = false }
         let trimmedName = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
         context.workspace.createFolder(named: trimmedName)
         refreshToken += 1
     }

@@ -31,9 +31,9 @@ final class WorkspaceSymbolSearchService {
         if needle.isEmpty {
             guard let currentFilePath, let currentContent, let currentLanguage else { return [] }
             guard let rel = Self.relativePath(
-                    projectRoot: projectRoot, 
-                    absolutePath: currentFilePath
-                ) else { return [] }
+                projectRoot: projectRoot,
+                absolutePath: currentFilePath
+            ) else { return [] }
             let parsed = parseSymbols(
                 language: currentLanguage,
                 content: currentContent,
@@ -56,11 +56,11 @@ final class WorkspaceSymbolSearchService {
             var out: [WorkspaceSymbolLocation] = []
             out.reserveCapacity(min(limit, matches.count))
 
-            for m in matches {
-                guard let filePath = m.filePath else { continue }
+            for match in matches {
+                guard let filePath = match.filePath else { continue }
                 guard let rel = Self.relativePath(projectRoot: projectRoot, absolutePath: filePath) else { continue }
 
-                let symbol = m.symbol
+                let symbol = match.symbol
                 out.append(
                     WorkspaceSymbolLocation(
                         id: "\(rel):\(symbol.lineStart):\(symbol.kind.rawValue):\(symbol.name)",
@@ -120,20 +120,20 @@ final class WorkspaceSymbolSearchService {
         let needle = query.lowercased()
 
         func score(_ name: String) -> Int {
-            let n = name.lowercased()
-            if n == needle { return 1_000 }
-            if n.hasPrefix(needle) { return 700 }
-            if n.contains(needle) { return 500 }
+            let lowercasedName = name.lowercased()
+            if lowercasedName == needle { return 1_000 }
+            if lowercasedName.hasPrefix(needle) { return 700 }
+            if lowercasedName.contains(needle) { return 500 }
             return 0
         }
 
-        return items.sorted { a, b in
-            let sa = score(a.name)
-            let sb = score(b.name)
+        return items.sorted { left, right in
+            let sa = score(left.name)
+            let sb = score(right.name)
             if sa != sb { return sa > sb }
-            if a.relativePath != b.relativePath { return a.relativePath < b.relativePath }
-            if a.line != b.line { return a.line < b.line }
-            return a.name < b.name
+            if left.relativePath != right.relativePath { return left.relativePath < right.relativePath }
+            if left.line != right.line { return left.line < right.line }
+            return left.name < right.name
         }
     }
 

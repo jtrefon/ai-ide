@@ -234,7 +234,7 @@ struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
             )
 
             let userPrompt = "Analyze this code and suggest improvements. " +
-            "If there are any obvious bugs, point them out and propose fixes."
+                "If there are any obvious bugs, point them out and propose fixes."
             context.conversationManager.currentInput = userPrompt
             context.conversationManager.sendMessage(context: selectionContext)
         }
@@ -258,16 +258,16 @@ struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
         commandRegistry.register(command: .problemsNext) { _ in
             context.ui.isTerminalVisible = true
             context.ui.bottomPanelSelectedName = "Internal.Problems"
-            if let d = context.diagnosticsStore.selectNext() {
-                openDiagnostic(d)
+            if let diagnostic = context.diagnosticsStore.selectNext() {
+                openDiagnostic(diagnostic)
             }
         }
 
         commandRegistry.register(command: .problemsPrevious) { _ in
             context.ui.isTerminalVisible = true
             context.ui.bottomPanelSelectedName = "Internal.Problems"
-            if let d = context.diagnosticsStore.selectPrevious() {
-                openDiagnostic(d)
+            if let diagnostic = context.diagnosticsStore.selectPrevious() {
+                openDiagnostic(diagnostic)
             }
         }
     }
@@ -397,10 +397,10 @@ struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
     }
 
     @MainActor
-    private func openDiagnostic(_ d: Diagnostic) {
-        guard let url = DiagnosticURLResolver.resolve(d, context: context) else { return }
+    private func openDiagnostic(_ diagnostic: Diagnostic) {
+        guard let url = DiagnosticURLResolver.resolve(diagnostic, context: context) else { return }
 
         context.loadFile(from: url)
-        context.fileEditor.selectLine(d.line)
+        context.fileEditor.selectLine(diagnostic.line)
     }
 }

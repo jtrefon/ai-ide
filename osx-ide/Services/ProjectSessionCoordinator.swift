@@ -181,9 +181,9 @@ final class ProjectSessionCoordinator {
         let focused = FileEditorStateManager.PaneID(rawValue: session.focusedEditorPaneRawValue) ?? .primary
         fileEditor.focusedPane = focused
 
-        let primaryRelPaths = !session.primaryOpenTabRelativePaths.isEmpty 
-                ? session.primaryOpenTabRelativePaths 
-                : session.openTabRelativePaths
+        let primaryRelPaths = !session.primaryOpenTabRelativePaths.isEmpty
+            ? session.primaryOpenTabRelativePaths
+            : session.openTabRelativePaths
         let primaryActiveRel = session.primaryActiveTabRelativePath ?? session.activeTabRelativePath
 
         restoreTabs(
@@ -225,17 +225,17 @@ final class ProjectSessionCoordinator {
             tabs: focusedPaneState.tabs
         )
 
-        openTabRelatives = focusedPaneState.tabs.compactMap { 
-                relativePathForURL(URL(fileURLWithPath: $0.filePath)) 
-            }
+        openTabRelatives = focusedPaneState.tabs.compactMap {
+            relativePathForURL(URL(fileURLWithPath: $0.filePath))
+        }
         lastOpenRelative = activeRelative
 
-        let primaryTabs = fileEditor.primaryPane.tabs.compactMap { 
-                relativePathForURL(URL(fileURLWithPath: $0.filePath)) 
-            }
-        let secondaryTabs = fileEditor.secondaryPane.tabs.compactMap { 
-                relativePathForURL(URL(fileURLWithPath: $0.filePath)) 
-            }
+        let primaryTabs = fileEditor.primaryPane.tabs.compactMap {
+            relativePathForURL(URL(fileURLWithPath: $0.filePath))
+        }
+        let secondaryTabs = fileEditor.secondaryPane.tabs.compactMap {
+            relativePathForURL(URL(fileURLWithPath: $0.filePath))
+        }
 
         let primaryActive = relativePathForActiveTab(
             activeTabID: fileEditor.primaryPane.activeTabID,

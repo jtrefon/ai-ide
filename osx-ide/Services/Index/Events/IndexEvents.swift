@@ -43,7 +43,7 @@ public struct IndexingProgressEvent: Event {
     public let processedCount: Int
     public let totalCount: Int
     public let currentFile: URL?
-    
+
     public init(processedCount: Int, totalCount: Int, currentFile: URL? = nil) {
         self.processedCount = processedCount
         self.totalCount = totalCount
@@ -54,7 +54,7 @@ public struct IndexingProgressEvent: Event {
 public struct IndexingCompletedEvent: Event {
     public let indexedCount: Int
     public let duration: TimeInterval
-    
+
     public init(indexedCount: Int, duration: TimeInterval) {
         self.indexedCount = indexedCount
         self.duration = duration
@@ -102,7 +102,7 @@ public struct AIEnrichmentCompletedEvent: Event {
 public struct MemoryCapturedEvent: Event {
     public let tier: String // "short", "mid", "long"
     public let content: String
-    
+
     public init(tier: String, content: String) {
         self.tier = tier
         self.content = content

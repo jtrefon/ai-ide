@@ -17,7 +17,7 @@ final class AllowlistedRunCommandToolTests: XCTestCase {
         }
 
         func execute(
-            arguments: ToolArguments, 
+            arguments: ToolArguments,
             onProgress: @Sendable @escaping (String) -> Void
         ) async throws -> String {
             let arguments = arguments.raw

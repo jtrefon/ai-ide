@@ -59,14 +59,14 @@ final class SettingsGeneralUITests: XCTestCase {
 
         // Given: Settings window is opened
         let settingsWindow = openSettingsWindow(app: app)
-        
+
         // When: Settings controls are interacted with
         interactWithSettingsControls(app: app, settingsWindow: settingsWindow)
-        
+
         // Then: Editor should still exist and be focused
         verifyEditorStillExists(editor: editor)
     }
-    
+
     /// Opens the settings window and returns it
     private func openSettingsWindow(app: XCUIApplication) -> XCUIElement {
         // Open Settings (Cmd+,)
@@ -79,15 +79,15 @@ final class SettingsGeneralUITests: XCTestCase {
         // Verify settings window opened
         XCTAssertTrue(settingsWindow.exists, "Settings window should be open")
         XCTAssertFalse(settingsWindow.title.isEmpty, "Settings window should have a title")
-        
+
         // Look for any scroll views (settings content is usually in a scroll view)
         let scrollViews = settingsWindow.scrollViews
         let hasContent = scrollViews.count > 0 || settingsWindow.staticTexts.count > 0
         XCTAssertTrue(hasContent, "Settings window should contain UI elements")
-        
+
         return settingsWindow
     }
-    
+
     /// Interacts with discoverable settings controls
     private func interactWithSettingsControls(app: XCUIApplication, settingsWindow: XCUIElement) {
         let themeControl = app.segmentedControls["Settings.Theme"]
@@ -98,12 +98,12 @@ final class SettingsGeneralUITests: XCTestCase {
         if fontSizeSlider.waitForExistence(timeout: 2) {
             testFontSizeSlider(slider: fontSizeSlider)
         }
-        
+
         if wordWrapToggle.waitForExistence(timeout: 2) {
             testWordWrapToggle(toggle: wordWrapToggle)
         }
     }
-    
+
     /// Tests font size slider interaction
     private func testFontSizeSlider(slider: XCUIElement) {
         let initialSliderValue = slider.value as? String ?? ""
@@ -113,12 +113,12 @@ final class SettingsGeneralUITests: XCTestCase {
 
         let adjustedSliderValue = slider.value as? String ?? ""
         XCTAssertNotEqual(
-            initialSliderValue, 
-            adjustedSliderValue, 
+            initialSliderValue,
+            adjustedSliderValue,
             "Font size slider value should change after adjustment"
         )
     }
-    
+
     /// Tests word wrap toggle interaction
     private func testWordWrapToggle(toggle: XCUIElement) {
         let initialToggleValue = toggle.value as? String ?? ""
@@ -129,7 +129,7 @@ final class SettingsGeneralUITests: XCTestCase {
         let toggledValue = toggle.value as? String ?? ""
         XCTAssertNotEqual(initialToggleValue, toggledValue, "Word wrap toggle value should change")
     }
-    
+
     /// Verifies that the editor still exists and is focused
     private func verifyEditorStillExists(editor: XCUIElement) {
         // Close settings window

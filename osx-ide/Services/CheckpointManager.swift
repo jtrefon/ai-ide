@@ -65,15 +65,15 @@ public actor CheckpointManager {
                 .appendingPathComponent("files", isDirectory: true)
                 .appendingPathComponent(normalized)
             try FileManager.default.createDirectory(
-                at: backupURL.deletingLastPathComponent(), 
+                at: backupURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
 
             try copyFile(source: sourceURL, destination: backupURL)
             entries.append(
                 CheckpointEntry(
-                    relativePath: normalized, 
-                    existed: true, 
+                    relativePath: normalized,
+                    existed: true,
                     stagedRelativeBackupPath: "files/\(normalized)"
                 )
             )
@@ -107,9 +107,9 @@ public actor CheckpointManager {
 
             let targetURL = root.appendingPathComponent(entry.relativePath)
             try FileManager.default.createDirectory(
-                    at: targetURL.deletingLastPathComponent(), 
-                    withIntermediateDirectories: true
-                )
+                at: targetURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             try copyFile(source: backupURL, destination: targetURL)
             return true
         }

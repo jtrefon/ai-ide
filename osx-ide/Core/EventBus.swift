@@ -17,7 +17,7 @@ public protocol Event { }
 public protocol EventBusProtocol: Sendable {
     /// Publishes an event to all subscribers.
     func publish<E: Event>(_ event: E)
-    
+
     /// Subscribes to a specific type of event.
     /// - Returns: A Cancellable generic that can be stored to manage subscription lifecycle.
     func subscribe<E: Event>(to eventType: E.Type, handler: @escaping (E) -> Void) -> AnyCancellable
@@ -30,9 +30,9 @@ public final class EventBus: EventBusProtocol {
     // We store PassthroughSubjects for each Event type name.
     // Using String keys (type name) allows decoupled storage.
     private var subjects: [String: Any] = [:]
-    
+
     public init() {}
-    
+
     public func publish<E: Event>(_ event: E) {
         let key = String(describing: E.self)
 
@@ -45,7 +45,7 @@ public final class EventBus: EventBusProtocol {
             subject.send(event)
         }
     }
-    
+
     public func subscribe<E: Event>(to eventType: E.Type, handler: @escaping (E) -> Void) -> AnyCancellable {
         let key = String(describing: E.self)
 
@@ -55,14 +55,14 @@ public final class EventBus: EventBusProtocol {
             ])
         }
         let subject: PassthroughSubject<E, Never>
-        
+
         if let existing = subjects[key] as? PassthroughSubject<E, Never> {
             subject = existing
         } else {
             subject = PassthroughSubject<E, Never>()
             subjects[key] = subject
         }
-        
+
         // EventBus is @MainActor; publish() is expected to be called from the main actor.
         // Delivering synchronously here avoids races/flakiness in tests and keeps UI updates deterministic.
         return subject

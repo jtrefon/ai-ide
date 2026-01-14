@@ -28,7 +28,7 @@ struct ConversationLogger {
                     "mode": mode,
                     "projectRoot": projectRootPath,
                     "inputLength": text.count,
-                    "hasSelectionContext": hasSelectionContext,
+                    "hasSelectionContext": hasSelectionContext
                 ]
             )
 
@@ -39,7 +39,7 @@ struct ConversationLogger {
                     "mode": mode,
                     "projectRoot": projectRootPath,
                     "inputLength": text.count,
-                    "hasSelectionContext": hasSelectionContext,
+                    "hasSelectionContext": hasSelectionContext
                 ]
             )
             await ConversationLogStore.shared.append(
@@ -47,7 +47,7 @@ struct ConversationLogger {
                 type: "chat.user_message",
                 data: [
                     "content": text,
-                    "hasSelectionContext": hasSelectionContext,
+                    "hasSelectionContext": hasSelectionContext
                 ]
             )
         }
@@ -60,7 +60,7 @@ struct ConversationLogger {
                 type: "chat.ai_request_start",
                 data: [
                     "mode": mode,
-                    "historyCount": historyCount,
+                    "historyCount": historyCount
                 ]
             )
         }
@@ -76,7 +76,7 @@ struct ConversationLogger {
                 category: .error, message: "chat.error",
                 metadata: [
                     "conversationId": conversationId,
-                    "error": errorDescription,
+                    "error": errorDescription
                 ]
             )
             await ConversationLogStore.shared.append(
@@ -100,7 +100,7 @@ struct ConversationLogger {
             var metadata: [String: Any] = [
                 "conversationId": conversationId,
                 "mode": mode,
-                "projectRoot": projectRootPath,
+                "projectRoot": projectRootPath
             ]
             if let previousId = previousConversationId {
                 metadata["previousConversationId"] = previousId
@@ -116,7 +116,7 @@ struct ConversationLogger {
                 data: [
                     "mode": mode,
                     "projectRoot": projectRootPath,
-                    "previousConversationId": previousConversationId as Any,
+                    "previousConversationId": previousConversationId as Any
                 ]
             )
             await ConversationIndexStore.shared.appendStart(
@@ -156,7 +156,7 @@ struct ConversationLogger {
                 data: [
                     "logFile": logPath,
                     "mode": mode,
-                    "projectRoot": projectRootPath,
+                    "projectRoot": projectRootPath
                 ]
             )
         }

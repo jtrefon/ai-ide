@@ -14,25 +14,25 @@ public struct AIServiceResponse: Sendable {
 
 public protocol AIService: Sendable {
     func sendMessage(
-            _ message: String, 
-            context: String?, 
-            tools: [AITool]?, 
-            mode: AIMode?
-        ) async throws -> AIServiceResponse
+        _ message: String,
+        context: String?,
+        tools: [AITool]?,
+        mode: AIMode?
+    ) async throws -> AIServiceResponse
     func sendMessage(
-            _ message: String, 
-            context: String?, 
-            tools: [AITool]?, 
-            mode: AIMode?, 
-            projectRoot: URL?
-        ) async throws -> AIServiceResponse
+        _ message: String,
+        context: String?,
+        tools: [AITool]?,
+        mode: AIMode?,
+        projectRoot: URL?
+    ) async throws -> AIServiceResponse
     func sendMessage(
-            _ messages: [ChatMessage], 
-            context: String?, 
-            tools: [AITool]?, 
-            mode: AIMode?, 
-            projectRoot: URL?
-        ) async throws -> AIServiceResponse
+        _ messages: [ChatMessage],
+        context: String?,
+        tools: [AITool]?,
+        mode: AIMode?,
+        projectRoot: URL?
+    ) async throws -> AIServiceResponse
     func explainCode(_ code: String) async throws -> String
     func refactorCode(_ code: String, instructions: String) async throws -> String
     func generateCode(_ prompt: String) async throws -> String
@@ -48,9 +48,9 @@ public extension AIService {
     ) async -> Result<AIServiceResponse, AppError> {
         do {
             let response = try await sendMessage(
-                message, 
-                context: context, 
-                tools: tools, 
+                message,
+                context: context,
+                tools: tools,
                 mode: mode
             )
             return .success(response)
@@ -68,10 +68,10 @@ public extension AIService {
     ) async -> Result<AIServiceResponse, AppError> {
         do {
             let response = try await sendMessage(
-                message, 
-                context: context, 
-                tools: tools, 
-                mode: mode, 
+                message,
+                context: context,
+                tools: tools,
+                mode: mode,
                 projectRoot: projectRoot
             )
             return .success(response)
@@ -89,10 +89,10 @@ public extension AIService {
     ) async -> Result<AIServiceResponse, AppError> {
         do {
             let response = try await sendMessage(
-                messages, 
-                context: context, 
-                tools: tools, 
-                mode: mode, 
+                messages,
+                context: context,
+                tools: tools,
+                mode: mode,
                 projectRoot: projectRoot
             )
             return .success(response)

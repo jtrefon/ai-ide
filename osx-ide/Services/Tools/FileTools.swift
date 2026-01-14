@@ -93,7 +93,7 @@ enum FileToolProposalStager {
     }
 }
 
-fileprivate enum FileToolParameterSchemaBuilder {
+private enum FileToolParameterSchemaBuilder {
     static func modeProperty() -> [String: Any] {
         [
             "type": "string",
@@ -216,12 +216,12 @@ struct WriteFilesTool: AITool {
         results.reserveCapacity(files.count)
 
         await AIToolTraceLogger.shared.log(
-                    type: mode == "propose" ? "fs.write_files_propose_start" : "fs.write_files_start", 
-                    data: [
-                        "count": files.count,
-                        "patchSetId": patchSetId
-                    ]
-                )
+            type: mode == "propose" ? "fs.write_files_propose_start" : "fs.write_files_start",
+            data: [
+                "count": files.count,
+                "patchSetId": patchSetId
+            ]
+        )
 
         for entry in files {
             let resolved = try resolvedWriteFileEntry(from: entry)
@@ -242,12 +242,12 @@ struct WriteFilesTool: AITool {
         }
 
         await AIToolTraceLogger.shared.log(
-                    type: mode == "propose" ? "fs.write_files_propose_done" : "fs.write_files_done", 
-                    data: [
-                        "count": results.count,
-                        "patchSetId": patchSetId
-                    ]
-                )
+            type: mode == "propose" ? "fs.write_files_propose_done" : "fs.write_files_done",
+            data: [
+                "count": results.count,
+                "patchSetId": patchSetId
+            ]
+        )
 
         if mode == "propose" {
             return "Proposed \(results.count) file(s) (patch_set_id=\(patchSetId)):\n" + results.joined(separator: "\n")
@@ -274,7 +274,7 @@ struct CreateFileTool: AITool {
     }
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
-    
+
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
         guard let path = arguments["path"] as? String else {
@@ -332,7 +332,7 @@ struct ListFilesTool: AITool {
         )
     }
     let pathValidator: PathValidator
-    
+
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
         guard let path = arguments["path"] as? String else {
@@ -363,7 +363,7 @@ struct DeleteFileTool: AITool {
     }
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
-    
+
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
         guard let path = arguments["path"] as? String else {
@@ -424,11 +424,11 @@ struct ReplaceInFileTool: AITool {
             required: ["path", "old_text", "new_text"]
         )
     }
-    
+
     let fileSystemService: FileSystemService
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
-    
+
     private func resolvedPath(from arguments: [String: Any]) throws -> String {
         let candidates: [Any?] = [
             arguments["path"],
@@ -436,7 +436,7 @@ struct ReplaceInFileTool: AITool {
             arguments["target_path"],
             arguments["file_path"],
             arguments["file"],
-            arguments["target"],
+            arguments["target"]
         ]
 
         let path = candidates
@@ -453,7 +453,7 @@ struct ReplaceInFileTool: AITool {
                     "\".old { color: red; }\",\n  \"new_text\": \".old { color: blue; }\"\n}"
             )
         }
-        
+
         return path
     }
 
@@ -479,15 +479,15 @@ struct ReplaceInFileTool: AITool {
         let mode = context.mode
         let toolCallId = context.toolCallId
         let patchSetId = context.patchSetId
-        
+
         let url = try pathValidator.validateAndResolve(path)
         let relativePath = pathValidator.relativePath(for: url)
         let content = try fileSystemService.readFile(at: url)
-        
+
         if !content.contains(oldText) {
             return "Error: Could not find the specified old_text in the file. Make sure it matches exactly."
         }
-        
+
         let newContent = content.replacingOccurrences(of: oldText, with: newText)
 
         if mode == "propose" {
@@ -511,7 +511,7 @@ struct ReplaceInFileTool: AITool {
         Task { @MainActor in
             eventBus.publish(FileModifiedEvent(url: url))
         }
-        
+
         return "Successfully replaced content in \(relativePath)"
     }
 }

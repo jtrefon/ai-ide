@@ -14,7 +14,7 @@ public class ChatHistoryManager: ObservableObject {
     @Published public var messages: [ChatMessage] = []
     private var projectRoot: URL?
     private static let defaultGreetingMessage = "Hello! I'm your AI coding assistant. How can I help you today?"
-    
+
     public init() {
         ensureDefaultGreetingMessageIfNeeded()
     }
@@ -34,20 +34,20 @@ public class ChatHistoryManager: ObservableObject {
         loadHistory()
         ensureDefaultGreetingMessageIfNeeded()
     }
-    
+
     public func append(_ message: ChatMessage) {
         // Skip empty assistant messages at the source
         let isAssistant = message.role == MessageRole.assistant
         let isContentEmpty = message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty
         let isReasoningEmpty = (message.reasoning?
-                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-                .isEmpty ?? true)
+                                    .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                                    .isEmpty ?? true)
         let isToolCallsEmpty = (message.toolCalls?.isEmpty ?? true)
-        
+
         if isAssistant && isContentEmpty && isReasoningEmpty && isToolCallsEmpty {
             return
         }
-        
+
         messages.append(message)
         saveHistory()
     }
@@ -65,7 +65,7 @@ public class ChatHistoryManager: ObservableObject {
             append(message)
         }
     }
-    
+
     public func removeLast() {
         if !messages.isEmpty {
             messages.removeLast()
@@ -86,7 +86,7 @@ public class ChatHistoryManager: ObservableObject {
         ensureDefaultGreetingMessageIfNeeded()
         saveHistory()
     }
-    
+
     public func clear() {
         messages.removeAll()
         messages.append(ChatMessage(
@@ -103,7 +103,7 @@ public class ChatHistoryManager: ObservableObject {
                 role: oldMessage.role,
                 content: content ?? oldMessage.content,
                 context: ChatMessageContentContext(
-                    reasoning: oldMessage.reasoning, 
+                    reasoning: oldMessage.reasoning,
                     codeContext: oldMessage.codeContext
                 ),
                 tool: ChatMessageToolContext(
@@ -116,7 +116,7 @@ public class ChatHistoryManager: ObservableObject {
             saveHistory()
         }
     }
-    
+
     public func saveHistory() {
         guard let url = historyFileURL() else { return }
         do {
@@ -136,11 +136,11 @@ public class ChatHistoryManager: ObservableObject {
             }
         }
     }
-    
+
     private func loadHistory() {
         guard let url = historyFileURL() else { return }
         guard let data = try? Data(contentsOf: url) else { return }
-        
+
         do {
             messages = try JSONDecoder().decode([ChatMessage].self, from: data)
         } catch {

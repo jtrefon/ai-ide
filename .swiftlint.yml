@@ -1,2 +1,12 @@
 disabled_rules:
   - one_declaration_per_file
+
+included:
+  - osx-ide
+
+excluded:
+  - .build
+  - .build-tests
+  - "**/DerivedSources"
+  - osx-ideTests
+  - osx-ideUITests

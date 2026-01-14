@@ -20,7 +20,7 @@ public struct MemoryEntry: Codable, Sendable, Identifiable {
     public let category: String // e.g., "decision", "architecture", "pattern"
     public let timestamp: Date
     public let protectionLevel: Int // 0-100, computed
-    
+
     public init(id: String = UUID().uuidString, tier: MemoryTier, content: String, category: String, timestamp: Date = Date(), protectionLevel: Int = 0) {
         self.id = id
         self.tier = tier

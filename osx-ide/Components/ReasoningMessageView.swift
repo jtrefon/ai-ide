@@ -15,16 +15,16 @@ struct ReasoningMessageView: View {
     var fontFamily: String
     @Binding var isReasoningHidden: Bool
     @State private var showFullReasoning = false
-    
+
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Reasoning toggle button
             reasoningToggleButton
-            
+
             // Reasoning content (when not hidden)
             if !isReasoningHidden {
                 reasoningContent
@@ -36,9 +36,9 @@ struct ReasoningMessageView: View {
         .cornerRadius(14)
         .frame(maxWidth: 400)
     }
-    
+
     // MARK: - Private Components
-    
+
     private var reasoningToggleButton: some View {
         HStack {
             Button(action: {
@@ -49,7 +49,7 @@ struct ReasoningMessageView: View {
                 HStack(spacing: 4) {
                     Image(systemName: isReasoningHidden ? "eye.slash" : "eye")
                         .font(.system(size: 10, weight: .medium))
-                    
+
                     Text(localized("reasoning.title"))
                         .font(.caption2)
                         .fontWeight(.medium)
@@ -57,10 +57,10 @@ struct ReasoningMessageView: View {
                 .foregroundColor(.secondary)
             }
             .buttonStyle(.borderless)
-            
+
             if !isReasoningHidden {
                 Spacer()
-                
+
                 Button(showFullReasoning ? localized("common.less") : localized("common.more")) {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showFullReasoning.toggle()
@@ -81,12 +81,12 @@ struct ReasoningMessageView: View {
         .font(.caption2)
         .foregroundColor(.secondary)
     }
-    
+
     private var reasoningContent: some View {
         VStack(alignment: .leading, spacing: 4) {
             let reasoningContent = (message.reasoning ?? "")
                 .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-            
+
             if showFullReasoning {
                 Text(reasoningContent)
                     .font(.system(size: CGFloat(max(10, fontSize - 2))))

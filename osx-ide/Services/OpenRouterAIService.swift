@@ -12,7 +12,7 @@ actor OpenRouterAIService: AIService {
     private let client: OpenRouterAPIClient
 
     private static let maxToolOutputCharsForModel = 12_000
-    
+
     init(
         settingsStore: OpenRouterSettingsStore = OpenRouterSettingsStore(),
         client: OpenRouterAPIClient = OpenRouterAPIClient()
@@ -20,7 +20,7 @@ actor OpenRouterAIService: AIService {
         self.settingsStore = settingsStore
         self.client = client
     }
-    
+
     func sendMessage(
         _ message: String,
         context: String?,
@@ -35,7 +35,7 @@ actor OpenRouterAIService: AIService {
             projectRoot: nil
         )
     }
-    
+
     func sendMessage(
         _ message: String,
         context: String?,
@@ -51,7 +51,7 @@ actor OpenRouterAIService: AIService {
             projectRoot: projectRoot
         )
     }
-    
+
     func sendMessage(
         _ messages: [ChatMessage],
         context: String?,
@@ -77,10 +77,10 @@ actor OpenRouterAIService: AIService {
                 if let toolCalls = msg.toolCalls {
                     // Map tool calls
                     return OpenRouterChatMessage(
-                            role: "assistant", 
-                            content: msg.content.isEmpty ? nil : msg.content, 
-                            tool_calls: toolCalls
-                        )
+                        role: "assistant",
+                        content: msg.content.isEmpty ? nil : msg.content,
+                        toolCalls: toolCalls
+                    )
                 }
                 return OpenRouterChatMessage(role: "assistant", content: msg.content)
             case .system:
@@ -95,7 +95,7 @@ actor OpenRouterAIService: AIService {
                         return nil
                     }
                     let content = Self.truncate(msg.content, limit: Self.maxToolOutputCharsForModel)
-                    return OpenRouterChatMessage(role: "tool", content: content, tool_call_id: toolCallId)
+                    return OpenRouterChatMessage(role: "tool", content: content, toolCallID: toolCallId)
                 } else {
                     // Fallback if ID missing (shouldn't happen with new logic)
                     let content = Self.truncate(msg.content, limit: Self.maxToolOutputCharsForModel)
@@ -103,12 +103,12 @@ actor OpenRouterAIService: AIService {
                 }
             }
         }
-        
+
         return try await performChatWithHistory(
-            messages: openRouterMessages, 
-            context: context, 
-            tools: tools, 
-            mode: mode, 
+            messages: openRouterMessages,
+            context: context,
+            tools: tools,
+            mode: mode,
             projectRoot: projectRoot
         )
     }
@@ -117,38 +117,14 @@ actor OpenRouterAIService: AIService {
         let sanitizer = ToolCallOrderingSanitizer()
         return sanitizer.sanitize(messages)
     }
-    
-    func explainCode(_ code: String) async throws -> String {
-        let prompt = "Explain the following code in clear, concise terms:\n\n\(code)"
-        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
-        return response.content ?? ""
-    }
-    
-    func refactorCode(_ code: String, instructions: String) async throws -> String {
-        let prompt = "Refactor this code using the following instructions:\n\(instructions)\n\nCode:\n\(code)"
-        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
-        return response.content ?? ""
-    }
-    
-    func generateCode(_ prompt: String) async throws -> String {
-        let message = "Generate code for the following request:\n\(prompt)"
-        let response = try await performChat(prompt: message, context: nil, tools: nil, mode: nil, projectRoot: nil)
-        return response.content ?? ""
-    }
-    
-    func fixCode(_ code: String, error: String) async throws -> String {
-        let prompt = "Fix this code. Error message:\n\(error)\n\nCode:\n\(code)"
-        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
-        return response.content ?? ""
-    }
-    
+
     private func performChat(
-            prompt: String, 
-            context: String?, 
-            tools: [AITool]?, 
-            mode: AIMode?, 
-            projectRoot: URL?
-        ) async throws -> AIServiceResponse {
+        prompt: String,
+        context: String?,
+        tools: [AITool]?,
+        mode: AIMode?,
+        projectRoot: URL?
+    ) async throws -> AIServiceResponse {
         return try await performChatWithHistory(
             messages: [OpenRouterChatMessage(role: "user", content: prompt)],
             context: context,
@@ -245,32 +221,6 @@ actor OpenRouterAIService: AIService {
         guard !model.isEmpty else {
             throw AppError.aiServiceError("OpenRouter model is not set.")
         }
-    }
-
-    private func buildSystemContent(
-        systemPrompt: String,
-        tools: [AITool]?,
-        mode: AIMode?,
-        projectRoot: URL?,
-        settings: OpenRouterSettings
-    ) -> String {
-        var systemContent = systemPrompt.isEmpty
-            ? (tools != nil ? ToolAwarenessPrompt.systemPrompt : "You are a helpful, concise coding assistant.")
-            : systemPrompt
-
-        if let mode = mode {
-            systemContent += mode.systemPromptAddition
-        }
-
-        if let projectRoot = projectRoot {
-            systemContent += "\n\n**IMPORTANT CONTEXT:**\nProject Root: `\(projectRoot.path)`\nPlatform: macOS\nAll file paths must be relative to the project root or validated absolute paths within it. Never use Linux-style paths like /home."
-        }
-
-        if settings.reasoningEnabled, mode != nil {
-            systemContent += "\n\n## Reasoning\nWhen responding, include a structured reasoning block enclosed in <ide_reasoning>...</ide_reasoning>. This block will be shown in a separate, foldable UI panel.\n\nRequirements:\n- ALWAYS include all four sections in this exact order: Analyze, Research, Plan, Reflect.\n- If a section is not applicable, write 'N/A' (do not omit the section).\n- Keep it concise and actionable; use short bullets or short sentences.\n- Do NOT include code blocks in <ide_reasoning>.\n- Do NOT use placeholders like '...' or copy the format example text verbatim.\n- After </ide_reasoning>, provide the normal user-facing answer as usual (markdown allowed).\n\nFormat example:\n<ide_reasoning>\nAnalyze: - ... (write real bullets)\nResearch: - ... (write real bullets)\nPlan: - ... (write real bullets)\nReflect: - ... (write real bullets)\n</ide_reasoning>"
-        }
-
-        return systemContent
     }
 
     private func buildFinalMessages(
@@ -419,6 +369,86 @@ actor OpenRouterAIService: AIService {
     }
 }
 
+extension OpenRouterAIService {
+    func explainCode(_ code: String) async throws -> String {
+        let prompt = "Explain the following code in clear, concise terms:\n\n\(code)"
+        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
+        return response.content ?? ""
+    }
+
+    func refactorCode(_ code: String, instructions: String) async throws -> String {
+        let prompt = "Refactor this code using the following instructions:\n\(instructions)\n\nCode:\n\(code)"
+        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
+        return response.content ?? ""
+    }
+
+    func generateCode(_ prompt: String) async throws -> String {
+        let message = "Generate code for the following request:\n\(prompt)"
+        let response = try await performChat(prompt: message, context: nil, tools: nil, mode: nil, projectRoot: nil)
+        return response.content ?? ""
+    }
+
+    func fixCode(_ code: String, error: String) async throws -> String {
+        let prompt = "Fix this code. Error message:\n\(error)\n\nCode:\n\(code)"
+        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
+        return response.content ?? ""
+    }
+
+    private func buildSystemContent(
+        systemPrompt: String,
+        tools: [AITool]?,
+        mode: AIMode?,
+        projectRoot: URL?,
+        settings: OpenRouterSettings
+    ) -> String {
+        var systemContent = systemPrompt.isEmpty
+            ? (tools != nil ? ToolAwarenessPrompt.systemPrompt : "You are a helpful, concise coding assistant.")
+            : systemPrompt
+
+        if let mode = mode {
+            systemContent += mode.systemPromptAddition
+        }
+
+        if let projectRoot = projectRoot {
+            systemContent += """
+
+            **IMPORTANT CONTEXT:**
+            Project Root: `\(projectRoot.path)`
+            Platform: macOS
+            All file paths must be relative to the project root or validated absolute paths within it.
+            Never use Linux-style paths like /home.
+            """
+        }
+
+        if settings.reasoningEnabled, mode != nil {
+            systemContent += """
+
+            ## Reasoning
+            When responding, include a structured reasoning block enclosed in <ide_reasoning>...</ide_reasoning>.
+            This block will be shown in a separate, foldable UI panel.
+
+            Requirements:
+            - ALWAYS include all four sections in this exact order: Analyze, Research, Plan, Reflect.
+            - If a section is not applicable, write 'N/A' (do not omit the section).
+            - Keep it concise and actionable; use short bullets or short sentences.
+            - Do NOT include code blocks in <ide_reasoning>.
+            - Do NOT use placeholders like '...' or copy the format example text verbatim.
+            - After </ide_reasoning>, provide the normal user-facing answer as usual (markdown allowed).
+
+            Format example:
+            <ide_reasoning>
+            Analyze: - ... (write real bullets)
+            Research: - ... (write real bullets)
+            Plan: - ... (write real bullets)
+            Reflect: - ... (write real bullets)
+            </ide_reasoning>
+            """
+        }
+
+        return systemContent
+    }
+}
+
 private struct OpenRouterChatRequest: Encodable {
     let model: String
     let messages: [OpenRouterChatMessage]
@@ -426,7 +456,7 @@ private struct OpenRouterChatRequest: Encodable {
     let temperature: Double
     let tools: [[String: Any]]?
     let toolChoice: String?
-    
+
     enum CodingKeys: String, CodingKey {
         case model
         case messages
@@ -435,7 +465,7 @@ private struct OpenRouterChatRequest: Encodable {
         case tools
         case toolChoice = "tool_choice"
     }
-    
+
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(model, forKey: .model)
@@ -461,22 +491,29 @@ struct AnyCodable: Encodable {
     init(_ value: Any) { self.value = value }
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-        if let val = value as? String { try container.encode(val) }
-        else if let val = value as? Int { try container.encode(val) }
-        else if let val = value as? Double { try container.encode(val) }
-        else if let val = value as? Bool { try container.encode(val) }
-        else if let val = value as? [String: Any] {
+        if let val = value as? String {
+            try container.encode(val)
+        } else if let val = value as? Int {
+            try container.encode(val)
+        } else if let val = value as? Double {
+            try container.encode(val)
+        } else if let val = value as? Bool {
+            try container.encode(val)
+        } else if let val = value as? [String: Any] {
             var mapContainer = encoder.container(keyedBy: DynamicKey.self)
-            for (key, v) in val {
-                try mapContainer.encode(AnyCodable(v), forKey: DynamicKey(stringValue: key)!)
+            for (key, nestedValue) in val {
+                try mapContainer.encode(AnyCodable(nestedValue), forKey: DynamicKey(stringValue: key)!)
             }
-        }
-        else if let val = value as? [Any] {
+        } else if let val = value as? [Any] {
             var arrContainer = encoder.unkeyedContainer()
-            for v in val { try arrContainer.encode(AnyCodable(v)) }
+            for nestedValue in val {
+                try arrContainer.encode(AnyCodable(nestedValue))
+            }
+        } else {
+            try container.encodeNil()
         }
     }
-    
+
     struct DynamicKey: CodingKey {
         var stringValue: String
         var intValue: Int?
@@ -488,18 +525,25 @@ struct AnyCodable: Encodable {
 private struct OpenRouterChatMessage: Encodable {
     let role: String
     let content: String?
-    let tool_call_id: String?
-    let tool_calls: [AIToolCall]?
-    
+    let toolCallID: String?
+    let toolCalls: [AIToolCall]?
+
+    enum CodingKeys: String, CodingKey {
+        case role
+        case content
+        case toolCallID = "tool_call_id"
+        case toolCalls = "tool_calls"
+    }
+
     // Custom coding keys to handle optional encoding cleaner (although default works too if nil)
     // But content is required by some APIs unless it's a tool call assistant msg.
     // For now, let's keep it simple.
-    
-    init(role: String, content: String? = nil, tool_call_id: String? = nil, tool_calls: [AIToolCall]? = nil) {
+
+    init(role: String, content: String? = nil, toolCallID: String? = nil, toolCalls: [AIToolCall]? = nil) {
         self.role = role
         self.content = content
-        self.tool_call_id = tool_call_id
-        self.tool_calls = tool_calls
+        self.toolCallID = toolCallID
+        self.toolCalls = toolCalls
     }
 }
 
@@ -508,7 +552,7 @@ private struct OpenRouterChatResponse: Decodable {
         struct Message: Decodable {
             let content: String?
             let toolCalls: [AIToolCall]?
-            
+
             enum CodingKeys: String, CodingKey {
                 case content
                 case toolCalls = "tool_calls"

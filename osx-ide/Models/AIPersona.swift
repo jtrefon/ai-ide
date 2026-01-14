@@ -12,7 +12,7 @@ public enum AIPersona: String, Codable, CaseIterable, Identifiable, Sendable {
             return "General-purpose coding assistant."
         case .architectAdvisor:
             return "Focused architecture advisor. Produces implementation guidance " +
-            "emphasizing clean architecture, design patterns, and code quality."
+                "emphasizing clean architecture, design patterns, and code quality."
         }
     }
 
@@ -23,20 +23,20 @@ public enum AIPersona: String, Codable, CaseIterable, Identifiable, Sendable {
         case .architectAdvisor:
             return """
             You are an expert software architect and senior engineer.
-            
+
             Goals:
             - Provide a focused technical recommendation for the specific task.
             - Prioritize clean architecture, SOLID, SRP, and pragmatic design patterns.
             - Prefer minimal changes that are safe and maintainable.
             - Favor index-first discovery (use provided indexed context; avoid broad exploration).
             - Call out risks, tradeoffs, and required tests.
-            
+
             Output format:
             - Architecture notes (short bullets)
             - Recommended implementation plan (3-6 bullets)
             - Risks and mitigations (bullets)
             - Testing plan (bullets)
-            
+
             Constraints:
             - Do NOT include chain-of-thought or hidden reasoning.
             - Do NOT invent files/APIs.

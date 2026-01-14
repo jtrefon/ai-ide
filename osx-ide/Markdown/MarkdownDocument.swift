@@ -3,10 +3,6 @@ import Foundation
 struct MarkdownDocument: Equatable {
     let blocks: [MarkdownBlock]
 
-    init(blocks: [MarkdownBlock]) {
-        self.blocks = blocks
-    }
-
     static func parse(_ input: String) -> MarkdownDocument {
         MarkdownParser.parse(input)
     }
@@ -81,7 +77,7 @@ enum MarkdownParser {
                 segments.append(.text(nsString.substring(with: textRange)))
             }
 
-            var language: String? = nil
+            var language: String?
             if match.range(at: 1).length > 0 {
                 let lang = nsString.substring(with: match.range(at: 1))
                 language = lang.isEmpty ? nil : lang

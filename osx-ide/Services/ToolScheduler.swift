@@ -1,6 +1,6 @@
 import Foundation
 
-actor ToolScheduler: Sendable {
+actor ToolScheduler {
     struct Configuration: Sendable {
         let maxConcurrentReadTasks: Int
 
@@ -25,9 +25,9 @@ actor ToolScheduler: Sendable {
     }
 
     func runWriteTask<T: Sendable>(
-            pathKey: String, 
-            _ operation: @escaping @Sendable () async throws -> T
-        ) async throws -> T {
+        pathKey: String,
+        _ operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
         await writeLocks.lock(for: pathKey)
         defer { Task { await writeLocks.unlock(for: pathKey) } }
         return try await operation()

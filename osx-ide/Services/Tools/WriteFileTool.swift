@@ -36,15 +36,15 @@ struct WriteFileTool: AITool {
             "required": ["path", "content"]
         ]
     }
-    
+
     let fileSystemService: FileSystemService
     let pathValidator: PathValidator
     let eventBus: EventBusProtocol
 
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
-        guard let path = arguments["path"] as? String, 
-                !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard let path = arguments["path"] as? String,
+              !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             let keys = arguments.keys.sorted().joined(separator: ", ")
             throw AppError.aiServiceError(
                 "Missing 'path' argument for write_file. Provided keys: [\(keys)]. "

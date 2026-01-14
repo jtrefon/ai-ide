@@ -170,7 +170,9 @@ extension AIToolExecutor {
         if toolName == "index_read_file" {
             let msg = error.localizedDescription
             if msg.lowercased().hasPrefix("file not found") {
-                return "Error: \(msg)\n\nHint: do not guess filenames. First use index_find_files(query: \"RegistrationPage\") or index_list_files(query: \"registration-app/src\") to discover the correct path, then call index_read_file with that exact path."
+                return "Error: \(msg)\n\nHint: do not guess filenames. " +
+                    "First use index_find_files(query: \"RegistrationPage\") or index_list_files(query: \"registration-app/src\") " +
+                    "to discover the correct path, then call index_read_file with that exact path."
             }
         }
         return "Error: \(error.localizedDescription)"

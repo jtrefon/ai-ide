@@ -54,16 +54,16 @@ final class TerminalEchoUITests: XCTestCase {
         app.launch()
         return app
     }
-    
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
-    
+
     override func tearDownWithError() throws {
         // Clean up by terminating the app
         XCUIApplication().terminate()
     }
-    
+
     /// Test that terminal input does not produce double echo
     func testTerminalNoDoubleEcho() throws {
         let app = launchApp()
@@ -147,7 +147,7 @@ final class TerminalEchoUITests: XCTestCase {
                 "OCR text was: \n\(ocr)"
         )
     }
-    
+
     /// Test basic terminal functionality
     func testTerminalBasicFunctionality() throws {
         let app = launchApp()

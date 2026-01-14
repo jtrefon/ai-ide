@@ -126,11 +126,11 @@ struct LogsPanelView: View {
             guard $0.pathExtension == "ndjson" else { return false }
             return true
         }
-        return ndjson.max(by: { a, b in
-            let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey])
-                .contentModificationDate) ?? .distantPast
-            let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey])
-                .contentModificationDate) ?? .distantPast
+        return ndjson.max(by: { left, right in
+            let da = (try? left.resourceValues(forKeys: [.contentModificationDateKey])
+                        .contentModificationDate) ?? .distantPast
+            let db = (try? right.resourceValues(forKeys: [.contentModificationDateKey])
+                        .contentModificationDate) ?? .distantPast
             return da < db
         })
     }

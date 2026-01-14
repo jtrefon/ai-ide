@@ -11,16 +11,16 @@ import AppKit
 /// Manages terminal and bottom panel configuration and rendering
 @MainActor
 struct PanelCoordinator {
-    
+
     // MARK: - Properties
-    
+
     let registry: UIRegistry
     let ui: UIStateManager
 
     // MARK: - Initialization
-    
+
     // MARK: - Public Methods
-    
+
     /// Creates the terminal panel view
     @ViewBuilder
     func makeTerminalPanel() -> some View {
@@ -43,12 +43,12 @@ struct PanelCoordinator {
             EmptyView()
         }
     }
-    
+
     /// Creates the sidebar view
     @ViewBuilder
     func makeSidebar() -> some View {
         let sidebarViews = registry.views(for: .sidebarLeft)
-        
+
         if let sidebarView = sidebarViews.first {
             sidebarView.makeView()
                 .frame(minWidth: 200, maxWidth: 300)
@@ -63,7 +63,7 @@ struct PanelCoordinator {
             .background(Color(NSColor.windowBackgroundColor))
         }
     }
-    
+
     /// Creates the right panel view
     @ViewBuilder
     func makeRightPanel() -> some View {

@@ -61,10 +61,10 @@ final class ChatHistoryCoordinator {
         _ newRoot: URL,
         shouldStartConversationLog: Bool,
         onStartConversation: @escaping @Sendable (
-                _ conversationId: String, 
-                _ mode: String, 
-                _ projectRootPath: String
-            ) async -> Void
+            _ conversationId: String,
+            _ mode: String,
+            _ projectRootPath: String
+        ) async -> Void
     ) {
         historyManager.setProjectRoot(newRoot)
 

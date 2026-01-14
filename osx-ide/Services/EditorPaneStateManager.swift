@@ -6,12 +6,12 @@ import UniformTypeIdentifiers
 @MainActor
 final class EditorPaneStateManager: ObservableObject {
     @Published var tabs: [EditorTab] = []
-    @Published var activeTabID: UUID? = nil
-    @Published var selectedFile: String? = nil
+    @Published var activeTabID: UUID?
+    @Published var selectedFile: String?
     @Published var editorContent: String = ""
     @Published var editorLanguage: String = "swift"
     @Published var isDirty: Bool = false
-    @Published var selectedRange: NSRange? = nil
+    @Published var selectedRange: NSRange?
     @Published var isLoadingFile: Bool = false
 
     let fileEditorService: FileEditorServiceProtocol
@@ -24,10 +24,10 @@ final class EditorPaneStateManager: ObservableObject {
     let fileWatchCoordinator: FileWatchCoordinator
 
     init(
-            fileEditorService: FileEditorServiceProtocol, 
-            fileDialogService: FileDialogServiceProtocol, 
-            fileSystemService: FileSystemService
-        ) {
+        fileEditorService: FileEditorServiceProtocol,
+        fileDialogService: FileDialogServiceProtocol,
+        fileSystemService: FileSystemService
+    ) {
         self.fileEditorService = fileEditorService
         self.fileDialogService = fileDialogService
         self.fileSystemService = fileSystemService

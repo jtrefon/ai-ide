@@ -11,16 +11,16 @@ import Foundation
 public enum ExtensionPoint: String, CaseIterable, Hashable {
     /// The left sidebar (e.g., File Explorer, Search)
     case sidebarLeft = "ide.sidebar.left"
-    
+
     /// The right panel (e.g., AI Chat, Inspector)
     case panelRight = "ide.panel.right"
-    
+
     /// The bottom panel (e.g., Terminal, Debug Output)
     case panelBottom = "ide.panel.bottom"
-    
+
     /// The main editor area (typically replaced, not appended to)
     case editor = "ide.editor"
-    
+
     /// The status bar
     case statusbar = "ide.statusbar"
 }
