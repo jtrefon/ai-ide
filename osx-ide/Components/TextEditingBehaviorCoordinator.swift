@@ -146,23 +146,43 @@ class TextEditingBehaviorCoordinator {
 
     /// Calculates increased indentation based on current line
     private func calculateIncreasedIndentation(for line: String) -> String {
+        let openCounts = calculateOpenDelimiters(in: line)
+        return String(repeating: "    ", count: openCounts)
+    }
+
+    private func calculateOpenDelimiters(in line: String) -> Int {
         var openBrackets = 0
         var openBraces = 0
         var openParens = 0
 
         for ch in line {
-            switch ch {
-            case "{": openBraces += 1
-            case "}": openBraces = max(0, openBraces - 1)
-            case "[": openBrackets += 1
-            case "]": openBrackets = max(0, openBrackets - 1)
-            case "(": openParens += 1
-            case ")": openParens = max(0, openParens - 1)
-            default: break
-            }
+            applyDelimiterDelta(for: ch, openBraces: &openBraces, openBrackets: &openBrackets, openParens: &openParens)
         }
 
-        let totalOpen = openBraces + openBrackets + openParens
-        return String(repeating: "    ", count: totalOpen)
+        return openBraces + openBrackets + openParens
+    }
+
+    private func applyDelimiterDelta(
+        for character: Character,
+        openBraces: inout Int,
+        openBrackets: inout Int,
+        openParens: inout Int
+    ) {
+        switch character {
+        case "{":
+            openBraces += 1
+        case "}":
+            openBraces = max(0, openBraces - 1)
+        case "[":
+            openBrackets += 1
+        case "]":
+            openBrackets = max(0, openBrackets - 1)
+        case "(":
+            openParens += 1
+        case ")":
+            openParens = max(0, openParens - 1)
+        default:
+            break
+        }
     }
 }

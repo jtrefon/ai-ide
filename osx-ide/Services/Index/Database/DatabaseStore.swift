@@ -32,6 +32,15 @@ public struct IndexStatsCounts: Sendable {
     }
 }
 
+public struct UpsertResourceAndFTSRequest: Sendable {
+    public let resourceId: String
+    public let path: String
+    public let language: String
+    public let timestamp: Double
+    public let contentHash: String
+    public let content: String
+}
+
 public actor DatabaseStore {
     private let database: DatabaseManager
 
@@ -165,14 +174,7 @@ public actor DatabaseStore {
         try database.execute(sql: sql, parameters: parameters.map { $0.anyValue })
     }
 
-    public func upsertResourceAndFTS(
-        resourceId: String,
-        path: String,
-        language: String,
-        timestamp: Double,
-        contentHash: String,
-        content: String
-    ) throws {
+    public func upsertResourceAndFTS(_ request: UpsertResourceAndFTSRequest) throws {
         let sql = """
         INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
         VALUES (?, ?, ?, ?, ?, 0.0)
@@ -186,9 +188,18 @@ public actor DatabaseStore {
         let ftsInsertSql = "INSERT INTO resources_fts (path, content, content_id) VALUES (?, ?, ?);"
 
         try database.transaction {
-            try database.execute(sql: sql, parameters: [resourceId, path, language, timestamp, contentHash])
-            try database.execute(sql: ftsDeleteSql, parameters: [resourceId])
-            try database.execute(sql: ftsInsertSql, parameters: [path, content, resourceId])
+            try database.execute(
+                sql: sql,
+                parameters: [
+                    request.resourceId,
+                    request.path,
+                    request.language,
+                    request.timestamp,
+                    request.contentHash
+                ]
+            )
+            try database.execute(sql: ftsDeleteSql, parameters: [request.resourceId])
+            try database.execute(sql: ftsInsertSql, parameters: [request.path, request.content, request.resourceId])
         }
     }
 
