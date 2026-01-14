@@ -3,6 +3,35 @@ import CoreGraphics
 
 // MARK: - Configuration Groupings
 
+public struct ProjectSessionWindowFrame: Codable, Sendable {
+    public var originX: Double
+    public var originY: Double
+    public var width: Double
+    public var height: Double
+
+    public init(originX: Double, originY: Double, width: Double, height: Double) {
+        self.originX = originX
+        self.originY = originY
+        self.width = width
+        self.height = height
+    }
+
+    public init(rect: CGRect) {
+        self.init(originX: rect.origin.x, originY: rect.origin.y, width: rect.size.width, height: rect.size.height)
+    }
+
+    public var rect: CGRect {
+        CGRect(x: originX, y: originY, width: width, height: height)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case originX = "x"
+        case originY = "y"
+        case width
+        case height
+    }
+}
+
 public struct UIConfiguration: Codable, Sendable {
     public var windowFrame: ProjectSession.WindowFrame?
     public var isSidebarVisible: Bool
@@ -113,38 +142,11 @@ public struct FileTreeState: Codable, Sendable {
 // MARK: - Main ProjectSession
 
 public struct ProjectSession: Codable, Sendable {
-    public struct WindowFrame: Codable, Sendable {
-        public var originX: Double
-        public var originY: Double
-        public var width: Double
-        public var height: Double
-
-        enum CodingKeys: String, CodingKey {
-            case originX = "x"
-            case originY = "y"
-            case width
-            case height
-        }
-
-        public init(originX: Double, originY: Double, width: Double, height: Double) {
-            self.originX = originX
-            self.originY = originY
-            self.width = width
-            self.height = height
-        }
-
-        public init(rect: CGRect) {
-            self.init(originX: rect.origin.x, originY: rect.origin.y, width: rect.size.width, height: rect.size.height)
-        }
-
-        public var rect: CGRect {
-            CGRect(x: originX, y: originY, width: width, height: height)
-        }
-    }
+    public typealias WindowFrame = ProjectSessionWindowFrame
 
     // MARK: - Properties (Grouped)
 
-    public var ui: UIConfiguration
+    public var uiConfiguration: UIConfiguration
     public var editor: EditorConfiguration
     public var fileState: FileState
     public var splitEditor: SplitEditorState
@@ -154,14 +156,14 @@ public struct ProjectSession: Codable, Sendable {
     // MARK: - Builder Pattern
 
     public init(
-        ui: UIConfiguration,
+        uiConfiguration: UIConfiguration,
         editor: EditorConfiguration,
         fileState: FileState,
         splitEditor: SplitEditorState,
         fileTree: FileTreeState,
         aiModeRawValue: String = "Chat"
     ) {
-        self.ui = ui
+        self.uiConfiguration = uiConfiguration
         self.editor = editor
         self.fileState = fileState
         self.splitEditor = splitEditor
@@ -199,7 +201,7 @@ public struct ProjectSession: Codable, Sendable {
         fileTreeExpandedRelativePaths: [String],
         languageOverridesByRelativePath: [String: String]
     ) {
-        self.ui = UIConfiguration(
+        self.uiConfiguration = UIConfiguration(
             windowFrame: windowFrame,
             isSidebarVisible: isSidebarVisible,
             isTerminalVisible: isTerminalVisible,
@@ -245,7 +247,7 @@ public struct ProjectSession: Codable, Sendable {
 
     public static func `default`() -> ProjectSession {
         ProjectSession(
-            ui: UIConfiguration(windowFrame: nil),
+            uiConfiguration: UIConfiguration(windowFrame: nil),
             editor: EditorConfiguration(),
             fileState: FileState(),
             splitEditor: SplitEditorState(),
@@ -254,31 +256,31 @@ public struct ProjectSession: Codable, Sendable {
     }
 
     public static func with(windowFrame: WindowFrame?) -> ProjectSessionBuilder {
-        ProjectSessionBuilder().ui(UIConfiguration(windowFrame: windowFrame))
+        ProjectSessionBuilder().uiConfiguration(UIConfiguration(windowFrame: windowFrame))
     }
 
     // MARK: - Computed Properties (Backward Compatibility)
 
     @available(*, deprecated, message: "Use ui.windowFrame instead")
-    public var windowFrame: WindowFrame? { ui.windowFrame }
+    public var windowFrame: WindowFrame? { uiConfiguration.windowFrame }
 
     @available(*, deprecated, message: "Use ui.isSidebarVisible instead")
-    public var isSidebarVisible: Bool { ui.isSidebarVisible }
+    public var isSidebarVisible: Bool { uiConfiguration.isSidebarVisible }
 
     @available(*, deprecated, message: "Use ui.isTerminalVisible instead")
-    public var isTerminalVisible: Bool { ui.isTerminalVisible }
+    public var isTerminalVisible: Bool { uiConfiguration.isTerminalVisible }
 
     @available(*, deprecated, message: "Use ui.isAIChatVisible instead")
-    public var isAIChatVisible: Bool { ui.isAIChatVisible }
+    public var isAIChatVisible: Bool { uiConfiguration.isAIChatVisible }
 
     @available(*, deprecated, message: "Use ui.sidebarWidth instead")
-    public var sidebarWidth: Double { ui.sidebarWidth }
+    public var sidebarWidth: Double { uiConfiguration.sidebarWidth }
 
     @available(*, deprecated, message: "Use ui.terminalHeight instead")
-    public var terminalHeight: Double { ui.terminalHeight }
+    public var terminalHeight: Double { uiConfiguration.terminalHeight }
 
     @available(*, deprecated, message: "Use ui.chatPanelWidth instead")
-    public var chatPanelWidth: Double { ui.chatPanelWidth }
+    public var chatPanelWidth: Double { uiConfiguration.chatPanelWidth }
 
     @available(*, deprecated, message: "Use editor.selectedThemeRawValue instead")
     public var selectedThemeRawValue: String { editor.selectedThemeRawValue }
@@ -335,7 +337,7 @@ public struct ProjectSession: Codable, Sendable {
 // MARK: - Builder Pattern
 
 public class ProjectSessionBuilder {
-    private var ui: UIConfiguration = UIConfiguration(windowFrame: nil)
+    private var uiConfiguration: UIConfiguration = UIConfiguration(windowFrame: nil)
     private var editor: EditorConfiguration = EditorConfiguration()
     private var fileState: FileState = FileState()
     private var splitEditor: SplitEditorState = SplitEditorState()
@@ -344,8 +346,14 @@ public class ProjectSessionBuilder {
 
     public init() {}
 
-    public func ui(_ ui: UIConfiguration) -> ProjectSessionBuilder {
-        self.ui = ui
+    @available(*, deprecated, message: "Use uiConfiguration(_:) instead")
+    public func ui(_ uiConfiguration: UIConfiguration) -> ProjectSessionBuilder {
+        self.uiConfiguration = uiConfiguration
+        return self
+    }
+
+    public func uiConfiguration(_ uiConfiguration: UIConfiguration) -> ProjectSessionBuilder {
+        self.uiConfiguration = uiConfiguration
         return self
     }
 
@@ -376,7 +384,7 @@ public class ProjectSessionBuilder {
 
     public func build() -> ProjectSession {
         ProjectSession(
-            ui: ui,
+            uiConfiguration: uiConfiguration,
             editor: editor,
             fileState: fileState,
             splitEditor: splitEditor,
@@ -390,7 +398,7 @@ public class ProjectSessionBuilder {
 
 extension ProjectSession {
     private enum CodingKeys: String, CodingKey {
-        case ui
+        case uiConfiguration = "ui"
         case editor
         case fileState
         case splitEditor
@@ -427,93 +435,113 @@ extension ProjectSession {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        // Try new format first
-        if let ui = try container.decodeIfPresent(UIConfiguration.self, forKey: .ui),
-           let editor = try container.decodeIfPresent(EditorConfiguration.self, forKey: .editor),
-           let fileState = try container.decodeIfPresent(FileState.self, forKey: .fileState),
-           let splitEditor = try container.decodeIfPresent(SplitEditorState.self, forKey: .splitEditor),
-           let fileTree = try container.decodeIfPresent(FileTreeState.self, forKey: .fileTree) {
-
-            self.ui = ui
-            self.editor = editor
-            self.fileState = fileState
-            self.splitEditor = splitEditor
-            self.fileTree = fileTree
-            self.aiModeRawValue = try container.decodeIfPresent(String.self, forKey: .aiModeRawValue) ?? "Chat"
-        } else {
-            // Fallback to legacy format
-            let windowFrame = try container.decodeIfPresent(WindowFrame.self, forKey: .windowFrame)
-
-            let uiConfig = UIConfiguration(
-                windowFrame: windowFrame,
-                isSidebarVisible: try container.decodeIfPresent(Bool.self, forKey: .isSidebarVisible) ?? true,
-                isTerminalVisible: try container.decodeIfPresent(Bool.self, forKey: .isTerminalVisible) ?? true,
-                isAIChatVisible: try container.decodeIfPresent(Bool.self, forKey: .isAIChatVisible) ?? true,
-                sidebarWidth: try container.decodeIfPresent(Double.self, forKey: .sidebarWidth) ?? 250,
-                terminalHeight: try container.decodeIfPresent(Double.self, forKey: .terminalHeight) ?? 200,
-                chatPanelWidth: try container.decodeIfPresent(Double.self, forKey: .chatPanelWidth) ?? 300
-            )
-
-            let editorConfig = EditorConfiguration(
-                selectedThemeRawValue: try container.decodeIfPresent(
-                    String.self,
-                    forKey: .selectedThemeRawValue
-                ) ?? "system",
-                showLineNumbers: try container.decodeIfPresent(Bool.self, forKey: .showLineNumbers) ?? true,
-                wordWrap: try container.decodeIfPresent(Bool.self, forKey: .wordWrap) ?? false,
-                minimapVisible: try container.decodeIfPresent(Bool.self, forKey: .minimapVisible) ?? false,
-                showHiddenFilesInFileTree: try container.decodeIfPresent(
-                    Bool.self,
-                    forKey: .showHiddenFilesInFileTree
-                ) ?? false
-            )
-
-            let fileStateConfig = FileState(
-                lastOpenFileRelativePath: try container.decodeIfPresent(String.self, forKey: .lastOpenFileRelativePath),
-                openTabRelativePaths: try container.decodeIfPresent([String].self, forKey: .openTabRelativePaths) ?? [],
-                activeTabRelativePath: try container.decodeIfPresent(String.self, forKey: .activeTabRelativePath)
-            )
-
-            let splitEditorConfig = SplitEditorState(
-                isSplitEditor: try container.decodeIfPresent(Bool.self, forKey: .isSplitEditor) ?? false,
-                splitAxisRawValue: try container.decodeIfPresent(String.self, forKey: .splitAxisRawValue) ?? "vertical",
-                focusedEditorPaneRawValue: try container.decodeIfPresent(
-                    String.self,
-                    forKey: .focusedEditorPaneRawValue
-                ) ?? "primary",
-                primaryOpenTabRelativePaths: try container.decodeIfPresent(
-                    [String].self,
-                    forKey: .primaryOpenTabRelativePaths
-                ) ?? [],
-                primaryActiveTabRelativePath: try container.decodeIfPresent(
-                    String.self,
-                    forKey: .primaryActiveTabRelativePath
-                ),
-                secondaryOpenTabRelativePaths: try container.decodeIfPresent(
-                    [String].self,
-                    forKey: .secondaryOpenTabRelativePaths
-                ) ?? [],
-                secondaryActiveTabRelativePath: try container.decodeIfPresent(String.self, forKey: .secondaryActiveTabRelativePath)
-            )
-
-            let fileTreeConfig = FileTreeState(
-                fileTreeExpandedRelativePaths: try container.decodeIfPresent([String].self, forKey: .fileTreeExpandedRelativePaths) ?? [],
-                languageOverridesByRelativePath: try container.decodeIfPresent([String: String].self, forKey: .languageOverridesByRelativePath) ?? [:]
-            )
-
-            self.ui = uiConfig
-            self.editor = editorConfig
-            self.fileState = fileStateConfig
-            self.splitEditor = splitEditorConfig
-            self.fileTree = fileTreeConfig
-            self.aiModeRawValue = try container.decodeIfPresent(String.self, forKey: .aiModeRawValue) ?? "Chat"
+        if let decodedSession = try Self.decodeNewFormat(from: container) {
+            self = decodedSession
+            return
         }
+
+        self = try Self.decodeLegacyFormat(from: container)
+    }
+
+    private static func decodeNewFormat(from container: KeyedDecodingContainer<CodingKeys>) throws -> ProjectSession? {
+        guard
+            let decodedUIConfiguration = try container.decodeIfPresent(UIConfiguration.self, forKey: .uiConfiguration),
+            let decodedEditorConfiguration = try container.decodeIfPresent(EditorConfiguration.self, forKey: .editor),
+            let decodedFileState = try container.decodeIfPresent(FileState.self, forKey: .fileState),
+            let decodedSplitEditorState = try container.decodeIfPresent(SplitEditorState.self, forKey: .splitEditor),
+            let decodedFileTreeState = try container.decodeIfPresent(FileTreeState.self, forKey: .fileTree)
+        else {
+            return nil
+        }
+
+        let decodedAIModeRawValue = try container.decodeIfPresent(String.self, forKey: .aiModeRawValue) ?? "Chat"
+
+        return ProjectSession(
+            uiConfiguration: decodedUIConfiguration,
+            editor: decodedEditorConfiguration,
+            fileState: decodedFileState,
+            splitEditor: decodedSplitEditorState,
+            fileTree: decodedFileTreeState,
+            aiModeRawValue: decodedAIModeRawValue
+        )
+    }
+
+    private static func decodeLegacyFormat(from container: KeyedDecodingContainer<CodingKeys>) throws -> ProjectSession {
+        let decodedWindowFrame = try container.decodeIfPresent(WindowFrame.self, forKey: .windowFrame)
+
+        let decodedUIConfiguration = UIConfiguration(
+            windowFrame: decodedWindowFrame,
+            isSidebarVisible: try container.decodeIfPresent(Bool.self, forKey: .isSidebarVisible) ?? true,
+            isTerminalVisible: try container.decodeIfPresent(Bool.self, forKey: .isTerminalVisible) ?? true,
+            isAIChatVisible: try container.decodeIfPresent(Bool.self, forKey: .isAIChatVisible) ?? true,
+            sidebarWidth: try container.decodeIfPresent(Double.self, forKey: .sidebarWidth) ?? 250,
+            terminalHeight: try container.decodeIfPresent(Double.self, forKey: .terminalHeight) ?? 200,
+            chatPanelWidth: try container.decodeIfPresent(Double.self, forKey: .chatPanelWidth) ?? 300
+        )
+
+        let decodedEditorConfiguration = try decodeLegacyEditorConfiguration(from: container)
+        let decodedFileState = try decodeLegacyFileState(from: container)
+        let decodedSplitEditorState = try decodeLegacySplitEditorState(from: container)
+        let decodedFileTreeState = try decodeLegacyFileTreeState(from: container)
+        let decodedAIModeRawValue = try container.decodeIfPresent(String.self, forKey: .aiModeRawValue) ?? "Chat"
+
+        return ProjectSession(
+            uiConfiguration: decodedUIConfiguration,
+            editor: decodedEditorConfiguration,
+            fileState: decodedFileState,
+            splitEditor: decodedSplitEditorState,
+            fileTree: decodedFileTreeState,
+            aiModeRawValue: decodedAIModeRawValue
+        )
+    }
+
+    private static func decodeLegacyEditorConfiguration(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> EditorConfiguration {
+        let decodedThemeRawValue = try container.decodeIfPresent(String.self, forKey: .selectedThemeRawValue) ?? "system"
+
+        return EditorConfiguration(
+            selectedThemeRawValue: decodedThemeRawValue,
+            showLineNumbers: try container.decodeIfPresent(Bool.self, forKey: .showLineNumbers) ?? true,
+            wordWrap: try container.decodeIfPresent(Bool.self, forKey: .wordWrap) ?? false,
+            minimapVisible: try container.decodeIfPresent(Bool.self, forKey: .minimapVisible) ?? false,
+            showHiddenFilesInFileTree: try container.decodeIfPresent(Bool.self, forKey: .showHiddenFilesInFileTree) ?? false
+        )
+    }
+
+    private static func decodeLegacyFileState(from container: KeyedDecodingContainer<CodingKeys>) throws -> FileState {
+        FileState(
+            lastOpenFileRelativePath: try container.decodeIfPresent(String.self, forKey: .lastOpenFileRelativePath),
+            openTabRelativePaths: try container.decodeIfPresent([String].self, forKey: .openTabRelativePaths) ?? [],
+            activeTabRelativePath: try container.decodeIfPresent(String.self, forKey: .activeTabRelativePath)
+        )
+    }
+
+    private static func decodeLegacySplitEditorState(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> SplitEditorState {
+        SplitEditorState(
+            isSplitEditor: try container.decodeIfPresent(Bool.self, forKey: .isSplitEditor) ?? false,
+            splitAxisRawValue: try container.decodeIfPresent(String.self, forKey: .splitAxisRawValue) ?? "vertical",
+            focusedEditorPaneRawValue: try container.decodeIfPresent(String.self, forKey: .focusedEditorPaneRawValue) ?? "primary",
+            primaryOpenTabRelativePaths: try container.decodeIfPresent([String].self, forKey: .primaryOpenTabRelativePaths) ?? [],
+            primaryActiveTabRelativePath: try container.decodeIfPresent(String.self, forKey: .primaryActiveTabRelativePath),
+            secondaryOpenTabRelativePaths: try container.decodeIfPresent([String].self, forKey: .secondaryOpenTabRelativePaths) ?? [],
+            secondaryActiveTabRelativePath: try container.decodeIfPresent(String.self, forKey: .secondaryActiveTabRelativePath)
+        )
+    }
+
+    private static func decodeLegacyFileTreeState(from container: KeyedDecodingContainer<CodingKeys>) throws -> FileTreeState {
+        FileTreeState(
+            fileTreeExpandedRelativePaths: try container.decodeIfPresent([String].self, forKey: .fileTreeExpandedRelativePaths) ?? [],
+            languageOverridesByRelativePath: try container.decodeIfPresent([String: String].self, forKey: .languageOverridesByRelativePath) ?? [:]
+        )
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
 
-        try container.encode(ui, forKey: .ui)
+        try container.encode(uiConfiguration, forKey: .uiConfiguration)
         try container.encode(editor, forKey: .editor)
         try container.encode(fileState, forKey: .fileState)
         try container.encode(splitEditor, forKey: .splitEditor)
