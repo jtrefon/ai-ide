@@ -1,28 +1,27 @@
 import Foundation
 
 enum FileToolWriteApplier {
-    static func applyWrite(
-        fileSystemService: FileSystemService,
-        eventBus: EventBusProtocol,
-        url: URL,
-        relativePath: String,
-        content: String,
-        traceType: String
-    ) async throws {
-        await AIToolTraceLogger.shared.log(type: traceType, data: [
-            "path": relativePath,
-            "bytes": content.utf8.count
+    struct ApplyWriteRequest {
+        let fileSystemService: FileSystemService
+        let eventBus: EventBusProtocol
+        let url: URL
+        let relativePath: String
+        let content: String
+        let traceType: String
+    }
+
+    static func applyWrite(_ request: ApplyWriteRequest) async throws {
+        await AIToolTraceLogger.shared.log(type: request.traceType, data: [
+            "path": request.relativePath,
+            "bytes": request.content.utf8.count
         ])
 
-        let existed = FileManager.default.fileExists(atPath: url.path)
-        try fileSystemService.writeFile(content: content, to: url)
-
-        Task { @MainActor in
-            if existed {
-                eventBus.publish(FileModifiedEvent(url: url))
-            } else {
-                eventBus.publish(FileCreatedEvent(url: url))
-            }
+        try await MainActor.run {
+            let fileOperationsService = FileOperationsService(
+                fileSystemService: request.fileSystemService,
+                eventBus: request.eventBus
+            )
+            try fileOperationsService.writeFile(content: request.content, to: request.url)
         }
     }
 }

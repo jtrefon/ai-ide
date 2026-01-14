@@ -122,7 +122,12 @@ struct WorkspaceAndChatTests {
     @Test func testWorkspaceServiceRenamePublishesEventAndMovesFile() async throws {
         let errorManager = ErrorManager()
         let eventBus = EventBus()
-        let workspaceService = WorkspaceService(errorManager: errorManager, eventBus: eventBus)
+        let fileSystemService = FileSystemService()
+        let workspaceService = WorkspaceService(
+            errorManager: errorManager,
+            eventBus: eventBus,
+            fileSystemService: fileSystemService
+        )
 
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("osx_ide_workspace_rename_\(UUID().uuidString)")
@@ -159,7 +164,12 @@ struct WorkspaceAndChatTests {
     @Test func testWorkspaceServiceDeletePublishesEventAndRemovesFile() async throws {
         let errorManager = ErrorManager()
         let eventBus = EventBus()
-        let workspaceService = WorkspaceService(errorManager: errorManager, eventBus: eventBus)
+        let fileSystemService = FileSystemService()
+        let workspaceService = WorkspaceService(
+            errorManager: errorManager,
+            eventBus: eventBus,
+            fileSystemService: fileSystemService
+        )
 
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("osx_ide_workspace_delete_\(UUID().uuidString)")
