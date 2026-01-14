@@ -39,34 +39,50 @@ extension AIToolExecutor {
         emitExecutingProgress(toolCall: toolCall, targetFile: targetFile, onProgress: onProgress)
 
         return makeScheduledToolExecutionTask(
-            toolCall: toolCall,
-            availableTools: availableTools,
-            conversationId: conversationId,
-            onProgress: onProgress,
-            targetFile: targetFile
-        )
-    }
-
-    private func makeScheduledToolExecutionTask(
-        toolCall: AIToolCall,
-        availableTools: [AITool],
-        conversationId: String?,
-        onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void,
-        targetFile: String?
-    ) -> Task<ChatMessage, Never> {
-        Task { [weak self] in
-            guard let self else {
-                return Self.makeExecutorUnavailableMessage(toolCall: toolCall, targetFile: targetFile)
-            }
-
-            return await self.executeScheduledToolCall(
+            ScheduledToolExecutionTaskRequest(
                 toolCall: toolCall,
                 availableTools: availableTools,
                 conversationId: conversationId,
                 onProgress: onProgress,
                 targetFile: targetFile
             )
+        )
+    }
+
+    private struct ScheduledToolExecutionTaskRequest {
+        let toolCall: AIToolCall
+        let availableTools: [AITool]
+        let conversationId: String?
+        let onProgress: @MainActor @Sendable (ChatMessage) -> Void
+        let targetFile: String?
+    }
+
+    private func makeScheduledToolExecutionTask(
+        _ request: ScheduledToolExecutionTaskRequest
+    ) -> Task<ChatMessage, Never> {
+        Task { [weak self] in
+            guard let self else {
+                return Self.makeExecutorUnavailableMessage(toolCall: request.toolCall, targetFile: request.targetFile)
+            }
+
+            return await self.executeScheduledToolCall(
+                ExecuteScheduledToolCallRequest(
+                    toolCall: request.toolCall,
+                    availableTools: request.availableTools,
+                    conversationId: request.conversationId,
+                    onProgress: request.onProgress,
+                    targetFile: request.targetFile
+                )
+            )
         }
+    }
+
+    private struct ExecuteScheduledToolCallRequest {
+        let toolCall: AIToolCall
+        let availableTools: [AITool]
+        let conversationId: String?
+        let onProgress: @MainActor @Sendable (ChatMessage) -> Void
+        let targetFile: String?
     }
 
     private func runScheduledTask(
@@ -128,29 +144,25 @@ extension AIToolExecutor {
     }
 
     private func executeScheduledToolCall(
-        toolCall: AIToolCall,
-        availableTools: [AITool],
-        conversationId: String?,
-        onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void,
-        targetFile: String?
+        _ request: ExecuteScheduledToolCallRequest
     ) async -> ChatMessage {
-        let pathKey = self.pathKey(for: toolCall)
+        let pathKey = self.pathKey(for: request.toolCall)
         do {
-            return try await runScheduledTask(toolCall: toolCall, pathKey: pathKey) { [weak self] in
+            return try await runScheduledTask(toolCall: request.toolCall, pathKey: pathKey) { [weak self] in
                 guard let self else {
-                    return Self.makeExecutorUnavailableMessage(toolCall: toolCall, targetFile: targetFile)
+                    return Self.makeExecutorUnavailableMessage(toolCall: request.toolCall, targetFile: request.targetFile)
                 }
 
                 return await self.executeToolCall(
-                    toolCall: toolCall,
-                    availableTools: availableTools,
-                    conversationId: conversationId,
-                    onProgress: onProgress,
-                    targetFile: targetFile
+                    toolCall: request.toolCall,
+                    availableTools: request.availableTools,
+                    conversationId: request.conversationId,
+                    onProgress: request.onProgress,
+                    targetFile: request.targetFile
                 )
             }
         } catch {
-            return Self.makeExecuteScheduledFailedMessage(toolCall: toolCall, targetFile: targetFile, error: error)
+            return Self.makeExecuteScheduledFailedMessage(toolCall: request.toolCall, targetFile: request.targetFile, error: error)
         }
     }
 }
