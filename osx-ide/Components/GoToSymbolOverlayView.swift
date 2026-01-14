@@ -110,12 +110,14 @@ struct GoToSymbolOverlayView: View {
 
         isSearching = true
         let newResults = await searchService.search(
-            query: trimmed,
-            projectRoot: root,
-            currentFilePath: currentFilePath,
-            currentContent: currentContent,
-            currentLanguage: currentLanguage,
-            limit: 200
+            WorkspaceSymbolSearchService.SearchRequest(
+                rawQuery: trimmed,
+                projectRoot: root,
+                currentFilePath: currentFilePath,
+                currentContent: currentContent,
+                currentLanguage: currentLanguage,
+                limit: 200
+            )
         )
         self.results = newResults
         self.isSearching = false
