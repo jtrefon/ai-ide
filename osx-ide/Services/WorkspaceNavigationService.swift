@@ -94,13 +94,13 @@ public final class WorkspaceNavigationService {
         )
 
         let exact = results.filter { $0.name == needle }
-        return exact.map { 
-                WorkspaceCodeLocation(
-                    relativePath: $0.relativePath, 
-                    line: $0.line, 
-                    snippet: "\($0.kind.rawValue) \($0.name)"
-                ) 
-            }
+        return exact.map {
+            WorkspaceCodeLocation(
+                relativePath: $0.relativePath,
+                line: $0.line,
+                snippet: "\($0.kind.rawValue) \($0.name)"
+            )
+        }
     }
 
     public func findReferenceLocations(
@@ -119,10 +119,10 @@ public final class WorkspaceNavigationService {
     }
 
     public func renameInCurrentBuffer(
-            content: String, 
-            identifier: String, 
-            newName: String
-        ) throws -> (updated: String, replacements: Int) {
+        content: String,
+        identifier: String,
+        newName: String
+    ) throws -> (updated: String, replacements: Int) {
         try Self.renameInCurrentBuffer(content: content, identifier: identifier, newName: newName)
     }
 
@@ -167,10 +167,10 @@ public final class WorkspaceNavigationService {
     }
 
     public static func renameInCurrentBuffer(
-            content: String, 
-            identifier: String, 
-            newName: String
-        ) throws -> (updated: String, replacements: Int) {
+        content: String,
+        identifier: String,
+        newName: String
+    ) throws -> (updated: String, replacements: Int) {
         let old = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         let replacement = newName.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -189,22 +189,22 @@ public final class WorkspaceNavigationService {
         let ns = content as NSString
         let matches = regex.numberOfMatches(in: content, range: NSRange(location: 0, length: ns.length))
         let updated = regex.stringByReplacingMatches(
-                in: content, 
-                range: NSRange(location: 0, length: ns.length), 
-                withTemplate: replacement
-            )
+            in: content,
+            range: NSRange(location: 0, length: ns.length),
+            withTemplate: replacement
+        )
         return (updated, matches)
     }
 
-    public static func isValidIdentifier(_ s: String) -> Bool {
-        if s.isEmpty { return false }
-        let ns = s as NSString
+    public static func isValidIdentifier(_ candidate: String) -> Bool {
+        if candidate.isEmpty { return false }
+        let ns = candidate as NSString
         let first = ns.character(at: 0)
         let isLetterOrUnderscore = (first >= 65 && first <= 90) || (first >= 97 && first <= 122) || first == 95
         if !isLetterOrUnderscore { return false }
 
-        for i in 1..<ns.length {
-            let ch = ns.character(at: i)
+        for index in 1..<ns.length {
+            let ch = ns.character(at: index)
             let ok = (ch >= 48 && ch <= 57) || (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch == 95
             if !ok { return false }
         }

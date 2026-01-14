@@ -104,15 +104,15 @@ struct CommandPaletteOverlayView: View {
         scored.reserveCapacity(all.count)
 
         for command in all {
-            let s = CommandPaletteScoring.score(candidate: command.value, query: trimmed)
-            if s > 0 {
-                scored.append((command, s))
+            let score = CommandPaletteScoring.score(candidate: command.value, query: trimmed)
+            if score > 0 {
+                scored.append((command, score))
             }
         }
 
-        scored.sort { a, b in
-            if a.1 != b.1 { return a.1 > b.1 }
-            return a.0.value < b.0.value
+        scored.sort { left, right in
+            if left.1 != right.1 { return left.1 > right.1 }
+            return left.0.value < right.0.value
         }
 
         items = scored.prefix(60).map { (cmd, _) in

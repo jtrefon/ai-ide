@@ -14,7 +14,7 @@ struct AISettingsTab: View {
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }
-    
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -31,20 +31,20 @@ struct AISettingsTab: View {
                             SecureField(localized("settings.ai.api_key.placeholder"), text: $viewModel.apiKey)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 240)
-                            
+
                             Button(localized("settings.ai.api_key.validate")) {
                                 Task { await viewModel.validateKey() }
                             }
                             .buttonStyle(.borderedProminent)
                         }
                     }
-                    
+
                     HStack(spacing: 12) {
                         SettingsStatusPill(status: viewModel.keyStatus)
                         Spacer()
                         Button(
-                            showAdvanced 
-                                ? localized("settings.ai.advanced.hide") 
+                            showAdvanced
+                                ? localized("settings.ai.advanced.hide")
                                 : localized("settings.ai.advanced.show")
                         ) {
                             withAnimation(.easeInOut(duration: 0.2)) {
@@ -53,7 +53,7 @@ struct AISettingsTab: View {
                         }
                         .buttonStyle(.bordered)
                     }
-                    
+
                     if showAdvanced {
                         SettingsRow(
                             title: localized("settings.ai.base_url.title"),
@@ -66,7 +66,7 @@ struct AISettingsTab: View {
                         }
                     }
                 }
-                
+
                 SettingsCard(
                     title: localized("settings.ai.model_selection.title"),
                     subtitle: localized("settings.ai.model_selection.subtitle")
@@ -87,30 +87,30 @@ struct AISettingsTab: View {
                                 .onChange(of: viewModel.modelQuery) {
                                     Task { await viewModel.loadModels() }
                                 }
-                            
+
                             Button(localized("settings.ai.model.test_latency")) {
                                 Task { await viewModel.testModel() }
                             }
                             .buttonStyle(.bordered)
                         }
                     }
-                    
+
                     if viewModel.shouldShowSuggestions() {
                         ModelSuggestionList(models: viewModel.filteredModels) { model in
                             viewModel.selectModel(model)
                             Task { await viewModel.validateModel() }
                         }
                     }
-                    
+
                     HStack(spacing: 12) {
                         SettingsStatusPill(status: viewModel.modelStatus)
                         SettingsStatusPill(status: viewModel.modelValidationStatus)
                         SettingsStatusPill(status: viewModel.testStatus)
-                        
+
                         Spacer()
                     }
                 }
-                
+
                 SettingsCard(
                     title: localized("settings.ai.system_prompt.title"),
                     subtitle: localized("settings.ai.system_prompt.subtitle")
@@ -119,7 +119,7 @@ struct AISettingsTab: View {
                         Text(localized("settings.ai.system_prompt.help"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        
+
                         TextEditor(text: $viewModel.systemPrompt)
                             .font(.system(size: 13, weight: .regular, design: .monospaced))
                             .frame(minHeight: 140)
@@ -131,13 +131,13 @@ struct AISettingsTab: View {
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .stroke(Color.white.opacity(0.08), lineWidth: 0.6)
                             )
-                        
+
                         HStack(spacing: 12) {
                             Button(localized("settings.ai.system_prompt.reset")) {
                                 viewModel.systemPrompt = ""
                             }
                             .buttonStyle(.bordered)
-                            
+
                             Spacer()
                         }
                     }

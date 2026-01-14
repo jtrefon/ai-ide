@@ -41,10 +41,10 @@ public final class WorkspaceSearchService {
         await WorkspaceFallbackSearcher().search(pattern: pattern, projectRoot: projectRoot, limit: limit)
     }
 
-    static func parseIndexedMatchLine(_ s: String) -> WorkspaceSearchMatch? {
+    static func parseIndexedMatchLine(_ line: String) -> WorkspaceSearchMatch? {
         // Expected: rel/path:line: snippet
         // We split the first two ":" occurrences.
-        let parts = s.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        let parts = line.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
         guard parts.count >= 2 else { return nil }
 
         let path = String(parts[0])

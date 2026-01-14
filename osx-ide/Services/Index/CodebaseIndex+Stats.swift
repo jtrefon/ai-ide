@@ -1,12 +1,21 @@
 import Foundation
 
 extension CodebaseIndex {
+    private struct SymbolKindStats {
+        let classCount: Int
+        let structCount: Int
+        let enumCount: Int
+        let protocolCount: Int
+        let functionCount: Int
+        let variableCount: Int
+    }
+
     public func getStats() async throws -> IndexStats {
         let counts = try await database.getIndexStatsCounts()
         let totalProjectFileCount = IndexFileEnumerator.enumerateProjectFiles(
-                    rootURL: projectRoot, 
-                    excludePatterns: excludePatterns
-                ).count
+            rootURL: projectRoot,
+            excludePatterns: excludePatterns
+        ).count
 
         let aiEnrichableProjectFileCount = IndexFileEnumerator
             .enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns)
@@ -42,21 +51,21 @@ extension CodebaseIndex {
     }
 
     private func loadScopedStats(
-            fallbackIndexedCount: Int
-        ) async -> (indexedCount: Int, aiEnrichedCount: Int, avgAIQuality: Double) {
+        fallbackIndexedCount: Int
+    ) async -> (indexedCount: Int, aiEnrichedCount: Int, avgAIQuality: Double) {
         let allowed = AppConstants.Indexing.allowedExtensions
         let indexedCount = (try? await database.getIndexedResourceCountScoped(
             projectRoot: projectRoot,
             allowedExtensions: allowed
         )) ?? fallbackIndexedCount
         let aiEnrichedCount = (try? await database.getAIEnrichedResourceCountScoped(
-                    projectRoot: projectRoot, 
-                    allowedExtensions: allowed
-                )) ?? 0
+            projectRoot: projectRoot,
+            allowedExtensions: allowed
+        )) ?? 0
         let avgAIQuality = (try? await database.getAverageAIQualityScoreScoped(
-                    projectRoot: projectRoot, 
-                    allowedExtensions: allowed
-                )) ?? 0
+            projectRoot: projectRoot,
+            allowedExtensions: allowed
+        )) ?? 0
         return (indexedCount, aiEnrichedCount, avgAIQuality)
     }
 
@@ -78,8 +87,8 @@ extension CodebaseIndex {
 
     private func symbolKindStats(
         _ kindCounts: [String: Int]
-    ) -> (classCount: Int, structCount: Int, enumCount: Int, protocolCount: Int, functionCount: Int, variableCount: Int) {
-        return (
+    ) -> SymbolKindStats {
+        return SymbolKindStats(
             classCount: kindCounts[SymbolKind.class.rawValue] ?? 0,
             structCount: kindCounts[SymbolKind.struct.rawValue] ?? 0,
             enumCount: kindCounts[SymbolKind.enum.rawValue] ?? 0,

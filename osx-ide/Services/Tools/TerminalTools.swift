@@ -81,40 +81,12 @@ struct RunCommandTool: AIToolProgressReporting {
             ?? UUID().uuidString
         let isCancelled = AtomicBool(false)
 
-        let observer = NotificationCenter.default.addObserver(
-            forName: NSNotification.Name("CancelToolExecution"),
-            object: nil,
-            queue: nil
-        ) { notification in
-            if let targetId = notification.userInfo?["toolCallId"] as? String, targetId == toolCallId {
-                isCancelled.set(true)
-            }
-        }
+        let observer = makeCancellationObserver(toolCallId: toolCallId, isCancelled: isCancelled)
 
         defer { NotificationCenter.default.removeObserver(observer) }
 
-        let timeoutSecondsRaw = arguments["timeout_seconds"] as? Double
-        let timeoutSeconds: Double = {
-            if let timeoutSecondsRaw {
-                return timeoutSecondsRaw
-            }
-
-            let storedTimeout = UserDefaults.standard.double(forKey: AppConstants.Storage.cliTimeoutSecondsKey)
-            return storedTimeout == 0 ? 30 : storedTimeout
-        }()
-        if !(1...300).contains(timeoutSeconds) {
-            throw AppError.aiServiceError(
-                "Invalid 'timeout_seconds' for run_command. Must be between 1 and 300."
-            )
-        }
-
-        let workingDirectoryArg = arguments["working_directory"] as? String
-        let workingDirectoryURL: URL
-        if let workingDirectoryArg, !workingDirectoryArg.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            workingDirectoryURL = try pathValidator.validateAndResolve(workingDirectoryArg)
-        } else {
-            workingDirectoryURL = projectRoot
-        }
+        let timeoutSeconds = try resolveTimeoutSeconds(arguments: arguments)
+        let workingDirectoryURL = try resolveWorkingDirectory(arguments: arguments)
 
         let inheritedEnvironment = ProcessInfo.processInfo.environment
         let resolvedPath = inheritedEnvironment["PATH"] ?? ""
@@ -132,78 +104,24 @@ struct RunCommandTool: AIToolProgressReporting {
             "timeoutSeconds": timeoutSeconds
         ])
 
-        let process = Process()
-        let pipe = Pipe()
         let maxCapturedBytes = 64 * 1024
         let collector = OutputCollector(maxBytes: maxCapturedBytes)
-
-        process.standardOutput = pipe
-        process.standardError = pipe
-        process.environment = inheritedEnvironment
-        process.arguments = ["-lc", command]
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.currentDirectoryURL = workingDirectoryURL
-
-        pipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            collector.append(data)
-            if let onProgress,
-               let chunk = String(data: data, encoding: .utf8),
-               !chunk.isEmpty {
-                onProgress(chunk)
-            }
-        }
+        let (process, pipe) = makeProcess(
+            command: command,
+            workingDirectoryURL: workingDirectoryURL,
+            inheritedEnvironment: inheritedEnvironment,
+            collector: collector,
+            onProgress: onProgress
+        )
 
         do {
             try process.run()
 
-            let didExitBeforeTimeout: Bool = await withTaskGroup(of: Bool.self) { group in
-                group.addTask {
-                    final class OneShot: @unchecked Sendable {
-                        private let lock = NSLock()
-                        private var fired = false
-
-                        func fire(_ action: () -> Void) {
-                            lock.lock()
-                            defer { lock.unlock() }
-                            guard !fired else { return }
-                            fired = true
-                            action()
-                        }
-                    }
-
-                    let oneShot = OneShot()
-                    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                        if !process.isRunning {
-                            continuation.resume()
-                            return
-                        }
-
-                        process.terminationHandler = { _ in
-                            oneShot.fire {
-                                continuation.resume()
-                            }
-                        }
-                    }
-                    return true
-                }
-                group.addTask {
-                    let nanos = UInt64(timeoutSeconds * 1_000_000_000)
-                    try? await Task.sleep(nanoseconds: nanos)
-                    return false
-                }
-                group.addTask {
-                    while !isCancelled.get() {
-                        try? await Task.sleep(nanoseconds: 100_000_000)
-                    }
-                    return false
-                }
-
-                let first = await group.next() ?? false
-                group.cancelAll()
-                return first
-            }
+            let didExitBeforeTimeout = await waitForExit(
+                process: process,
+                timeoutSeconds: timeoutSeconds,
+                isCancelled: isCancelled
+            )
 
             if isCancelled.get() || !didExitBeforeTimeout {
                 await AIToolTraceLogger.shared.log(
@@ -217,22 +135,10 @@ struct RunCommandTool: AIToolProgressReporting {
                         "timeoutSeconds": timeoutSeconds
                     ]
                 )
-
-                if process.isRunning {
-                    process.terminate()
-                }
-
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                if process.isRunning {
-                    kill(process.processIdentifier, SIGKILL)
-                }
+                await terminateProcessIfNeeded(process)
             }
 
-            pipe.fileHandleForReading.readabilityHandler = nil
-            let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
-            collector.append(remaining)
-
-            let output = String(data: collector.snapshot(), encoding: .utf8) ?? ""
+            let output = finalizeOutput(pipe: pipe, collector: collector)
 
             await AIToolTraceLogger.shared.log(type: "terminal.run_command_result", data: [
                 "exitCode": Int(process.terminationStatus),
@@ -264,7 +170,147 @@ struct RunCommandTool: AIToolProgressReporting {
             """
         }
     }
-    
+
+    private func makeCancellationObserver(toolCallId: String, isCancelled: AtomicBool) -> NSObjectProtocol {
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("CancelToolExecution"),
+            object: nil,
+            queue: nil
+        ) { notification in
+            if let targetId = notification.userInfo?["toolCallId"] as? String, targetId == toolCallId {
+                isCancelled.set(true)
+            }
+        }
+    }
+
+    private func resolveTimeoutSeconds(arguments: [String: Any]) throws -> Double {
+        let timeoutSecondsRaw = arguments["timeout_seconds"] as? Double
+        let timeoutSeconds: Double = {
+            if let timeoutSecondsRaw {
+                return timeoutSecondsRaw
+            }
+
+            let storedTimeout = UserDefaults.standard.double(forKey: AppConstants.Storage.cliTimeoutSecondsKey)
+            return storedTimeout == 0 ? 30 : storedTimeout
+        }()
+        if !(1...300).contains(timeoutSeconds) {
+            throw AppError.aiServiceError(
+                "Invalid 'timeout_seconds' for run_command. Must be between 1 and 300."
+            )
+        }
+        return timeoutSeconds
+    }
+
+    private func resolveWorkingDirectory(arguments: [String: Any]) throws -> URL {
+        let workingDirectoryArg = arguments["working_directory"] as? String
+        if let workingDirectoryArg, !workingDirectoryArg.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return try pathValidator.validateAndResolve(workingDirectoryArg)
+        }
+        return projectRoot
+    }
+
+    private func makeProcess(
+        command: String,
+        workingDirectoryURL: URL,
+        inheritedEnvironment: [String: String],
+        collector: OutputCollector,
+        onProgress: (@Sendable (String) -> Void)?
+    ) -> (Process, Pipe) {
+        let process = Process()
+        let pipe = Pipe()
+
+        process.standardOutput = pipe
+        process.standardError = pipe
+        process.environment = inheritedEnvironment
+        process.arguments = ["-lc", command]
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.currentDirectoryURL = workingDirectoryURL
+
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            collector.append(data)
+            if let onProgress,
+               let chunk = String(data: data, encoding: .utf8),
+               !chunk.isEmpty {
+                onProgress(chunk)
+            }
+        }
+
+        return (process, pipe)
+    }
+
+    private func waitForExit(
+        process: Process,
+        timeoutSeconds: Double,
+        isCancelled: AtomicBool
+    ) async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                final class OneShot: @unchecked Sendable {
+                    private let lock = NSLock()
+                    private var fired = false
+
+                    func fire(_ action: () -> Void) {
+                        lock.lock()
+                        defer { lock.unlock() }
+                        guard !fired else { return }
+                        fired = true
+                        action()
+                    }
+                }
+
+                let oneShot = OneShot()
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    if !process.isRunning {
+                        continuation.resume()
+                        return
+                    }
+
+                    process.terminationHandler = { _ in
+                        oneShot.fire {
+                            continuation.resume()
+                        }
+                    }
+                }
+                return true
+            }
+            group.addTask {
+                let nanos = UInt64(timeoutSeconds * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanos)
+                return false
+            }
+            group.addTask {
+                while !isCancelled.get() {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                return false
+            }
+
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+    }
+
+    private func terminateProcessIfNeeded(_ process: Process) async {
+        if process.isRunning {
+            process.terminate()
+        }
+
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        if process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+        }
+    }
+
+    private func finalizeOutput(pipe: Pipe, collector: OutputCollector) -> String {
+        pipe.fileHandleForReading.readabilityHandler = nil
+        let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
+        collector.append(remaining)
+        return String(data: collector.snapshot(), encoding: .utf8) ?? ""
+    }
+
     func execute(arguments: ToolArguments) async throws -> String {
         try await executeImpl(arguments: arguments.raw, onProgress: nil)
     }

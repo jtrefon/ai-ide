@@ -24,13 +24,13 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     var isEnabled: Bool
     var aiEnrichmentAfterIndexCancellable: AnyCancellable?
     var aiEnrichmentTask: Task<Void, Never>?
-    
+
     init(
-            eventBus: EventBusProtocol, 
-            projectRoot: URL, 
-            aiService: AIService, 
-            config: IndexConfiguration = .default
-        ) throws {
+        eventBus: EventBusProtocol,
+        projectRoot: URL,
+        aiService: AIService,
+        config: IndexConfiguration = .default
+    ) throws {
         self.eventBus = eventBus
         self.projectRoot = projectRoot
         self.aiService = aiService
@@ -45,11 +45,11 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         self.memoryManager = MemoryManager(database: database, eventBus: eventBus)
         self.queryService = QueryService(database: database)
         self.coordinator = IndexCoordinator(
-                    eventBus: eventBus, 
-                    indexer: indexer, 
-                    config: resolvedConfig.configuration, 
-                    projectRoot: projectRoot
-                )
+            eventBus: eventBus,
+            indexer: indexer,
+            config: resolvedConfig.configuration,
+            projectRoot: projectRoot
+        )
     }
 
     private struct ResolvedIndexConfiguration {
@@ -58,18 +58,18 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     }
 
     private static func resolveConfiguration(
-            projectRoot: URL, 
-            config: IndexConfiguration
-        ) -> ResolvedIndexConfiguration {
+        projectRoot: URL,
+        config: IndexConfiguration
+    ) -> ResolvedIndexConfiguration {
         let resolvedExcludePatterns = IndexExcludePatternManager.loadExcludePatterns(
-                    projectRoot: projectRoot, 
-                    defaultPatterns: config.excludePatterns
-                )
+            projectRoot: projectRoot,
+            defaultPatterns: config.excludePatterns
+        )
         let resolvedConfig = IndexConfiguration(
-                    enabled: config.enabled, 
-                    debounceMs: config.debounceMs, 
-                    excludePatterns: resolvedExcludePatterns
-                )
+            enabled: config.enabled,
+            debounceMs: config.debounceMs,
+            excludePatterns: resolvedExcludePatterns
+        )
         return ResolvedIndexConfiguration(configuration: resolvedConfig, excludePatterns: resolvedExcludePatterns)
     }
 

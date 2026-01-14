@@ -6,8 +6,8 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
     public init() {}
 
     public func scoreFile(
-        path: String, 
-        content: String, 
+        path: String,
+        content: String,
         context: QualityScoringContext
     ) async -> QualityAssessment {
         let lines = content.components(separatedBy: .newlines)
@@ -148,52 +148,6 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
             breakdown: fileAggregate.breakdown,
             issues: fileIssues,
             children: children
-        )
-    }
-
-    private func scoreStandaloneFile(lines: [String]) -> QualityAssessment {
-        let loc = nonEmptyLineCount(lines)
-        var score = 80.0
-        var issues: [QualityIssue] = []
-
-        if loc > 800 {
-            score -= 30
-            issues.append(
-                QualityIssue(
-                    severity: .warning, 
-                    category: .maintainability, 
-                    message: "Large file (\(loc) non-empty lines)"
-                )
-            )
-        } else if loc > 400 {
-            score -= 15
-            issues.append(
-                QualityIssue(
-                    severity: .info, 
-                    category: .maintainability, 
-                    message: "Moderately large file (\(loc) non-empty lines)"
-                )
-            )
-        }
-
-        let breakdown = QualityBreakdown(categoryScores: [
-            .readability: score,
-            .complexity: score,
-            .maintainability: score,
-            .correctness: score,
-            .architecture: score
-        ], metrics: [
-            "loc": Double(loc)
-        ])
-
-        return QualityAssessment(
-            entityType: .type,
-            entityName: "(file)",
-            language: .swift,
-            score: clamp(score),
-            breakdown: breakdown,
-            issues: issues,
-            children: []
         )
     }
 
@@ -357,10 +311,10 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
     }
 
     private func aggregate(
-            parentName: String, 
-            children: [QualityAssessment], 
-            kind: AggregateKind
-        ) -> QualityAssessment {
+        parentName: String,
+        children: [QualityAssessment],
+        kind: AggregateKind
+    ) -> QualityAssessment {
         guard !children.isEmpty else {
             let breakdown = QualityBreakdown(categoryScores: [
                 .readability: 50,
@@ -371,12 +325,12 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
             ])
             let entityType: QualityEntityType = (kind == .file) ? .file : .type
             return QualityAssessment(
-                    entityType: entityType, 
-                    entityName: parentName, 
-                    language: .swift, 
-                    score: 50, 
-                    breakdown: breakdown
-                )
+                entityType: entityType,
+                entityName: parentName,
+                language: .swift,
+                score: 50,
+                breakdown: breakdown
+            )
         }
 
         let avg = children.map { $0.score }.reduce(0, +) / Double(children.count)
@@ -394,13 +348,13 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         score = clamp(score * 0.85 + minScore * 0.15)
 
         var merged: [String: Double] = [:]
-        for c in children {
-            for (k, v) in c.breakdown.categoryScores {
-                merged[k, default: 0] += v
+        for child in children {
+            for (category, categoryScore) in child.breakdown.categoryScores {
+                merged[category, default: 0] += categoryScore
             }
         }
-        for (k, v) in merged {
-            merged[k] = v / Double(children.count)
+        for (category, categoryScore) in merged {
+            merged[category] = categoryScore / Double(children.count)
         }
 
         let breakdown = QualityBreakdown(categoryScores: merged, metrics: [
@@ -410,15 +364,69 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         ])
 
         let entityType: QualityEntityType = (kind == .file) ? .file : .type
-        return QualityAssessment(entityType: entityType, entityName: parentName, language: .swift, score: score, breakdown: breakdown)
+        return QualityAssessment(
+            entityType: entityType,
+            entityName: parentName,
+            language: .swift,
+            score: score,
+            breakdown: breakdown
+        )
+    }
+}
+
+extension SwiftHeuristicScorer {
+    private func scoreStandaloneFile(lines: [String]) -> QualityAssessment {
+        let loc = nonEmptyLineCount(lines)
+        var score = 80.0
+        var issues: [QualityIssue] = []
+
+        if loc > 800 {
+            score -= 30
+            issues.append(
+                QualityIssue(
+                    severity: .warning,
+                    category: .maintainability,
+                    message: "Large file (\(loc) non-empty lines)"
+                )
+            )
+        } else if loc > 400 {
+            score -= 15
+            issues.append(
+                QualityIssue(
+                    severity: .info,
+                    category: .maintainability,
+                    message: "Moderately large file (\(loc) non-empty lines)"
+                )
+            )
+        }
+
+        let breakdown = QualityBreakdown(categoryScores: [
+            .readability: score,
+            .complexity: score,
+            .maintainability: score,
+            .correctness: score,
+            .architecture: score
+        ], metrics: [
+            "loc": Double(loc)
+        ])
+
+        return QualityAssessment(
+            entityType: .type,
+            entityName: "(file)",
+            language: .swift,
+            score: clamp(score),
+            breakdown: breakdown,
+            issues: issues,
+            children: []
+        )
     }
 
     private func slice(lines: [String], start: Int, end: Int) -> [String] {
         if lines.isEmpty { return [] }
-        let s = max(1, start)
-        let e = min(end, lines.count)
-        if s > e { return [] }
-        return Array(lines[(s - 1)...(e - 1)])
+        let startIndex = max(1, start)
+        let endIndex = min(end, lines.count)
+        if startIndex > endIndex { return [] }
+        return Array(lines[(startIndex - 1)...(endIndex - 1)])
     }
 
     private func nonEmptyLineCount(_ lines: [String]) -> Int {
@@ -501,7 +509,7 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         state.started && currentIndex - startIndex > 600
     }
 
-    private func clamp(_ v: Double) -> Double {
-        max(0, min(100, v))
+    private func clamp(_ value: Double) -> Double {
+        max(0, min(100, value))
     }
 }

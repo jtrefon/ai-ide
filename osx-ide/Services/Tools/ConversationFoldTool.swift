@@ -12,18 +12,18 @@ struct ConversationFoldTool: AITool {
                 "action": [
                     "type": "string",
                     "description": "One of: list, read",
-                    "enum": ["list", "read"],
+                    "enum": ["list", "read"]
                 ],
                 "id": [
                     "type": "string",
-                    "description": "Fold id (required for action=read)",
+                    "description": "Fold id (required for action=read)"
                 ],
                 "limit": [
                     "type": "integer",
-                    "description": "Max number of folds to return (action=list)",
-                ],
+                    "description": "Max number of folds to return (action=list)"
+                ]
             ],
-            "required": ["action"],
+            "required": ["action"]
         ]
     }
 
@@ -44,7 +44,7 @@ struct ConversationFoldTool: AITool {
             let payload = entries.map { [
                 "id": $0.id,
                 "summary": $0.summary,
-                "createdAt": ISO8601DateFormatter().string(from: $0.createdAt),
+                "createdAt": ISO8601DateFormatter().string(from: $0.createdAt)
             ] }
             let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
             return String(decoding: data, as: UTF8.self)

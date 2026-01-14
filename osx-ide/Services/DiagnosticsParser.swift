@@ -14,16 +14,16 @@ struct DiagnosticsParser {
         guard parts.count >= 4 else { return nil }
 
         func intAt(_ idx: Int) -> Int? {
-            let s = parts[idx].trimmingCharacters(in: .whitespaces)
-            return Int(s)
+            let segment = parts[idx].trimmingCharacters(in: .whitespaces)
+            return Int(segment)
         }
 
         // Find first numeric segment to treat as line.
         // This allows paths with ':' (rare on macOS) but keeps behavior predictable.
         var lineIndex: Int?
-        for i in 1..<(parts.count - 2) {
-            if intAt(i) != nil {
-                lineIndex = i
+        for index in 1..<(parts.count - 2) {
+            if intAt(index) != nil {
+                lineIndex = index
                 break
             }
         }
@@ -32,7 +32,7 @@ struct DiagnosticsParser {
         let path = parts[0..<li].joined(separator: ":").trimmingCharacters(in: .whitespaces)
         guard !path.isEmpty else { return nil }
 
-        var column: Int? = nil
+        var column: Int?
         var severityIndex = li + 1
         if li + 1 < parts.count, let col = intAt(li + 1) {
             column = col

@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 final class EditorPaneReloadFromDiskTests: XCTestCase {
 
     private final class StubFileEditorService: ObservableObject, FileEditorServiceProtocol {
-        @Published var selectedFile: String? = nil
+        @Published var selectedFile: String?
         @Published var editorContent: String = ""
         @Published var editorLanguage: String = "swift"
 

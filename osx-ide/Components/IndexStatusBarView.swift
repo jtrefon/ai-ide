@@ -5,17 +5,17 @@ struct IndexStatusBarView: View {
     @StateObject private var viewModel: IndexStatusBarViewModel
 
     init(
-            appState: AppState, 
-            codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?, 
-            eventBus: EventBusProtocol
-        ) {
+        appState: AppState,
+        codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
+        eventBus: EventBusProtocol
+    ) {
         self.appState = appState
         self._viewModel = StateObject(
-                wrappedValue: IndexStatusBarViewModel(
-                    codebaseIndexProvider: codebaseIndexProvider, 
-                    eventBus: eventBus
-                )
+            wrappedValue: IndexStatusBarViewModel(
+                codebaseIndexProvider: codebaseIndexProvider,
+                eventBus: eventBus
             )
+        )
     }
 
     @State private var isShowingMetricsInfo: Bool = false
@@ -34,8 +34,8 @@ struct IndexStatusBarView: View {
     private var activeLanguageLabel: String {
         guard let filePath = activeFilePath else { return "" }
         let effective = appState.effectiveLanguageIdentifier(
-                forAbsoluteFilePath: filePath
-            )
+            forAbsoluteFilePath: filePath
+        )
         return displayName(for: effective)
     }
 
@@ -43,8 +43,8 @@ struct IndexStatusBarView: View {
         var choices: [LanguageChoice] = []
         choices.append(
             LanguageChoice(
-                id: "auto", 
-                title: NSLocalizedString("status.language_mode.auto_detect", comment: ""), 
+                id: "auto",
+                title: NSLocalizedString("status.language_mode.auto_detect", comment: ""),
                 languageIdentifier: nil
             )
         )
@@ -121,9 +121,9 @@ struct IndexStatusBarView: View {
                                 Button {
                                     guard let filePath = activeFilePath else { return }
                                     appState.setLanguageOverride(
-                                    forAbsoluteFilePath: filePath, 
-                                    languageIdentifier: choice.languageIdentifier
-                                )
+                                        forAbsoluteFilePath: filePath,
+                                        languageIdentifier: choice.languageIdentifier
+                                    )
                                     isShowingLanguagePicker = false
                                 } label: {
                                     Text(choice.title)

@@ -57,8 +57,8 @@ struct IndexExcludePatternManager {
         var merged: [String] = []
         merged.reserveCapacity(defaultPatterns.count + customPatterns.count)
 
-        for p in defaultPatterns + customPatterns {
-            let trimmed = p.trimmingCharacters(in: .whitespacesAndNewlines)
+        for pattern in defaultPatterns + customPatterns {
+            let trimmed = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
             if seen.insert(trimmed).inserted {
                 merged.append(trimmed)

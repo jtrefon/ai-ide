@@ -66,11 +66,11 @@ private struct MinimapRepresentable: NSViewRepresentable {
             return font
         }
         if let font = NSFontManager.shared.font(
-                withFamily: family, 
-                traits: .fixedPitchFontMask, 
-                weight: 5, 
-                size: size
-            ) {
+            withFamily: family,
+            traits: .fixedPitchFontMask,
+            weight: 5,
+            size: size
+        ) {
             return font
         }
         return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)

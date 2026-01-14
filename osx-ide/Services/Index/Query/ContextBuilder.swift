@@ -4,11 +4,11 @@ import SQLite3
 
 public enum ContextBuilder {
     public static func buildContext(
-            userInput: String, 
-            explicitContext: String?, 
-            index: CodebaseIndexProtocol?, 
-            projectRoot: URL?
-        ) async -> String? {
+        userInput: String,
+        explicitContext: String?,
+        index: CodebaseIndexProtocol?,
+        projectRoot: URL?
+    ) async -> String? {
         var parts: [String] = []
 
         func relPath(_ absPath: String) -> String {
@@ -56,7 +56,7 @@ public enum ContextBuilder {
                 let symbol = result.symbol
                 if let filePath = result.filePath {
                     return "- [\(symbol.kind.rawValue)] \(symbol.name) (" +
-                    "\(relPath(filePath)):\(symbol.lineStart)-\(symbol.lineEnd))"
+                        "\(relPath(filePath)):\(symbol.lineStart)-\(symbol.lineEnd))"
                 }
                 return "- [\(symbol.kind.rawValue)] \(symbol.name) (lines \(symbol.lineStart)-\(symbol.lineEnd))"
             }

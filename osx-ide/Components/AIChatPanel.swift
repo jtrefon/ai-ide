@@ -8,7 +8,7 @@ struct AIChatPanel: View {
     @ObservedObject var ui: UIStateManager
 
     @State private var stateTick: UInt = 0
-    @State private var conversationPlan: String? = nil
+    @State private var conversationPlan: String?
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
@@ -24,12 +24,12 @@ struct AIChatPanel: View {
                 Spacer()
                 if let selected = currentSelection, !selected.isEmpty {
                     Text(String(
-                    format: localized("ai_chat.context_format"), 
-                    "\(selected.prefix(30))\(selected.count > 30 ? "..." : "")"
-                ))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
+                        format: localized("ai_chat.context_format"),
+                        "\(selected.prefix(30))\(selected.count > 30 ? "..." : "")"
+                    ))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
                 }
                 Button(action: {
                     conversationManager.startNewConversation()
@@ -75,7 +75,7 @@ struct AIChatPanel: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .layoutPriority(1)
             .clipped()
-            
+
             // Error display
             if let error = conversationManager.error {
                 Text(error)
@@ -84,7 +84,7 @@ struct AIChatPanel: View {
                     .padding(.horizontal)
                     .padding(.vertical, 4)
             }
-            
+
             // Input area
             ChatInputView(
                 text: inputBinding,
@@ -95,13 +95,13 @@ struct AIChatPanel: View {
                     sendMessage()
                 }
             )
-            
+
             // Mode selector
             HStack(spacing: 8) {
                 Image(systemName: conversationManager.currentMode.icon)
                     .font(.caption)
                     .foregroundColor(.secondary)
-                
+
                 Picker(localized("ai_chat.mode"), selection: modeBinding) {
                     ForEach(AIMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
@@ -109,12 +109,12 @@ struct AIChatPanel: View {
                 }
                 .pickerStyle(.menu)
                 .frame(width: 100)
-                
+
                 Text(conversationManager.currentMode.description)
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
-                
+
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -136,19 +136,19 @@ struct AIChatPanel: View {
         .background(Color(NSColor.controlBackgroundColor))
     }
 
-    var currentSelection: String? { 
+    var currentSelection: String? {
         selectionContext.selectedText.isEmpty ? nil : selectionContext.selectedText
     }
-    
+
     // MARK: - Bindings
-    
+
     private var inputBinding: Binding<String> {
         Binding(
             get: { conversationManager.currentInput },
             set: { conversationManager.currentInput = $0 }
         )
     }
-    
+
     private var modeBinding: Binding<AIMode> {
         Binding(
             get: { conversationManager.currentMode },
@@ -160,8 +160,8 @@ struct AIChatPanel: View {
         // Use selected code as context if available
         let context = currentSelection
         conversationManager.currentInput = conversationManager.currentInput.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
+            in: .whitespacesAndNewlines
+        )
         conversationManager.sendMessage(context: context)
     }
 
@@ -195,10 +195,9 @@ struct AIChatPanel: View {
             selectionContext: ctx,
             conversationManager: container.conversationManager,
             ui: UIStateManager(
-                uiService: UIService(errorManager: ErrorManager(), eventBus: EventBus()), 
+                uiService: UIService(errorManager: ErrorManager(), eventBus: EventBus()),
                 eventBus: EventBus()
             )
         )
     }
 }
-

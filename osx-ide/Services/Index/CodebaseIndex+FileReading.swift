@@ -39,9 +39,9 @@ extension CodebaseIndex {
 
         var output: [String] = []
         output.reserveCapacity(end - start + 1)
-        for i in start...end {
-            let text = lines[i - 1]
-            output.append(String(format: "%6d | %@", i, text))
+        for lineNumber in start...end {
+            let text = lines[lineNumber - 1]
+            output.append(String(format: "%6d | %@", lineNumber, text))
         }
 
         return output.joined(separator: "\n")

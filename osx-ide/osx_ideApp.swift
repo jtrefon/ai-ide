@@ -9,15 +9,15 @@ import SwiftUI
 import AppKit
 
 @main
-struct osx_ideApp: App {
+struct OSXIDEApp: App {
     private let container: DependencyContainer
     @StateObject private var appState: AppState
     @StateObject private var errorManager: ErrorManager
     @AppStorage(AppConstants.Storage.codebaseIndexEnabledKey) private var codebaseIndexEnabled: Bool = true
-    @AppStorage(AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey) 
+    @AppStorage(AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey)
     private var codebaseIndexAIEnrichmentEnabled: Bool = false
     @State private var didInitializeCorePlugin: Bool = false
-    
+
     init() {
         let container = DependencyContainer()
         self.container = container
@@ -42,7 +42,7 @@ struct osx_ideApp: App {
             appSt.fileEditor.primaryPane.editorContent = json
             appSt.fileEditor.primaryPane.editorLanguage = "json"
         }
-        
+
         self._errorManager = StateObject(wrappedValue: errorMgr)
         self._appState = StateObject(wrappedValue: appSt)
     }
@@ -50,7 +50,7 @@ struct osx_ideApp: App {
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }
-    
+
     var body: some Scene {
         WindowGroup {
             ContentView(appState: appState)
@@ -78,7 +78,7 @@ struct osx_ideApp: App {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(error.localizedDescription)
                                 .font(.headline)
-                            
+
                             if let suggestion = error.recoverySuggestion {
                                 Text(String(format: localized("alert.suggestion_format"), suggestion))
                                     .font(.caption)
@@ -96,30 +96,30 @@ struct osx_ideApp: App {
                 }
                 .keyboardShortcut(",", modifiers: [.command])
             }
-            
+
             CommandGroup(replacing: .newItem) {
                 Button(localized("menu.new_project")) {
                     Task { try? await appState.commandRegistry.execute(.projectNew) }
                 }
                 .keyboardShortcut("n", modifiers: [.command])
             }
-            
+
             CommandGroup(after: .importExport) {
                 Button(localized("menu.open")) {
                     Task { try? await appState.commandRegistry.execute(.fileOpen) }
                 }
                 .keyboardShortcut("o", modifiers: [.command])
-                
+
                 Button(localized("menu.open_folder")) {
                     Task { try? await appState.commandRegistry.execute(.fileOpenFolder) }
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
-                
+
                 Button(localized("menu.save")) {
                     Task { try? await appState.commandRegistry.execute(.fileSave) }
                 }
                 .keyboardShortcut("s", modifiers: [.command])
-                
+
                 Button(localized("menu.save_as")) {
                     Task { try? await appState.commandRegistry.execute(.fileSaveAs) }
                 }
@@ -148,7 +148,7 @@ struct osx_ideApp: App {
                     get: { appState.showHiddenFilesInFileTree },
                     set: { appState.showHiddenFilesInFileTree = $0 }
                 ))
-                    .keyboardShortcut(".", modifiers: [.command, .shift])
+                .keyboardShortcut(".", modifiers: [.command, .shift])
             }
 
             CommandMenu(localized("menu.tools")) {
@@ -295,7 +295,7 @@ struct osx_ideApp: App {
                     Task { try? await appState.commandRegistry.execute(.editorAddCursorAbove) }
                 }
                 .keyboardShortcut(
-                    KeyEquivalent(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 
+                    KeyEquivalent(Character(UnicodeScalar(NSUpArrowFunctionKey)!)),
                     modifiers: [.command, .option]
                 )
 
@@ -303,7 +303,7 @@ struct osx_ideApp: App {
                     Task { try? await appState.commandRegistry.execute(.editorAddCursorBelow) }
                 }
                 .keyboardShortcut(
-                    KeyEquivalent(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 
+                    KeyEquivalent(Character(UnicodeScalar(NSDownArrowFunctionKey)!)),
                     modifiers: [.command, .option]
                 )
             }
@@ -311,11 +311,11 @@ struct osx_ideApp: App {
             CommandMenu(localized("menu.explorer")) {
                 Button(localized("menu.explorer.delete"), action: {
                     guard let url = appState.selectedFileTreeURL() else { return }
-                    Task { 
+                    Task {
                         try? await appState.commandRegistry.execute(
-                            .explorerDeleteSelection, 
+                            .explorerDeleteSelection,
                             args: ExplorerPathArgs(path: url.path)
-                        ) 
+                        )
                     }
                 })
                 .keyboardShortcut(.delete, modifiers: [.command])
@@ -337,7 +337,7 @@ struct osx_ideApp: App {
                     guard !newName.isEmpty else { return }
                     Task {
                         try? await appState.commandRegistry.execute(
-                            .explorerRenameSelection, 
+                            .explorerRenameSelection,
                             args: ExplorerRenameArgs(path: url.path, newName: newName)
                         )
                     }
@@ -345,18 +345,18 @@ struct osx_ideApp: App {
 
                 Button(localized("file_tree.context.show_in_finder"), action: {
                     guard let url = appState.selectedFileTreeURL() else { return }
-                    Task { 
+                    Task {
                         try? await appState.commandRegistry.execute(
-                            .explorerRevealInFinder, 
+                            .explorerRevealInFinder,
                             args: ExplorerPathArgs(path: url.path)
-                        ) 
+                        )
                     }
                 })
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }
         }
         .windowResizability(.contentMinSize)
-        
+
         Settings {
             SettingsView(ui: appState.ui)
         }

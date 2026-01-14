@@ -5,9 +5,9 @@ public actor IndexLogger {
     public static let shared = IndexLogger()
     private var logFileURL: URL?
     private var setupRootPath: String?
-    
+
     private init() {}
-    
+
     /// Initializes the logger with the project root. Should be called as early as possible.
     public func setup(projectRoot: URL) {
         let rootPath = projectRoot.standardizedFileURL.path
@@ -18,18 +18,18 @@ public actor IndexLogger {
 
         let ideDir = projectRoot.appendingPathComponent(".ide", isDirectory: true)
         let logsDir = ideDir.appendingPathComponent("logs", isDirectory: true)
-        
+
         do {
             try FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
             let fileURL = logsDir.appendingPathComponent("indexing.log")
             self.logFileURL = fileURL
             self.setupRootPath = rootPath
-            
+
             // Ensure the file exists so FileHandle can open it
             if !FileManager.default.fileExists(atPath: fileURL.path) {
                 try "".write(to: fileURL, atomically: true, encoding: .utf8)
             }
-            
+
             internalLog("--- Indexing Logger Initialized ---")
             internalLog("Project Root: \(projectRoot.path)")
             internalLog("Log File: \(fileURL.path)")
@@ -47,24 +47,24 @@ public actor IndexLogger {
             print("[IndexLogger] CRITICAL ERROR: Could not setup logs directory: \(error)")
         }
     }
-    
+
     /// Public log method
     public func log(_ message: String) {
         internalLog(message)
     }
-    
+
     private func internalLog(_ message: String) {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let line = "[\(timestamp)] \(message)\n"
-        
+
         // Console output for immediate feedback
         print("[IndexLogger] \(message)")
-        
-        guard let url = logFileURL else { 
+
+        guard let url = logFileURL else {
             // Fallback if setup hasn't been called yet
-            return 
+            return
         }
-        
+
         do {
             if let data = line.data(using: .utf8) {
                 let handle = try FileHandle(forWritingTo: url)

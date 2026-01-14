@@ -9,7 +9,7 @@ import SwiftUI
 
 struct GeneralSettingsTab: View {
     @ObservedObject var ui: UIStateManager
-    
+
     private let fontFamilies = [
         AppConstants.Editor.defaultFontFamily,
         "Menlo",
@@ -18,7 +18,7 @@ struct GeneralSettingsTab: View {
         "Source Code Pro",
         "Courier New"
     ]
-    
+
     var body: some View {
         ScrollView {
             VStack(spacing: AppConstants.Settings.sectionSpacing) {
@@ -43,7 +43,7 @@ struct GeneralSettingsTab: View {
                         .accessibilityIdentifier("Settings.Theme")
                     }
                 }
-                
+
                 SettingsCard(
                     title: NSLocalizedString("settings.editor.title", comment: ""),
                     subtitle: NSLocalizedString("settings.editor.subtitle", comment: "")
@@ -63,7 +63,7 @@ struct GeneralSettingsTab: View {
                         .frame(width: AppConstants.Settings.pickerNarrowWidth)
                         .accessibilityIdentifier("Settings.FontFamily")
                     }
-                    
+
                     SettingsRow(
                         title: NSLocalizedString("settings.editor.font_size.title", comment: ""),
                         subtitle: NSLocalizedString("settings.editor.font_size.subtitle", comment: ""),
@@ -77,9 +77,9 @@ struct GeneralSettingsTab: View {
                             )
                             .frame(width: AppConstants.Settings.sliderWidth)
                             .accessibilityIdentifier("Settings.FontSize")
-                            
+
                             Text("\(Int(ui.fontSize)) " +
-                            NSLocalizedString("settings.editor.font_size.unit", comment: ""))
+                                    NSLocalizedString("settings.editor.font_size.unit", comment: ""))
                                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }
@@ -101,7 +101,7 @@ struct GeneralSettingsTab: View {
                         .frame(width: AppConstants.Settings.pickerWideWidth)
                         .accessibilityIdentifier("Settings.IndentationStyle")
                     }
-                    
+
                     SettingsRow(
                         title: NSLocalizedString("settings.editor.line_numbers.title", comment: ""),
                         subtitle: NSLocalizedString("settings.editor.line_numbers.subtitle", comment: ""),
@@ -112,7 +112,7 @@ struct GeneralSettingsTab: View {
                             .toggleStyle(.switch)
                             .accessibilityIdentifier("Settings.ShowLineNumbers")
                     }
-                    
+
                     SettingsRow(
                         title: NSLocalizedString("settings.editor.word_wrap.title", comment: ""),
                         subtitle: NSLocalizedString("settings.editor.word_wrap.subtitle", comment: ""),
@@ -123,7 +123,7 @@ struct GeneralSettingsTab: View {
                             .toggleStyle(.switch)
                             .accessibilityIdentifier("Settings.WordWrap")
                     }
-                    
+
                     SettingsRow(
                         title: NSLocalizedString("settings.editor.minimap.title", comment: ""),
                         subtitle: NSLocalizedString("settings.editor.minimap.subtitle", comment: ""),
@@ -135,7 +135,7 @@ struct GeneralSettingsTab: View {
                             .accessibilityIdentifier("Settings.Minimap")
                     }
                 }
-                
+
                 SettingsCard(
                     title: NSLocalizedString("settings.workspace.title", comment: ""),
                     subtitle: NSLocalizedString("settings.workspace.subtitle", comment: "")
@@ -151,7 +151,7 @@ struct GeneralSettingsTab: View {
                             .accessibilityIdentifier("Settings.Sidebar")
                     }
                 }
-                
+
                 SettingsCard(
                     title: NSLocalizedString("settings.defaults.title", comment: ""),
                     subtitle: NSLocalizedString("settings.defaults.subtitle", comment: "")
@@ -166,9 +166,9 @@ struct GeneralSettingsTab: View {
                                 .font(.caption2)
                                 .foregroundStyle(.red.opacity(0.8))
                         }
-                        
+
                         Spacer()
-                        
+
                         Button(NSLocalizedString("settings.defaults.reset.button", comment: "")) {
                             ui.resetToDefaults()
                         }
@@ -180,21 +180,21 @@ struct GeneralSettingsTab: View {
             .padding(.top, AppConstants.Settings.contentTopPadding)
         }
     }
-    
+
     private var themeBinding: Binding<AppTheme> {
         Binding(
             get: { ui.selectedTheme },
             set: { ui.setTheme($0) }
         )
     }
-    
+
     private var fontSizeBinding: Binding<Double> {
         Binding(
             get: { ui.fontSize },
             set: { ui.updateFontSize($0) }
         )
     }
-    
+
     private var fontFamilyBinding: Binding<String> {
         Binding(
             get: { ui.fontFamily },
@@ -208,28 +208,28 @@ struct GeneralSettingsTab: View {
             set: { ui.setIndentationStyle($0) }
         )
     }
-    
+
     private var showLineNumbersBinding: Binding<Bool> {
         Binding(
             get: { ui.showLineNumbers },
             set: { ui.setShowLineNumbers($0) }
         )
     }
-    
+
     private var wordWrapBinding: Binding<Bool> {
         Binding(
             get: { ui.wordWrap },
             set: { ui.setWordWrap($0) }
         )
     }
-    
+
     private var minimapBinding: Binding<Bool> {
         Binding(
             get: { ui.minimapVisible },
             set: { ui.setMinimapVisible($0) }
         )
     }
-    
+
     private var sidebarBinding: Binding<Bool> {
         Binding(
             get: { ui.isSidebarVisible },

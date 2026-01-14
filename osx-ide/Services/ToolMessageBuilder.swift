@@ -9,7 +9,7 @@ import Foundation
 
 /// Builds ChatMessage objects for tool execution status and results.
 final class ToolMessageBuilder {
-    
+
     /// Creates a tool execution message with specified status and content
     static func makeToolExecutionMessage(
         content: String,
@@ -28,7 +28,7 @@ final class ToolMessageBuilder {
             )
         )
     }
-    
+
     /// Creates the final message for a tool call based on execution result
     func makeToolCallFinalMessage(
         result: Result<String, Error>,
@@ -54,7 +54,7 @@ final class ToolMessageBuilder {
             )
         }
     }
-    
+
     /// Formats error messages with tool-specific context
     private static func formatError(_ error: Error, toolName: String) -> String {
         if toolName == "index_read_file" {
@@ -62,14 +62,16 @@ final class ToolMessageBuilder {
             if msg.lowercased().hasPrefix("file not found") {
                 return """
                 \(msg)
-                
-                Hint: do not guess filenames. First use index_find_files(query: "RegistrationPage") or index_list_files(query: "registration-app/src") to discover the correct path, then call index_read_file with that exact path.
+
+                Hint: do not guess filenames.
+                First use index_find_files(query: "RegistrationPage") or index_list_files(query: "registration-app/src")
+                to discover the correct path, then call index_read_file with that exact path.
                 """
             }
         }
         return error.localizedDescription
     }
-    
+
     /// Creates a progress snapshot message for streaming tool output
     static func makeToolProgressSnapshot(
         content: String,

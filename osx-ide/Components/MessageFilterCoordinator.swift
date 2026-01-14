@@ -39,9 +39,9 @@ struct MessageFilterCoordinator {
 
     private func isEmptyAssistantMessage(_ message: ChatMessage) -> Bool {
         message.role == .assistant &&
-        message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        (message.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) &&
-        (message.toolCalls?.isEmpty ?? true)
+            message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            (message.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) &&
+            (message.toolCalls?.isEmpty ?? true)
     }
 
     private func shouldDisplayToolExecutionMessage(_ message: ChatMessage, in messages: [ChatMessage]) -> Bool {

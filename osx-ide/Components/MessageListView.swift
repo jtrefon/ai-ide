@@ -8,7 +8,7 @@
 import SwiftUI
 import Foundation
 
-fileprivate func localized(_ key: String) -> String {
+private func localized(_ key: String) -> String {
     NSLocalizedString(key, comment: "")
 }
 
@@ -156,7 +156,7 @@ struct MessageListView_Previews: PreviewProvider {
             messages: [
                 ChatMessage(role: .assistant, content: "Hello! How can I help you today?"),
                 ChatMessage(role: .user, content: "Can you explain this code?"),
-                ChatMessage(role: .assistant, content: "Sure! This code implements a chat interface."),
+                ChatMessage(role: .assistant, content: "Sure! This code implements a chat interface.")
             ],
             isSending: true,
             fontSize: 12,

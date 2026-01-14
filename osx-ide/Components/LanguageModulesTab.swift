@@ -10,17 +10,17 @@ import SwiftUI
 struct LanguageModulesTab: View {
     @ObservedObject var moduleManager = LanguageModuleManager.shared
     @State private var searchText = ""
-    
+
     var filteredLanguages: [CodeLanguage] {
         if searchText.isEmpty {
             return moduleManager.availableLanguages
         } else {
-            return moduleManager.availableLanguages.filter { 
-                $0.rawValue.localizedCaseInsensitiveContains(searchText) 
+            return moduleManager.availableLanguages.filter {
+                $0.rawValue.localizedCaseInsensitiveContains(searchText)
             }
         }
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Search Bar
@@ -35,7 +35,7 @@ struct LanguageModulesTab: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 24)
             .padding(.top, 16)
-            
+
             ScrollView {
                 VStack(spacing: 20) {
                     SettingsCard(
@@ -45,12 +45,12 @@ struct LanguageModulesTab: View {
                         VStack(alignment: .leading, spacing: 12) {
                             if filteredLanguages.isEmpty {
                                 Text(String(
-                    format: NSLocalizedString("language_modules.empty", comment: ""), 
-                    searchText
-                ))
-                                    .foregroundColor(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                                    .padding(.vertical, 20)
+                                    format: NSLocalizedString("language_modules.empty", comment: ""),
+                                    searchText
+                                ))
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 20)
                             } else {
                                 ForEach(filteredLanguages, id: \.self) { language in
                                     HStack {
@@ -60,7 +60,7 @@ struct LanguageModulesTab: View {
                                             Text(NSLocalizedString("language_modules.feature_summary", comment: ""))
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
-                                            
+
                                             if let module = moduleManager.getModule(for: language) {
                                                 Text(
                                                     String(
@@ -71,13 +71,13 @@ struct LanguageModulesTab: View {
                                                         module.fileExtensions.joined(separator: ", ")
                                                     )
                                                 )
-                                                    .font(.system(size: 10, design: .monospaced))
-                                                    .foregroundColor(.blue.opacity(0.8))
+                                                .font(.system(size: 10, design: .monospaced))
+                                                .foregroundColor(.blue.opacity(0.8))
                                             }
                                         }
-                                        
+
                                         Spacer()
-                                        
+
                                         Toggle(
                                             "",
                                             isOn: Binding(
@@ -92,7 +92,7 @@ struct LanguageModulesTab: View {
                                         )
                                         .toggleStyle(.switch)
                                     }
-                                    
+
                                     if language != filteredLanguages.last {
                                         Divider()
                                             .opacity(0.1)
@@ -101,7 +101,7 @@ struct LanguageModulesTab: View {
                             }
                         }
                     }
-                    
+
                     SettingsCard(
                         title: NSLocalizedString("language_modules.performance.title", comment: ""),
                         subtitle: NSLocalizedString("language_modules.performance.subtitle", comment: "")

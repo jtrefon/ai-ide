@@ -77,9 +77,9 @@ struct QuickOpenFileFinder {
     }
 
     private func sortedPaths(from hits: [ScoredPath], limit: Int) -> [String] {
-        let sorted = hits.sorted { a, b in
-            if a.score != b.score { return a.score > b.score }
-            return a.relativePath < b.relativePath
+        let sorted = hits.sorted { left, right in
+            if left.score != right.score { return left.score > right.score }
+            return left.relativePath < right.relativePath
         }
 
         return Array(sorted.prefix(limit)).map { $0.relativePath }

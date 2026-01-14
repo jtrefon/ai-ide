@@ -13,16 +13,16 @@ import AppKit
 /// Main application state coordinator that manages interaction between specialized state managers
 @MainActor
 class AppState: ObservableObject, IDEContext {
-    
+
     // MARK: - State Managers (Dependency Inversion)
-    
+
     var fileEditor: FileEditorStateManager
     var workspace: WorkspaceStateManager
     var ui: UIStateManager
-    
+
     @Published var fileTreeExpandedRelativePaths: Set<String> = []
 
-    @Published var fileTreeSelectedRelativePath: String? = nil
+    @Published var fileTreeSelectedRelativePath: String?
 
     @Published var isGlobalSearchPresented: Bool = false
     @Published var isQuickOpenPresented: Bool = false
@@ -37,12 +37,12 @@ class AppState: ObservableObject, IDEContext {
     @Published var isRenameSymbolPresented: Bool = false
     @Published var renameSymbolIdentifier: String = ""
 
-     @Published var showHiddenFilesInFileTree: Bool = false
+    @Published var showHiddenFilesInFileTree: Bool = false
 
     @Published var languageOverridesByRelativePath: [String: String] = [:]
-    
+
     // MARK: - Services
-    
+
     private let errorManager: ErrorManagerProtocol
     let uiService: UIServiceProtocol
     let workspaceService: WorkspaceServiceProtocol
@@ -117,16 +117,16 @@ class AppState: ObservableObject, IDEContext {
             self?.scheduleSaveProjectSession()
         }
     )
-    
+
     // MARK: - Shared Contexts
-    
+
     let selectionContext = CodeSelectionContext()
-    
+
     // MARK: - Computed Properties (Convenience)
-    
+
     var lastError: String? {
         get { errorManager.currentError?.localizedDescription }
-        set { 
+        set {
             if let error = newValue {
                 errorManager.handle(.unknown(error))
             } else {
@@ -134,9 +134,9 @@ class AppState: ObservableObject, IDEContext {
             }
         }
     }
-    
+
     // MARK: - Initialization
-    
+
     init(
         errorManager: ErrorManagerProtocol,
         uiService: UIServiceProtocol,
@@ -175,7 +175,7 @@ class AppState: ObservableObject, IDEContext {
         self.setCodebaseIndexEnabledImpl = setCodebaseIndexEnabled
         self.setAIEnrichmentIndexingEnabledImpl = setAIEnrichmentIndexingEnabled
         self.reindexProjectNowImpl = reindexProjectNow
-        
+
         // Initialize specialized state managers
         self.fileEditor = FileEditorStateManager(
             fileEditorService: fileEditorService,
@@ -187,7 +187,7 @@ class AppState: ObservableObject, IDEContext {
             fileDialogService: fileDialogService
         )
         self.ui = UIStateManager(uiService: uiService, eventBus: eventBus)
-        
+
         stateObservationCoordinator.startObserving(
             fileTreeExpandedRelativePathsPublisher: $fileTreeExpandedRelativePaths,
             showHiddenFilesInFileTreePublisher: $showHiddenFilesInFileTree
@@ -195,7 +195,7 @@ class AppState: ObservableObject, IDEContext {
 
         projectSessionCoordinator.loadProjectSessionIfAvailable()
     }
-    
+
     func attachWindow(_ window: NSWindow) {
         projectSessionCoordinator.attachWindow(window)
     }
@@ -246,15 +246,15 @@ class AppState: ObservableObject, IDEContext {
     func reindexProjectNow() {
         reindexProjectNowImpl()
     }
-    
+
     // MARK: - State Coordination Methods (Keep high-level orchestration)
-    
+
     func loadFile(from url: URL) {
         fileEditor.loadFile(from: url)
         workspace.addOpenFile(url)
         scheduleSaveProjectSession()
     }
-    
+
     func openFile() {
         Task { @MainActor in
             await workspace.openFileOrFolder { [weak self] url in
@@ -278,19 +278,19 @@ class AppState: ObservableObject, IDEContext {
             await workspace.openFolder()
         }
     }
-    
+
     func createFile(name: String) {
         workspace.createFile(named: name)
     }
-    
+
     func createFolder(name: String) {
         workspace.createFolder(named: name)
     }
-    
+
     func navigateToParent() {
         workspace.navigateToParent()
     }
-    
+
     func newProject() {
         Task { @MainActor in
             guard let projectURL = await fileDialogService.promptForNewProjectFolder(defaultName: "NewProject") else {
@@ -299,29 +299,29 @@ class AppState: ObservableObject, IDEContext {
             workspace.createProject(at: projectURL)
         }
     }
-    
+
     // UI Operations
     func toggleSidebar() {
         ui.toggleSidebar()
     }
-    
+
     func setSidebarVisible(_ visible: Bool) {
         ui.setSidebarVisible(visible)
     }
-    
+
     func resetSettings() {
         ui.resetToDefaults()
     }
-    
+
     // Conversation Operations
     func sendMessage() {
         conversationManager.sendMessage()
     }
-    
+
     func clearConversation() {
         conversationManager.clearConversation()
     }
-    
+
     // Helper Methods
     static func languageForFileExtension(_ fileExtension: String) -> String {
         return FileEditorStateManager.languageForFileExtension(fileExtension)
@@ -331,7 +331,7 @@ class AppState: ObservableObject, IDEContext {
     func relativePath(for url: URL) -> String? {
         guard let projectRoot = workspace.currentDirectory?.standardizedFileURL else { return nil }
         let standardizedURL = url.standardizedFileURL
-        
+
         if standardizedURL.path.hasPrefix(projectRoot.path) {
             var relative = String(standardizedURL.path.dropFirst(projectRoot.path.count))
             if relative.hasPrefix("/") { relative.removeFirst() }
@@ -350,7 +350,6 @@ class AppState: ObservableObject, IDEContext {
         guard let relative = fileTreeSelectedRelativePath, !relative.isEmpty else { return nil }
         return projectRoot.appendingPathComponent(relative).standardizedFileURL
     }
-
 
     private func scheduleSaveProjectSession() {
         projectSessionCoordinator.scheduleSaveProjectSession()

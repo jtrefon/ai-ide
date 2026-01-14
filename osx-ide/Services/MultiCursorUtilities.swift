@@ -14,8 +14,8 @@ public enum MultiCursorUtilities {
 
     /// Returns the line range (including newline) containing `index`.
     public static func lineRange(text: NSString, index: Int) -> NSRange {
-        let i = max(0, min(index, text.length))
-        return text.lineRange(for: NSRange(location: i, length: 0))
+        let safeIndex = max(0, min(index, text.length))
+        return text.lineRange(for: NSRange(location: safeIndex, length: 0))
     }
 
     /// Returns caret index moved one line up/down keeping the same column when possible.

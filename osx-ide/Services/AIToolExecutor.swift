@@ -29,7 +29,7 @@ public final class AIToolExecutor {
     let argumentResolver: ToolArgumentResolver
     let messageBuilder: ToolMessageBuilder
     let scheduler: ToolScheduler
-    
+
     public init(
         fileSystemService: FileSystemService,
         errorManager: any ErrorManagerProtocol,
@@ -48,7 +48,7 @@ public final class AIToolExecutor {
     }
 
     // MARK: - Helper Methods (using specialized services)
-    
+
     func isWriteLikeTool(_ toolName: String) -> Bool {
         return argumentResolver.isWriteLikeTool(toolName)
     }
@@ -77,7 +77,7 @@ public final class AIToolExecutor {
             arguments["target_path"],
             arguments["file_path"],
             arguments["file"],
-            arguments["target"],
+            arguments["target"]
         ]
 
         return candidates

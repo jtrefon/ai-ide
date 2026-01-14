@@ -23,7 +23,7 @@ struct NativeTerminalView: View {
         self.eventBus = eventBus
         self._embedder = StateObject(wrappedValue: NativeTerminalEmbedder(eventBus: eventBus))
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Terminal content area using proper NSViewRepresentable
@@ -77,7 +77,7 @@ struct TerminalContentView: NSViewRepresentable {
     @Binding var currentDirectory: URL?
     var fontSize: Double
     var fontFamily: String
-    
+
     func makeNSView(context: Context) -> NSView {
         let embedderRef = embedder
         let containerView = FocusForwardingContainerView()
@@ -93,10 +93,10 @@ struct TerminalContentView: NSViewRepresentable {
             fontSize: fontSize,
             fontFamily: fontFamily
         )
-        
+
         return containerView
     }
-    
+
     func updateNSView(_ nsView: NSView, context: Context) {
         if let containerView = nsView as? FocusForwardingContainerView {
             let embedderRef = embedder
@@ -133,12 +133,12 @@ struct TerminalContentView: NSViewRepresentable {
         private var lastFontFamily: String?
 
         func scheduleEmbed(
-                into view: NSView, 
-                directory: URL?, 
-                embedder: NativeTerminalEmbedder, 
-                fontSize: Double, 
-                fontFamily: String
-            ) {
+            into view: NSView,
+            directory: URL?,
+            embedder: NativeTerminalEmbedder,
+            fontSize: Double,
+            fontFamily: String
+        ) {
             let path = directory?.standardizedFileURL.path
             guard lastEmbeddedPath != path || lastFontSize != fontSize || lastFontFamily != fontFamily else { return }
             lastEmbeddedPath = path
@@ -162,9 +162,9 @@ struct TerminalContentView: NSViewRepresentable {
     NativeTerminalView(
         currentDirectory: .constant(nil),
         ui: UIStateManager(
-                uiService: UIService(errorManager: ErrorManager(), eventBus: EventBus()), 
-                eventBus: EventBus()
-            ),
+            uiService: UIService(errorManager: ErrorManager(), eventBus: EventBus()),
+            eventBus: EventBus()
+        ),
         eventBus: EventBus()
     )
     .frame(width: 600, height: 400)

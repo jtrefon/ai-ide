@@ -13,5 +13,4 @@ import Combine
 @testable import osx_ide
 
 @MainActor
-struct osx_ideTests {}
-
+struct OSXIDETests {}

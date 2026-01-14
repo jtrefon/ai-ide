@@ -24,7 +24,7 @@ struct CodeEditorView: View {
     var fontSize: Double = AppConstants.Editor.defaultFontSize
     var fontFamily: String = AppConstants.Editor.defaultFontFamily
     @ObservedObject private var highlightDiagnostics = EditorHighlightDiagnosticsStore.shared
-    
+
     var body: some View {
         GeometryReader { geometry in
             // Text editor (use AppKit's own NSScrollView; avoid nesting in SwiftUI ScrollView)
@@ -65,7 +65,7 @@ struct TextViewRepresentable: NSViewRepresentable {
     var wordWrap: Bool
     var fontSize: Double
     var fontFamily: String
-    
+
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         let textView = NSTextView()
@@ -79,7 +79,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         scheduleInitialWordWrapApply(scrollView, textView: textView)
         configureLineNumbersIfNeeded(scrollView, textView: textView)
         scheduleInitialHighlight(textView: textView, coordinator: context.coordinator, font: resolvedFont)
-        
+
         return scrollView
     }
 
@@ -160,7 +160,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         // Apply syntax highlighting after the view is set up asynchronously
         coordinator.performAsyncHighlight(for: text, in: textView, language: language, font: font)
     }
-    
+
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
@@ -262,11 +262,11 @@ struct TextViewRepresentable: NSViewRepresentable {
         }
 
         if let font = NSFontManager.shared.font(
-                withFamily: fontFamily, 
-                traits: .fixedPitchFontMask, 
-                weight: 5, 
-                size: size
-            ) {
+            withFamily: fontFamily,
+            traits: .fixedPitchFontMask,
+            weight: 5,
+            size: size
+        ) {
             return font
         }
 
@@ -280,7 +280,7 @@ struct TextViewRepresentable: NSViewRepresentable {
             textView.isHorizontallyResizable = false
             container.widthTracksTextView = true
             container.containerSize = NSSize(
-                width: scrollView.contentSize.width, 
+                width: scrollView.contentSize.width,
                 height: CGFloat.greatestFiniteMagnitude
             )
             scrollView.hasHorizontalScroller = false
@@ -288,7 +288,7 @@ struct TextViewRepresentable: NSViewRepresentable {
             textView.isHorizontallyResizable = true
             container.widthTracksTextView = false
             container.containerSize = NSSize(
-                width: CGFloat.greatestFiniteMagnitude, 
+                width: CGFloat.greatestFiniteMagnitude,
                 height: CGFloat.greatestFiniteMagnitude
             )
             scrollView.hasHorizontalScroller = true

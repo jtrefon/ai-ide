@@ -29,8 +29,8 @@ extension CodebaseIndex {
                 await IndexLogger.shared.log("Enriching file \(processed + 1)/\(total): \(file.lastPathComponent)")
                 await eventBus.publish(
                     AIEnrichmentProgressEvent(
-                        processedCount: processed, 
-                        totalCount: total, 
+                        processedCount: processed,
+                        totalCount: total,
                         currentFile: file
                     )
                 )
@@ -39,12 +39,12 @@ extension CodebaseIndex {
                     await IndexLogger.shared.log("Skipping \(file.lastPathComponent) (already enriched)")
                     processed += 1
                     await eventBus.publish(
-                    AIEnrichmentProgressEvent(
-                        processedCount: processed, 
-                        totalCount: total, 
-                        currentFile: file
+                        AIEnrichmentProgressEvent(
+                            processedCount: processed,
+                            totalCount: total,
+                            currentFile: file
+                        )
                     )
-                )
                     continue
                 }
 
@@ -53,8 +53,8 @@ extension CodebaseIndex {
                 processed += 1
                 await eventBus.publish(
                     AIEnrichmentProgressEvent(
-                        processedCount: processed, 
-                        totalCount: total, 
+                        processedCount: processed,
+                        totalCount: total,
                         currentFile: file
                     )
                 )
@@ -77,8 +77,8 @@ extension CodebaseIndex {
 
     private func shouldSkipAIEnrichment(for file: URL) async -> Bool {
         let fileModTime = (try? file.resourceValues(
-                    forKeys: [.contentModificationDateKey]
-                ))?.contentModificationDate?.timeIntervalSince1970
+            forKeys: [.contentModificationDateKey]
+        ))?.contentModificationDate?.timeIntervalSince1970
         let existingModTime = try? await database.getResourceLastModified(resourceId: file.absoluteString)
 
         guard let fileModTime, let existingModTime else { return false }
@@ -92,10 +92,10 @@ extension CodebaseIndex {
             let relPath = makeRelativePath(file)
 
             let assessment = await scoringEngine.score(
-                    language: LanguageDetector.detect(at: file), 
-                    path: relPath, 
-                    content: content
-                )
+                language: LanguageDetector.detect(at: file),
+                path: relPath,
+                content: content
+            )
             let heuristicScore = max(0, min(100, assessment.score))
             await persistHeuristicQuality(heuristicScore, assessment: assessment, file: file, relPath: relPath)
 
@@ -137,11 +137,11 @@ extension CodebaseIndex {
     }
 
     private func persistHeuristicQuality(
-            _ score: Double, 
-            assessment: QualityAssessment, 
-            file: URL, 
-            relPath: String
-        ) async {
+        _ score: Double,
+        assessment: QualityAssessment,
+        file: URL,
+        relPath: String
+    ) async {
         do {
             let jsonData = try JSONEncoder().encode(assessment)
             let json = String(data: jsonData, encoding: .utf8)
@@ -155,9 +155,9 @@ extension CodebaseIndex {
     }
 
     private func withTimeout<T: Sendable>(
-            seconds: TimeInterval, 
-            operation: @escaping @Sendable () async throws -> T
-        ) async throws -> T {
+        seconds: TimeInterval,
+        operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
         try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask {
                 try await operation()

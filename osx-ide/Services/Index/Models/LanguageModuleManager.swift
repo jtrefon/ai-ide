@@ -13,11 +13,11 @@ import Combine
 @MainActor
 public final class LanguageModuleManager: ObservableObject {
     public static let shared = LanguageModuleManager()
-    
+
     @Published private(set) var enabledModules: [CodeLanguage: LanguageModule] = [:]
     private var allModules: [CodeLanguage: LanguageModule] = [:]
     private let settingsStore: SettingsStore
-    
+
     private init() {
         settingsStore = SettingsStore(userDefaults: .standard)
         // Register default modules
@@ -28,33 +28,33 @@ public final class LanguageModuleManager: ObservableObject {
         register(HTMLModule())
         register(CSSModule())
         register(JSONModule())
-        
+
         setupInitialEnabledState()
     }
-    
+
     public func register(_ module: LanguageModule) {
         allModules[module.id] = module
         updateEnabledModules()
     }
-    
+
     public func getModule(for language: CodeLanguage) -> LanguageModule? {
         return enabledModules[language]
     }
-    
+
     public func getModule(forExtension ext: String) -> LanguageModule? {
         let ext = ext.lowercased()
         return enabledModules.values.first { $0.fileExtensions.contains(ext) }
     }
-    
+
     public func isEnabled(_ language: CodeLanguage) -> Bool {
         return enabledModules[language] != nil
     }
-    
+
     public func toggleModule(_ language: CodeLanguage, enabled: Bool) {
         var enabledLangs = settingsStore.stringArray(
-                    forKey: AppConstants.Storage.enabledLanguageModulesKey
-                ) ?? allModules.keys.map { $0.rawValue }
-        
+            forKey: AppConstants.Storage.enabledLanguageModulesKey
+        ) ?? allModules.keys.map { $0.rawValue }
+
         if enabled {
             if !enabledLangs.contains(language.rawValue) {
                 enabledLangs.append(language.rawValue)
@@ -62,11 +62,11 @@ public final class LanguageModuleManager: ObservableObject {
         } else {
             enabledLangs.removeAll { $0 == language.rawValue }
         }
-        
+
         settingsStore.set(enabledLangs, forKey: AppConstants.Storage.enabledLanguageModulesKey)
         updateEnabledModules()
     }
-    
+
     private func setupInitialEnabledState() {
         let allLangs = allModules.keys.map { $0.rawValue }
         if let stored = settingsStore.stringArray(forKey: AppConstants.Storage.enabledLanguageModulesKey) {
@@ -87,14 +87,14 @@ public final class LanguageModuleManager: ObservableObject {
         }
         updateEnabledModules()
     }
-    
+
     private func updateEnabledModules() {
         let enabledLangs = settingsStore.stringArray(
-                    forKey: AppConstants.Storage.enabledLanguageModulesKey
-                ) ?? allModules.keys.map { $0.rawValue }
+            forKey: AppConstants.Storage.enabledLanguageModulesKey
+        ) ?? allModules.keys.map { $0.rawValue }
         enabledModules = allModules.filter { enabledLangs.contains($0.key.rawValue) }
     }
-    
+
     public var availableLanguages: [CodeLanguage] {
         return allModules.keys.sorted { $0.rawValue < $1.rawValue }
     }

@@ -35,7 +35,7 @@ final class FileTreeIsolationTests: XCTestCase {
             let fileURL = tempDirectory.appendingPathComponent("file_\(fileIndex).txt")
             try? "content".write(to: fileURL, atomically: true, encoding: .utf8)
         }
-        
+
         // Rapidly change root/search to provoke race conditions
         for updateIndex in 0..<50 {
             if updateIndex % 2 == 0 {
@@ -52,7 +52,7 @@ final class FileTreeIsolationTests: XCTestCase {
         try? FileManager.default.createDirectory(at: folderA, withIntermediateDirectories: true)
         let fileA = folderA.appendingPathComponent("FileA.txt")
         try? "content".write(to: fileA, atomically: true, encoding: .utf8)
-        
+
         dataSource.setRootURL(tempDirectory)
 
         // Allow any pending work to settle.

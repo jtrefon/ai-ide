@@ -24,7 +24,7 @@ public struct IndexConfiguration: Codable, Sendable {
     public var enabled: Bool
     public var debounceMs: Int
     public var excludePatterns: [String]
-    
+
     public static let `default` = IndexConfiguration(
         enabled: true,
         debounceMs: 300,
@@ -111,7 +111,7 @@ public struct Symbol: Codable, Sendable {
     public let lineStart: Int
     public let lineEnd: Int
     public let description: String?
-    
+
     public init(id: String, resourceId: String, name: String, kind: SymbolKind, lineStart: Int, lineEnd: Int, description: String? = nil) {
         self.id = id
         self.resourceId = resourceId

@@ -11,28 +11,28 @@ import AppKit
 /// Handles ANSI escape sequence processing and rendering for terminal output
 @MainActor
 class TerminalANSIRenderer {
-    
+
     // MARK: - Color Configuration
-    
+
     private var defaultForegroundColor: NSColor = .green
     private var defaultBackgroundColor: NSColor = .black
-    
+
     // MARK: - Initialization
-    
+
     init(foregroundColor: NSColor = .green, backgroundColor: NSColor = .black) {
         self.defaultForegroundColor = foregroundColor
         self.defaultBackgroundColor = backgroundColor
     }
-    
+
     // MARK: - Color Configuration
-    
+
     func updateColors(foreground: NSColor, background: NSColor) {
         self.defaultForegroundColor = foreground
         self.defaultBackgroundColor = background
     }
-    
+
     // MARK: - ANSI Processing
-    
+
     /// Processes ANSI escape sequences in terminal text
     func processANSIEscapeSequences(_ text: String) -> NSAttributedString {
         let result = NSMutableAttributedString()
@@ -54,7 +54,7 @@ class TerminalANSIRenderer {
 
             let char = String(text[stringIndex])
             let attributedChar = NSAttributedString(
-                string: char, 
+                string: char,
                 attributes: currentAttributes.isEmpty ? nil : currentAttributes
             )
             result.append(attributedChar)
@@ -63,12 +63,12 @@ class TerminalANSIRenderer {
 
         return result
     }
-    
+
     /// Parses ANSI escape sequences and returns rendering attributes
     private func parseANSISequence(
-            _ text: String, 
-            from index: Int
-        ) -> (attributes: [NSAttributedString.Key: Any], sequenceLength: Int)? {
+        _ text: String,
+        from index: Int
+    ) -> (attributes: [NSAttributedString.Key: Any], sequenceLength: Int)? {
         guard isValidANSIPrefix(text, at: index) else {
             return nil
         }
@@ -81,7 +81,7 @@ class TerminalANSIRenderer {
         let sequenceLength = parsed.endIndex - index + 1
         return (attributes: attributes, sequenceLength: sequenceLength)
     }
-    
+
     /// Processes ANSI parameters and returns text attributes
     private func processANSIParameters(_ parameters: [Int], command: Character) -> [NSAttributedString.Key: Any] {
         guard command == "m" else {
@@ -94,7 +94,7 @@ class TerminalANSIRenderer {
 
         return applySGRParameters(parameters)
     }
-    
+
     /// Maps ANSI color codes to NSColor values
     private func colorForANSICode(_ code: Int) -> NSColor {
         let baseColors: [NSColor] = [

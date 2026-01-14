@@ -26,9 +26,9 @@ actor ConversationPlanStore {
         guard let url = planFileURL(conversationId: conversationId) else { return }
         do {
             try FileManager.default.createDirectory(
-                    at: url.deletingLastPathComponent(), 
-                    withIntermediateDirectories: true
-                )
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             try plan.data(using: .utf8)?.write(to: url, options: [.atomic])
         } catch {
         }

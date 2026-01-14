@@ -14,7 +14,7 @@ public actor ExecutionLogStore {
     public func append(_ request: ExecutionLogAppendRequest) async {
         let sessionId = await AppLogger.shared.currentSessionId()
         let conversationId = request.context.conversationId ?? "unknown"
-        
+
         let header = ExecutionLogEventHeader(
             ts: iso.string(from: Date()),
             session: sessionId,

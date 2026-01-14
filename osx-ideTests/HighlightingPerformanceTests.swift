@@ -21,7 +21,7 @@ final class HighlightingPerformanceTests: XCTestCase {
             print("Hello, \\(name)!")
         }
         """
-        
+
         measure {
             _ = syntaxHighlighter.highlight(smallCode, language: "swift", font: font)
         }

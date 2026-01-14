@@ -9,18 +9,18 @@ struct ProblemsView<Context: IDEContext>: View {
 
     var body: some View {
         List {
-            ForEach(store.diagnostics) { d in
+            ForEach(store.diagnostics) { diagnostic in
                 Button {
-                    open(d)
+                    open(diagnostic)
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: d.severity == .error ? "xmark.octagon" : "exclamationmark.triangle")
-                            .foregroundColor(d.severity == .error ? .red : .yellow)
+                        Image(systemName: diagnostic.severity == .error ? "xmark.octagon" : "exclamationmark.triangle")
+                            .foregroundColor(diagnostic.severity == .error ? .red : .yellow)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(d.message)
+                            Text(diagnostic.message)
                                 .lineLimit(2)
-                            Text(locationText(d))
+                            Text(locationText(diagnostic))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
@@ -43,17 +43,17 @@ struct ProblemsView<Context: IDEContext>: View {
     }
 
     @MainActor
-    private func open(_ d: Diagnostic) {
-        guard let url = DiagnosticURLResolver.resolve(d, context: context) else { return }
+    private func open(_ diagnostic: Diagnostic) {
+        guard let url = DiagnosticURLResolver.resolve(diagnostic, context: context) else { return }
 
         context.loadFile(from: url)
-        context.fileEditor.selectLine(d.line)
+        context.fileEditor.selectLine(diagnostic.line)
     }
 
-    private func locationText(_ d: Diagnostic) -> String {
-        if let column = d.column {
-            return "\(d.relativePath):\(d.line):\(column)"
+    private func locationText(_ diagnostic: Diagnostic) -> String {
+        if let column = diagnostic.column {
+            return "\(diagnostic.relativePath):\(diagnostic.line):\(column)"
         }
-        return "\(d.relativePath):\(d.line)"
+        return "\(diagnostic.relativePath):\(diagnostic.line)"
     }
 }
