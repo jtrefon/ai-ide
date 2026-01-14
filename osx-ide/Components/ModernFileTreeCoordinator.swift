@@ -18,9 +18,9 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     let dataSource = FileTreeDataSource()
     
     // Specialized coordinators
-    private let dialogCoordinator: FileTreeDialogCoordinator
-    private let searchCoordinator: FileTreeSearchCoordinator
-    private var appearanceCoordinator: FileTreeAppearanceCoordinator
+    private let dialogCoordinator = FileTreeDialogCoordinator()
+    private lazy var searchCoordinator = FileTreeSearchCoordinator(dataSource: dataSource)
+    private var appearanceCoordinator = FileTreeAppearanceCoordinator(outlineView: NSOutlineView())
 
     typealias Configuration = ModernFileTreeCoordinatorConfiguration
 
@@ -44,20 +44,12 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
     }
 
     init(configuration: Configuration) {
-        self.dialogCoordinator = FileTreeDialogCoordinator()
-        self.searchCoordinator = FileTreeSearchCoordinator(dataSource: dataSource)
-        self.appearanceCoordinator = Self.makePlaceholderAppearanceCoordinator()
-
         self.configuration = configuration
         super.init()
     }
 
     private func cancelPendingSearchTask() {
         pendingSearchTask?.cancel()
-    }
-
-    private static func makePlaceholderAppearanceCoordinator() -> FileTreeAppearanceCoordinator {
-        FileTreeAppearanceCoordinator(outlineView: NSOutlineView())
     }
 
     func attach(outlineView: NSOutlineView) {
@@ -257,7 +249,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         return item
     }
     
-    @objc private func onContextOpen(_ sender: NSMenuItem) {
+    @objc private func onContextOpen(_ _: NSMenuItem) {
         guard let item = clickedFileTreeItem() else { return }
         performOpen(for: item)
     }
@@ -279,7 +271,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         configuration.onRevealInFinder(url)
     }
 
-    @objc private func onContextNewFile(_ sender: NSMenuItem) {
+    @objc private func onContextNewFile(_ _: NSMenuItem) {
         guard let directory = directoryForCreate() else { return }
         guard let name = dialogCoordinator.promptForNewItem(
             title: NSLocalizedString("file_tree.create_file.title", comment: ""),
@@ -288,7 +280,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         configuration.onCreateFile(directory, name)
     }
 
-    @objc private func onContextNewFolder(_ sender: NSMenuItem) {
+    @objc private func onContextNewFolder(_ _: NSMenuItem) {
         guard let directory = directoryForCreate() else { return }
         guard let name = dialogCoordinator.promptForNewItem(
             title: NSLocalizedString("file_tree.create_folder.title", comment: ""),
@@ -349,7 +341,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         }
     }
 
-    func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
+    func outlineView(_ outlineView: NSOutlineView, viewFor _: NSTableColumn?, item: Any) -> NSView? {
         guard let ftItem = item as? FileTreeItem else { return nil }
         let url = ftItem.url
 
@@ -438,21 +430,28 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
     private func scheduleSearch(query: String) {
         let searchContext = beginSearch(query: query)
-
-        if searchContext.query.isEmpty {
-            dataSource.resetCaches()
+        if handleEmptySearchQueryIfNeeded(searchContext) {
             return
         }
 
-        // XCTest runs the app-hosted test bundle in a way that can SIGTRAP if we spin the main
-        // runloop to await debounced background work. Make search deterministic for tests by
-        // performing it synchronously on the MainActor.
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+        if shouldRunSearchSynchronously {
             runSynchronousSearch(searchContext)
             return
         }
 
         scheduleAsynchronousSearch(searchContext)
+    }
+
+    private var shouldRunSearchSynchronously: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    private func handleEmptySearchQueryIfNeeded(_ context: SearchContext) -> Bool {
+        if context.query.isEmpty {
+            dataSource.resetCaches()
+            return true
+        }
+        return false
     }
 
     private struct SearchContext {
