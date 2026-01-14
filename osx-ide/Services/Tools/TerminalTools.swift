@@ -68,6 +68,14 @@ struct RunCommandTool: AIToolProgressReporting {
         }
     }
 
+    private struct MakeProcessRequest {
+        let command: String
+        let workingDirectoryURL: URL
+        let inheritedEnvironment: [String: String]
+        let collector: OutputCollector
+        let onProgress: (@Sendable (String) -> Void)?
+    }
+
     private func executeImpl(
         arguments: [String: Any],
         onProgress: (@Sendable (String) -> Void)?
@@ -107,11 +115,13 @@ struct RunCommandTool: AIToolProgressReporting {
         let maxCapturedBytes = 64 * 1024
         let collector = OutputCollector(maxBytes: maxCapturedBytes)
         let (process, pipe) = makeProcess(
-            command: command,
-            workingDirectoryURL: workingDirectoryURL,
-            inheritedEnvironment: inheritedEnvironment,
-            collector: collector,
-            onProgress: onProgress
+            MakeProcessRequest(
+                command: command,
+                workingDirectoryURL: workingDirectoryURL,
+                inheritedEnvironment: inheritedEnvironment,
+                collector: collector,
+                onProgress: onProgress
+            )
         )
 
         do {
@@ -209,28 +219,22 @@ struct RunCommandTool: AIToolProgressReporting {
         return projectRoot
     }
 
-    private func makeProcess(
-        command: String,
-        workingDirectoryURL: URL,
-        inheritedEnvironment: [String: String],
-        collector: OutputCollector,
-        onProgress: (@Sendable (String) -> Void)?
-    ) -> (Process, Pipe) {
+    private func makeProcess(_ request: MakeProcessRequest) -> (Process, Pipe) {
         let process = Process()
         let pipe = Pipe()
 
         process.standardOutput = pipe
         process.standardError = pipe
-        process.environment = inheritedEnvironment
-        process.arguments = ["-lc", command]
+        process.environment = request.inheritedEnvironment
+        process.arguments = ["-lc", request.command]
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.currentDirectoryURL = workingDirectoryURL
+        process.currentDirectoryURL = request.workingDirectoryURL
 
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             guard !data.isEmpty else { return }
-            collector.append(data)
-            if let onProgress,
+            request.collector.append(data)
+            if let onProgress = request.onProgress,
                let chunk = String(data: data, encoding: .utf8),
                !chunk.isEmpty {
                 onProgress(chunk)

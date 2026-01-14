@@ -29,31 +29,44 @@ struct WorkspaceFallbackSearcher {
         while let url = enumerator?.nextObject() as? URL {
             if Task.isCancelled { break }
 
-            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
-            if values?.isDirectory == true {
-                if shouldSkipDirectory(url) {
-                    enumerator?.skipDescendants()
-                }
+            if shouldSkipDescendantsIfDirectory(url, enumerator: enumerator) {
                 continue
             }
 
-            guard values?.isRegularFile == true else { continue }
-            guard shouldSearchFile(url) else { continue }
-
-            guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            appendMatches(
-                from: content,
-                in: url,
-                root: root,
-                pattern: needle,
-                limit: limit,
-                output: &output
-            )
-
-            if output.count >= limit { break }
+            if let matches = matchesInFileIfApplicable(url: url, root: root, needle: needle, limit: limit - output.count) {
+                output.append(contentsOf: matches)
+                if output.count >= limit { break }
+            }
         }
 
         return output
+    }
+
+    private func shouldSkipDescendantsIfDirectory(_ url: URL, enumerator: FileManager.DirectoryEnumerator?) -> Bool {
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
+        guard values?.isDirectory == true else { return false }
+        if shouldSkipDirectory(url) {
+            enumerator?.skipDescendants()
+        }
+        return true
+    }
+
+    private func matchesInFileIfApplicable(url: URL, root: URL, needle: String, limit: Int) -> [WorkspaceSearchMatch]? {
+        guard limit > 0 else { return nil }
+        let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+        guard values?.isRegularFile == true else { return nil }
+        guard shouldSearchFile(url) else { return nil }
+        guard let content = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+
+        return buildMatches(
+            MatchBuildRequest(
+                content: content,
+                url: url,
+                root: root,
+                pattern: needle,
+                limit: limit
+            )
+        )
     }
 
     private func shouldSkipDirectory(_ url: URL) -> Bool {
@@ -67,20 +80,23 @@ struct WorkspaceFallbackSearcher {
         return allowedExtensions.contains(ext)
     }
 
-    private func appendMatches(
-        from content: String,
-        in url: URL,
-        root: URL,
-        pattern: String,
-        limit: Int,
-        output: inout [WorkspaceSearchMatch]
-    ) {
-        let lines = content.components(separatedBy: .newlines)
-        let relative = makeRelativePath(url: url, root: root)
+    private struct MatchBuildRequest {
+        let content: String
+        let url: URL
+        let root: URL
+        let pattern: String
+        let limit: Int
+    }
+
+    private func buildMatches(_ request: MatchBuildRequest) -> [WorkspaceSearchMatch] {
+        let lines = request.content.components(separatedBy: .newlines)
+        let relative = makeRelativePath(url: request.url, root: request.root)
+        var output: [WorkspaceSearchMatch] = []
+        output.reserveCapacity(min(request.limit, 8))
 
         for (idx, line) in lines.enumerated() {
             if Task.isCancelled { break }
-            if !line.contains(pattern) { continue }
+            if !line.contains(request.pattern) { continue }
 
             output.append(
                 WorkspaceSearchMatch(
@@ -90,8 +106,10 @@ struct WorkspaceFallbackSearcher {
                 )
             )
 
-            if output.count >= limit { return }
+            if output.count >= request.limit { break }
         }
+
+        return output
     }
 
     private func makeRelativePath(url: URL, root: URL) -> String {

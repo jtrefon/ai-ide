@@ -13,92 +13,125 @@ final class WorkspaceSymbolSearchService {
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
     private let settingsStore: SettingsStore
 
+    struct SearchRequest {
+        let rawQuery: String
+        let projectRoot: URL
+        let currentFilePath: String?
+        let currentContent: String?
+        let currentLanguage: String?
+        let limit: Int
+    }
+
     init(codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?) {
         self.codebaseIndexProvider = codebaseIndexProvider
         self.settingsStore = SettingsStore(userDefaults: .standard)
     }
 
-    func search(
-        query rawQuery: String,
-        projectRoot: URL,
-        currentFilePath: String?,
-        currentContent: String?,
-        currentLanguage: String?,
-        limit: Int
-    ) async -> [WorkspaceSymbolLocation] {
-        let needle = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-
+    func search(_ request: SearchRequest) async -> [WorkspaceSymbolLocation] {
+        let needle = request.rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         if needle.isEmpty {
-            guard let currentFilePath, let currentContent, let currentLanguage else { return [] }
-            guard let rel = Self.relativePath(
-                projectRoot: projectRoot,
-                absolutePath: currentFilePath
-            ) else { return [] }
-            let parsed = parseSymbols(
-                language: currentLanguage,
-                content: currentContent,
-                resourceId: URL(fileURLWithPath: currentFilePath).absoluteString
-            )
-            return parsed.prefix(limit).map { sym in
-                WorkspaceSymbolLocation(
-                    id: "\(rel):\(sym.line):\(sym.kind.rawValue):\(sym.name)",
-                    name: sym.name,
-                    kind: sym.kind,
-                    relativePath: rel,
-                    line: sym.line
-                )
-            }
+            return searchCurrentFileWhenQueryEmpty(request)
         }
 
-        if let index = codebaseIndexProvider(),
-           settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true),
-           let matches = try? await index.searchSymbolsWithPaths(nameLike: needle, limit: max(1, min(200, limit))) {
-            var out: [WorkspaceSymbolLocation] = []
-            out.reserveCapacity(min(limit, matches.count))
-
-            for match in matches {
-                guard let filePath = match.filePath else { continue }
-                guard let rel = Self.relativePath(projectRoot: projectRoot, absolutePath: filePath) else { continue }
-
-                let symbol = match.symbol
-                out.append(
-                    WorkspaceSymbolLocation(
-                        id: "\(rel):\(symbol.lineStart):\(symbol.kind.rawValue):\(symbol.name)",
-                        name: symbol.name,
-                        kind: symbol.kind,
-                        relativePath: rel,
-                        line: max(1, symbol.lineStart)
-                    )
-                )
-
-                if out.count >= limit { break }
-            }
-
-            return sort(out, query: needle)
+        if let indexed = await searchUsingIndexIfAvailable(request, needle: needle) {
+            return indexed
         }
 
-        // Fallback: current buffer only.
-        guard let currentFilePath, let currentContent, let currentLanguage else { return [] }
-        guard let rel = Self.relativePath(projectRoot: projectRoot, absolutePath: currentFilePath) else { return [] }
+        return searchCurrentBufferFallback(request, needle: needle)
+    }
+
+    private func searchCurrentFileWhenQueryEmpty(_ request: SearchRequest) -> [WorkspaceSymbolLocation] {
+        guard let currentFilePath = request.currentFilePath,
+              let currentContent = request.currentContent,
+              let currentLanguage = request.currentLanguage else { return [] }
+        guard let rel = Self.relativePath(projectRoot: request.projectRoot, absolutePath: currentFilePath) else { return [] }
 
         let parsed = parseSymbols(
             language: currentLanguage,
             content: currentContent,
             resourceId: URL(fileURLWithPath: currentFilePath).absoluteString
         )
-        let filtered = parsed.filter { $0.name.lowercased().contains(needle.lowercased()) }
+        return parsed.prefix(request.limit).map { sym in
+            makeWorkspaceSymbolLocation(relativePath: rel, name: sym.name, kind: sym.kind, line: sym.line)
+        }
+    }
 
-        let limited = filtered.prefix(limit).map { sym in
-            WorkspaceSymbolLocation(
-                id: "\(rel):\(sym.line):\(sym.kind.rawValue):\(sym.name)",
-                name: sym.name,
-                kind: sym.kind,
-                relativePath: rel,
-                line: sym.line
+    private func searchUsingIndexIfAvailable(
+        _ request: SearchRequest,
+        needle: String
+    ) async -> [WorkspaceSymbolLocation]? {
+        guard let index = codebaseIndexProvider() else { return nil }
+        guard settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true) else { return nil }
+        let indexedLimit = max(1, min(200, request.limit))
+        guard let matches = try? await index.searchSymbolsWithPaths(nameLike: needle, limit: indexedLimit) else { return nil }
+
+        let mapped = mapIndexedMatchesToLocations(matches, projectRoot: request.projectRoot, limit: request.limit)
+        return sort(mapped, query: needle)
+    }
+
+    private func mapIndexedMatchesToLocations(
+        _ matches: [SymbolSearchResult],
+        projectRoot: URL,
+        limit: Int
+    ) -> [WorkspaceSymbolLocation] {
+        var out: [WorkspaceSymbolLocation] = []
+        out.reserveCapacity(min(limit, matches.count))
+
+        for match in matches {
+            guard let filePath = match.filePath else { continue }
+            guard let rel = Self.relativePath(projectRoot: projectRoot, absolutePath: filePath) else { continue }
+
+            let symbol = match.symbol
+            out.append(
+                makeWorkspaceSymbolLocation(
+                    relativePath: rel,
+                    name: symbol.name,
+                    kind: symbol.kind,
+                    line: max(1, symbol.lineStart)
+                )
             )
+
+            if out.count >= limit { break }
         }
 
+        return out
+    }
+
+    private func searchCurrentBufferFallback(
+        _ request: SearchRequest,
+        needle: String
+    ) -> [WorkspaceSymbolLocation] {
+        guard let currentFilePath = request.currentFilePath,
+              let currentContent = request.currentContent,
+              let currentLanguage = request.currentLanguage else { return [] }
+        guard let rel = Self.relativePath(projectRoot: request.projectRoot, absolutePath: currentFilePath) else { return [] }
+
+        let parsed = parseSymbols(
+            language: currentLanguage,
+            content: currentContent,
+            resourceId: URL(fileURLWithPath: currentFilePath).absoluteString
+        )
+        let lowerNeedle = needle.lowercased()
+        let filtered = parsed.filter { $0.name.lowercased().contains(lowerNeedle) }
+        let limited = filtered.prefix(request.limit).map { sym in
+            makeWorkspaceSymbolLocation(relativePath: rel, name: sym.name, kind: sym.kind, line: sym.line)
+        }
         return sort(Array(limited), query: needle)
+    }
+
+    private func makeWorkspaceSymbolLocation(
+        relativePath: String,
+        name: String,
+        kind: SymbolKind,
+        line: Int
+    ) -> WorkspaceSymbolLocation {
+        WorkspaceSymbolLocation(
+            id: "\(relativePath):\(line):\(kind.rawValue):\(name)",
+            name: name,
+            kind: kind,
+            relativePath: relativePath,
+            line: line
+        )
     }
 
     private func parseSymbols(

@@ -63,11 +63,13 @@ class ShellManager: NSObject {
         }
 
         let process = configureProcess(
-            shellPath: shellPath,
-            arguments: arguments,
-            directory: directory,
-            slaveHandle: pty.slaveHandle,
-            environmentOverrides: environmentOverrides
+            ConfigureProcessRequest(
+                shellPath: shellPath,
+                arguments: arguments,
+                directory: directory,
+                slaveHandle: pty.slaveHandle,
+                environmentOverrides: environmentOverrides
+            )
         )
 
         registerRunningProcess(process, pty: pty)
@@ -126,21 +128,23 @@ class ShellManager: NSObject {
         )
     }
 
-    private func configureProcess(
-        shellPath: String,
-        arguments: [String],
-        directory: URL?,
-        slaveHandle: FileHandle,
-        environmentOverrides: [String: String]
-    ) -> Process {
+    private struct ConfigureProcessRequest {
+        let shellPath: String
+        let arguments: [String]
+        let directory: URL?
+        let slaveHandle: FileHandle
+        let environmentOverrides: [String: String]
+    }
+
+    private func configureProcess(_ request: ConfigureProcessRequest) -> Process {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: shellPath)
-        process.arguments = arguments
-        process.currentDirectoryURL = directory ?? FileManager.default.homeDirectoryForCurrentUser
-        process.standardInput = slaveHandle
-        process.standardOutput = slaveHandle
-        process.standardError = slaveHandle
-        process.environment = Self.buildEnvironment(environmentOverrides: environmentOverrides)
+        process.executableURL = URL(fileURLWithPath: request.shellPath)
+        process.arguments = request.arguments
+        process.currentDirectoryURL = request.directory ?? FileManager.default.homeDirectoryForCurrentUser
+        process.standardInput = request.slaveHandle
+        process.standardOutput = request.slaveHandle
+        process.standardError = request.slaveHandle
+        process.environment = Self.buildEnvironment(environmentOverrides: request.environmentOverrides)
         return process
     }
 

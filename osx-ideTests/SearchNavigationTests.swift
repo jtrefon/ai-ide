@@ -69,12 +69,14 @@ struct SearchNavigationTests {
 
         let svc = WorkspaceSymbolSearchService(codebaseIndexProvider: { nil })
         let results = await svc.search(
-            query: "Foo",
-            projectRoot: tempRoot,
-            currentFilePath: file.path,
-            currentContent: content,
-            currentLanguage: "swift",
-            limit: 20
+            WorkspaceSymbolSearchService.SearchRequest(
+                rawQuery: "Foo",
+                projectRoot: tempRoot,
+                currentFilePath: file.path,
+                currentContent: content,
+                currentLanguage: "swift",
+                limit: 20
+            )
         )
 
         let foundFoo = results.first(where: { $0.name == "Foo" })

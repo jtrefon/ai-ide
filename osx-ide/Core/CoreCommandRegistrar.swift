@@ -80,12 +80,14 @@ struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
             Task { @MainActor in
                 let svc = WorkspaceNavigationService(codebaseIndexProvider: { context.codebaseIndex })
                 let locations = await svc.findDefinitionLocations(
-                    identifier: identifier,
-                    projectRoot: root,
-                    currentFilePath: context.fileEditor.selectedFile,
-                    currentContent: content,
-                    currentLanguage: context.fileEditor.editorLanguage,
-                    limit: 50
+                    WorkspaceNavigationService.FindDefinitionRequest(
+                        identifier: identifier,
+                        projectRoot: root,
+                        currentFilePath: context.fileEditor.selectedFile,
+                        currentContent: content,
+                        currentLanguage: context.fileEditor.editorLanguage,
+                        limit: 50
+                    )
                 )
 
                 if locations.isEmpty {

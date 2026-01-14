@@ -7,6 +7,22 @@ extension TextViewRepresentable.Coordinator {
         let typingAttributes: [NSAttributedString.Key: Any]
     }
 
+    private struct HighlightTaskRequest {
+        let text: String
+        let language: String
+        let font: NSFont
+        let textView: NSTextView
+        let context: HighlightContext
+    }
+
+    private struct ApplyHighlightRequest {
+        let attributedString: NSAttributedString
+        let textView: NSTextView
+        let language: String
+        let font: NSFont
+        let context: HighlightContext
+    }
+
     @MainActor
     func performAsyncHighlight(for text: String, in textView: NSTextView, language: String, font: NSFont) {
         currentHighlightTask?.cancel()
@@ -17,59 +33,55 @@ extension TextViewRepresentable.Coordinator {
         )
 
         currentHighlightTask = makeHighlightTask(
-            text: text,
-            language: language,
-            font: font,
-            textView: textView,
-            context: context
+            HighlightTaskRequest(
+                text: text,
+                language: language,
+                font: font,
+                textView: textView,
+                context: context
+            )
         )
     }
 
     @MainActor
-    private func makeHighlightTask(
-        text: String,
-        language: String,
-        font: NSFont,
-        textView: NSTextView,
-        context: HighlightContext
-    ) -> Task<Void, Never> {
+    private func makeHighlightTask(_ request: HighlightTaskRequest) -> Task<Void, Never> {
         Task {
-            let attributedString = SyntaxHighlighter.shared.highlight(text, language: language, font: font)
+            let attributedString = SyntaxHighlighter.shared.highlight(
+                request.text,
+                language: request.language,
+                font: request.font
+            )
 
             if Task.isCancelled { return }
 
             self.isProgrammaticUpdate = true
             applyHighlightResult(
-                attributedString,
-                textView: textView,
-                language: language,
-                font: font,
-                context: context
+                ApplyHighlightRequest(
+                    attributedString: attributedString,
+                    textView: request.textView,
+                    language: request.language,
+                    font: request.font,
+                    context: request.context
+                )
             )
             self.isProgrammaticUpdate = false
 
-            refreshRulerAfterHighlight(in: textView)
+            refreshRulerAfterHighlight(in: request.textView)
         }
     }
 
     @MainActor
-    private func applyHighlightResult(
-        _ attributedString: NSAttributedString,
-        textView: NSTextView,
-        language: String,
-        font: NSFont,
-        context: HighlightContext
-    ) {
-        if let textStorage = textView.textStorage {
-            applyHighlightAttributes(textStorage: textStorage, attributedString: attributedString, font: font)
+    private func applyHighlightResult(_ request: ApplyHighlightRequest) {
+        if let textStorage = request.textView.textStorage {
+            applyHighlightAttributes(textStorage: textStorage, attributedString: request.attributedString, font: request.font)
         }
 
         if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
-            postHighlightDiagnosticsIfNeeded(from: attributedString, language: language)
+            postHighlightDiagnosticsIfNeeded(from: request.attributedString, language: request.language)
         }
 
-        restoreSelectionIfValid(context.selectedRange, in: textView)
-        restoreTypingAttributes(context.typingAttributes, in: textView)
+        restoreSelectionIfValid(request.context.selectedRange, in: request.textView)
+        restoreTypingAttributes(request.context.typingAttributes, in: request.textView)
     }
 
     func applyHighlightAttributes(textStorage: NSTextStorage, attributedString: NSAttributedString, font: NSFont) {
@@ -214,7 +226,7 @@ extension TextViewRepresentable.Coordinator {
     }
 
     @MainActor
-    func handleDidProcessEditing(text: String) {
+    func handleDidProcessEditing(text _: String) {
         if isProgrammaticUpdate { return }
         guard let textView = attachedTextView else { return }
         scheduleHighlightForCurrentEditorText(in: textView)
