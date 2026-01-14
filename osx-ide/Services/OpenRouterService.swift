@@ -13,7 +13,7 @@ struct OpenRouterSettings: Equatable {
     var baseURL: String
     var systemPrompt: String
     var reasoningEnabled: Bool
-    
+
     static let empty = OpenRouterSettings(
         apiKey: "",
         model: "",
@@ -30,7 +30,7 @@ final class OpenRouterSettingsStore {
     private let baseURLKey = "OpenRouterBaseURL"
     private let systemPromptKey = "OpenRouterSystemPrompt"
     private let reasoningEnabledKey = "OpenRouterReasoningEnabled"
-    
+
     func load() -> OpenRouterSettings {
         OpenRouterSettings(
             apiKey: settingsStore.string(forKey: apiKeyKey) ?? "",
@@ -40,7 +40,7 @@ final class OpenRouterSettingsStore {
             reasoningEnabled: settingsStore.bool(forKey: reasoningEnabledKey, default: true)
         )
     }
-    
+
     func save(_ settings: OpenRouterSettings) {
         settingsStore.set(settings.apiKey, forKey: apiKeyKey)
         settingsStore.set(settings.model, forKey: modelKey)
@@ -53,7 +53,7 @@ final class OpenRouterSettingsStore {
 struct OpenRouterModel: Identifiable, Decodable, Hashable {
     let id: String
     let name: String?
-    
+
     var displayName: String {
         name ?? id
     }
@@ -69,7 +69,7 @@ enum OpenRouterServiceError: LocalizedError {
     case serverError(Int, body: String?)
     case missingAPIKey
     case emptyModel
-    
+
     var errorDescription: String? {
         switch self {
         case .invalidURL:
@@ -91,11 +91,11 @@ enum OpenRouterServiceError: LocalizedError {
 
 actor OpenRouterAPIClient {
     private let urlSession: URLSession
-    
+
     init(urlSession: URLSession = URLSession(configuration: .default)) {
         self.urlSession = urlSession
     }
-    
+
     func fetchModels(
         apiKey: String?,
         baseURL: String,
@@ -111,7 +111,7 @@ actor OpenRouterAPIClient {
             referer: referer,
             body: nil
         )
-        
+
         let (data, response) = try await urlSession.data(for: request)
         let status = try httpStatus(from: response)
         guard status == 200 else {
@@ -121,7 +121,7 @@ actor OpenRouterAPIClient {
         let decoded = try JSONDecoder().decode(OpenRouterModelResponse.self, from: data)
         return decoded.data
     }
-    
+
     func validateKey(
         apiKey: String,
         baseURL: String,
@@ -135,7 +135,7 @@ actor OpenRouterAPIClient {
             referer: referer
         )
     }
-    
+
     func testModel(
         apiKey: String,
         model: String,
@@ -151,7 +151,7 @@ actor OpenRouterAPIClient {
             "max_tokens": 16,
             "temperature": 0.0
         ]
-        
+
         let body = try JSONSerialization.data(withJSONObject: payload, options: [])
         let startTime = Date()
         _ = try await chatCompletion(
@@ -163,7 +163,7 @@ actor OpenRouterAPIClient {
         )
         return Date().timeIntervalSince(startTime)
     }
-    
+
     func chatCompletion(
         apiKey: String,
         baseURL: String,
@@ -180,7 +180,7 @@ actor OpenRouterAPIClient {
             referer: referer,
             body: body
         )
-        
+
         let (data, response) = try await urlSession.data(for: request)
         let status = try httpStatus(from: response)
         guard status == 200 else {
@@ -189,7 +189,7 @@ actor OpenRouterAPIClient {
         }
         return data
     }
-    
+
     private func makeRequest(
         path: String,
         method: String,
@@ -218,7 +218,7 @@ actor OpenRouterAPIClient {
         }
         return request
     }
-    
+
     private func httpStatus(from response: URLResponse) throws -> Int {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw OpenRouterServiceError.invalidResponse

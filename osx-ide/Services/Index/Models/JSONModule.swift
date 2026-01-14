@@ -11,10 +11,10 @@ import AppKit
 // These types are defined in IndexModels.swift in the same module.
 // If SourceKit fails to find them, ensure they are in the same target.
 
-public final class JSONModule: RegexLanguageModule, 
-        HighlightPaletteProviding, 
-        HighlightDiagnosticsPaletteProviding, 
-        @unchecked Sendable {
+public final class JSONModule: RegexLanguageModule,
+                               HighlightPaletteProviding,
+                               HighlightDiagnosticsPaletteProviding,
+                               @unchecked Sendable {
     public let highlightPalette: HighlightPalette
 
     public init() {
@@ -30,7 +30,7 @@ public final class JSONModule: RegexLanguageModule,
         palette.setColor(.systemBrown, for: .comma)
         palette.setColor(.systemYellow, for: .colon)
         self.highlightPalette = palette
-        
+
         super.init(id: CodeLanguage.json, fileExtensions: ["json"])
     }
 

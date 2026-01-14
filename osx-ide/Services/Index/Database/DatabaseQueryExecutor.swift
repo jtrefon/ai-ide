@@ -36,8 +36,8 @@ final class DatabaseQueryExecutor {
     }
 
     func candidatePathsForFTS(query: String, limit: Int) throws -> [String] {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if q.isEmpty { return [] }
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedQuery.isEmpty { return [] }
 
         let sql = """
         SELECT path
@@ -48,7 +48,7 @@ final class DatabaseQueryExecutor {
         """
 
         return try database.withPreparedStatement(sql: sql) { statement in
-            sqlite3_bind_text(statement, 1, (q as NSString).utf8String, -1, Self.sqliteTransient)
+            sqlite3_bind_text(statement, 1, (trimmedQuery as NSString).utf8String, -1, Self.sqliteTransient)
             sqlite3_bind_int(statement, 2, Int32(limit))
 
             var paths: [String] = []
@@ -74,7 +74,7 @@ final class DatabaseQueryExecutor {
         if trimmed.isEmpty { return [] }
 
         let sql = "SELECT path, ai_enriched, quality_score FROM resources " +
-                "WHERE LOWER(path) LIKE LOWER(?) ORDER BY path LIMIT ?;"
+            "WHERE LOWER(path) LIKE LOWER(?) ORDER BY path LIMIT ?;"
 
         let parameters: [Any] = ["%\(trimmed)%", limit]
         return try database.withPreparedStatement(sql: sql, parameters: parameters) { statement in
@@ -121,17 +121,17 @@ final class DatabaseQueryExecutor {
         }
     }
 
-    func getIndexStatsCounts() throws -> (
-            indexedResourceCount: Int, 
-            symbolCount: Int, 
-            memoryCount: Int, 
-            longTermMemoryCount: Int
-        ) {
+    func getIndexStatsCounts() throws -> IndexStatsCounts {
         let resourceCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM resources;")
         let symbolCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM symbols;")
         let memoryCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM memories;")
         let longTermMemoryCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM memories WHERE tier = 'long';")
-        return (resourceCount, symbolCount, memoryCount, longTermMemoryCount)
+        return IndexStatsCounts(
+            indexedResourceCount: resourceCount,
+            symbolCount: symbolCount,
+            memoryCount: memoryCount,
+            longTermMemoryCount: longTermMemoryCount
+        )
     }
 
     func searchFTS(query: String, limit: Int) throws -> [(path: String, snippet: String)] {

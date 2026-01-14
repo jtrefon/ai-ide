@@ -30,30 +30,30 @@ public enum LogValue: Codable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if container.decodeNil() { self = .null; return }
-        if let v = try? container.decode(String.self) { self = .string(v); return }
-        if let v = try? container.decode(Int.self) { self = .int(v); return }
-        if let v = try? container.decode(Double.self) { self = .double(v); return }
-        if let v = try? container.decode(Bool.self) { self = .bool(v); return }
-        if let v = try? container.decode([String: LogValue].self) { self = .object(v); return }
-        if let v = try? container.decode([LogValue].self) { self = .array(v); return }
+        if let decodedString = try? container.decode(String.self) { self = .string(decodedString); return }
+        if let decodedInt = try? container.decode(Int.self) { self = .int(decodedInt); return }
+        if let decodedDouble = try? container.decode(Double.self) { self = .double(decodedDouble); return }
+        if let decodedBool = try? container.decode(Bool.self) { self = .bool(decodedBool); return }
+        if let decodedObject = try? container.decode([String: LogValue].self) { self = .object(decodedObject); return }
+        if let decodedArray = try? container.decode([LogValue].self) { self = .array(decodedArray); return }
         self = .null
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
-        case .string(let v):
-            try container.encode(v)
-        case .int(let v):
-            try container.encode(v)
-        case .double(let v):
-            try container.encode(v)
-        case .bool(let v):
-            try container.encode(v)
-        case .object(let v):
-            try container.encode(v)
-        case .array(let v):
-            try container.encode(v)
+        case .string(let stringValue):
+            try container.encode(stringValue)
+        case .int(let intValue):
+            try container.encode(intValue)
+        case .double(let doubleValue):
+            try container.encode(doubleValue)
+        case .bool(let boolValue):
+            try container.encode(boolValue)
+        case .object(let objectValue):
+            try container.encode(objectValue)
+        case .array(let arrayValue):
+            try container.encode(arrayValue)
         case .null:
             try container.encodeNil()
         }
@@ -61,18 +61,18 @@ public enum LogValue: Codable, Sendable {
 
     public static func from(_ value: Any) -> LogValue {
         switch value {
-        case let v as String:
-            return .string(v)
-        case let v as Int:
-            return .int(v)
-        case let v as Double:
-            return .double(v)
-        case let v as Bool:
-            return .bool(v)
-        case let v as [String: Any]:
-            return .object(v.mapValues { LogValue.from($0) })
-        case let v as [Any]:
-            return .array(v.map { LogValue.from($0) })
+        case let stringValue as String:
+            return .string(stringValue)
+        case let intValue as Int:
+            return .int(intValue)
+        case let doubleValue as Double:
+            return .double(doubleValue)
+        case let boolValue as Bool:
+            return .bool(boolValue)
+        case let objectValue as [String: Any]:
+            return .object(objectValue.mapValues { LogValue.from($0) })
+        case let arrayValue as [Any]:
+            return .array(arrayValue.map { LogValue.from($0) })
         default:
             return .null
         }
@@ -184,109 +184,109 @@ public actor AppLogger {
     }
 
     public func trace(
-        category: LogCategory, 
-        message: String, 
-        metadata: [String: Any]? = nil, 
-        file: String = #fileID, 
-        function: String = #function, 
+        category: LogCategory,
+        message: String,
+        metadata: [String: Any]? = nil,
+        file: String = #fileID,
+        function: String = #function,
         line: Int = #line
     ) {
         log(
-                .trace, 
-                category: category, 
-                message: message, 
-                metadata: metadata, 
-                file: file, 
-                function: function, 
-                line: line
-            )
+            .trace,
+            category: category,
+            message: message,
+            metadata: metadata,
+            file: file,
+            function: function,
+            line: line
+        )
     }
 
     public func debug(
-        category: LogCategory, 
-        message: String, 
-        metadata: [String: Any]? = nil, 
-        file: String = #fileID, 
-        function: String = #function, 
+        category: LogCategory,
+        message: String,
+        metadata: [String: Any]? = nil,
+        file: String = #fileID,
+        function: String = #function,
         line: Int = #line
     ) {
         log(
-                .debug, 
-                category: category, 
-                message: message, 
-                metadata: metadata, 
-                file: file, 
-                function: function, 
-                line: line
-            )
+            .debug,
+            category: category,
+            message: message,
+            metadata: metadata,
+            file: file,
+            function: function,
+            line: line
+        )
     }
 
     public func info(
-        category: LogCategory, 
-        message: String, 
-        metadata: [String: Any]? = nil, 
-        file: String = #fileID, 
-        function: String = #function, 
+        category: LogCategory,
+        message: String,
+        metadata: [String: Any]? = nil,
+        file: String = #fileID,
+        function: String = #function,
         line: Int = #line
     ) {
         log(.info, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
     }
 
     public func warning(
-        category: LogCategory, 
-        message: String, 
-        metadata: [String: Any]? = nil, 
-        file: String = #fileID, 
-        function: String = #function, 
+        category: LogCategory,
+        message: String,
+        metadata: [String: Any]? = nil,
+        file: String = #fileID,
+        function: String = #function,
         line: Int = #line
     ) {
         log(
-                .warning, 
-                category: category, 
-                message: message, 
-                metadata: metadata, 
-                file: file, 
-                function: function, 
-                line: line
-            )
+            .warning,
+            category: category,
+            message: message,
+            metadata: metadata,
+            file: file,
+            function: function,
+            line: line
+        )
     }
 
     public func error(
-        category: LogCategory, 
-        message: String, 
-        metadata: [String: Any]? = nil, 
-        file: String = #fileID, 
-        function: String = #function, 
+        category: LogCategory,
+        message: String,
+        metadata: [String: Any]? = nil,
+        file: String = #fileID,
+        function: String = #function,
         line: Int = #line
     ) {
         log(
-                .error, 
-                category: category, 
-                message: message, 
-                metadata: metadata, 
-                file: file, 
-                function: function, 
-                line: line
-            )
+            .error,
+            category: category,
+            message: message,
+            metadata: metadata,
+            file: file,
+            function: function,
+            line: line
+        )
     }
 
     public func critical(
-        category: LogCategory, 
-        message: String, 
-        metadata: [String: Any]? = nil, 
-        file: String = #fileID, 
-        function: String = #function, 
+        category: LogCategory,
+        message: String,
+        metadata: [String: Any]? = nil,
+        file: String = #fileID,
+        function: String = #function,
         line: Int = #line
     ) {
         log(
-                .critical, 
-                category: category, 
-                message: message, 
-                metadata: metadata, 
-                file: file, 
-                function: function, 
-                line: line
-            )
+            .critical,
+            category: category,
+            message: message,
+            metadata: metadata,
+            file: file,
+            function: function,
+            line: line
+        )
     }
 
     private func shouldLog(_ level: LogLevel) -> Bool {

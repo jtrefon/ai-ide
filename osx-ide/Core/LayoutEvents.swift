@@ -10,7 +10,7 @@ import Foundation
 /// Event triggered when the sidebar visibility changes.
 public struct SidebarVisibilityChangedEvent: Event {
     public let isVisible: Bool
-    
+
     public init(isVisible: Bool) {
         self.isVisible = isVisible
     }
@@ -19,7 +19,7 @@ public struct SidebarVisibilityChangedEvent: Event {
 /// Event triggered when the sidebar width changes.
 public struct SidebarWidthChangedEvent: Event {
     public let width: Double
-    
+
     public init(width: Double) {
         self.width = width
     }
@@ -28,7 +28,7 @@ public struct SidebarWidthChangedEvent: Event {
 /// Event triggered when the terminal height changes.
 public struct TerminalHeightChangedEvent: Event {
     public let height: Double
-    
+
     public init(height: Double) {
         self.height = height
     }
@@ -37,7 +37,7 @@ public struct TerminalHeightChangedEvent: Event {
 /// Event triggered when the chat panel width changes.
 public struct ChatPanelWidthChangedEvent: Event {
     public let width: Double
-    
+
     public init(width: Double) {
         self.width = width
     }

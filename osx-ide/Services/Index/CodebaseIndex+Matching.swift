@@ -19,24 +19,24 @@ extension CodebaseIndex {
             return calculateMatchScore(relPath: rel, needle: needle, aiEnriched: aiEnriched, qualityScore: qualityScore)
         }
 
-        let sorted = raw.sorted { a, b in
-            let sa = score(for: a.path, aiEnriched: a.aiEnriched, qualityScore: a.qualityScore)
-            let sb = score(for: b.path, aiEnriched: b.aiEnriched, qualityScore: b.qualityScore)
+        let sorted = raw.sorted { left, right in
+            let sa = score(for: left.path, aiEnriched: left.aiEnriched, qualityScore: left.qualityScore)
+            let sb = score(for: right.path, aiEnriched: right.aiEnriched, qualityScore: right.qualityScore)
             if sa != sb { return sa > sb }
-            return relPath(a.path) < relPath(b.path)
+            return relPath(left.path) < relPath(right.path)
         }
 
-        return sorted.map { m in
-            IndexedFileMatch(path: relPath(m.path), aiEnriched: m.aiEnriched, qualityScore: m.qualityScore)
+        return sorted.map { match in
+            IndexedFileMatch(path: relPath(match.path), aiEnriched: match.aiEnriched, qualityScore: match.qualityScore)
         }
     }
 
     private func calculateMatchScore(
-            relPath: String, 
-            needle: String, 
-            aiEnriched: Bool, 
-            qualityScore: Double?
-        ) -> Double {
+        relPath: String,
+        needle: String,
+        aiEnriched: Bool,
+        qualityScore: Double?
+    ) -> Double {
         let lowerRel = relPath.lowercased()
         let base = URL(fileURLWithPath: relPath).lastPathComponent.lowercased()
 

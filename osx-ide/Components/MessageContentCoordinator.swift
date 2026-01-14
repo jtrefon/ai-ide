@@ -12,25 +12,25 @@ import AppKit
 /// Coordinates message content rendering and styling
 @MainActor
 struct MessageContentCoordinator {
-    
+
     // MARK: - Properties
-    
+
     let message: ChatMessage
     var fontSize: Double
     var fontFamily: String
     @Binding var isReasoningHidden: Bool
-    
+
     // MARK: - Initialization
-    
+
     init(message: ChatMessage, fontSize: Double, fontFamily: String, isReasoningHidden: Binding<Bool>) {
         self.message = message
         self.fontSize = fontSize
         self.fontFamily = fontFamily
         self._isReasoningHidden = isReasoningHidden
     }
-    
+
     // MARK: - Public Methods
-    
+
     /// Creates the appropriate message content view based on message type
     func makeMessageContent() -> some View {
         Group {
@@ -77,9 +77,9 @@ struct MessageContentCoordinator {
             }
         }
     }
-    
+
     // MARK: - Private Methods
-    
+
     private func backgroundColor(for message: ChatMessage) -> Color {
         if message.role == .user {
             return Color.accentColor.opacity(0.8)
@@ -87,7 +87,7 @@ struct MessageContentCoordinator {
 
         return Color(NSColor.controlBackgroundColor)
     }
-    
+
     private func foregroundColor(for message: ChatMessage) -> Color {
         if message.role == .user {
             return Color.white
@@ -95,12 +95,12 @@ struct MessageContentCoordinator {
 
         return Color.primary
     }
-    
+
     private var hasReasoning: Bool {
         guard let reasoning = message.reasoning else { return false }
         return !reasoning.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty
     }
-    
+
     private var copyMessageButton: some View {
         Button {
             NSPasteboard.general.clearContents()
@@ -110,7 +110,7 @@ struct MessageContentCoordinator {
             Image(systemName: "doc.on.doc")
         }
     }
-    
+
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }

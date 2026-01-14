@@ -44,15 +44,15 @@ final class ConversationToolProvider {
 
         tools.append(
             WriteFileTool(
-                fileSystemService: fileSystemService, 
-                pathValidator: pathValidator, 
+                fileSystemService: fileSystemService,
+                pathValidator: pathValidator,
                 eventBus: eventBus
             )
         )
         tools.append(
             WriteFilesTool(
-                fileSystemService: fileSystemService, 
-                pathValidator: pathValidator, 
+                fileSystemService: fileSystemService,
+                pathValidator: pathValidator,
                 eventBus: eventBus
             )
         )
@@ -60,8 +60,8 @@ final class ConversationToolProvider {
         tools.append(DeleteFileTool(pathValidator: pathValidator, eventBus: eventBus))
         tools.append(
             ReplaceInFileTool(
-                fileSystemService: fileSystemService, 
-                pathValidator: pathValidator, 
+                fileSystemService: fileSystemService,
+                pathValidator: pathValidator,
                 eventBus: eventBus
             )
         )

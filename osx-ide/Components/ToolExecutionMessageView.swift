@@ -14,18 +14,18 @@ struct ToolExecutionMessageView: View {
     let message: ChatMessage
     var fontSize: Double
     var fontFamily: String
-    
+
     @State private var isExpanded = false
-    
+
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header (Always Visible)
             toolExecutionHeader
-            
+
             // Content (Expandable)
             if isExpanded || message.toolStatus == .executing {
                 toolExecutionContent
@@ -38,13 +38,13 @@ struct ToolExecutionMessageView: View {
                 .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
         )
     }
-    
+
     // MARK: - Private Components
-    
+
     private var toolExecutionHeader: some View {
         HStack(spacing: 6) {
             statusIcon
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(message.toolName ?? localized("tool.default_name"))
                     .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .medium))
@@ -62,9 +62,9 @@ struct ToolExecutionMessageView: View {
                     let trimmed = message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         let lastLine = trimmed.split(
-                        separator: "\n", 
-                        omittingEmptySubsequences: false
-                    ).last.map(String.init) ?? trimmed
+                            separator: "\n",
+                            omittingEmptySubsequences: false
+                        ).last.map(String.init) ?? trimmed
                         Text(lastLine)
                             .font(.system(size: CGFloat(max(9, fontSize - 4))))
                             .foregroundColor(.secondary)
@@ -73,12 +73,12 @@ struct ToolExecutionMessageView: View {
                     }
                 }
             }
-            
+
             Spacer()
-            
+
             // Expand/Collapse button
-            if message.toolStatus != .executing && 
-               !message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
+            if message.toolStatus != .executing &&
+                !message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isExpanded.toggle()
@@ -94,7 +94,7 @@ struct ToolExecutionMessageView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
-    
+
     private var toolExecutionContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             if message.toolStatus == .executing {
@@ -102,7 +102,7 @@ struct ToolExecutionMessageView: View {
                     .scaleEffect(0.8)
                     .frame(width: 16, height: 16)
             }
-            
+
             let content = message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
             if !content.isEmpty {
                 ScrollView {
@@ -118,7 +118,7 @@ struct ToolExecutionMessageView: View {
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }
-    
+
     private var statusIcon: some View {
         Group {
             switch message.toolStatus {

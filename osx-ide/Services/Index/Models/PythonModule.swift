@@ -12,7 +12,7 @@ public final class PythonModule: RegexLanguageModule, @unchecked Sendable {
     public init() {
         super.init(id: .python, fileExtensions: ["py"])
     }
-    
+
     public override func highlight(_ code: String, font: NSFont) -> NSAttributedString {
         let base = makeBaseAttributedString(code: code, font: font)
         let attr = base.attributed
@@ -26,19 +26,19 @@ public final class PythonModule: RegexLanguageModule, @unchecked Sendable {
             code: code,
             using: self
         )
-        
+
         // Python specific
         applyRegex("#.*", color: NSColor.systemGreen, in: attr, code: code)
         applyRegex("\"\"\"[\\s\\S]*?\"\"\"", color: NSColor.systemRed, in: attr, code: code)
         applyRegex("'''[\\s\\S]*?'''", color: NSColor.systemRed, in: attr, code: code)
-        
+
         return attr
     }
-    
+
     public override func parseSymbols(content: String, resourceId: String) -> [Symbol] {
         return PythonParser.parse(content: content, resourceId: resourceId)
     }
-    
+
     public override func format(_ code: String) -> String {
         return CodeFormatter.format(code, language: .python)
     }

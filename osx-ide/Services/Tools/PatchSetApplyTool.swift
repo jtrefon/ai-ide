@@ -80,6 +80,6 @@ struct PatchSetApplyTool: AITool {
             return "Applied patch set \(id). Created checkpoint \(checkpointId)."
         }
         return "Applied patch set \(id). Created checkpoint \(checkpointId). " +
-                "Touched files:\n" + touched.joined(separator: "\n")
+            "Touched files:\n" + touched.joined(separator: "\n")
     }
 }

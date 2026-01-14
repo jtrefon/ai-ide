@@ -23,10 +23,10 @@ struct ReadFileTool: AITool {
             "required": ["path"]
         ]
     }
-    
+
     let fileSystemService: FileSystemService
     let pathValidator: PathValidator
-    
+
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
         guard let path = arguments["path"] as? String else {

@@ -25,14 +25,14 @@ extension ShellManager: ShellManaging {}
 class NativeTerminalEmbedder: NSObject, ObservableObject {
     @Published var currentDirectory: URL?
     @Published var errorMessage: String?
-    
+
     var terminalView: NSTextView?
     private let shellManager: ShellManaging
     private var isCleaningUp = false
-    
+
     var fontSize: CGFloat = 12
     var fontFamily: String = "SF Mono"
-    
+
     var currentLineStartLocation: Int = 0
     var cursorColumn: Int = 0
     var currentTextAttributes: [NSAttributedString.Key: Any] = [:]
@@ -58,8 +58,8 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         }
 
         override func keyDown(with event: NSEvent) {
-            if let s = event.characters {
-                inputDelegate?.shellManager.sendInput(s)
+            if let characters = event.characters {
+                inputDelegate?.shellManager.sendInput(characters)
             }
         }
 
@@ -85,17 +85,16 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             super.doCommand(by: selector)
         }
     }
-    
-    
+
     deinit {
         // Observer cleanup is handled in removeEmbedding
     }
-    
+
     /// Embed terminal in the specified parent view
     func embedTerminal(
-        in parentView: NSView, 
-        directory: URL? = nil, 
-        fontSize: Double? = nil, 
+        in parentView: NSView,
+        directory: URL? = nil,
+        fontSize: Double? = nil,
         fontFamily: String? = nil
     ) {
         if let fontSize = fontSize {
@@ -104,15 +103,15 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         if let fontFamily = fontFamily {
             self.fontFamily = fontFamily
         }
-        
+
         let newDir = directory?.standardizedFileURL
-        
+
         // If we already have a terminal view and process, check if we just need to change dir
         if let existingView = terminalView {
             if existingView.enclosingScrollView?.superview == parentView || existingView.superview == parentView {
-                if let current = self.currentDirectory?.standardizedFileURL, 
-               let new = newDir, 
-               current.path != new.path {
+                if let current = self.currentDirectory?.standardizedFileURL,
+                   let new = newDir,
+                   current.path != new.path {
                     Task { @MainActor [weak self] in
                         self?.currentDirectory = new
                     }
@@ -121,16 +120,16 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
                 return
             }
         }
-        
+
         cleanup()
-        
+
         let targetDir = newDir ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
 
         Task { @MainActor [weak self] in
             self?.currentDirectory = targetDir
             self?.errorMessage = nil
         }
-        
+
         isCleaningUp = false
         setupTerminalView(in: parentView)
         shellManager.start(in: targetDir)
@@ -146,13 +145,13 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView.setSelectedRange(endRange)
         terminalView.scrollRangeToVisible(endRange)
     }
-    
+
     /// Setup terminal view
     private func setupTerminalView(in parentView: NSView) {
         parentView.subviews.forEach { $0.removeFromSuperview() }
         terminalView = nil
         parentView.wantsLayer = true
-        
+
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
@@ -160,7 +159,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         scrollView.borderType = .noBorder
         scrollView.backgroundColor = NSColor.black
         scrollView.drawsBackground = true
-        
+
         let terminalView = TerminalTextView()
         terminalView.inputDelegate = self
         terminalView.isEditable = true
@@ -179,7 +178,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView.isContinuousSpellCheckingEnabled = false
         terminalView.delegate = self
         terminalView.setAccessibilityIdentifier("TerminalTextView")
-        
+
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .left
         terminalView.typingAttributes = [
@@ -187,18 +186,18 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             .foregroundColor: NSColor.green,
             .paragraphStyle: paragraphStyle
         ]
-        
+
         scrollView.documentView = terminalView
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         parentView.addSubview(scrollView)
-        
+
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: parentView.topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: parentView.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: parentView.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: parentView.bottomAnchor)
         ])
-        
+
         self.terminalView = terminalView
 
         currentLineStartLocation = 0
@@ -206,17 +205,17 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         currentTextAttributes = terminalView.typingAttributes
         pendingEraseToEndOfLine = false
     }
-    
+
     /// Update terminal font
     func updateFont(size: Double, family: String) {
         self.fontSize = CGFloat(size)
         self.fontFamily = family
-        
+
         guard let terminalView = terminalView else { return }
-        
+
         let newFont = resolveFont(size: self.fontSize, family: self.fontFamily)
         terminalView.font = newFont
-        
+
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .left
         terminalView.typingAttributes = [
@@ -224,7 +223,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             .foregroundColor: NSColor.green,
             .paragraphStyle: paragraphStyle
         ]
-        
+
         // Refresh existing content font if needed
         if let storage = terminalView.textStorage {
             storage.beginEditing()
@@ -232,14 +231,14 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             storage.endEditing()
         }
     }
-    
+
     func resolveFont(size: CGFloat, family: String, weight: NSFont.Weight = .regular) -> NSFont {
         if let font = NSFont(name: family, size: size) {
             return NSFontManager.shared.convert(font, toHaveTrait: weight == .bold ? .boldFontMask : .unboldFontMask)
         }
         return NSFont.monospacedSystemFont(ofSize: size, weight: weight)
     }
-    
+
     private func appendOutput(_ text: String) {
         guard !isCleaningUp, terminalView != nil else { return }
 
@@ -257,7 +256,9 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             }
         }
     }
+}
 
+extension NativeTerminalEmbedder {
     private func isNearBottom(_ terminalView: NSTextView) -> Bool {
         guard let scrollView = terminalView.enclosingScrollView else { return true }
         let contentHeight = scrollView.contentView.bounds.height
@@ -286,27 +287,27 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     }
 
     private func applyTerminalOutputCharacters(_ text: String, into textStorage: NSTextStorage) {
-        var i = text.startIndex
-        while i < text.endIndex {
-            let ch = text[i]
+        var index = text.startIndex
+        while index < text.endIndex {
+            let ch = text[index]
 
-            if let newIndex = consumeEscapeSequenceIfPresent(text, at: i) {
-                i = newIndex
+            if let newIndex = consumeEscapeSequenceIfPresent(text, at: index) {
+                index = newIndex
                 continue
             }
 
-            if let newIndex = consumeLineBreakIfPresent(text, at: i, into: textStorage) {
-                i = newIndex
+            if let newIndex = consumeLineBreakIfPresent(text, at: index, into: textStorage) {
+                index = newIndex
                 continue
             }
 
-            if let newIndex = consumeEditingControlIfPresent(text, at: i, into: textStorage) {
-                i = newIndex
+            if let newIndex = consumeEditingControlIfPresent(text, at: index, into: textStorage) {
+                index = newIndex
                 continue
             }
 
             if consumeIgnoredControlIfPresent(ch) {
-                i = text.index(after: i)
+                index = text.index(after: index)
                 continue
             }
 
@@ -316,7 +317,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             }
 
             putCharacter(String(ch), into: textStorage)
-            i = text.index(after: i)
+            index = text.index(after: index)
         }
     }
 
@@ -330,8 +331,8 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     }
 
     private func consumeLineBreakIfPresent(
-        _ text: String, 
-        at index: String.Index, 
+        _ text: String,
+        at index: String.Index,
         into textStorage: NSTextStorage
     ) -> String.Index? {
         let ch = text[index]
@@ -348,8 +349,8 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     }
 
     private func consumeEditingControlIfPresent(
-        _ text: String, 
-        at index: String.Index, 
+        _ text: String,
+        at index: String.Index,
         into textStorage: NSTextStorage
     ) -> String.Index? {
         let ch = text[index]
@@ -443,7 +444,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             if currentLineStartLocation < cursorIndex {
                 textStorage.deleteCharacters(
                     in: NSRange(
-                        location: currentLineStartLocation, 
+                        location: currentLineStartLocation,
                         length: cursorIndex - currentLineStartLocation
                     )
                 )
@@ -455,7 +456,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             if currentLineStartLocation < bounds.lineEnd {
                 textStorage.deleteCharacters(
                     in: NSRange(
-                        location: currentLineStartLocation, 
+                        location: currentLineStartLocation,
                         length: bounds.lineEnd - currentLineStartLocation
                     )
                 )
@@ -495,7 +496,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             // Append at end of line (before newline if present).
             let insertLocation = bounds.lineEnd
             textStorage.insert(
-                NSAttributedString(string: character, attributes: currentTextAttributes), 
+                NSAttributedString(string: character, attributes: currentTextAttributes),
                 at: insertLocation
             )
         }
@@ -514,11 +515,11 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     private func cleanup() {
         guard !isCleaningUp else { return }
         isCleaningUp = true
-        
+
         shellManager.terminate()
         terminalView?.removeFromSuperview()
         terminalView = nil
-        
+
         Task { @MainActor [weak self] in
             self?.errorMessage = nil
         }
@@ -530,11 +531,11 @@ extension NativeTerminalEmbedder: ShellManagerDelegate {
     func shellManager(_ manager: ShellManager, didProduceOutput output: String) {
         appendOutput(output)
     }
-    
+
     func shellManager(_ manager: ShellManager, didFailWithError error: String) {
         self.errorMessage = error
     }
-    
+
     func shellManagerDidTerminate(_ manager: ShellManager) {
         appendOutput("\n[Process terminated]\n")
     }

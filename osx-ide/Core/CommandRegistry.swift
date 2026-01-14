@@ -10,15 +10,15 @@ import Foundation
 /// A unique identifier for a command, e.g., "editor.save" or "git.commit".
 public struct CommandID: Hashable, ExpressibleByStringLiteral, CustomStringConvertible, Sendable {
     public let value: String
-    
+
     public init(_ value: String) {
         self.value = value
     }
-    
+
     public init(stringLiteral value: String) {
         self.value = value
     }
-    
+
     public var description: String { value }
 }
 
@@ -47,11 +47,11 @@ public protocol CommandHandler {
 @MainActor
 public final class ClosureCommandHandler: CommandHandler {
     private let action: @MainActor @Sendable ([String: Any]) async throws -> Void
-    
+
     public init(_ action: @escaping @MainActor @Sendable ([String: Any]) async throws -> Void) {
         self.action = action
     }
-    
+
     /// Execute the command with the provided arguments.
     /// - Parameter args: Command arguments as key-value pairs
     public func execute(args: [String: Any]) async throws {
@@ -64,9 +64,9 @@ public final class ClosureCommandHandler: CommandHandler {
 @MainActor
 public final class CommandRegistry {
     private var handlers: [CommandID: CommandHandler] = [:]
-    
+
     public init() {}
-    
+
     /// Registers a handler for a command.
     /// Allows overwriting (Last-Writer-Wins) which enables "Hijacking".
     /// - Parameters:
@@ -76,13 +76,13 @@ public final class CommandRegistry {
         handlers[command] = handler
         print("[CommandRegistry] Registered: \(command)")
     }
-    
+
     /// Registers a closure-based handler for a command.
     /// - Parameters:
     ///   - command: The command identifier
     ///   - action: The closure to execute when the command is triggered
     public func register(
-        command: CommandID, 
+        command: CommandID,
         action: @escaping @MainActor @Sendable ([String: Any]) async throws -> Void
     ) {
         register(command: command, handler: ClosureCommandHandler(action))
@@ -97,7 +97,7 @@ public final class CommandRegistry {
             try await action(args)
         }
     }
-    
+
     public func unregister(command: CommandID) {
         handlers.removeValue(forKey: command)
         print("[CommandRegistry] Unregistered: \(command)")
@@ -106,13 +106,13 @@ public final class CommandRegistry {
     public func registeredCommandIDs() -> [CommandID] {
         handlers.keys.sorted { $0.value < $1.value }
     }
-    
+
     public func execute(_ command: CommandID, args: [String: Any] = [:]) async throws {
         guard let handler = handlers[command] else {
             print("[CommandRegistry] Error: Command not found: \(command)")
             throw AppError.commandNotFound(command.value)
         }
-        
+
         print("[CommandRegistry] Executing: \(command)")
         try await handler.execute(args: args)
     }

@@ -21,7 +21,7 @@ struct IndexFindFilesTool: AITool {
                 "query": [
                     "type": "string",
                     "description": "Filename, basename, or path substring " +
-                    "(e.g. 'train_cli', 'DatabaseManager.swift', 'Services/Index')."
+                        "(e.g. 'train_cli', 'DatabaseManager.swift', 'Services/Index')."
                 ],
                 "limit": [
                     "type": "integer",
@@ -46,12 +46,12 @@ struct IndexFindFilesTool: AITool {
             return "No files found in index."
         }
 
-        return matches.map { m in
-            if let score = m.qualityScore {
+        return matches.map { match in
+            if let score = match.qualityScore {
                 let scoreText = String(format: "%.2f", score)
-                return "\(m.path)  (ai_enriched=\(m.aiEnriched), quality_score=\(scoreText))"
+                return "\(match.path)  (ai_enriched=\(match.aiEnriched), quality_score=\(scoreText))"
             }
-            return "\(m.path)  (ai_enriched=\(m.aiEnriched))"
+            return "\(match.path)  (ai_enriched=\(match.aiEnriched))"
         }.joined(separator: "\n")
     }
 }
@@ -70,7 +70,7 @@ struct IndexListFilesTool: AITool {
                 "query": [
                     "type": "string",
                     "description": "Optional case-insensitive substring filter on path " +
-                    "(e.g. 'Services/Index', 'DatabaseManager')."
+                        "(e.g. 'Services/Index', 'DatabaseManager')."
                 ],
                 "limit": [
                     "type": "integer",
@@ -94,10 +94,10 @@ struct IndexListFilesTool: AITool {
         let offset = max(0, arguments["offset"] as? Int ?? 0)
 
         let results = try await index.listIndexedFiles(
-                    matching: query?.isEmpty == true ? nil : query, 
-                    limit: limit, 
-                    offset: offset
-                )
+            matching: query?.isEmpty == true ? nil : query,
+            limit: limit,
+            offset: offset
+        )
         return results.isEmpty ? "No indexed files found." : results.joined(separator: "\n")
     }
 }
@@ -186,7 +186,7 @@ struct IndexReadFileTool: AITool {
 struct IndexSearchSymbolsTool: AITool {
     let name = "index_search_symbols"
     let description = "Search for symbols (classes, functions, etc.) in the Codebase Index. " +
-                "Use to locate relevant files/definitions efficiently."
+        "Use to locate relevant files/definitions efficiently."
 
     var parameters: [String: Any] {
         [
@@ -220,11 +220,11 @@ struct IndexSearchSymbolsTool: AITool {
         }
 
         let lines = results.map { result in
-            let s = result.symbol
+            let symbol = result.symbol
             if let path = result.filePath {
-                return "[\(s.kind.rawValue)] \(s.name) (\(path):\(s.lineStart)-\(s.lineEnd))"
+                return "[\(symbol.kind.rawValue)] \(symbol.name) (\(path):\(symbol.lineStart)-\(symbol.lineEnd))"
             }
-            return "[\(s.kind.rawValue)] \(s.name) (lines \(s.lineStart)-\(s.lineEnd))"
+            return "[\(symbol.kind.rawValue)] \(symbol.name) (lines \(symbol.lineStart)-\(symbol.lineEnd))"
         }
         return lines.joined(separator: "\n")
     }

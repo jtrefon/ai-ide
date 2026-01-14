@@ -13,7 +13,7 @@ import AppKit
 @MainActor
 class UIStateManager: ObservableObject {
     // MARK: - Layout State
-    
+
     @Published var isSidebarVisible: Bool = true
     @Published var isTerminalVisible: Bool = true
     @Published var isAIChatVisible: Bool = true
@@ -21,18 +21,18 @@ class UIStateManager: ObservableObject {
     @Published var sidebarWidth: Double = AppConstants.Layout.defaultSidebarWidth
     @Published var terminalHeight: Double = AppConstants.Layout.defaultTerminalHeight
     @Published var chatPanelWidth: Double = AppConstants.Layout.defaultChatPanelWidth
-    
+
     // MARK: - Editor State
-    
+
     @Published var showLineNumbers: Bool = true
     @Published var wordWrap: Bool = false
     @Published var minimapVisible: Bool = false
     @Published var fontSize: Double = AppConstants.Editor.defaultFontSize
     @Published var fontFamily: String = AppConstants.Editor.defaultFontFamily
     @Published var indentationStyle: IndentationStyle = .tabs
-    
+
     // MARK: - Terminal Settings
-    
+
     @Published var terminalFontSize: Double = 12
     @Published var terminalFontFamily: String = "SF Mono"
     @Published var terminalForegroundColor: String = "#00FF00" // Green
@@ -42,18 +42,18 @@ class UIStateManager: ObservableObject {
     // MARK: - Agent Settings
 
     @Published var cliTimeoutSeconds: Double = 30
-    
+
     // MARK: - Theme State
-    
+
     @Published var selectedTheme: AppTheme = .system
     @Published var isDarkMode: Bool = false
-    
+
     // MARK: - Services
-    
+
     private let uiService: UIServiceProtocol
     private let eventBus: EventBusProtocol
     private var cancellables = Set<AnyCancellable>()
-    
+
     init(uiService: UIServiceProtocol, eventBus: EventBusProtocol) {
         self.uiService = uiService
         self.eventBus = eventBus
@@ -61,27 +61,27 @@ class UIStateManager: ObservableObject {
         updateTheme()
         setupEventSubscriptions()
     }
-    
+
     private func setupEventSubscriptions() {
         eventBus.subscribe(to: SidebarWidthChangedEvent.self) { [weak self] event in
             self?.sidebarWidth = event.width
         }.store(in: &cancellables)
-        
+
         eventBus.subscribe(to: TerminalHeightChangedEvent.self) { [weak self] event in
             self?.terminalHeight = event.height
         }.store(in: &cancellables)
-        
+
         eventBus.subscribe(to: ChatPanelWidthChangedEvent.self) { [weak self] event in
             self?.chatPanelWidth = event.width
         }.store(in: &cancellables)
     }
-    
+
     // MARK: - Layout Management
-    
+
     func toggleSidebar() {
         isSidebarVisible.toggle()
     }
-    
+
     func setSidebarVisible(_ visible: Bool) {
         isSidebarVisible = visible
     }
@@ -93,60 +93,60 @@ class UIStateManager: ObservableObject {
     func setAIChatVisible(_ visible: Bool) {
         isAIChatVisible = visible
     }
-    
+
     func updateSidebarWidth(_ width: Double) {
         sidebarWidth = max(AppConstants.Layout.minSidebarWidth, min(AppConstants.Layout.maxSidebarWidth, width))
         uiService.setSidebarWidth(sidebarWidth)
     }
-    
+
     func updateTerminalHeight(_ height: Double) {
         terminalHeight = max(AppConstants.Layout.minTerminalHeight, min(AppConstants.Layout.maxTerminalHeight, height))
         uiService.setTerminalHeight(terminalHeight)
     }
-    
+
     func updateChatPanelWidth(_ width: Double) {
         chatPanelWidth = max(AppConstants.Layout.minChatPanelWidth, min(AppConstants.Layout.maxChatPanelWidth, width))
         uiService.setChatPanelWidth(chatPanelWidth)
     }
-    
+
     // MARK: - Editor Settings
-    
+
     func toggleLineNumbers() {
         showLineNumbers.toggle()
         uiService.setShowLineNumbers(showLineNumbers)
     }
-    
+
     func setShowLineNumbers(_ show: Bool) {
         showLineNumbers = show
         uiService.setShowLineNumbers(show)
     }
-    
+
     func toggleWordWrap() {
         wordWrap.toggle()
         uiService.setWordWrap(wordWrap)
     }
-    
+
     func setWordWrap(_ wrap: Bool) {
         wordWrap = wrap
         uiService.setWordWrap(wrap)
     }
-    
+
     func toggleMinimap() {
         minimapVisible.toggle()
         uiService.setMinimapVisible(minimapVisible)
     }
-    
+
     func setMinimapVisible(_ visible: Bool) {
         minimapVisible = visible
         uiService.setMinimapVisible(visible)
     }
-    
+
     func updateFontSize(_ size: Double) {
         guard size >= AppConstants.Editor.minFontSize && size <= AppConstants.Editor.maxFontSize else { return }
         fontSize = size
         uiService.setFontSize(size)
     }
-    
+
     func updateFontFamily(_ family: String) {
         fontFamily = family
         uiService.setFontFamily(family)
@@ -156,37 +156,37 @@ class UIStateManager: ObservableObject {
         indentationStyle = style
         uiService.setIndentationStyle(style)
     }
-    
+
     // MARK: - Terminal Settings
-    
+
     func updateTerminalFontSize(_ size: Double) {
         guard size >= 8 && size <= 72 else { return }
         terminalFontSize = size
         uiService.setTerminalFontSize(size)
     }
-    
+
     func updateTerminalFontFamily(_ family: String) {
         terminalFontFamily = family
         uiService.setTerminalFontFamily(family)
     }
-    
+
     func updateTerminalForegroundColor(_ color: String) {
         terminalForegroundColor = color
         uiService.setTerminalForegroundColor(color)
     }
-    
+
     func updateTerminalBackgroundColor(_ color: String) {
         terminalBackgroundColor = color
         uiService.setTerminalBackgroundColor(color)
     }
-    
+
     func updateTerminalShell(_ shell: String) {
         terminalShell = shell
         uiService.setTerminalShell(shell)
     }
-    
+
     // MARK: - Theme Management
-    
+
     func setTheme(_ theme: AppTheme) {
         selectedTheme = theme
         uiService.setTheme(theme)
@@ -198,7 +198,7 @@ class UIStateManager: ObservableObject {
         cliTimeoutSeconds = clamped
         uiService.setCliTimeoutSeconds(clamped)
     }
-    
+
     private func updateTheme() {
         switch selectedTheme {
         case .light:
@@ -214,9 +214,9 @@ class UIStateManager: ObservableObject {
             }
         }
     }
-    
+
     // MARK: - Settings Persistence
-    
+
     private func loadSettings() {
         let settings = uiService.loadSettings()
         selectedTheme = settings.selectedTheme
@@ -230,20 +230,20 @@ class UIStateManager: ObservableObject {
         sidebarWidth = settings.sidebarWidth
         terminalHeight = settings.terminalHeight
         chatPanelWidth = settings.chatPanelWidth
-        
+
         // Load terminal settings
         terminalFontSize = settings.terminalFontSize
         terminalFontFamily = settings.terminalFontFamily
         terminalForegroundColor = settings.terminalForegroundColor
         terminalBackgroundColor = settings.terminalBackgroundColor
         terminalShell = settings.terminalShell
-        
+
         updateTheme()
     }
-    
+
     func resetToDefaults() {
         uiService.resetToDefaults()
-        
+
         // Reset local state to defaults
         isSidebarVisible = true
         isTerminalVisible = true
@@ -259,23 +259,23 @@ class UIStateManager: ObservableObject {
         indentationStyle = .tabs
         cliTimeoutSeconds = 30
         selectedTheme = .system
-        
+
         // Reset terminal settings to defaults
         terminalFontSize = 12
         terminalFontFamily = "SF Mono"
         terminalForegroundColor = "#00FF00" // Green
         terminalBackgroundColor = "#000000" // Black
         terminalShell = "/bin/zsh"
-        
+
         updateTheme()
     }
-    
+
     // MARK: - Settings Export/Import
-    
+
     func exportSettings() -> [String: Any] {
         return uiService.exportSettings()
     }
-    
+
     func importSettings(_ settings: [String: Any]) {
         uiService.importSettings(settings)
         loadSettings() // Refresh local state

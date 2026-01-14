@@ -9,12 +9,12 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
             saveCurrentDirectoryToUserDefaults(currentDirectory)
         }
     }
-    
+
     private let errorManager: ErrorManagerProtocol
     private let eventBus: EventBusProtocol
     private let settingsStore: SettingsStore
     private let fileOperationsService: FileOperationsService
-    
+
     init(
         errorManager: ErrorManagerProtocol,
         eventBus: EventBusProtocol,
@@ -53,12 +53,12 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
         if let appError = error as? AppError { return appError }
         return AppError.fileOperationFailed(operation, underlying: error)
     }
-    
+
     /// Handle error through the service's error manager
     func handleError(_ error: AppError) {
         errorManager.handle(error)
     }
-    
+
     enum WorkspaceError: Error {
         case alreadyExists(String)
         case invalidPath(String)
@@ -81,7 +81,7 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
             return nil
         }
     }
-    
+
     /// Create a new file in the specified directory
     func createFile(named name: String, in directory: URL) {
         do {
@@ -90,7 +90,7 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
             handleError(mapToAppError(error, operation: "create file"))
         }
     }
-    
+
     /// Create a new folder in the specified directory
     func createFolder(named name: String, in directory: URL) {
         do {
@@ -99,34 +99,34 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
             handleError(mapToAppError(error, operation: "create folder"))
         }
     }
-    
+
     /// Navigate to parent directory
     func navigateToParent() {
         guard let current = currentDirectory else { return }
-        
+
         let parent = current.deletingLastPathComponent()
         if parent.path != current.path { // Prevent going above root
             currentDirectory = parent
         }
     }
-    
+
     /// Navigate to subdirectory
     func navigateTo(subdirectory: String) {
         guard let current = currentDirectory else { return }
-        
+
         let newURL = current.appendingPathComponent(subdirectory)
         var isDirectory: ObjCBool = false
-        
+
         if FileManager.default.fileExists(atPath: newURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
             currentDirectory = newURL
         } else {
             handleError(.invalidFilePath("Directory not found: \(subdirectory)"))
         }
     }
-    
+
     /// Check if path is valid and accessible
     func isValidPath(_ path: String) -> Bool {
-        let _ = URL(fileURLWithPath: path)
+        _ = URL(fileURLWithPath: path)
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
     }

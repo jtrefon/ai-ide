@@ -18,11 +18,11 @@ final class ModernLineNumberRulerView: NSRulerView {
         self.backgroundColor = NSColor.clear // Transparent for liquid glass
         self.selectionColor = NSColor.systemBlue.withAlphaComponent(0.1)
         self.currentLineColor = NSColor.systemBlue.withAlphaComponent(0.05)
-        
+
         super.init(scrollView: scrollView, orientation: .verticalRuler)
         self.clientView = textView
         self.ruleThickness = 50
-        
+
         // Modern styling for macOS v26
         self.wantsLayer = true
         self.layer?.backgroundColor = NSColor.clear.cgColor
@@ -48,8 +48,8 @@ final class ModernLineNumberRulerView: NSRulerView {
         var count = 1
         var pos = 0
         while pos < firstCharIndex {
-            let r = string.lineRange(for: NSRange(location: pos, length: 0))
-            let next = NSMaxRange(r)
+            let lineRange = string.lineRange(for: NSRange(location: pos, length: 0))
+            let next = NSMaxRange(lineRange)
             guard next > pos else { break }
             if next <= firstCharIndex {
                 count += 1
@@ -60,8 +60,8 @@ final class ModernLineNumberRulerView: NSRulerView {
     }
 
     override func drawHashMarksAndLabels(in rect: NSRect) {
-        guard let textView, 
-              let layoutManager = textView.layoutManager, 
+        guard let textView,
+              let layoutManager = textView.layoutManager,
               let textContainer = textView.textContainer else {
             return
         }
@@ -70,7 +70,7 @@ final class ModernLineNumberRulerView: NSRulerView {
         backgroundColor.setFill()
         rect.fill()
 
-        let relativePoint = convert(NSZeroPoint, from: textView)
+        let relativePoint = convert(NSPoint.zero, from: textView)
         let visibleRect = textView.visibleRect
         let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
 
@@ -114,9 +114,9 @@ final class ModernLineNumberRulerView: NSRulerView {
             var lineStart: Int = 0
             var lineEnd: Int = 0
             context.string.getLineStart(
-                &lineStart, 
-                end: &lineEnd, 
-                contentsEnd: nil, 
+                &lineStart,
+                end: &lineEnd,
+                contentsEnd: nil,
                 for: NSRange(location: charIndex, length: 0)
             )
 
@@ -128,8 +128,8 @@ final class ModernLineNumberRulerView: NSRulerView {
 
             let label = "\(lineNumber)" as NSString
             let labelSize = label.size(withAttributes: attrs)
-            let y = lineRect.minY + (lineRect.height - labelSize.height) / 2
-            let x = ruleThickness - 6 - labelSize.width
+            let labelY = lineRect.minY + (lineRect.height - labelSize.height) / 2
+            let labelX = ruleThickness - 6 - labelSize.width
 
             if charIndex == context.textView.selectedRange.location {
                 let highlightRect = NSRect(x: 0, y: lineRect.minY, width: ruleThickness, height: lineRect.height)
@@ -137,19 +137,19 @@ final class ModernLineNumberRulerView: NSRulerView {
                 highlightRect.fill()
             }
 
-            label.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
+            label.draw(at: NSPoint(x: labelX, y: labelY), withAttributes: attrs)
 
             let nextGlyphIndex = NSMaxRange(lineGlyphRange)
             glyphIndex = nextGlyphIndex > glyphIndex ? nextGlyphIndex : (glyphIndex + 1)
             lineNumber += 1
         }
     }
-    
+
     // Modern macOS v26 compatibility methods
     override var wantsUpdateLayer: Bool {
         return true
     }
-    
+
     override func updateLayer() {
         super.updateLayer()
         // Enhanced layer setup for liquid glass effect

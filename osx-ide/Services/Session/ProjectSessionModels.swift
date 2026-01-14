@@ -11,7 +11,7 @@ public struct UIConfiguration: Codable, Sendable {
     public var sidebarWidth: Double
     public var terminalHeight: Double
     public var chatPanelWidth: Double
-    
+
     public init(
         windowFrame: ProjectSession.WindowFrame?,
         isSidebarVisible: Bool = true,
@@ -37,7 +37,7 @@ public struct EditorConfiguration: Codable, Sendable {
     public var wordWrap: Bool
     public var minimapVisible: Bool
     public var showHiddenFilesInFileTree: Bool
-    
+
     public init(
         selectedThemeRawValue: String = "system",
         showLineNumbers: Bool = true,
@@ -57,7 +57,7 @@ public struct FileState: Codable, Sendable {
     public var lastOpenFileRelativePath: String?
     public var openTabRelativePaths: [String]
     public var activeTabRelativePath: String?
-    
+
     public init(
         lastOpenFileRelativePath: String? = nil,
         openTabRelativePaths: [String] = [],
@@ -77,7 +77,7 @@ public struct SplitEditorState: Codable, Sendable {
     public var primaryActiveTabRelativePath: String?
     public var secondaryOpenTabRelativePaths: [String]
     public var secondaryActiveTabRelativePath: String?
-    
+
     public init(
         isSplitEditor: Bool = false,
         splitAxisRawValue: String = "vertical",
@@ -100,7 +100,7 @@ public struct SplitEditorState: Codable, Sendable {
 public struct FileTreeState: Codable, Sendable {
     public var fileTreeExpandedRelativePaths: [String]
     public var languageOverridesByRelativePath: [String: String]
-    
+
     public init(
         fileTreeExpandedRelativePaths: [String] = [],
         languageOverridesByRelativePath: [String: String] = [:]
@@ -114,29 +114,36 @@ public struct FileTreeState: Codable, Sendable {
 
 public struct ProjectSession: Codable, Sendable {
     public struct WindowFrame: Codable, Sendable {
-        public var x: Double
-        public var y: Double
+        public var originX: Double
+        public var originY: Double
         public var width: Double
         public var height: Double
 
-        public init(x: Double, y: Double, width: Double, height: Double) {
-            self.x = x
-            self.y = y
+        enum CodingKeys: String, CodingKey {
+            case originX = "x"
+            case originY = "y"
+            case width
+            case height
+        }
+
+        public init(originX: Double, originY: Double, width: Double, height: Double) {
+            self.originX = originX
+            self.originY = originY
             self.width = width
             self.height = height
         }
 
         public init(rect: CGRect) {
-            self.init(x: rect.origin.x, y: rect.origin.y, width: rect.size.width, height: rect.size.height)
+            self.init(originX: rect.origin.x, originY: rect.origin.y, width: rect.size.width, height: rect.size.height)
         }
 
         public var rect: CGRect {
-            CGRect(x: x, y: y, width: width, height: height)
+            CGRect(x: originX, y: originY, width: width, height: height)
         }
     }
 
     // MARK: - Properties (Grouped)
-    
+
     public var ui: UIConfiguration
     public var editor: EditorConfiguration
     public var fileState: FileState
@@ -145,7 +152,7 @@ public struct ProjectSession: Codable, Sendable {
     public var aiModeRawValue: String
 
     // MARK: - Builder Pattern
-    
+
     public init(
         ui: UIConfiguration,
         editor: EditorConfiguration,
@@ -161,9 +168,9 @@ public struct ProjectSession: Codable, Sendable {
         self.fileTree = fileTree
         self.aiModeRawValue = aiModeRawValue
     }
-    
+
     // MARK: - Convenience Initializer (Backward Compatibility)
-    
+
     @available(*, deprecated, message: "Use the new builder pattern with grouped configurations")
     public init(
         windowFrame: WindowFrame?,
@@ -201,7 +208,7 @@ public struct ProjectSession: Codable, Sendable {
             terminalHeight: terminalHeight,
             chatPanelWidth: chatPanelWidth
         )
-        
+
         self.editor = EditorConfiguration(
             selectedThemeRawValue: selectedThemeRawValue,
             showLineNumbers: showLineNumbers,
@@ -209,13 +216,13 @@ public struct ProjectSession: Codable, Sendable {
             minimapVisible: minimapVisible,
             showHiddenFilesInFileTree: showHiddenFilesInFileTree
         )
-        
+
         self.fileState = FileState(
             lastOpenFileRelativePath: lastOpenFileRelativePath,
             openTabRelativePaths: openTabRelativePaths,
             activeTabRelativePath: activeTabRelativePath
         )
-        
+
         self.splitEditor = SplitEditorState(
             isSplitEditor: isSplitEditor,
             splitAxisRawValue: splitAxisRawValue,
@@ -225,17 +232,17 @@ public struct ProjectSession: Codable, Sendable {
             secondaryOpenTabRelativePaths: secondaryOpenTabRelativePaths,
             secondaryActiveTabRelativePath: secondaryActiveTabRelativePath
         )
-        
+
         self.fileTree = FileTreeState(
             fileTreeExpandedRelativePaths: fileTreeExpandedRelativePaths,
             languageOverridesByRelativePath: languageOverridesByRelativePath
         )
-        
+
         self.aiModeRawValue = aiModeRawValue
     }
-    
+
     // MARK: - Static Factory Methods
-    
+
     public static func `default`() -> ProjectSession {
         ProjectSession(
             ui: UIConfiguration(windowFrame: nil),
@@ -245,82 +252,82 @@ public struct ProjectSession: Codable, Sendable {
             fileTree: FileTreeState()
         )
     }
-    
+
     public static func with(windowFrame: WindowFrame?) -> ProjectSessionBuilder {
         ProjectSessionBuilder().ui(UIConfiguration(windowFrame: windowFrame))
     }
-    
+
     // MARK: - Computed Properties (Backward Compatibility)
-    
+
     @available(*, deprecated, message: "Use ui.windowFrame instead")
     public var windowFrame: WindowFrame? { ui.windowFrame }
-    
+
     @available(*, deprecated, message: "Use ui.isSidebarVisible instead")
     public var isSidebarVisible: Bool { ui.isSidebarVisible }
-    
+
     @available(*, deprecated, message: "Use ui.isTerminalVisible instead")
     public var isTerminalVisible: Bool { ui.isTerminalVisible }
-    
+
     @available(*, deprecated, message: "Use ui.isAIChatVisible instead")
     public var isAIChatVisible: Bool { ui.isAIChatVisible }
-    
+
     @available(*, deprecated, message: "Use ui.sidebarWidth instead")
     public var sidebarWidth: Double { ui.sidebarWidth }
-    
+
     @available(*, deprecated, message: "Use ui.terminalHeight instead")
     public var terminalHeight: Double { ui.terminalHeight }
-    
+
     @available(*, deprecated, message: "Use ui.chatPanelWidth instead")
     public var chatPanelWidth: Double { ui.chatPanelWidth }
-    
+
     @available(*, deprecated, message: "Use editor.selectedThemeRawValue instead")
     public var selectedThemeRawValue: String { editor.selectedThemeRawValue }
-    
+
     @available(*, deprecated, message: "Use editor.showLineNumbers instead")
     public var showLineNumbers: Bool { editor.showLineNumbers }
-    
+
     @available(*, deprecated, message: "Use editor.wordWrap instead")
     public var wordWrap: Bool { editor.wordWrap }
-    
+
     @available(*, deprecated, message: "Use editor.minimapVisible instead")
     public var minimapVisible: Bool { editor.minimapVisible }
-    
+
     @available(*, deprecated, message: "Use editor.showHiddenFilesInFileTree instead")
     public var showHiddenFilesInFileTree: Bool { editor.showHiddenFilesInFileTree }
-    
+
     @available(*, deprecated, message: "Use fileState.lastOpenFileRelativePath instead")
     public var lastOpenFileRelativePath: String? { fileState.lastOpenFileRelativePath }
-    
+
     @available(*, deprecated, message: "Use fileState.openTabRelativePaths instead")
     public var openTabRelativePaths: [String] { fileState.openTabRelativePaths }
-    
+
     @available(*, deprecated, message: "Use fileState.activeTabRelativePath instead")
     public var activeTabRelativePath: String? { fileState.activeTabRelativePath }
-    
+
     @available(*, deprecated, message: "Use splitEditor.isSplitEditor instead")
     public var isSplitEditor: Bool { splitEditor.isSplitEditor }
-    
+
     @available(*, deprecated, message: "Use splitEditor.splitAxisRawValue instead")
     public var splitAxisRawValue: String { splitEditor.splitAxisRawValue }
-    
+
     @available(*, deprecated, message: "Use splitEditor.focusedEditorPaneRawValue instead")
     public var focusedEditorPaneRawValue: String { splitEditor.focusedEditorPaneRawValue }
-    
+
     @available(*, deprecated, message: "Use splitEditor.primaryOpenTabRelativePaths instead")
     public var primaryOpenTabRelativePaths: [String] { splitEditor.primaryOpenTabRelativePaths }
-    
+
     @available(*, deprecated, message: "Use splitEditor.primaryActiveTabRelativePath instead")
     public var primaryActiveTabRelativePath: String? { splitEditor.primaryActiveTabRelativePath }
-    
+
     @available(*, deprecated, message: "Use splitEditor.secondaryOpenTabRelativePaths instead")
     public var secondaryOpenTabRelativePaths: [String] { splitEditor.secondaryOpenTabRelativePaths }
-    
+
     @available(*, deprecated, message: "Use splitEditor.secondaryActiveTabRelativePath instead")
     public var secondaryActiveTabRelativePath: String? { splitEditor.secondaryActiveTabRelativePath }
-    
+
     @available(*, deprecated, message: "Use fileTree.fileTreeExpandedRelativePaths instead")
     public var fileTreeExpandedRelativePaths: [String] { fileTree.fileTreeExpandedRelativePaths }
-    
+
     @available(*, deprecated, message: "Use fileTree.languageOverridesByRelativePath instead")
     public var languageOverridesByRelativePath: [String: String] { fileTree.languageOverridesByRelativePath }
 }
@@ -334,39 +341,39 @@ public class ProjectSessionBuilder {
     private var splitEditor: SplitEditorState = SplitEditorState()
     private var fileTree: FileTreeState = FileTreeState()
     private var aiModeRawValue: String = "Chat"
-    
+
     public init() {}
-    
+
     public func ui(_ ui: UIConfiguration) -> ProjectSessionBuilder {
         self.ui = ui
         return self
     }
-    
+
     public func editor(_ editor: EditorConfiguration) -> ProjectSessionBuilder {
         self.editor = editor
         return self
     }
-    
+
     public func fileState(_ fileState: FileState) -> ProjectSessionBuilder {
         self.fileState = fileState
         return self
     }
-    
+
     public func splitEditor(_ splitEditor: SplitEditorState) -> ProjectSessionBuilder {
         self.splitEditor = splitEditor
         return self
     }
-    
+
     public func fileTree(_ fileTree: FileTreeState) -> ProjectSessionBuilder {
         self.fileTree = fileTree
         return self
     }
-    
+
     public func aiMode(_ aiModeRawValue: String) -> ProjectSessionBuilder {
         self.aiModeRawValue = aiModeRawValue
         return self
     }
-    
+
     public func build() -> ProjectSession {
         ProjectSession(
             ui: ui,
@@ -389,7 +396,7 @@ extension ProjectSession {
         case splitEditor
         case fileTree
         case aiModeRawValue
-        
+
         // Legacy keys for backward compatibility
         case windowFrame
         case isSidebarVisible
@@ -416,17 +423,17 @@ extension ProjectSession {
         case fileTreeExpandedRelativePaths
         case languageOverridesByRelativePath
     }
-    
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
+
         // Try new format first
         if let ui = try container.decodeIfPresent(UIConfiguration.self, forKey: .ui),
            let editor = try container.decodeIfPresent(EditorConfiguration.self, forKey: .editor),
            let fileState = try container.decodeIfPresent(FileState.self, forKey: .fileState),
            let splitEditor = try container.decodeIfPresent(SplitEditorState.self, forKey: .splitEditor),
            let fileTree = try container.decodeIfPresent(FileTreeState.self, forKey: .fileTree) {
-            
+
             self.ui = ui
             self.editor = editor
             self.fileState = fileState
@@ -436,7 +443,7 @@ extension ProjectSession {
         } else {
             // Fallback to legacy format
             let windowFrame = try container.decodeIfPresent(WindowFrame.self, forKey: .windowFrame)
-            
+
             let uiConfig = UIConfiguration(
                 windowFrame: windowFrame,
                 isSidebarVisible: try container.decodeIfPresent(Bool.self, forKey: .isSidebarVisible) ?? true,
@@ -446,54 +453,54 @@ extension ProjectSession {
                 terminalHeight: try container.decodeIfPresent(Double.self, forKey: .terminalHeight) ?? 200,
                 chatPanelWidth: try container.decodeIfPresent(Double.self, forKey: .chatPanelWidth) ?? 300
             )
-            
+
             let editorConfig = EditorConfiguration(
-                    selectedThemeRawValue: try container.decodeIfPresent(
-                        String.self, 
-                        forKey: .selectedThemeRawValue
-                    ) ?? "system",
-                    showLineNumbers: try container.decodeIfPresent(Bool.self, forKey: .showLineNumbers) ?? true,
-                    wordWrap: try container.decodeIfPresent(Bool.self, forKey: .wordWrap) ?? false,
-                    minimapVisible: try container.decodeIfPresent(Bool.self, forKey: .minimapVisible) ?? false,
-                    showHiddenFilesInFileTree: try container.decodeIfPresent(
-                        Bool.self, 
-                        forKey: .showHiddenFilesInFileTree
-                    ) ?? false
-                )
-            
+                selectedThemeRawValue: try container.decodeIfPresent(
+                    String.self,
+                    forKey: .selectedThemeRawValue
+                ) ?? "system",
+                showLineNumbers: try container.decodeIfPresent(Bool.self, forKey: .showLineNumbers) ?? true,
+                wordWrap: try container.decodeIfPresent(Bool.self, forKey: .wordWrap) ?? false,
+                minimapVisible: try container.decodeIfPresent(Bool.self, forKey: .minimapVisible) ?? false,
+                showHiddenFilesInFileTree: try container.decodeIfPresent(
+                    Bool.self,
+                    forKey: .showHiddenFilesInFileTree
+                ) ?? false
+            )
+
             let fileStateConfig = FileState(
                 lastOpenFileRelativePath: try container.decodeIfPresent(String.self, forKey: .lastOpenFileRelativePath),
                 openTabRelativePaths: try container.decodeIfPresent([String].self, forKey: .openTabRelativePaths) ?? [],
                 activeTabRelativePath: try container.decodeIfPresent(String.self, forKey: .activeTabRelativePath)
             )
-            
+
             let splitEditorConfig = SplitEditorState(
                 isSplitEditor: try container.decodeIfPresent(Bool.self, forKey: .isSplitEditor) ?? false,
                 splitAxisRawValue: try container.decodeIfPresent(String.self, forKey: .splitAxisRawValue) ?? "vertical",
                 focusedEditorPaneRawValue: try container.decodeIfPresent(
-                        String.self, 
-                        forKey: .focusedEditorPaneRawValue
-                    ) ?? "primary",
+                    String.self,
+                    forKey: .focusedEditorPaneRawValue
+                ) ?? "primary",
                 primaryOpenTabRelativePaths: try container.decodeIfPresent(
-                        [String].self, 
-                        forKey: .primaryOpenTabRelativePaths
-                    ) ?? [],
+                    [String].self,
+                    forKey: .primaryOpenTabRelativePaths
+                ) ?? [],
                 primaryActiveTabRelativePath: try container.decodeIfPresent(
-                        String.self, 
-                        forKey: .primaryActiveTabRelativePath
-                    ),
+                    String.self,
+                    forKey: .primaryActiveTabRelativePath
+                ),
                 secondaryOpenTabRelativePaths: try container.decodeIfPresent(
-                        [String].self, 
-                        forKey: .secondaryOpenTabRelativePaths
-                    ) ?? [],
+                    [String].self,
+                    forKey: .secondaryOpenTabRelativePaths
+                ) ?? [],
                 secondaryActiveTabRelativePath: try container.decodeIfPresent(String.self, forKey: .secondaryActiveTabRelativePath)
             )
-            
+
             let fileTreeConfig = FileTreeState(
                 fileTreeExpandedRelativePaths: try container.decodeIfPresent([String].self, forKey: .fileTreeExpandedRelativePaths) ?? [],
                 languageOverridesByRelativePath: try container.decodeIfPresent([String: String].self, forKey: .languageOverridesByRelativePath) ?? [:]
             )
-            
+
             self.ui = uiConfig
             self.editor = editorConfig
             self.fileState = fileStateConfig
@@ -502,10 +509,10 @@ extension ProjectSession {
             self.aiModeRawValue = try container.decodeIfPresent(String.self, forKey: .aiModeRawValue) ?? "Chat"
         }
     }
-    
+
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        
+
         try container.encode(ui, forKey: .ui)
         try container.encode(editor, forKey: .editor)
         try container.encode(fileState, forKey: .fileState)

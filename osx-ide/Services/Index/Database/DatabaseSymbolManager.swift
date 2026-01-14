@@ -94,7 +94,7 @@ final class DatabaseSymbolManager {
 
     func searchSymbols(nameLike query: String, limit: Int = 50) throws -> [Symbol] {
         let sql = "SELECT id, resource_id, name, kind, line_start, line_end, description " +
-                "FROM symbols WHERE name LIKE ? ORDER BY name LIMIT ?;"
+            "FROM symbols WHERE name LIKE ? ORDER BY name LIMIT ?;"
 
         let pattern = "%\(query)%" as NSString
         return try database.withPreparedStatement(sql: sql) { statement in

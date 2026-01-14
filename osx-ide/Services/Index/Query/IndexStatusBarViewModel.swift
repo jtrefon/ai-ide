@@ -6,13 +6,13 @@ final class IndexStatusBarViewModel: ObservableObject {
     @Published private(set) var isIndexing: Bool = false
     @Published private(set) var processedCount: Int = 0
     @Published private(set) var totalCount: Int = 0
-    @Published private(set) var currentFile: URL? = nil
-    @Published private(set) var stats: IndexStats? = nil
+    @Published private(set) var currentFile: URL?
+    @Published private(set) var stats: IndexStats?
 
     @Published private(set) var isAIEnriching: Bool = false
     @Published private(set) var aiProcessedCount: Int = 0
     @Published private(set) var aiTotalCount: Int = 0
-    @Published private(set) var aiCurrentFile: URL? = nil
+    @Published private(set) var aiCurrentFile: URL?
 
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
     private let eventBus: EventBusProtocol
@@ -70,9 +70,9 @@ final class IndexStatusBarViewModel: ObservableObject {
         }
 
         let size = formatBytes(stats.databaseSizeBytes)
-        let score = stats.aiEnrichedResourceCount > 0 && stats.averageAIQualityScore > 0 
-                ? stats.averageAIQualityScore 
-                : stats.averageQualityScore
+        let score = stats.aiEnrichedResourceCount > 0 && stats.averageAIQualityScore > 0
+            ? stats.averageAIQualityScore
+            : stats.averageQualityScore
         let quality = score > 0 ? String(format: "%.0f", score) : "0"
         return "C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | M \(stats.memoryCount) (LT \(stats.longTermMemoryCount)) | DB \(size)"
     }

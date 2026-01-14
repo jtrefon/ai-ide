@@ -12,25 +12,25 @@ public class IndexCoordinator {
     private var reindexTask: Task<Void, Never>?
     private var singleFileTasks: [UUID: Task<Void, Never>] = [:]
     private var generation: UInt64 = 0
-    
+
     public init(
-            eventBus: EventBusProtocol, 
-            indexer: IndexerActor, 
-            config: IndexConfiguration = .default, 
-            projectRoot: URL? = nil
-        ) {
+        eventBus: EventBusProtocol,
+        indexer: IndexerActor,
+        config: IndexConfiguration = .default,
+        projectRoot: URL? = nil
+    ) {
         self.eventBus = eventBus
         self.indexer = indexer
         self.config = config
         self.isEnabled = config.enabled
-        
+
         if let projectRoot = projectRoot {
             Task {
                 await IndexLogger.shared.setup(projectRoot: projectRoot)
                 await IndexLogger.shared.log("IndexCoordinator initialized with root: \(projectRoot.path)")
             }
         }
-        
+
         setupSubscriptions()
     }
 
@@ -54,9 +54,9 @@ public class IndexCoordinator {
     }
 
     public func reindexProject(rootURL: URL) {
-        guard isEnabled else { 
+        guard isEnabled else {
             Task { @MainActor in await IndexLogger.shared.log("Reindex skipped: Indexing is disabled") }
-            return 
+            return
         }
 
         generation &+= 1
@@ -70,23 +70,23 @@ public class IndexCoordinator {
             await eventBus.publish(IndexingStartedEvent())
 
             let files = IndexFileEnumerator.enumerateProjectFiles(
-                    rootURL: rootURL, 
-                    excludePatterns: config.excludePatterns
-                )
+                rootURL: rootURL,
+                excludePatterns: config.excludePatterns
+            )
             let total = files.count
             await IndexLogger.shared.log("Found \(total) files to index")
 
             var processed = 0
             for file in files {
                 if Task.isCancelled || localGeneration != generation { break }
-                if !isEnabled { 
+                if !isEnabled {
                     await IndexLogger.shared.log("Reindex aborted: Indexing was disabled during process")
-                    break 
+                    break
                 }
                 await eventBus.publish(
                     IndexingProgressEvent(
-                        processedCount: processed, 
-                        totalCount: total, 
+                        processedCount: processed,
+                        totalCount: total,
                         currentFile: file
                     )
                 )
@@ -98,8 +98,8 @@ public class IndexCoordinator {
                 }
                 await eventBus.publish(
                     IndexingProgressEvent(
-                        processedCount: processed, 
-                        totalCount: total, 
+                        processedCount: processed,
+                        totalCount: total,
                         currentFile: file
                     )
                 )
@@ -109,14 +109,14 @@ public class IndexCoordinator {
 
             let duration = Date().timeIntervalSince(start)
             await IndexLogger.shared.log(
-                    "Reindex completed: \(processed)/\(total) files in " +
+                "Reindex completed: \(processed)/\(total) files in " +
                     "\(String(format: "%.2f", duration))s"
-                )
+            )
             await eventBus.publish(IndexingCompletedEvent(indexedCount: processed, duration: duration))
             await eventBus.publish(ProjectReindexCompletedEvent(indexedCount: processed, duration: duration))
         }
     }
-    
+
     private func setupSubscriptions() {
         // Handle file events
         eventBus.subscribe(to: FileCreatedEvent.self) { [weak self] event in
@@ -124,13 +124,13 @@ public class IndexCoordinator {
             self.debounceSubject.send(event.url)
         }
         .store(in: &cancellables)
-        
+
         eventBus.subscribe(to: FileModifiedEvent.self) { [weak self] event in
             guard let self, self.isEnabled else { return }
             self.debounceSubject.send(event.url)
         }
         .store(in: &cancellables)
-        
+
         eventBus.subscribe(to: FileRenamedEvent.self) { [weak self] event in
             guard let self, self.isEnabled else { return }
             Task {
@@ -139,7 +139,7 @@ public class IndexCoordinator {
             }
         }
         .store(in: &cancellables)
-        
+
         eventBus.subscribe(to: FileDeletedEvent.self) { [weak self] event in
             guard let self, self.isEnabled else { return }
             Task {
@@ -147,7 +147,7 @@ public class IndexCoordinator {
             }
         }
         .store(in: &cancellables)
-        
+
         // Setup debounce pipeline
         debounceSubject
             .debounce(for: .milliseconds(config.debounceMs), scheduler: DispatchQueue.main)
@@ -157,16 +157,16 @@ public class IndexCoordinator {
             }
             .store(in: &cancellables)
     }
-    
+
     private func indexFile(_ url: URL) {
         let localGeneration = generation
 
         let id = UUID()
         let task = Task { @MainActor in
             do {
-                guard isEnabled else { 
+                guard isEnabled else {
                     await IndexLogger.shared.log("Single file index skipped for \(url.path): Indexing disabled")
-                    return 
+                    return
                 }
                 await IndexLogger.shared.log("Indexing single file: \(url.path)")
                 await eventBus.publish(IndexingStartedEvent())

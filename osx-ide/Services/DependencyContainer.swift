@@ -13,7 +13,7 @@ import Combine
 class DependencyContainer {
 
     private let settingsStore: SettingsStore
-    
+
     init() {
         settingsStore = SettingsStore(userDefaults: .standard)
         let errorManager = ErrorManager()
@@ -61,19 +61,19 @@ class DependencyContainer {
             _projectCoordinator.configureProject(root: root)
         }
     }
-    
+
     // MARK: - Public Accessors
-    
+
     /// Error manager instance
     var errorManager: ErrorManagerProtocol {
         return _errorManager
     }
-    
+
     /// UI service instance
     var uiService: UIServiceProtocol {
         return _uiService
     }
-    
+
     /// Workspace service instance
     var workspaceService: WorkspaceServiceProtocol {
         return _workspaceService
@@ -94,7 +94,7 @@ class DependencyContainer {
     var diagnosticsStore: DiagnosticsStore {
         return _diagnosticsStore
     }
-    
+
     /// File editor service instance
     var fileEditorService: FileEditorServiceProtocol {
         return _fileEditorService
@@ -113,12 +113,12 @@ class DependencyContainer {
     var windowProvider: WindowProvider {
         return _windowProvider
     }
-    
+
     /// AI service instance
     var aiService: AIService {
         return _aiService
     }
-    
+
     /// Conversation manager instance
     var conversationManager: ConversationManagerProtocol {
         return _conversationManager
@@ -128,7 +128,7 @@ class DependencyContainer {
     var projectCoordinator: ProjectCoordinator {
         return _projectCoordinator
     }
-    
+
     /// Codebase index instance (proxied through coordinator)
     var codebaseIndex: CodebaseIndexProtocol? {
         return _projectCoordinator.codebaseIndex
@@ -170,9 +170,9 @@ class DependencyContainer {
     func configureCodebaseIndex(projectRoot: URL) {
         _projectCoordinator.configureProject(root: projectRoot)
     }
-    
+
     // MARK: - Factory Methods
-    
+
     /// Creates a configured AppState instance
     func makeAppState() -> AppState {
         return AppState(
@@ -205,7 +205,7 @@ class DependencyContainer {
             }
         )
     }
-    
+
     /// Updates the AI service used by the application
     func updateAIService(_ newService: AIService) {
         _aiService = newService

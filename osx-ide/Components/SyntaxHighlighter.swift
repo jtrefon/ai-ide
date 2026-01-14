@@ -10,10 +10,10 @@ import Foundation
 import AppKit
 
 /// A centralized syntax highlighting service that provides robust highlighting for multiple programming languages.
-/// 
+///
 /// The SyntaxHighlighter uses a modular approach with language-specific modules when available,
 /// and falls back to built-in highlighting for common languages when modules are not registered.
-/// 
+///
 /// ## Usage
 /// ```swift
 /// let highlighter = SyntaxHighlighter.shared
@@ -54,8 +54,8 @@ final class SyntaxHighlighter {
     ///   - font: The font to use for the highlighted text
     /// - Returns: An NSAttributedString with syntax highlighting applied
     func highlight(
-        _ code: String, 
-        language: String = "text", 
+        _ code: String,
+        language: String = "text",
         font: NSFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     ) -> NSAttributedString {
         let langStr = LanguageIdentifierNormalizer.normalize(language)
@@ -63,7 +63,7 @@ final class SyntaxHighlighter {
         #if DEBUG
         print("[Highlighter] highlight raw=\(language) normalized=\(langStr) len=\((code as NSString).length)")
         #endif
-        
+
         // Try to use modular language support if enabled
         if let module = resolveModule(for: langStr) {
             #if DEBUG
@@ -89,7 +89,7 @@ final class SyntaxHighlighter {
 
         return attributed
     }
-    
+
     /// Incremental highlighting that reuses previous results for better performance
     struct HighlightIncrementalRequest {
         let code: String
@@ -196,11 +196,11 @@ final class SyntaxHighlighter {
     // MARK: - Helpers
 
     private func highlightWholeWords(
-            _ words: [String], 
-            color: NSColor, 
-            in attr: NSMutableAttributedString, 
-            code: String
-        ) {
+        _ words: [String],
+        color: NSColor,
+        in attr: NSMutableAttributedString,
+        code: String
+    ) {
         regexHelper.highlightWholeWords(words, color: color, in: attr, code: code)
     }
 

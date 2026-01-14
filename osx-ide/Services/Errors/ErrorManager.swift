@@ -16,9 +16,9 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
     @Published var errorHistory: [AppError] = []
 
     private var pendingAutoDismissTask: Task<Void, Never>?
-    
+
     private let maxHistoryCount = AppConstants.FileSystem.maxHistoryCount
-    
+
     /// Handle an error with appropriate UI feedback
     func handle(_ error: AppError) {
         handle(error, operation: "ErrorManager.handle(AppError)", file: #fileID, function: #function, line: #line)
@@ -30,16 +30,16 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
 
         currentError = error
         showErrorAlert = true
-        
+
         // Add to history for logging
         errorHistory.append(error)
         if errorHistory.count > maxHistoryCount {
             errorHistory.removeFirst()
         }
-        
+
         // Log the error
         logError(error, operation: operation, file: file, function: function, line: line)
-        
+
         // Auto-dismiss info and warning errors after delay
         if error.severity == .info || error.severity == .warning {
             let targetSeverity = error.severity
@@ -54,7 +54,7 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
             }
         }
     }
-    
+
     /// Handle generic Error by converting to AppError
     func handle(_ error: Error, context: String = "") {
         handle(error, context: context, file: #fileID, function: #function, line: #line)
@@ -77,7 +77,7 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
         logCrashCapture(error, operation: operation, file: file, function: function, line: line)
         handle(appError, operation: operation, file: file, function: function, line: line)
     }
-    
+
     /// Dismiss current error
     func dismissError() {
         pendingAutoDismissTask?.cancel()
@@ -85,17 +85,17 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
         currentError = nil
         showErrorAlert = false
     }
-    
+
     /// Get recent errors for debugging
     func getRecentErrors() -> [AppError] {
         return errorHistory
     }
-    
+
     /// Clear error history
     func clearErrorHistory() {
         errorHistory.removeAll()
     }
-    
+
     private func logError(_ error: AppError, operation: String, file: String, function: String, line: Int) {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let logMessage = "[\(timestamp)] [\(error.severity)] \(error.localizedDescription)"
@@ -109,7 +109,7 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
         }
 
         logCrashCapture(error, operation: operation, file: file, function: function, line: line)
-        
+
         #if DEBUG
         print(logMessage)
         #endif
@@ -140,7 +140,7 @@ extension ErrorManager {
             return nil
         }
     }
-    
+
     /// Async version of error handling
     func handleError<T>(_ operation: () async throws -> T, context: String = "") async -> T? {
         do {

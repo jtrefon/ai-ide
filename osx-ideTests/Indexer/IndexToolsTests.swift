@@ -241,7 +241,7 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
     func runAIEnrichment() {}
     func getSummaries(projectRoot: URL, limit: Int) throws -> [(path: String, summary: String)] { [] }
     func getMemories(tier: MemoryTier?) throws -> [MemoryEntry] { [] }
-    func getStats() throws -> IndexStats { 
+    func getStats() throws -> IndexStats {
         IndexStats(
             indexedResourceCount: 0,
             aiEnrichedResourceCount: 0,

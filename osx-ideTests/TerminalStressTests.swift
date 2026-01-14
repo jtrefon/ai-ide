@@ -29,11 +29,11 @@ final class TerminalStressTests: XCTestCase {
             // No-op
         }
     }
-    
+
     var embedder: NativeTerminalEmbedder!
     var parentView: NSView!
     private var mockShellManager: NoOpShellManager!
-    
+
     override func setUp() async throws {
         try await super.setUp()
         _ = NSApplication.shared
@@ -41,7 +41,7 @@ final class TerminalStressTests: XCTestCase {
         embedder = NativeTerminalEmbedder(shellManager: mockShellManager, eventBus: EventBus())
         parentView = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
     }
-    
+
     override func tearDown() async throws {
         embedder.removeEmbedding()
         embedder = nil
@@ -49,7 +49,7 @@ final class TerminalStressTests: XCTestCase {
         parentView = nil
         try await super.tearDown()
     }
-    
+
     func testRapidOutputBursts() async throws {
         embedder.embedTerminal(in: parentView)
 
@@ -79,7 +79,7 @@ final class TerminalStressTests: XCTestCase {
 
         await fulfillment(of: [expectation], timeout: 10.0)
     }
-    
+
     func testRapidReEmbedding() async throws {
         let expectation = expectation(description: "Rapid re-embedding completed")
 

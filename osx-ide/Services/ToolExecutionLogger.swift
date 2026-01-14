@@ -11,11 +11,11 @@ import Foundation
 @MainActor
 final class ToolExecutionLogger {
     private let errorManager: any ErrorManagerProtocol
-    
+
     init(errorManager: any ErrorManagerProtocol) {
         self.errorManager = errorManager
     }
-    
+
     /// Logs the start of tool execution
     func logToolExecuteStart(
         conversationId: String?,
@@ -28,13 +28,13 @@ final class ToolExecutionLogger {
         Target File: \(targetFile ?? "None")
         Arguments: \(toolCall.arguments)
         """
-        
+
         await errorManager.handle(
             AppError.aiServiceError(context),
             context: "Tool Execution Start"
         )
     }
-    
+
     /// Logs progress during tool execution
     func logToolExecuteProgress(
         conversationId: String?,
@@ -46,13 +46,13 @@ final class ToolExecutionLogger {
         Tool: \(toolCall.name)
         Progress: \(progress)
         """
-        
+
         await errorManager.handle(
             AppError.aiServiceError(context),
             context: "Tool Execution Progress"
         )
     }
-    
+
     /// Logs successful tool execution
     func logToolExecuteSuccess(
         conversationId: String?,
@@ -64,13 +64,13 @@ final class ToolExecutionLogger {
         Tool: \(toolCall.name)
         Result Length: \(resultLength) characters
         """
-        
+
         await errorManager.handle(
             AppError.aiServiceError(context),
             context: "Tool Execution Success"
         )
     }
-    
+
     /// Logs tool execution errors
     func logToolExecuteError(
         conversationId: String?,
@@ -83,13 +83,13 @@ final class ToolExecutionLogger {
         Error: \(error.localizedDescription)
         Arguments: \(toolCall.arguments)
         """
-        
+
         await errorManager.handle(
             error,
             context: "Tool Execution Error"
         )
     }
-    
+
     /// Logs when a tool is not found
     func logToolNotFound(
         conversationId: String?,
@@ -100,7 +100,7 @@ final class ToolExecutionLogger {
         Requested Tool: \(toolCall.name)
         Available Tools: [Tool names would be listed here]
         """
-        
+
         await errorManager.handle(
             AppError.aiServiceError(context),
             context: "Tool Not Found"

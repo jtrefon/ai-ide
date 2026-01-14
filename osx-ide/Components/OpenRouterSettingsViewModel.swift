@@ -16,12 +16,12 @@ final class OpenRouterSettingsViewModel: ObservableObject {
         case warning
         case error
     }
-    
+
     struct Status: Equatable {
         let kind: StatusKind
         let message: String
     }
-    
+
     @Published var apiKey: String {
         didSet { persist() }
     }
@@ -40,20 +40,20 @@ final class OpenRouterSettingsViewModel: ObservableObject {
     @Published var reasoningEnabled: Bool {
         didSet { persist() }
     }
-    
+
     @Published private(set) var models: [OpenRouterModel] = []
     @Published private(set) var filteredModels: [OpenRouterModel] = []
     @Published private(set) var modelStatus = Status(kind: .idle, message: "Models not loaded yet.")
     @Published private(set) var keyStatus = Status(kind: .idle, message: "Key not validated.")
     @Published private(set) var testStatus = Status(kind: .idle, message: "No test run.")
     @Published private(set) var modelValidationStatus = Status(kind: .idle, message: "Model not validated.")
-    
+
     private let store: OpenRouterSettingsStore
     private let client: OpenRouterAPIClient
     private let appName = "OSX IDE"
     private let referer = ""
     private var hasLoadedModels = false
-    
+
     init(
         store: OpenRouterSettingsStore = OpenRouterSettingsStore(),
         client: OpenRouterAPIClient = OpenRouterAPIClient()
@@ -68,7 +68,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
         self.systemPrompt = settings.systemPrompt
         self.reasoningEnabled = settings.reasoningEnabled
     }
-    
+
     func loadModels(force: Bool = false) async {
         if hasLoadedModels && !force { return }
         modelStatus = Status(kind: .loading, message: "Loading models...")
@@ -79,8 +79,8 @@ final class OpenRouterSettingsViewModel: ObservableObject {
                 appName: appName,
                 referer: referer
             )
-            let sorted = models.sorted { 
-                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending 
+            let sorted = models.sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
             }
             self.models = sorted
             hasLoadedModels = true
@@ -90,7 +90,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             modelStatus = Status(kind: .error, message: error.localizedDescription)
         }
     }
-    
+
     func validateKey() async {
         guard !apiKey.isEmpty else {
             keyStatus = Status(kind: .warning, message: "Add an API key to validate.")
@@ -109,7 +109,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             keyStatus = Status(kind: .error, message: error.localizedDescription)
         }
     }
-    
+
     func validateModel() async {
         let activeModel = activeModelId()
         guard !activeModel.isEmpty else {
@@ -126,7 +126,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             modelValidationStatus = Status(kind: .error, message: "Model not found. Check spelling.")
         }
     }
-    
+
     func testModel() async {
         guard !apiKey.isEmpty else {
             testStatus = Status(kind: .warning, message: "Add an API key to run a test.")
@@ -152,35 +152,35 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             testStatus = Status(kind: .error, message: error.localizedDescription)
         }
     }
-    
+
     func commitModelEntry() {
         selectedModel = modelQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    
+
     func selectModel(_ model: OpenRouterModel) {
         modelQuery = model.id
         selectedModel = model.id
         modelValidationStatus = Status(kind: .idle, message: "Model selected.")
     }
-    
+
     func shouldShowSuggestions() -> Bool {
         !filteredModels.isEmpty && !modelQuery.isEmpty
     }
-    
+
     private func updateModelQuery() {
         let trimmed = modelQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             filteredModels = []
         } else {
             filteredModels = models.filter {
-                $0.displayName.localizedCaseInsensitiveContains(trimmed) || 
-                $0.id.localizedCaseInsensitiveContains(trimmed)
+                $0.displayName.localizedCaseInsensitiveContains(trimmed) ||
+                    $0.id.localizedCaseInsensitiveContains(trimmed)
             }
             filteredModels = Array(filteredModels.prefix(60))
         }
         persist()
     }
-    
+
     private func persist() {
         let activeModel = activeModelId()
         let settings = OpenRouterSettings(
@@ -192,7 +192,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
         )
         store.save(settings)
     }
-    
+
     private func activeModelId() -> String {
         let candidate = selectedModel.isEmpty ? modelQuery : selectedModel
         return candidate.trimmingCharacters(in: .whitespacesAndNewlines)

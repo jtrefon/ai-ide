@@ -64,7 +64,7 @@ public enum ConversationFoldingService {
             return "Folded \(messages.count) messages (\(fmt.string(from: start)) → \(fmt.string(from: end)))."
         }
         return "Folded \(messages.count) messages (\(fmt.string(from: start)) → \(fmt.string(from: end))). " +
-                "User topics: \(joined)"
+            "User topics: \(joined)"
     }
 
     private static func serialize(messages: [ChatMessage]) -> String {

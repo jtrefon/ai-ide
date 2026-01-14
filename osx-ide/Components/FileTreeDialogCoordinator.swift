@@ -11,7 +11,7 @@ import AppKit
 /// Handles dialog interactions for the file tree
 @MainActor
 final class FileTreeDialogCoordinator {
-    
+
     /// Prompts user for renaming an item
     func promptForRename(initialName: String) -> String? {
         let alert = NSAlert()
@@ -31,7 +31,7 @@ final class FileTreeDialogCoordinator {
         let trimmed = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
-    
+
     /// Prompts user for creating a new item
     func promptForNewItem(title: String, informativeText: String) -> String? {
         let alert = NSAlert()

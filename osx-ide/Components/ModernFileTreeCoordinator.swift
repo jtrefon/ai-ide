@@ -16,7 +16,7 @@ struct ModernFileTreeCoordinatorConfiguration {
 @MainActor
 final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDelegate {
     let dataSource = FileTreeDataSource()
-    
+
     // Specialized coordinators
     private let dialogCoordinator = FileTreeDialogCoordinator()
     private lazy var searchCoordinator = FileTreeSearchCoordinator(dataSource: dataSource)
@@ -54,21 +54,21 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
     func attach(outlineView: NSOutlineView) {
         self.outlineView = outlineView
-        
+
         // Update appearance coordinator with the outline view
         appearanceCoordinator = FileTreeAppearanceCoordinator(outlineView: outlineView)
-        
+
         outlineView.dataSource = dataSource
         outlineView.delegate = self
-        
+
         // Set up contextual menu with delegate
         let contextMenu = NSMenu()
         contextMenu.delegate = self
         outlineView.menu = contextMenu
-        
+
         outlineView.target = self
         outlineView.doubleAction = #selector(onDoubleClick)
-        
+
         // Apply initial appearance
         appearanceCoordinator.applyAppearanceToVisibleRows()
     }
@@ -147,11 +147,11 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         guard !dataSource.isSearching, let outlineView else { return }
 
         let targets = configuration.expandedRelativePaths.wrappedValue
-            .sorted { a, b in
-                let aDepth = a.split(separator: "/").count
-                let bDepth = b.split(separator: "/").count
-                if aDepth != bDepth { return aDepth < bDepth }
-                return a < b
+            .sorted { left, right in
+                let leftDepth = left.split(separator: "/").count
+                let rightDepth = right.split(separator: "/").count
+                if leftDepth != rightDepth { return leftDepth < rightDepth }
+                return left < right
             }
 
         for relative in targets {
@@ -174,119 +174,18 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         let fontSize: Double
         let fontFamily: String
     }
-    
+
     private func setSearchQuery(_ value: String) {
         searchCoordinator.setSearchQuery(value)
     }
-    
+
     @objc func onDoubleClick(_ _: Any?) {
         guard let item = clickedFileTreeItem() else { return }
         performOpen(for: item)
     }
-    
+
     private func performOpen(for item: FileTreeItem) {
         configuration.onOpenFile(item.url as URL)
-    }
-    
-    @objc func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-
-        guard let item = clickedFileTreeItem() else { return }
-        let url = item.url
-
-        addFileActionItems(menu, url: url)
-        menu.addItem(NSMenuItem.separator())
-        addRevealItem(menu, url: url)
-        menu.addItem(NSMenuItem.separator())
-        addCreateItems(menu)
-    }
-
-    private func addFileActionItems(_ menu: NSMenu, url: NSURL) {
-        menu.addItem(makeMenuItem(
-            title: NSLocalizedString("file_tree.context.open", comment: ""),
-            action: #selector(onContextOpen(_:)),
-            representedObject: url
-        ))
-        menu.addItem(makeMenuItem(
-            title: NSLocalizedString("file_tree.context.rename", comment: ""),
-            action: #selector(onContextRename(_:)),
-            representedObject: url
-        ))
-        menu.addItem(makeMenuItem(
-            title: NSLocalizedString("file_tree.context.delete", comment: ""),
-            action: #selector(onContextDelete(_:)),
-            representedObject: url
-        ))
-    }
-
-    private func addRevealItem(_ menu: NSMenu, url: NSURL) {
-        menu.addItem(makeMenuItem(
-            title: NSLocalizedString("file_tree.context.show_in_finder", comment: ""),
-            action: #selector(onContextRevealInFinder(_:)),
-            representedObject: url
-        ))
-    }
-
-    private func addCreateItems(_ menu: NSMenu) {
-        menu.addItem(makeMenuItem(
-            title: NSLocalizedString("file_tree.context.new_file", comment: ""),
-            action: #selector(onContextNewFile(_:))
-        ))
-        menu.addItem(makeMenuItem(
-            title: NSLocalizedString("file_tree.context.new_folder", comment: ""),
-            action: #selector(onContextNewFolder(_:))
-        ))
-    }
-
-    private func makeMenuItem(
-        title: String,
-        action: Selector,
-        representedObject: Any? = nil
-    ) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.target = self
-        item.representedObject = representedObject
-        return item
-    }
-    
-    @objc private func onContextOpen(_ _: NSMenuItem) {
-        guard let item = clickedFileTreeItem() else { return }
-        performOpen(for: item)
-    }
-
-    @objc private func onContextDelete(_ sender: NSMenuItem) {
-        guard let url = sender.representedObject as? URL else { return }
-        configuration.onDeleteItem(url)
-    }
-
-    @objc private func onContextRename(_ sender: NSMenuItem) {
-        guard let url = sender.representedObject as? URL else { return }
-        let initialName = url.lastPathComponent
-        guard let newName = dialogCoordinator.promptForRename(initialName: initialName) else { return }
-        configuration.onRenameItem(url, newName)
-    }
-
-    @objc private func onContextRevealInFinder(_ sender: NSMenuItem) {
-        guard let url = sender.representedObject as? URL else { return }
-        configuration.onRevealInFinder(url)
-    }
-
-    @objc private func onContextNewFile(_ _: NSMenuItem) {
-        guard let directory = directoryForCreate() else { return }
-        guard let name = dialogCoordinator.promptForNewItem(
-            title: NSLocalizedString("file_tree.create_file.title", comment: ""),
-            informativeText: NSLocalizedString("file_tree.create_file.info", comment: "")
-        ) else { return }
-        configuration.onCreateFile(directory, name)
-    }
-
-    @objc private func onContextNewFolder(_ _: NSMenuItem) {
-        guard let directory = directoryForCreate() else { return }
-        guard let name = dialogCoordinator.promptForNewItem(
-            title: NSLocalizedString("file_tree.create_folder.title", comment: ""),
-            informativeText: NSLocalizedString("file_tree.create_folder.info", comment: "")
-        ) else { return }
-        configuration.onCreateFolder(directory, name)
     }
 
     // MARK: - NSOutlineViewDelegate
@@ -347,9 +246,9 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
         let identifier = NSUserInterfaceItemIdentifier("cell")
         let cell: NSTableCellView = outlineView.makeView(
-                withIdentifier: identifier, 
-                owner: nil
-            ) as? NSTableCellView ?? {
+            withIdentifier: identifier,
+            owner: nil
+        ) as? NSTableCellView ?? {
             let cell = NSTableCellView(frame: .zero)
             cell.identifier = identifier
 
@@ -512,5 +411,108 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         let index = labelNumber - 1
         guard index >= 0, index < colors.count else { return nil }
         return colors[index]
+    }
+}
+
+extension ModernFileTreeCoordinator {
+    @objc func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+
+        guard let item = clickedFileTreeItem() else { return }
+        let url = item.url
+
+        addFileActionItems(menu, url: url)
+        menu.addItem(NSMenuItem.separator())
+        addRevealItem(menu, url: url)
+        menu.addItem(NSMenuItem.separator())
+        addCreateItems(menu)
+    }
+
+    private func addFileActionItems(_ menu: NSMenu, url: NSURL) {
+        menu.addItem(makeMenuItem(
+            title: NSLocalizedString("file_tree.context.open", comment: ""),
+            action: #selector(onContextOpen(_:)),
+            representedObject: url
+        ))
+        menu.addItem(makeMenuItem(
+            title: NSLocalizedString("file_tree.context.rename", comment: ""),
+            action: #selector(onContextRename(_:)),
+            representedObject: url
+        ))
+        menu.addItem(makeMenuItem(
+            title: NSLocalizedString("file_tree.context.delete", comment: ""),
+            action: #selector(onContextDelete(_:)),
+            representedObject: url
+        ))
+    }
+
+    private func addRevealItem(_ menu: NSMenu, url: NSURL) {
+        menu.addItem(makeMenuItem(
+            title: NSLocalizedString("file_tree.context.show_in_finder", comment: ""),
+            action: #selector(onContextRevealInFinder(_:)),
+            representedObject: url
+        ))
+    }
+
+    private func addCreateItems(_ menu: NSMenu) {
+        menu.addItem(makeMenuItem(
+            title: NSLocalizedString("file_tree.context.new_file", comment: ""),
+            action: #selector(onContextNewFile(_:))
+        ))
+        menu.addItem(makeMenuItem(
+            title: NSLocalizedString("file_tree.context.new_folder", comment: ""),
+            action: #selector(onContextNewFolder(_:))
+        ))
+    }
+
+    private func makeMenuItem(
+        title: String,
+        action: Selector,
+        representedObject: Any? = nil
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.representedObject = representedObject
+        return item
+    }
+
+    @objc private func onContextOpen(_ _: NSMenuItem) {
+        guard let item = clickedFileTreeItem() else { return }
+        performOpen(for: item)
+    }
+
+    @objc private func onContextDelete(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        configuration.onDeleteItem(url)
+    }
+
+    @objc private func onContextRename(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        let initialName = url.lastPathComponent
+        guard let newName = dialogCoordinator.promptForRename(initialName: initialName) else { return }
+        configuration.onRenameItem(url, newName)
+    }
+
+    @objc private func onContextRevealInFinder(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        configuration.onRevealInFinder(url)
+    }
+
+    @objc private func onContextNewFile(_ _: NSMenuItem) {
+        guard let directory = directoryForCreate() else { return }
+        guard let name = dialogCoordinator.promptForNewItem(
+            title: NSLocalizedString("file_tree.create_file.title", comment: ""),
+            informativeText: NSLocalizedString("file_tree.create_file.info", comment: "")
+        ) else { return }
+        configuration.onCreateFile(directory, name)
+    }
+
+    @objc private func onContextNewFolder(_ _: NSMenuItem) {
+        guard let directory = directoryForCreate() else { return }
+        guard let name = dialogCoordinator.promptForNewItem(
+            title: NSLocalizedString("file_tree.create_folder.title", comment: ""),
+            informativeText: NSLocalizedString("file_tree.create_folder.info", comment: "")
+        ) else { return }
+        configuration.onCreateFolder(directory, name)
     }
 }

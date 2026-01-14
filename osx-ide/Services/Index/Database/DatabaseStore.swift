@@ -9,12 +9,26 @@ public enum DatabaseValue: Sendable {
 
     var anyValue: Any {
         switch self {
-        case .string(let v): return v
-        case .int(let v): return v
-        case .int64(let v): return v
-        case .double(let v): return v
+        case .string(let stringValue): return stringValue
+        case .int(let intValue): return intValue
+        case .int64(let int64Value): return int64Value
+        case .double(let doubleValue): return doubleValue
         case .null: return NSNull()
         }
+    }
+}
+
+public struct IndexStatsCounts: Sendable {
+    public let indexedResourceCount: Int
+    public let symbolCount: Int
+    public let memoryCount: Int
+    public let longTermMemoryCount: Int
+
+    public init(indexedResourceCount: Int, symbolCount: Int, memoryCount: Int, longTermMemoryCount: Int) {
+        self.indexedResourceCount = indexedResourceCount
+        self.symbolCount = symbolCount
+        self.memoryCount = memoryCount
+        self.longTermMemoryCount = longTermMemoryCount
     }
 }
 
@@ -123,12 +137,7 @@ public actor DatabaseStore {
         try database.getAIEnrichedSummaries(projectRoot: projectRoot, limit: limit)
     }
 
-    public func getIndexStatsCounts() throws -> (
-            indexedResourceCount: Int, 
-            symbolCount: Int, 
-            memoryCount: Int, 
-            longTermMemoryCount: Int
-        ) {
+    public func getIndexStatsCounts() throws -> IndexStatsCounts {
         try database.getIndexStatsCounts()
     }
 

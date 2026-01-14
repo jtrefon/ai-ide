@@ -20,7 +20,7 @@ struct ChatInputView: View {
         NSLocalizedString(key, comment: "")
     }
     @FocusState private var isInputFocused: Bool
-    
+
     var body: some View {
         HStack {
             ZStack(alignment: .topLeading) {
@@ -63,7 +63,7 @@ struct ChatInputView: View {
                             self.inputMonitor = nil
                         }
                     }
-                
+
                 // Placeholder text
                 if text.isEmpty {
                     Text(localized("chat_input.placeholder"))
@@ -73,7 +73,7 @@ struct ChatInputView: View {
                         .allowsHitTesting(false)
                 }
             }
-            
+
             Button(action: onSend) {
                 Image(systemName: "paperplane.fill")
                     .foregroundColor(.white)

@@ -41,17 +41,17 @@ public enum CodeFoldingRangeFinder {
         var stack: [Int] = []
         var pairs: [BracePair] = []
 
-        var i = 0
-        while i < ns.length {
-            let ch = ns.substring(with: NSRange(location: i, length: 1))
+        var index = 0
+        while index < ns.length {
+            let ch = ns.substring(with: NSRange(location: index, length: 1))
             if ch == "{" {
-                stack.append(i)
+                stack.append(index)
             } else if ch == "}" {
-                if let open = stack.popLast(), open < i {
-                    pairs.append(BracePair(open: open, close: i))
+                if let open = stack.popLast(), open < index {
+                    pairs.append(BracePair(open: open, close: index))
                 }
             }
-            i += 1
+            index += 1
         }
 
         return pairs

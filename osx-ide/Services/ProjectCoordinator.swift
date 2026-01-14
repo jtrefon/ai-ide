@@ -17,10 +17,10 @@ class ProjectCoordinator {
     private let conversationManager: ConversationManagerProtocol
     private let settingsStore: SettingsStore
     private var currentProjectRoot: URL?
-    
+
     private(set) var codebaseIndex: CodebaseIndexProtocol?
     private var pendingAutoReindexTask: Task<Void, Never>?
-    
+
     init(
         aiService: AIService,
         errorManager: ErrorManagerProtocol,
@@ -33,7 +33,7 @@ class ProjectCoordinator {
         self.conversationManager = conversationManager
         self.settingsStore = SettingsStore(userDefaults: .standard)
     }
-    
+
     func configureProject(root: URL) {
         currentProjectRoot = root
         pendingAutoReindexTask?.cancel()
@@ -47,19 +47,19 @@ class ProjectCoordinator {
             await IndexLogger.shared.setup(projectRoot: root)
             await IndexLogger.shared.log("ProjectCoordinator: Configuring project at \(root.path)")
         }
-        
+
         do {
             let index = try CodebaseIndex(eventBus: eventBus, projectRoot: root, aiService: aiService)
             self.codebaseIndex = index
             index.start()
-            
+
             let isIndexEnabled = settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true)
             index.setEnabled(isIndexEnabled)
-            
+
             if isIndexEnabled {
                 scheduleAutoReindex(root: root)
             }
-            
+
             // Update conversation manager with new project context
             if let cm = conversationManager as? ConversationManager {
                 cm.updateCodebaseIndex(index)
@@ -70,7 +70,7 @@ class ProjectCoordinator {
             errorManager.handle(.unknown("Failed to initialize CodebaseIndex: \(error.localizedDescription)"))
         }
     }
-    
+
     func reindexProject(aiEnrichment: Bool) {
         codebaseIndex?.reindexProject(aiEnrichmentEnabled: aiEnrichment)
     }
@@ -99,7 +99,7 @@ class ProjectCoordinator {
 
             do {
                 try FileManager.default.createDirectory(
-                    at: dbURL.deletingLastPathComponent(), 
+                    at: dbURL.deletingLastPathComponent(),
                     withIntermediateDirectories: true
                 )
                 for url in [dbURL, walURL, shmURL] {
@@ -130,18 +130,18 @@ class ProjectCoordinator {
                     aiEnrichmentEnabled: aiEnrichment
                 )
             } else {
-                Task { 
-                await IndexLogger.shared.log(
-                    "ProjectCoordinator: Reindex requested but Codebase Index is disabled"
-                ) 
-            }
+                Task {
+                    await IndexLogger.shared.log(
+                        "ProjectCoordinator: Reindex requested but Codebase Index is disabled"
+                    )
+                }
             }
         } catch {
             self.codebaseIndex = nil
             errorManager.handle(.unknown("Failed to rebuild CodebaseIndex: \(error.localizedDescription)"))
         }
     }
-    
+
     func setIndexEnabled(_ enabled: Bool) {
         settingsStore.set(enabled, forKey: AppConstants.Storage.codebaseIndexEnabledKey)
         codebaseIndex?.setEnabled(enabled)
@@ -149,17 +149,17 @@ class ProjectCoordinator {
             reindexProject(aiEnrichment: false)
         }
     }
-    
+
     private func scheduleAutoReindex(root: URL) {
         pendingAutoReindexTask?.cancel()
         pendingAutoReindexTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard let self = self else { return }
-            
+
             let aiEnrichmentEnabled = settingsStore.bool(
-                    forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, 
-                    default: false
-                )
+                forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey,
+                default: false
+            )
             self.reindexProject(aiEnrichment: aiEnrichmentEnabled)
         }
     }

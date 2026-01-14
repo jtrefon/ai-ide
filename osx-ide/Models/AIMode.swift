@@ -10,9 +10,9 @@ import Foundation
 public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case chat = "Chat"
     case agent = "Agent"
-    
+
     public var id: String { rawValue }
-    
+
     public var description: String {
         switch self {
         case .chat:
@@ -21,7 +21,7 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
             return "Full autonomy. AI can read, write, edit, and delete files to complete tasks."
         }
     }
-    
+
     public var icon: String {
         switch self {
         case .chat:
@@ -30,12 +30,12 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
             return "gearshape.2"
         }
     }
-    
+
     public var systemPromptAddition: String {
         switch self {
         case .chat:
             return """
-            
+
             **CURRENT MODE: CHAT (Read-Only)**
             You are in Chat mode. You can help users understand their code but CANNOT modify files. " +
             "Available tools: index_find_files, index_list_files, index_search_text, index_read_file, " +
@@ -45,14 +45,14 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
             """
         case .agent:
             return """
-            
+
             **CURRENT MODE: AGENT (Full Access)**
             You are in Agent mode with full autonomy. You can read, write, edit, and delete files to complete tasks.
             All tools are available. Use them wisely and always explain what you're doing.
             """
         }
     }
-    
+
     // Determine which tools are available in this mode
     public func allowedTools(from allTools: [AITool]) -> [AITool] {
         switch self {

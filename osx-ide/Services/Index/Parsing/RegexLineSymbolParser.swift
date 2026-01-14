@@ -12,8 +12,8 @@ enum RegexLineSymbolParser {
         var symbols: [Symbol] = []
         let lines = content.components(separatedBy: .newlines)
 
-        for (i, line) in lines.enumerated() {
-            let lineNum = i + 1
+        for (index, line) in lines.enumerated() {
+            let lineNum = index + 1
             for (kind, pattern) in patterns {
                 if let match = matchRegex(pattern, in: line) {
                     let name = symbolNameForMatch(kind, match)

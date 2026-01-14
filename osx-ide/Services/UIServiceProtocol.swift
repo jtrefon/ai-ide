@@ -16,14 +16,14 @@ protocol UIServiceProtocol {
     func setSidebarWidth(_ width: Double)
     func setTerminalHeight(_ height: Double)
     func setChatPanelWidth(_ width: Double)
-    
+
     // Terminal settings
     func setTerminalFontSize(_ size: Double)
     func setTerminalFontFamily(_ family: String)
     func setTerminalForegroundColor(_ color: String)
     func setTerminalBackgroundColor(_ color: String)
     func setTerminalShell(_ shell: String)
-    
+
     func exportSettings() -> [String: Any]
     func importSettings(_ settings: [String: Any])
 }

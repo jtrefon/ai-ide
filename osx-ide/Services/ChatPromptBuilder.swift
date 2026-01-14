@@ -9,7 +9,7 @@ import Foundation
 
 /// Responsible for constructing and formatting prompts for the AI service.
 class ChatPromptBuilder {
-    
+
     /// Splits reasoning from the raw AI response text.
     /// - Parameter text: The raw response text.
     /// - Returns: A tuple containing the reasoning string (if found) and the cleaned content.
@@ -46,17 +46,17 @@ class ChatPromptBuilder {
         let split = splitReasoning(from: text)
         guard let reasoning = split.reasoning, !reasoning.isEmpty else { return false }
 
-        let r = reasoning.lowercased()
+        let lowercasedReasoning = reasoning.lowercased()
         let required = ["analyze:", "research:", "plan:", "reflect:"]
-        return required.contains(where: { !r.contains($0) })
+        return required.contains(where: { !lowercasedReasoning.contains($0) })
     }
 
     /// Checks if the reasoning block is present but low-quality (placeholders like "..." or no concrete content).
     /// This helps auto-retry with a stricter instruction.
     static func isLowQualityReasoning(text: String) -> Bool {
         let split = splitReasoning(from: text)
-        guard let reasoning = split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines), 
-                !reasoning.isEmpty else {
+        guard let reasoning = split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !reasoning.isEmpty else {
             return false
         }
 

@@ -50,10 +50,10 @@ struct PlannerTool: AITool {
             }
             await ConversationPlanStore.shared.set(conversationId: conversationId, plan: plan)
             await ConversationLogStore.shared.append(
-                    conversationId: conversationId, 
-                    type: "planner.set", 
-                    data: ["length": plan.count]
-                )
+                conversationId: conversationId,
+                type: "planner.set",
+                data: ["length": plan.count]
+            )
             return plan
 
         case "update":
@@ -90,7 +90,7 @@ struct PlannerTool: AITool {
         default:
             throw AppError.aiServiceError(
                 "Invalid 'action' for planner. " +
-                "Must be one of: get, set, update, clear"
+                    "Must be one of: get, set, update, clear"
             )
         }
     }

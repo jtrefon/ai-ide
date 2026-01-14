@@ -27,10 +27,10 @@ extension CodebaseIndex {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
 
         let score: Int
-        if let s = obj["score"] as? Int {
-            score = max(0, min(100, s))
-        } else if let s = obj["score"] as? Double {
-            score = max(0, min(100, Int(s.rounded())))
+        if let intScore = obj["score"] as? Int {
+            score = max(0, min(100, intScore))
+        } else if let doubleScore = obj["score"] as? Double {
+            score = max(0, min(100, Int(doubleScore.rounded())))
         } else {
             score = 0
         }

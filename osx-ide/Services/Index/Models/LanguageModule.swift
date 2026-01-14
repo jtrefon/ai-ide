@@ -101,16 +101,16 @@ enum LanguageKeywordHighlighter {
 public protocol LanguageModule: Sendable {
     /// Unique identifier for the language.
     var id: CodeLanguage { get }
-    
+
     /// File extensions supported by this module.
     var fileExtensions: [String] { get }
-    
+
     /// Applies syntax highlighting to the provided code string.
     func highlight(_ code: String, font: NSFont) -> NSAttributedString
-    
+
     /// Parses symbols from the provided content for indexing.
     func parseSymbols(content: String, resourceId: String) -> [Symbol]
-    
+
     /// Formats the provided code according to language standards.
     func format(_ code: String) -> String
 }
@@ -127,25 +127,25 @@ public extension LanguageModule {
 open class RegexLanguageModule: LanguageModule, @unchecked Sendable {
     public let id: CodeLanguage
     public let fileExtensions: [String]
-    
+
     public init(id: CodeLanguage, fileExtensions: [String]) {
         self.id = id
         self.fileExtensions = fileExtensions
     }
-    
+
     open func highlight(_ code: String, font: NSFont) -> NSAttributedString {
         let (attributed, _) = AttributedStringStyler.makeBaseAttributedString(code: code, font: font)
         return attributed
     }
-    
+
     open func parseSymbols(content: String, resourceId: String) -> [Symbol] {
         return []
     }
-    
+
     open func format(_ code: String) -> String {
         return code // Default: no-op
     }
-    
+
     // MARK: - Helper Methods
 
     public func makeBaseAttributedString(
@@ -185,25 +185,25 @@ open class RegexLanguageModule: LanguageModule, @unchecked Sendable {
     public func applyDecimalNumberHighlighting(color: NSColor, in attr: NSMutableAttributedString, code: String) {
         applyRegex("\\b\\d+(?:\\.\\d+)?\\b", color: color, in: attr, code: code)
     }
-    
+
     public func highlightWholeWords(_ words: [String], color: NSColor, in attr: NSMutableAttributedString, code: String) {
         guard !words.isEmpty else { return }
         let escaped = words.map { NSRegularExpression.escapedPattern(for: $0) }
         let pattern = "\\b(?:" + escaped.joined(separator: "|") + ")\\b"
         applyRegex(pattern, color: color, in: attr, code: code)
     }
-    
+
     public func applyRegex(
-            _ pattern: String, 
-            color: NSColor, 
-            in attr: NSMutableAttributedString, 
-            code: String, 
-            captureGroup: Int? = nil
-        ) {
+        _ pattern: String,
+        color: NSColor,
+        in attr: NSMutableAttributedString,
+        code: String,
+        captureGroup: Int? = nil
+    ) {
         guard let regex = try? NSRegularExpression(
-                    pattern: pattern, 
-                    options: [.dotMatchesLineSeparators]
-                ) else { return }
+            pattern: pattern,
+            options: [.dotMatchesLineSeparators]
+        ) else { return }
         let ns = code as NSString
         let fullRange = NSRange(location: 0, length: ns.length)
         let matches = regex.matches(in: code, options: [], range: fullRange)

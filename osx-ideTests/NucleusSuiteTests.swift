@@ -43,7 +43,7 @@ struct NucleusSuite {
     @Test func typedCommandRegistryExecution() async throws {
         let registry = CommandRegistry()
         let cmd = TypedCommand<ExplorerRenameArgs>("test.rename")
-        var seen: ExplorerRenameArgs? = nil
+        var seen: ExplorerRenameArgs?
 
         registry.register(command: cmd) { args in
             seen = args
@@ -57,7 +57,7 @@ struct NucleusSuite {
     @Test func typedCommandRegistryCompatibleWithLegacyArgs() async throws {
         let registry = CommandRegistry()
         let cmd = TypedCommand<ExplorerPathArgs>("test.path")
-        var seen: String? = nil
+        var seen: String?
 
         registry.register(command: cmd) { args in
             seen = args.path

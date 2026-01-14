@@ -11,23 +11,23 @@ import AppKit
 /// Manages editor pane configuration and rendering
 @MainActor
 struct EditorPaneCoordinator {
-    
+
     // MARK: - Properties
-    
+
     let fileEditor: FileEditorStateManager
     let workspace: WorkspaceStateManager
     let ui: UIStateManager
     let appState: AppState
 
     // MARK: - Initialization
-    
+
     // MARK: - Public Methods
-    
+
     /// Creates an editor pane view for the specified pane ID
     func makeEditorPane(for paneID: FileEditorStateManager.PaneID) -> some View {
         let manager = (paneID == .primary) ? fileEditor.primaryPane : fileEditor.secondaryPane
         let focused = (paneID == .primary) ? fileEditor.focusedPane == .primary : fileEditor.focusedPane == .secondary
-        
+
         return EditorPaneView(
             pane: manager,
             isFocused: focused,
@@ -40,7 +40,7 @@ struct EditorPaneCoordinator {
             fontFamily: ui.fontFamily
         )
     }
-    
+
     /// Creates the main editor view with split panes
     func makeEditorView() -> some View {
         Group {
@@ -61,9 +61,9 @@ struct EditorPaneCoordinator {
             }
         }
     }
-    
+
     // MARK: - Private Components
-    
+
     private struct EditorPaneView: View {
         @ObservedObject var pane: EditorPaneStateManager
         let isFocused: Bool
@@ -96,8 +96,8 @@ struct EditorPaneCoordinator {
                                     pane.activateTab(id: tab.id)
                                 }) {
                                     HStack(spacing: 6) {
-                                        Text(URL(fileURLWithPath: tab.filePath).lastPathComponent + 
-                                            (tab.isDirty ? " •" : ""))
+                                        Text(URL(fileURLWithPath: tab.filePath).lastPathComponent +
+                                                (tab.isDirty ? " •" : ""))
                                             .lineLimit(1)
 
                                         Button(action: {

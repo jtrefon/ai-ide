@@ -13,9 +13,9 @@ struct QuickOpenFileFinderTests {
         try "x".write(to: root.appendingPathComponent("Readme.md"), atomically: true, encoding: .utf8)
         try "x".write(to: root.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(
-                at: root.appendingPathComponent("docs"), 
-                withIntermediateDirectories: true
-            )
+            at: root.appendingPathComponent("docs"),
+            withIntermediateDirectories: true
+        )
         try "x".write(to: root.appendingPathComponent("docs/README.md"), atomically: true, encoding: .utf8)
 
         let finder = QuickOpenFileFinder()
@@ -30,9 +30,9 @@ struct QuickOpenFileFinderTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         try FileManager.default.createDirectory(
-                at: root.appendingPathComponent("node_modules"), 
-                withIntermediateDirectories: true
-            )
+            at: root.appendingPathComponent("node_modules"),
+            withIntermediateDirectories: true
+        )
         try FileManager.default.createDirectory(at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
 
         try "x".write(to: root.appendingPathComponent("node_modules/needle.txt"), atomically: true, encoding: .utf8)

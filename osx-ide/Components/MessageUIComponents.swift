@@ -10,9 +10,9 @@ import Foundation
 
 /// UI components for message display
 struct MessageUIComponents {
-    
+
     // MARK: - Corner Radius Components
-    
+
     struct RectCorner: OptionSet, Sendable {
         let rawValue: Int
         static let topLeft = RectCorner(rawValue: 1 << 0)
@@ -21,7 +21,7 @@ struct MessageUIComponents {
         static let bottomLeft = RectCorner(rawValue: 1 << 3)
         static let allCorners: RectCorner = [.topLeft, .topRight, .bottomLeft, .bottomRight]
     }
-    
+
     struct RoundedCorner: Shape {
         var radius: CGFloat = .infinity
         var corners: RectCorner = .allCorners
