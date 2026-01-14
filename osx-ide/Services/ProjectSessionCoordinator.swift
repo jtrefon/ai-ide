@@ -248,7 +248,7 @@ final class ProjectSessionCoordinator {
         )
 
         let session = ProjectSession(
-            ui: UIConfiguration(
+            uiConfiguration: UIConfiguration(
                 windowFrame: windowFrame,
                 isSidebarVisible: ui.isSidebarVisible,
                 isTerminalVisible: ui.isTerminalVisible,

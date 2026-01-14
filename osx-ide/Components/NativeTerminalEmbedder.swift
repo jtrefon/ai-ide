@@ -148,10 +148,22 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
 
     /// Setup terminal view
     private func setupTerminalView(in parentView: NSView) {
+        resetContainerView(parentView)
+
+        let scrollView = makeTerminalScrollView()
+        let terminalTextView = makeTerminalTextView()
+        applyDefaultTypingAttributes(to: terminalTextView)
+        embed(scrollView: scrollView, terminalView: terminalTextView, in: parentView)
+        resetTerminalState(for: terminalTextView)
+    }
+
+    private func resetContainerView(_ parentView: NSView) {
         parentView.subviews.forEach { $0.removeFromSuperview() }
         terminalView = nil
         parentView.wantsLayer = true
+    }
 
+    private func makeTerminalScrollView() -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
@@ -159,7 +171,10 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         scrollView.borderType = .noBorder
         scrollView.backgroundColor = NSColor.black
         scrollView.drawsBackground = true
+        return scrollView
+    }
 
+    private func makeTerminalTextView() -> TerminalTextView {
         let terminalView = TerminalTextView()
         terminalView.inputDelegate = self
         terminalView.isEditable = true
@@ -178,7 +193,10 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView.isContinuousSpellCheckingEnabled = false
         terminalView.delegate = self
         terminalView.setAccessibilityIdentifier("TerminalTextView")
+        return terminalView
+    }
 
+    private func applyDefaultTypingAttributes(to terminalView: TerminalTextView) {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .left
         terminalView.typingAttributes = [
@@ -186,7 +204,9 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             .foregroundColor: NSColor.green,
             .paragraphStyle: paragraphStyle
         ]
+    }
 
+    private func embed(scrollView: NSScrollView, terminalView: TerminalTextView, in parentView: NSView) {
         scrollView.documentView = terminalView
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         parentView.addSubview(scrollView)
@@ -199,7 +219,9 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         ])
 
         self.terminalView = terminalView
+    }
 
+    private func resetTerminalState(for terminalView: TerminalTextView) {
         currentLineStartLocation = 0
         cursorColumn = 0
         currentTextAttributes = terminalView.typingAttributes
