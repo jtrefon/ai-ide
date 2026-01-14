@@ -286,41 +286,67 @@ extension TextViewRepresentable {
         func performAsyncHighlight(for text: String, in textView: NSTextView, language: String, font: NSFont) {
             currentHighlightTask?.cancel()
 
-            let syntaxHighlighter = SyntaxHighlighter.shared
-
-            // Store the current selection before update
             let selectedRange = textView.selectedRange
             let typingAttributes = textView.typingAttributes
 
-            // Task inherits @MainActor from Coordinator
-            currentHighlightTask = Task {
-                let attributedString = syntaxHighlighter.highlight(text, language: language, font: font)
+            currentHighlightTask = makeHighlightTask(
+                text: text,
+                language: language,
+                font: font,
+                textView: textView,
+                selectedRange: selectedRange,
+                typingAttributes: typingAttributes
+            )
+        }
+
+        @MainActor
+        private func makeHighlightTask(
+            text: String,
+            language: String,
+            font: NSFont,
+            textView: NSTextView,
+            selectedRange: NSRange,
+            typingAttributes: [NSAttributedString.Key: Any]
+        ) -> Task<Void, Never> {
+            Task {
+                let attributedString = SyntaxHighlighter.shared.highlight(text, language: language, font: font)
 
                 if Task.isCancelled { return }
 
                 self.isProgrammaticUpdate = true
-
-                // Do NOT replace the entire attributed string (can conflict with AppKit edits on Enter).
-                // Instead, apply highlighting in-place by updating attributes only.
-                if let textStorage = textView.textStorage {
-                    applyHighlightAttributes(textStorage: textStorage, attributedString: attributedString, font: font)
-                }
-
-                if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
-                    postHighlightDiagnosticsIfNeeded(from: attributedString, language: language)
-                }
-
-                // Restore selection after update
-                restoreSelectionIfValid(selectedRange, in: textView)
-
-                // Preserve typing attributes so newlines / newly typed text doesn't reset styling
-                restoreTypingAttributes(typingAttributes, in: textView)
-
+                applyHighlightResult(
+                    attributedString,
+                    textView: textView,
+                    language: language,
+                    font: font,
+                    selectedRange: selectedRange,
+                    typingAttributes: typingAttributes
+                )
                 self.isProgrammaticUpdate = false
 
-                // Updating text storage can leave the ruler stale until the next scroll event.
                 refreshRulerAfterHighlight(in: textView)
             }
+        }
+
+        @MainActor
+        private func applyHighlightResult(
+            _ attributedString: NSAttributedString,
+            textView: NSTextView,
+            language: String,
+            font: NSFont,
+            selectedRange: NSRange,
+            typingAttributes: [NSAttributedString.Key: Any]
+        ) {
+            if let textStorage = textView.textStorage {
+                applyHighlightAttributes(textStorage: textStorage, attributedString: attributedString, font: font)
+            }
+
+            if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
+                postHighlightDiagnosticsIfNeeded(from: attributedString, language: language)
+            }
+
+            restoreSelectionIfValid(selectedRange, in: textView)
+            restoreTypingAttributes(typingAttributes, in: textView)
         }
 
         func applyHighlightAttributes(textStorage: NSTextStorage, attributedString: NSAttributedString, font: NSFont) {
@@ -447,15 +473,25 @@ extension TextViewRepresentable {
         }
 
         @MainActor
+        private func editorFont(for textView: NSTextView) -> NSFont {
+            textView.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        }
+
+        @MainActor
+        private func scheduleHighlightForCurrentEditorText(in textView: NSTextView) {
+            scheduleHighlight(
+                for: textView.string,
+                in: textView,
+                language: parent.language,
+                font: editorFont(for: textView)
+            )
+        }
+
+        @MainActor
         fileprivate func handleDidProcessEditing(text: String) {
             if isProgrammaticUpdate { return }
             guard let textView = attachedTextView else { return }
-            scheduleHighlight(
-                for: text,
-                in: textView,
-                language: parent.language,
-                font: textView.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-            )
+            scheduleHighlightForCurrentEditorText(in: textView)
         }
 
         @MainActor
@@ -473,13 +509,7 @@ extension TextViewRepresentable {
             // Update the selection context with current selected text and range
             updateSelectionContext(from: textView)
 
-            // Fallback highlight scheduling. Some edit paths may not reliably trigger NSTextStorageDelegate.
-            scheduleHighlight(
-                for: newText,
-                in: textView,
-                language: parent.language,
-                font: textView.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-            )
+            scheduleHighlightForCurrentEditorText(in: textView)
         }
 
         @MainActor

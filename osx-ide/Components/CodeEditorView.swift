@@ -205,17 +205,29 @@ struct TextViewRepresentable: NSViewRepresentable {
     ) {
         let current = textView.string
         if current != text {
-            coordinator.isProgrammaticUpdate = true
-            textView.string = text
-            coordinator.isProgrammaticUpdate = false
-
-            coordinator.performAsyncHighlight(for: text, in: textView, language: language, font: resolvedFont)
+            applyProgrammaticTextUpdate(text, to: textView, coordinator: coordinator)
+            scheduleHighlight(text, in: textView, coordinator: coordinator, font: resolvedFont)
             return
         }
 
         if needsRehighlight {
-            coordinator.performAsyncHighlight(for: current, in: textView, language: language, font: resolvedFont)
+            scheduleHighlight(current, in: textView, coordinator: coordinator, font: resolvedFont)
         }
+    }
+
+    private func applyProgrammaticTextUpdate(_ newText: String, to textView: NSTextView, coordinator: Coordinator) {
+        coordinator.isProgrammaticUpdate = true
+        textView.string = newText
+        coordinator.isProgrammaticUpdate = false
+    }
+
+    private func scheduleHighlight(
+        _ text: String,
+        in textView: NSTextView,
+        coordinator: Coordinator,
+        font: NSFont
+    ) {
+        coordinator.performAsyncHighlight(for: text, in: textView, language: language, font: font)
     }
 
     private func syncSelectionIfNeeded(for textView: NSTextView, coordinator: Coordinator) {
