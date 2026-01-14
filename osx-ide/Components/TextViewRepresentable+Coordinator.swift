@@ -24,9 +24,9 @@ extension TextViewRepresentable {
         let parent: TextViewRepresentable
         var isProgrammaticUpdate = false
         var isProgrammaticSelectionUpdate = false
-        fileprivate var currentHighlightTask: Task<Void, Never>?
-        fileprivate var pendingHighlightTask: Task<Void, Never>?
-        fileprivate weak var attachedTextView: NSTextView?
+        var currentHighlightTask: Task<Void, Never>?
+        var pendingHighlightTask: Task<Void, Never>?
+        weak var attachedTextView: NSTextView?
         let textStorageDelegateProxy: TextStorageDelegateProxy
 
         init(_ parent: TextViewRepresentable) {

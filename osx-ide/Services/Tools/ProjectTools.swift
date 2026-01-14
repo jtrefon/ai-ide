@@ -43,35 +43,41 @@ struct GetProjectStructureTool: AITool {
     }
 
     private func buildTree(at url: URL, prefix: String, depth: Int, maxDepth: Int?) -> String {
-        if let maxDepth = maxDepth, depth >= maxDepth {
-            return ""
-        }
-
-        guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: url,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ).sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) else {
-            return ""
-        }
+        guard shouldTraverse(depth: depth, maxDepth: maxDepth) else { return "" }
+        guard let contents = listDirectoryContents(at: url) else { return "" }
 
         var output = ""
         for (index, item) in contents.enumerated() {
             let isLast = index == contents.count - 1
-            let connector = isLast ? "└── " : "├── "
-            let childPrefix = prefix + (isLast ? "    " : "│   ")
-
-            let isDirectory = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            let displayName = isDirectory ? item.lastPathComponent + "/" : item.lastPathComponent
-
-            output += prefix + connector + displayName + "\n"
-
-            if isDirectory {
-                output += buildTree(at: item, prefix: childPrefix, depth: depth + 1, maxDepth: maxDepth)
+            let rendering = renderTreeNode(prefix: prefix, isLast: isLast, item: item)
+            output += rendering.line
+            if rendering.isDirectory {
+                output += buildTree(at: item, prefix: rendering.childPrefix, depth: depth + 1, maxDepth: maxDepth)
             }
         }
 
         return output
+    }
+
+    private func shouldTraverse(depth: Int, maxDepth: Int?) -> Bool {
+        guard let maxDepth else { return true }
+        return depth < maxDepth
+    }
+
+    private func listDirectoryContents(at url: URL) -> [URL]? {
+        return try? FileManager.default.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ).sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+    }
+
+    private func renderTreeNode(prefix: String, isLast: Bool, item: URL) -> (line: String, childPrefix: String, isDirectory: Bool) {
+        let connector = isLast ? "└── " : "├── "
+        let childPrefix = prefix + (isLast ? "    " : "│   ")
+        let isDirectory = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        let displayName = isDirectory ? item.lastPathComponent + "/" : item.lastPathComponent
+        return (line: prefix + connector + displayName + "\n", childPrefix: childPrefix, isDirectory: isDirectory)
     }
 }
 
@@ -90,7 +96,7 @@ struct ListAllFilesTool: AITool {
 
     let projectRoot: URL
 
-    func execute(arguments: ToolArguments) async throws -> String {
+    func execute(arguments _: ToolArguments) async throws -> String {
         return getFilesSync()
     }
 
