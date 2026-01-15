@@ -10,6 +10,9 @@ import AppKit
 
 @main
 struct OSXIDEApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
+    private let isUnitTesting: Bool
     private let container: DependencyContainer
     @StateObject private var appState: AppState
     @StateObject private var errorManager: ErrorManager
@@ -19,7 +22,11 @@ struct OSXIDEApp: App {
     @State private var didInitializeCorePlugin: Bool = false
 
     init() {
-        let container = DependencyContainer()
+        let isUnitTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            && ProcessInfo.processInfo.environment["XCUI_TESTING"] != "1"
+        self.isUnitTesting = isUnitTesting
+
+        let container = DependencyContainer(isTesting: isUnitTesting)
         self.container = container
 
         guard let errorMgr = container.errorManager as? ErrorManager else {
@@ -53,43 +60,48 @@ struct OSXIDEApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(appState: appState)
-                .environmentObject(errorManager)
-                .onAppear {
-                    NSApp.activate(ignoringOtherApps: true)
-                }
-                .task {
-                    if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
-                        return
+            if isUnitTesting {
+                Color.clear.frame(width: 0, height: 0)
+            } else {
+                ContentView(appState: appState)
+                    .environmentObject(errorManager)
+                    .onAppear {
+                        NSApp.activate(ignoringOtherApps: true)
                     }
-                    if didInitializeCorePlugin {
-                        return
-                    }
+                    .task {
+                        if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
+                            return
+                        }
+                        if didInitializeCorePlugin {
+                            return
+                        }
 
-                    CorePlugin.initialize(registry: appState.uiRegistry, context: appState)
-                    didInitializeCorePlugin = true
-                }
-                .alert(localized("alert.error.title"), isPresented: $errorManager.showErrorAlert) {
-                    Button(localized("common.ok")) {
-                        errorManager.dismissError()
+                        CorePlugin.initialize(registry: appState.uiRegistry, context: appState)
+                        didInitializeCorePlugin = true
                     }
-                } message: {
-                    if let error = errorManager.currentError {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(error.localizedDescription)
-                                .font(.headline)
+                    .alert(localized("alert.error.title"), isPresented: $errorManager.showErrorAlert) {
+                        Button(localized("common.ok")) {
+                            errorManager.dismissError()
+                        }
+                    } message: {
+                        if let error = errorManager.currentError {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(error.localizedDescription)
+                                    .font(.headline)
 
-                            if let suggestion = error.recoverySuggestion {
-                                Text(String(format: localized("alert.suggestion_format"), suggestion))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                if let suggestion = error.recoverySuggestion {
+                                    Text(String(format: localized("alert.suggestion_format"), suggestion))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
                     }
-                }
+            }
         }
         .windowToolbarStyle(.unifiedCompact)
         .commands {
+            if !isUnitTesting {
             CommandGroup(replacing: .appSettings) {
                 SettingsLink {
                     Label(localized("menu.settings"), systemImage: "gearshape")
@@ -354,11 +366,29 @@ struct OSXIDEApp: App {
                 })
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }
+            }
         }
         .windowResizability(.contentMinSize)
 
         Settings {
-            SettingsView(ui: appState.ui)
+            if isUnitTesting {
+                EmptyView()
+            } else {
+                SettingsView(ui: appState.ui)
+            }
+        }
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let isUnitTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            && ProcessInfo.processInfo.environment["XCUI_TESTING"] != "1"
+        guard isUnitTesting else { return }
+
+        NSApp.setActivationPolicy(.accessory)
+        DispatchQueue.main.async {
+            NSApp.windows.forEach { $0.orderOut(nil) }
         }
     }
 }
