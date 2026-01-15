@@ -1,5 +1,5 @@
 public struct CrashReportEvent: Codable, Sendable {
-    public let ts: String
+    public let timestamp: String
     public let session: String
     public let operation: String
     public let errorType: String
@@ -7,5 +7,17 @@ public struct CrashReportEvent: Codable, Sendable {
     public let file: String
     public let function: String
     public let line: Int
-    public let metadata: [String: String]?
+    public let metadata: [String: String]
+
+    private enum CodingKeys: String, CodingKey {
+        case timestamp = "ts"
+        case session
+        case operation
+        case errorType
+        case errorDescription
+        case file
+        case function
+        case line
+        case metadata
+    }
 }

@@ -319,7 +319,7 @@ public actor AppLogger {
                 await CrashReporter.shared.capture(
                     error,
                     context: CrashReportContext(operation: "AppLogger.write"),
-                    metadata: nil,
+                    metadata: [:],
                     file: #fileID,
                     function: #function,
                     line: #line

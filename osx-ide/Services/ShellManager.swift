@@ -207,7 +207,7 @@ class ShellManager: NSObject {
                     await CrashReporter.shared.capture(
                         error,
                         context: CrashReportContext(operation: "ShellManager.sendInput"),
-                        metadata: nil,
+                        metadata: [:],
                         file: #fileID,
                         function: #function,
                         line: #line

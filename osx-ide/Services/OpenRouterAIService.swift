@@ -150,11 +150,13 @@ actor OpenRouterAIService: AIService {
         try validateSettings(apiKey: apiKey, model: model)
 
         let systemContent = buildSystemContent(
-            systemPrompt: systemPrompt,
-            tools: tools,
-            mode: mode,
-            projectRoot: projectRoot,
-            settings: settings
+            input: BuildSystemContentInput(
+                systemPrompt: systemPrompt,
+                hasTools: tools != nil,
+                mode: mode,
+                projectRoot: projectRoot,
+                reasoningEnabled: settings.reasoningEnabled
+            )
         )
 
         let finalMessages = buildFinalMessages(
@@ -394,58 +396,89 @@ extension OpenRouterAIService {
         return response.content ?? ""
     }
 
-    private func buildSystemContent(
-        systemPrompt: String,
-        tools: [AITool]?,
-        mode: AIMode?,
-        projectRoot: URL?,
-        settings: OpenRouterSettings
-    ) -> String {
-        var systemContent = systemPrompt.isEmpty
-            ? (tools != nil ? ToolAwarenessPrompt.systemPrompt : "You are a helpful, concise coding assistant.")
-            : systemPrompt
+    private struct BuildSystemContentInput {
+        let systemPrompt: String
+        let hasTools: Bool
+        let mode: AIMode?
+        let projectRoot: URL?
+        let reasoningEnabled: Bool
+    }
 
-        if let mode = mode {
-            systemContent += mode.systemPromptAddition
+    private func buildSystemContent(input: BuildSystemContentInput) -> String {
+        var components: [String] = []
+        components.append(buildBaseSystemContent(systemPrompt: input.systemPrompt, hasTools: input.hasTools))
+
+        if let modeSystemAddition = buildModeSystemAddition(mode: input.mode) {
+            components.append(modeSystemAddition)
         }
 
-        if let projectRoot = projectRoot {
-            systemContent += """
-
-            **IMPORTANT CONTEXT:**
-            Project Root: `\(projectRoot.path)`
-            Platform: macOS
-            All file paths must be relative to the project root or validated absolute paths within it.
-            Never use Linux-style paths like /home.
-            """
+        if let projectRootContext = buildProjectRootContext(projectRoot: input.projectRoot) {
+            components.append(projectRootContext)
         }
 
-        if settings.reasoningEnabled, mode != nil {
-            systemContent += """
-
-            ## Reasoning
-            When responding, include a structured reasoning block enclosed in <ide_reasoning>...</ide_reasoning>.
-            This block will be shown in a separate, foldable UI panel.
-
-            Requirements:
-            - ALWAYS include all four sections in this exact order: Analyze, Research, Plan, Reflect.
-            - If a section is not applicable, write 'N/A' (do not omit the section).
-            - Keep it concise and actionable; use short bullets or short sentences.
-            - Do NOT include code blocks in <ide_reasoning>.
-            - Do NOT use placeholders like '...' or copy the format example text verbatim.
-            - After </ide_reasoning>, provide the normal user-facing answer as usual (markdown allowed).
-
-            Format example:
-            <ide_reasoning>
-            Analyze: - ... (write real bullets)
-            Research: - ... (write real bullets)
-            Plan: - ... (write real bullets)
-            Reflect: - ... (write real bullets)
-            </ide_reasoning>
-            """
+        if let reasoningPrompt = buildReasoningPromptIfNeeded(
+            reasoningEnabled: input.reasoningEnabled,
+            mode: input.mode
+        ) {
+            components.append(reasoningPrompt)
         }
 
-        return systemContent
+        return components.joined()
+    }
+
+    private func buildBaseSystemContent(systemPrompt: String, hasTools: Bool) -> String {
+        if !systemPrompt.isEmpty {
+            return systemPrompt
+        }
+
+        if hasTools {
+            return ToolAwarenessPrompt.systemPrompt
+        }
+
+        return "You are a helpful, concise coding assistant."
+    }
+
+    private func buildModeSystemAddition(mode: AIMode?) -> String? {
+        guard let mode else { return nil }
+        return mode.systemPromptAddition
+    }
+
+    private func buildProjectRootContext(projectRoot: URL?) -> String? {
+        guard let projectRoot else { return nil }
+        return """
+
+        **IMPORTANT CONTEXT:**
+        Project Root: `\(projectRoot.path)`
+        Platform: macOS
+        All file paths must be relative to the project root or validated absolute paths within it.
+        Never use Linux-style paths like /home.
+        """
+    }
+
+    private func buildReasoningPromptIfNeeded(reasoningEnabled: Bool, mode: AIMode?) -> String? {
+        guard reasoningEnabled, mode != nil else { return nil }
+        return """
+
+        ## Reasoning
+        When responding, include a structured reasoning block enclosed in <ide_reasoning>...</ide_reasoning>.
+        This block will be shown in a separate, foldable UI panel.
+
+        Requirements:
+        - ALWAYS include all four sections in this exact order: Analyze, Research, Plan, Reflect.
+        - If a section is not applicable, write 'N/A' (do not omit the section).
+        - Keep it concise and actionable; use short bullets or short sentences.
+        - Do NOT include code blocks in <ide_reasoning>.
+        - Do NOT use placeholders like '...' or copy the format example text verbatim.
+        - After </ide_reasoning>, provide the normal user-facing answer as usual (markdown allowed).
+
+        Format example:
+        <ide_reasoning>
+        Analyze: - ... (write real bullets)
+        Research: - ... (write real bullets)
+        Plan: - ... (write real bullets)
+        Reflect: - ... (write real bullets)
+        </ide_reasoning>
+        """
     }
 }
 

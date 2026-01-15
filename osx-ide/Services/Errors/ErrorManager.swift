@@ -120,7 +120,7 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
             await CrashReporter.shared.capture(
                 error,
                 context: CrashReportContext(operation: operation),
-                metadata: nil,
+                metadata: [:],
                 file: file,
                 function: function,
                 line: line
