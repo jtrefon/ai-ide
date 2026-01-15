@@ -391,6 +391,8 @@ private struct OverlayHostView: View {
     }
 }
 
-#Preview {
-    ContentView(appState: DependencyContainer().makeAppState())
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView(appState: DependencyContainer().makeAppState())
+    }
 }
