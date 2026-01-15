@@ -56,14 +56,16 @@ run_tests() {
                    -configuration Debug \
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
-                   test -only-testing:osx-ideTests/"$suite"
+                   ENABLE_PREVIEWS=NO \
+                   test -only-testing:osx-ideTests/"$suite" -skip-testing:osx-ideUITests
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                    -scheme "$SCHEME" \
                    -configuration Debug \
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
-                   test -only-testing:osx-ideTests
+                   ENABLE_PREVIEWS=NO \
+                   test -only-testing:osx-ideTests -skip-testing:osx-ideUITests
     fi
 }
 
@@ -80,14 +82,16 @@ run_e2e() {
                    -configuration Debug \
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
-                   test -only-testing:osx-ideUITests/"$suite"
+                   ENABLE_PREVIEWS=NO \
+                   test -only-testing:osx-ideUITests/"$suite" -skip-testing:osx-ideTests
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                    -scheme "$SCHEME" \
                    -configuration Debug \
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
-                   test -only-testing:osx-ideUITests
+                   ENABLE_PREVIEWS=NO \
+                   test -only-testing:osx-ideUITests -skip-testing:osx-ideTests
     fi
 }
 

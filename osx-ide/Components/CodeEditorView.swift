@@ -300,16 +300,18 @@ struct TextViewRepresentable: NSViewRepresentable {
     }
 }
 
-#Preview {
-    CodeEditorView(
-        text: .constant("func helloWorld() {\n    print(\"Hello, World!\")\n}"),
-        language: "swift",
-        selectedRange: .constant(nil),
-        selectionContext: CodeSelectionContext(),
-        showLineNumbers: true,
-        wordWrap: false,
-        fontSize: AppConstants.Editor.defaultFontSize,
-        fontFamily: AppConstants.Editor.defaultFontFamily
-    )
-    .frame(height: 300)
+struct CodeEditorView_Previews: PreviewProvider {
+    static var previews: some View {
+        CodeEditorView(
+            text: .constant("func helloWorld() {\n    print(\"Hello, World!\")\n}"),
+            language: "swift",
+            selectedRange: .constant(nil),
+            selectionContext: CodeSelectionContext(),
+            showLineNumbers: true,
+            wordWrap: false,
+            fontSize: AppConstants.Editor.defaultFontSize,
+            fontFamily: AppConstants.Editor.defaultFontFamily
+        )
+        .frame(height: 300)
+    }
 }

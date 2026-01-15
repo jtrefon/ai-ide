@@ -236,7 +236,9 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
     }
 }
 
-#Preview {
-    FileExplorerView(context: DependencyContainer().makeAppState())
-        .frame(width: 250, height: 400)
+struct FileExplorerView_Previews: PreviewProvider {
+    static var previews: some View {
+        FileExplorerView(context: DependencyContainer().makeAppState())
+            .frame(width: 250, height: 400)
+    }
 }

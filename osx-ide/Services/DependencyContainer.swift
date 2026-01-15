@@ -14,7 +14,7 @@ class DependencyContainer {
 
     private let settingsStore: SettingsStore
 
-    init() {
+    init(isTesting: Bool = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil) {
         settingsStore = SettingsStore(userDefaults: .standard)
         let errorManager = ErrorManager()
         _errorManager = errorManager
@@ -56,7 +56,7 @@ class DependencyContainer {
             conversationManager: _conversationManager
         )
 
-        if let root = _workspaceService.currentDirectory {
+        if !isTesting, let root = _workspaceService.currentDirectory {
             _conversationManager.updateProjectRoot(root)
             _projectCoordinator.configureProject(root: root)
         }

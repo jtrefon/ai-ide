@@ -78,6 +78,8 @@ private struct SettingsBackgroundView: View {
     }
 }
 
-#Preview {
-    SettingsView(ui: DependencyContainer().makeAppState().ui)
+struct SettingsView_Previews: PreviewProvider {
+    static var previews: some View {
+        SettingsView(ui: DependencyContainer().makeAppState().ui)
+    }
 }

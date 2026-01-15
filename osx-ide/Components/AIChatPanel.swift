@@ -187,11 +187,11 @@ struct AIChatPanel: View {
     }
 }
 
-#Preview {
-    Group {
+struct AIChatPanel_Previews: PreviewProvider {
+    static var previews: some View {
         let ctx = CodeSelectionContext()
         let container = DependencyContainer()
-        AIChatPanel(
+        return AIChatPanel(
             selectionContext: ctx,
             conversationManager: container.conversationManager,
             ui: UIStateManager(
