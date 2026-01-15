@@ -6,7 +6,7 @@ public protocol CrashReporting: Sendable {
     func capture(
         _ error: Error,
         context: CrashReportContext,
-        metadata: [String: String]?,
+        metadata: [String: String],
         file: String,
         function: String,
         line: Int

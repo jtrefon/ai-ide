@@ -37,13 +37,13 @@ public actor CrashReporter: CrashReporting {
     public func capture(
         _ error: Error,
         context: CrashReportContext,
-        metadata: [String: String]?,
+        metadata: [String: String] = [:],
         file: String,
         function: String,
         line: Int
     ) async {
         let event = CrashReportEvent(
-            ts: iso.string(from: Date()),
+            timestamp: iso.string(from: Date()),
             session: sessionId,
             operation: context.operation,
             errorType: String(reflecting: type(of: error)),
