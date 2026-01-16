@@ -37,9 +37,13 @@ public final class EventBus: EventBusProtocol {
         let key = String(describing: E.self)
 
         Task {
-            await AppLogger.shared.debug(category: .eventBus, message: "event.publish", metadata: [
-                "eventType": key
-            ])
+            await AppLogger.shared.debug(
+                category: .eventBus,
+                message: "event.publish",
+                context: AppLogger.LogCallContext(metadata: [
+                    "eventType": key
+                ])
+            )
         }
         if let subject = subjects[key] as? PassthroughSubject<E, Never> {
             subject.send(event)
@@ -50,9 +54,13 @@ public final class EventBus: EventBusProtocol {
         let key = String(describing: E.self)
 
         Task {
-            await AppLogger.shared.debug(category: .eventBus, message: "event.subscribe", metadata: [
-                "eventType": key
-            ])
+            await AppLogger.shared.debug(
+                category: .eventBus,
+                message: "event.subscribe",
+                context: AppLogger.LogCallContext(metadata: [
+                    "eventType": key
+                ])
+            )
         }
         let subject: PassthroughSubject<E, Never>
 

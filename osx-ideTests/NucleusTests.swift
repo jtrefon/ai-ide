@@ -13,18 +13,22 @@ import SwiftUI
 private actor ToolExecutionMockAIService: AIService {
     private var callCount: Int = 0
 
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws
-    -> AIServiceResponse {
-        try await sendMessage([ChatMessage(role: .user, content: message)], context: context, tools: tools, mode: mode, projectRoot: nil)
+    func sendMessage(
+        _ request: AIServiceMessageWithProjectRootRequest
+    ) async throws -> AIServiceResponse {
+        let messages = [ChatMessage(role: .user, content: request.message)]
+        return try await sendMessage(AIServiceHistoryRequest(
+            messages: messages,
+            context: request.context,
+            tools: request.tools,
+            mode: request.mode,
+            projectRoot: request.projectRoot
+        ))
     }
 
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws
-    -> AIServiceResponse {
-        try await sendMessage([ChatMessage(role: .user, content: message)], context: context, tools: tools, mode: mode, projectRoot: projectRoot)
-    }
-
-    func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws
-    -> AIServiceResponse {
+    func sendMessage(
+        _ request: AIServiceHistoryRequest
+    ) async throws -> AIServiceResponse {
         callCount += 1
         if callCount == 1 {
             return AIServiceResponse(
@@ -185,13 +189,20 @@ final class NucleusTests: XCTestCase {
         let aiService = ToolExecutionMockAIService()
 
         let conversationManager = ConversationManager(
-            aiService: aiService,
-            errorManager: errorManager,
-            fileSystemService: FileSystemService(),
-            workspaceService: workspaceService,
-            eventBus: eventBus,
-            projectRoot: projectRoot,
-            codebaseIndex: nil
+            dependencies: ConversationManager.Dependencies(
+                services: ConversationManager.ServiceDependencies(
+                    aiService: aiService,
+                    errorManager: errorManager,
+                    fileSystemService: FileSystemService(),
+                    fileEditorService: nil
+                ),
+                environment: ConversationManager.EnvironmentDependencies(
+                    workspaceService: workspaceService,
+                    eventBus: eventBus,
+                    projectRoot: projectRoot,
+                    codebaseIndex: nil
+                )
+            )
         )
         conversationManager.currentMode = .agent
         conversationManager.currentInput = "Create a file hello_from_test.txt"

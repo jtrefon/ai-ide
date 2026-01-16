@@ -10,6 +10,31 @@ import SwiftUI
 
 @MainActor
 final class ConversationManager: ObservableObject, ConversationManagerProtocol {
+    struct Dependencies {
+        let services: ServiceDependencies
+        let environment: EnvironmentDependencies
+    }
+
+    struct ServiceDependencies {
+        let aiService: AIService
+        let errorManager: ErrorManagerProtocol
+        let fileSystemService: FileSystemService
+        let fileEditorService: (any FileEditorServiceProtocol)?
+    }
+
+    struct EnvironmentDependencies {
+        let workspaceService: WorkspaceServiceProtocol
+        let eventBus: EventBusProtocol
+        let projectRoot: URL?
+        let codebaseIndex: CodebaseIndexProtocol?
+    }
+
+    private struct UserMessageContext {
+        let text: String
+        let hasSelectionContext: Bool
+        let message: ChatMessage
+    }
+
     @Published var currentInput: String = ""
     @Published var isSending: Bool = false
     @Published var error: String?
@@ -60,27 +85,21 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         toolProvider.availableTools(mode: currentMode, pathValidator: pathValidator)
     }
 
-    init(
-        aiService: AIService,
-        errorManager: ErrorManagerProtocol,
-        fileSystemService: FileSystemService = FileSystemService(),
-        fileEditorService: (any FileEditorServiceProtocol)? = nil,
-        workspaceService: WorkspaceServiceProtocol,
-        eventBus: EventBusProtocol,
-        projectRoot: URL? = nil,
-        codebaseIndex: CodebaseIndexProtocol? = nil
-    ) {
-        self.aiService = aiService
-        self.errorManager = errorManager
-        self.fileSystemService = fileSystemService
-        self.fileEditorService = fileEditorService
-        self.workspaceService = workspaceService
-        self.eventBus = eventBus
-        let root = projectRoot ?? FileManager.default.temporaryDirectory
+    init(dependencies: Dependencies) {
+        self.aiService = dependencies.services.aiService
+        self.errorManager = dependencies.services.errorManager
+        self.fileSystemService = dependencies.services.fileSystemService
+        self.fileEditorService = dependencies.services.fileEditorService
+        self.workspaceService = dependencies.environment.workspaceService
+        self.eventBus = dependencies.environment.eventBus
+        let root = dependencies.environment.projectRoot ?? FileManager.default.temporaryDirectory
         self.projectRoot = root
-        self.codebaseIndex = codebaseIndex
+        self.codebaseIndex = dependencies.environment.codebaseIndex
 
-        self.aiInteractionCoordinator = AIInteractionCoordinator(aiService: aiService, codebaseIndex: codebaseIndex)
+        self.aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: dependencies.services.aiService,
+            codebaseIndex: dependencies.environment.codebaseIndex
+        )
 
         self.historyManager = ChatHistoryManager()
         self.historyCoordinator = ChatHistoryCoordinator(
@@ -89,8 +108,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         )
         let fileEditorServiceProvider = fileEditorService
         self.toolExecutor = AIToolExecutor(
-            fileSystemService: fileSystemService,
-            errorManager: errorManager,
+            fileSystemService: dependencies.services.fileSystemService,
+            errorManager: dependencies.services.errorManager,
             projectRoot: root,
             defaultFilePathProvider: { [weak fileEditorServiceProvider] in
                 fileEditorServiceProvider?.selectedFile
@@ -107,10 +126,23 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
         self.conversationLogger = ConversationLogger()
 
-        conversationLogger.initializeProjectRoot(root)
-
+        initializeLogging(root: root)
         setupObservation()
+        startTraceLogging()
+        configureLoggingStores(root: root)
+    }
 
+    private func setupObservation() {
+        historyManager.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+    }
+
+    private func initializeLogging(root: URL) {
+        conversationLogger.initializeProjectRoot(root)
+    }
+
+    private func startTraceLogging() {
         Task.detached(priority: .utility) {
             let logPath = await AIToolTraceLogger.shared.currentLogFilePath()
             await self.conversationLogger.logTraceStart(
@@ -119,7 +151,9 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 logPath: logPath
             )
         }
+    }
 
+    private func configureLoggingStores(root: URL) {
         Task.detached(priority: .utility) {
             await AppLogger.shared.setProjectRoot(root)
             await ConversationLogStore.shared.setProjectRoot(root)
@@ -129,12 +163,6 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             await PatchSetStore.shared.setProjectRoot(root)
             await CheckpointManager.shared.setProjectRoot(root)
         }
-    }
-
-    private func setupObservation() {
-        historyManager.objectWillChange
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &cancellables)
     }
 
     func updateAIService(_ newService: AIService) {
@@ -176,29 +204,51 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     func sendMessage(context: String? = nil) {
         guard !currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let userContext = buildUserMessageContext(context: context)
+        logUserMessage(userContext)
+        historyCoordinator.append(userContext.message)
+        resetInputState()
+        startSendTask(userContext: userContext, explicitContext: context)
+    }
 
+    private func buildUserMessageContext(context: String?) -> UserMessageContext {
         let userMessageText = currentInput
         let hasSelectionContext = (context?.isEmpty == false)
-
-        conversationLogger.logUserMessage(
-            text: userMessageText,
-            mode: currentMode.rawValue,
-            projectRootPath: projectRoot.path,
-            conversationId: self.conversationId,
-            hasSelectionContext: hasSelectionContext
-        )
-
         let userMessage = ChatMessage(
             role: .user,
             content: currentInput,
             context: ChatMessageContentContext(codeContext: context)
         )
-        historyCoordinator.append(userMessage)
+        return UserMessageContext(
+            text: userMessageText,
+            hasSelectionContext: hasSelectionContext,
+            message: userMessage
+        )
+    }
 
+    private func logUserMessage(_ context: UserMessageContext) {
+        conversationLogger.logUserMessage(
+            ConversationUserMessageLogContext(
+                identity: ConversationUserMessageLogContext.Identity(
+                    conversationId: conversationId,
+                    projectRootPath: projectRoot.path
+                ),
+                details: ConversationUserMessageLogContext.MessageDetails(
+                    text: context.text,
+                    mode: currentMode.rawValue,
+                    hasSelectionContext: context.hasSelectionContext
+                )
+            )
+        )
+    }
+
+    private func resetInputState() {
         currentInput = ""
         isSending = true
         error = nil
+    }
 
+    private func startSendTask(userContext: UserMessageContext, explicitContext: String?) {
         Task { [weak self] in
             guard let self = self else { return }
 
@@ -209,28 +259,33 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 )
 
                 try await self.sendCoordinator.send(
-                    userInput: userMessageText,
-                    explicitContext: context,
-                    mode: self.currentMode,
-                    projectRoot: self.projectRoot,
-                    conversationId: self.conversationId,
-                    availableTools: self.availableTools,
-                    cancelledToolCallIds: { [weak self] in self?.cancelledToolCallIds ?? [] }
+                    ConversationSendCoordinator.SendRequest(
+                        userInput: userContext.text,
+                        explicitContext: explicitContext,
+                        mode: self.currentMode,
+                        projectRoot: self.projectRoot,
+                        conversationId: self.conversationId,
+                        availableTools: self.availableTools,
+                        cancelledToolCallIds: { [cancelledIds = self.cancelledToolCallIds] in cancelledIds }
+                    )
                 )
 
                 self.isSending = false
-
             } catch {
-                conversationLogger.logChatError(
-                    conversationId: self.conversationId,
-                    errorDescription: error.localizedDescription
-                )
-                await MainActor.run {
-                    self.errorManager.handle(.aiServiceError(error.localizedDescription))
-                    self.error = "Failed to get AI response: \(error.localizedDescription)"
-                    self.isSending = false
-                }
+                handleSendFailure(error)
             }
+        }
+    }
+
+    private func handleSendFailure(_ error: Error) {
+        conversationLogger.logChatError(
+            conversationId: conversationId,
+            errorDescription: error.localizedDescription
+        )
+        Task { @MainActor in
+            errorManager.handle(.aiServiceError(error.localizedDescription))
+            self.error = "Failed to get AI response: \(error.localizedDescription)"
+            isSending = false
         }
     }
 

@@ -8,12 +8,13 @@ extension AIService {
         mode: AIMode?
     ) async -> Result<AIServiceResponse, AppError> {
         do {
-            let response = try await sendMessage(
-                message,
+            let response = try await sendMessage(AIServiceMessageWithProjectRootRequest(
+                message: message,
                 context: context,
                 tools: tools,
-                mode: mode
-            )
+                mode: mode,
+                projectRoot: nil
+            ))
             return .success(response)
         } catch {
             return .failure(Self.mapToAppError(error, operation: "sendMessage"))
@@ -24,13 +25,7 @@ extension AIService {
         _ request: AIServiceMessageWithProjectRootRequest
     ) async -> Result<AIServiceResponse, AppError> {
         do {
-            let response = try await sendMessage(
-                request.message,
-                context: request.context,
-                tools: request.tools,
-                mode: request.mode,
-                projectRoot: request.projectRoot
-            )
+            let response = try await sendMessage(request)
             return .success(response)
         } catch {
             return .failure(Self.mapToAppError(error, operation: "sendMessageWithProjectRoot"))
@@ -41,13 +36,7 @@ extension AIService {
         _ request: AIServiceHistoryRequest
     ) async -> Result<AIServiceResponse, AppError> {
         do {
-            let response = try await sendMessage(
-                request.messages,
-                context: request.context,
-                tools: request.tools,
-                mode: request.mode,
-                projectRoot: request.projectRoot
-            )
+            let response = try await sendMessage(request)
             return .success(response)
         } catch {
             return .failure(Self.mapToAppError(error, operation: "sendMessageHistory"))

@@ -7,32 +7,17 @@ struct WorkspaceAndChatTests {
 
     private struct ThrowingAIService: AIService {
         func sendMessage(
-            _ message: String,
-            context: String?,
-            tools: [AITool]?,
-            mode: AIMode?
+            _ request: AIServiceMessageWithProjectRootRequest
         ) async throws -> AIServiceResponse {
+            _ = request
             throw NSError(domain: "test.ai", code: 1, userInfo: [NSLocalizedDescriptionKey: "boom"])
         }
 
         func sendMessage(
-            _ message: String,
-            context: String?,
-            tools: [AITool]?,
-            mode: AIMode?,
-            projectRoot: URL?
+            _ request: AIServiceHistoryRequest
         ) async throws -> AIServiceResponse {
+            _ = request
             throw NSError(domain: "test.ai", code: 2, userInfo: [NSLocalizedDescriptionKey: "boom"])
-        }
-
-        func sendMessage(
-            _ messages: [ChatMessage],
-            context: String?,
-            tools: [AITool]?,
-            mode: AIMode?,
-            projectRoot: URL?
-        ) async throws -> AIServiceResponse {
-            throw NSError(domain: "test.ai", code: 3, userInfo: [NSLocalizedDescriptionKey: "boom"])
         }
 
         func explainCode(_ code: String) async throws -> String { throw NSError(domain: "test.ai", code: 4) }

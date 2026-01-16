@@ -1,27 +1,5 @@
 import Foundation
 
-public struct ConversationFoldingThresholds: Sendable {
-    public let maxMessageCount: Int
-    public let maxContentCharacters: Int
-    public let preserveMostRecentMessages: Int
-
-    public init(maxMessageCount: Int = 40, maxContentCharacters: Int = 20_000, preserveMostRecentMessages: Int = 20) {
-        self.maxMessageCount = maxMessageCount
-        self.maxContentCharacters = maxContentCharacters
-        self.preserveMostRecentMessages = preserveMostRecentMessages
-    }
-}
-
-public struct ConversationFoldResult: Sendable {
-    public let entry: ConversationFoldIndexEntry
-    public let foldedMessageCount: Int
-
-    public init(entry: ConversationFoldIndexEntry, foldedMessageCount: Int) {
-        self.entry = entry
-        self.foldedMessageCount = foldedMessageCount
-    }
-}
-
 public enum ConversationFoldingService {
     public static func shouldFold(messages: [ChatMessage], thresholds: ConversationFoldingThresholds) -> Bool {
         if messages.count > thresholds.maxMessageCount { return true }

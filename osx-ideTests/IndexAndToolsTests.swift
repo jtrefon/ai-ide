@@ -62,30 +62,17 @@ struct IndexAndToolsTests {
     @Test func testIndexReadFileFallsBackToDiskWhenNotIndexed() async throws {
         struct LocalMockAIService: AIService, @unchecked Sendable {
             func sendMessage(
-                _: String,
-                context _: String?,
-                tools _: [AITool]?,
-                mode _: AIMode?
+                _ request: AIServiceMessageWithProjectRootRequest
             ) async throws -> AIServiceResponse {
-                AIServiceResponse(content: nil, toolCalls: nil)
+                _ = request
+                return AIServiceResponse(content: nil, toolCalls: nil)
             }
+
             func sendMessage(
-                _: String,
-                context _: String?,
-                tools _: [AITool]?,
-                mode _: AIMode?,
-                projectRoot _: URL?
+                _ request: AIServiceHistoryRequest
             ) async throws -> AIServiceResponse {
-                AIServiceResponse(content: nil, toolCalls: nil)
-            }
-            func sendMessage(
-                _: [ChatMessage],
-                context _: String?,
-                tools _: [AITool]?,
-                mode _: AIMode?,
-                projectRoot _: URL?
-            ) async throws -> AIServiceResponse {
-                AIServiceResponse(content: nil, toolCalls: nil)
+                _ = request
+                return AIServiceResponse(content: nil, toolCalls: nil)
             }
             func explainCode(_: String) async throws -> String { "" }
             func refactorCode(_: String, instructions _: String) async throws -> String { "" }
