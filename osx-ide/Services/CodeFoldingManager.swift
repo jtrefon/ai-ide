@@ -93,13 +93,25 @@ public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelega
         font: NSFont,
         glyphRange: NSRange
     ) {
+        guard !output.glyphs.isEmpty,
+              !output.properties.isEmpty,
+              !output.characterIndexes.isEmpty else {
+            return
+        }
+
         output.glyphs.withUnsafeBufferPointer { gPtr in
             output.properties.withUnsafeBufferPointer { pPtr in
                 output.characterIndexes.withUnsafeBufferPointer { cPtr in
+                    guard let gBase = gPtr.baseAddress,
+                          let pBase = pPtr.baseAddress,
+                          let cBase = cPtr.baseAddress else {
+                        return
+                    }
+                    
                     layoutManager.setGlyphs(
-                        gPtr.baseAddress!,
-                        properties: pPtr.baseAddress!,
-                        characterIndexes: cPtr.baseAddress!,
+                        gBase,
+                        properties: pBase,
+                        characterIndexes: cBase,
                         font: font,
                         forGlyphRange: glyphRange
                     )

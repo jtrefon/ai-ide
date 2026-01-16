@@ -32,14 +32,14 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
 
     private func saveCurrentDirectoryToUserDefaults(_ url: URL?) {
         guard let url else {
-            settingsStore.removeObject(forKey: AppConstants.Storage.lastWorkspacePathKey)
+            settingsStore.removeObject(forKey: AppConstantsStorage.lastWorkspacePathKey)
             return
         }
-        settingsStore.set(url.standardizedFileURL.path, forKey: AppConstants.Storage.lastWorkspacePathKey)
+        settingsStore.set(url.standardizedFileURL.path, forKey: AppConstantsStorage.lastWorkspacePathKey)
     }
 
     private static func restoreCurrentDirectoryFromUserDefaults(settingsStore: SettingsStore) -> URL? {
-        guard let path = settingsStore.string(forKey: AppConstants.Storage.lastWorkspacePathKey), !path.isEmpty else {
+        guard let path = settingsStore.string(forKey: AppConstantsStorage.lastWorkspacePathKey), !path.isEmpty else {
             return nil
         }
         var isDirectory: ObjCBool = false

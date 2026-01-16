@@ -113,8 +113,8 @@ class ShellManager: NSObject {
         }
 
         var winSize = winsize(
-            ws_row: UInt16(AppConstants.Terminal.defaultRows),
-            ws_col: UInt16(AppConstants.Terminal.defaultColumns),
+            ws_row: UInt16(AppConstantsTerminal.defaultRows),
+            ws_col: UInt16(AppConstantsTerminal.defaultColumns),
             ws_xpixel: 0,
             ws_ypixel: 0
         )
@@ -159,8 +159,8 @@ class ShellManager: NSObject {
     nonisolated static func buildEnvironment(environmentOverrides: [String: String]) -> [String: String] {
         var environment = ProcessInfo.processInfo.environment
         environment["TERM"] = environmentOverrides["TERM"] ?? "xterm-256color"
-        environment["COLUMNS"] = environmentOverrides["COLUMNS"] ?? "\(AppConstants.Terminal.defaultColumns)"
-        environment["LINES"] = environmentOverrides["LINES"] ?? "\(AppConstants.Terminal.defaultRows)"
+        environment["COLUMNS"] = environmentOverrides["COLUMNS"] ?? "\(AppConstantsTerminal.defaultColumns)"
+        environment["LINES"] = environmentOverrides["LINES"] ?? "\(AppConstantsTerminal.defaultRows)"
 
         if environment["HOME"]?.isEmpty ?? true {
             environment["HOME"] = FileManager.default.homeDirectoryForCurrentUser.path

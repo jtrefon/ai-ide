@@ -52,7 +52,7 @@ public final class LanguageModuleManager: ObservableObject {
 
     public func toggleModule(_ language: CodeLanguage, enabled: Bool) {
         var enabledLangs = settingsStore.stringArray(
-            forKey: AppConstants.Storage.enabledLanguageModulesKey
+            forKey: AppConstantsStorage.enabledLanguageModulesKey
         ) ?? allModules.keys.map { $0.rawValue }
 
         if enabled {
@@ -63,13 +63,13 @@ public final class LanguageModuleManager: ObservableObject {
             enabledLangs.removeAll { $0 == language.rawValue }
         }
 
-        settingsStore.set(enabledLangs, forKey: AppConstants.Storage.enabledLanguageModulesKey)
+        settingsStore.set(enabledLangs, forKey: AppConstantsStorage.enabledLanguageModulesKey)
         updateEnabledModules()
     }
 
     private func setupInitialEnabledState() {
         let allLangs = allModules.keys.map { $0.rawValue }
-        if let stored = settingsStore.stringArray(forKey: AppConstants.Storage.enabledLanguageModulesKey) {
+        if let stored = settingsStore.stringArray(forKey: AppConstantsStorage.enabledLanguageModulesKey) {
             // Ensure any newly added modules are also enabled if they weren't in the stored list
             var updated = stored
             var changed = false
@@ -80,17 +80,17 @@ public final class LanguageModuleManager: ObservableObject {
                 }
             }
             if changed {
-                settingsStore.set(updated, forKey: AppConstants.Storage.enabledLanguageModulesKey)
+                settingsStore.set(updated, forKey: AppConstantsStorage.enabledLanguageModulesKey)
             }
         } else {
-            settingsStore.set(allLangs, forKey: AppConstants.Storage.enabledLanguageModulesKey)
+            settingsStore.set(allLangs, forKey: AppConstantsStorage.enabledLanguageModulesKey)
         }
         updateEnabledModules()
     }
 
     private func updateEnabledModules() {
         let enabledLangs = settingsStore.stringArray(
-            forKey: AppConstants.Storage.enabledLanguageModulesKey
+            forKey: AppConstantsStorage.enabledLanguageModulesKey
         ) ?? allModules.keys.map { $0.rawValue }
         enabledModules = allModules.filter { enabledLangs.contains($0.key.rawValue) }
     }

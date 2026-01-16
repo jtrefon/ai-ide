@@ -40,9 +40,12 @@ struct ArchitectAdvisorTool: AITool {
         }
         let constraints = (arguments["constraints"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let explicit = constraints?.isEmpty == false
-            ? "Constraints:\n\(constraints!)"
-            : nil
+        let explicit: String?
+        if let constraints = constraints, !constraints.isEmpty {
+            explicit = "Constraints:\n\(constraints)"
+        } else {
+            explicit = nil
+        }
 
         let context = await ContextBuilder.buildContext(
             userInput: task,

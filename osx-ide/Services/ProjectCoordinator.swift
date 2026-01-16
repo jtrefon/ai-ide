@@ -53,7 +53,7 @@ class ProjectCoordinator {
             self.codebaseIndex = index
             index.start()
 
-            let isIndexEnabled = settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true)
+            let isIndexEnabled = settingsStore.bool(forKey: AppConstantsStorage.codebaseIndexEnabledKey, default: true)
             index.setEnabled(isIndexEnabled)
 
             if isIndexEnabled {
@@ -117,7 +117,7 @@ class ProjectCoordinator {
             self.codebaseIndex = index
             index.start()
 
-            let isIndexEnabled = settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true)
+            let isIndexEnabled = settingsStore.bool(forKey: AppConstantsStorage.codebaseIndexEnabledKey, default: true)
             index.setEnabled(isIndexEnabled)
 
             if let cm = conversationManager as? ConversationManager {
@@ -143,7 +143,7 @@ class ProjectCoordinator {
     }
 
     func setIndexEnabled(_ enabled: Bool) {
-        settingsStore.set(enabled, forKey: AppConstants.Storage.codebaseIndexEnabledKey)
+        settingsStore.set(enabled, forKey: AppConstantsStorage.codebaseIndexEnabledKey)
         codebaseIndex?.setEnabled(enabled)
         if enabled {
             reindexProject(aiEnrichment: false)
@@ -157,7 +157,7 @@ class ProjectCoordinator {
             guard let self = self else { return }
 
             let aiEnrichmentEnabled = settingsStore.bool(
-                forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey,
+                forKey: AppConstantsStorage.codebaseIndexAIEnrichmentEnabledKey,
                 default: false
             )
             self.reindexProject(aiEnrichment: aiEnrichmentEnabled)
