@@ -13,15 +13,25 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         let lines = content.components(separatedBy: .newlines)
         let symbols = await loadSymbols(path: path, content: content)
         let partitions = partitionSymbols(symbols)
-
-        let children = buildTypeAssessments(
+        let children = await buildAssessmentChildren(
             typeSymbols: partitions.typeSymbols,
             functionSymbols: partitions.functionSymbols,
             lines: lines
         )
+        return buildFileAssessment(path: path, children: children)
+    }
 
-        let finalChildren = children.isEmpty ? [scoreStandaloneFile(lines: lines)] : children
-        return buildFileAssessment(path: path, children: finalChildren)
+    private func buildAssessmentChildren(
+        typeSymbols: [Symbol],
+        functionSymbols: [Symbol],
+        lines: [String]
+    ) async -> [QualityAssessment] {
+        let children = buildTypeAssessments(
+            typeSymbols: typeSymbols,
+            functionSymbols: functionSymbols,
+            lines: lines
+        )
+        return children.isEmpty ? [scoreStandaloneFile(lines: lines)] : children
     }
 
     private func loadSymbols(path: String, content: String) async -> [Symbol] {
