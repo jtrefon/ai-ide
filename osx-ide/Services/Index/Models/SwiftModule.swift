@@ -22,20 +22,24 @@ public final class SwiftModule: RegexLanguageModule, @unchecked Sendable {
         applyLineAndBlockCommentHighlighting(color: NSColor.systemGreen, in: attr, code: code)
         applyDecimalNumberHighlighting(color: NSColor.systemOrange, in: attr, code: code)
 
-        LanguageKeywordHighlighter.highlight(
-            LanguageKeywordRepository.swiftKeywords,
-            color: NSColor.systemBlue,
-            attr: attr,
-            code: code,
-            using: self
-        )
-        LanguageKeywordHighlighter.highlight(
-            LanguageKeywordRepository.swiftTypes,
-            color: NSColor.systemPurple,
-            attr: attr,
-            code: code,
-            using: self
-        )
+        LanguageKeywordHighlighter.highlight(LanguageKeywordHighlighter.HighlightRequest(
+            words: LanguageKeywordRepository.swiftKeywords,
+            context: LanguageKeywordHighlighter.HighlightContext(
+                color: NSColor.systemBlue,
+                attributedString: attr,
+                code: code,
+                helper: self
+            )
+        ))
+        LanguageKeywordHighlighter.highlight(LanguageKeywordHighlighter.HighlightRequest(
+            words: LanguageKeywordRepository.swiftTypes,
+            context: LanguageKeywordHighlighter.HighlightContext(
+                color: NSColor.systemPurple,
+                attributedString: attr,
+                code: code,
+                helper: self
+            )
+        ))
 
         return attr
     }

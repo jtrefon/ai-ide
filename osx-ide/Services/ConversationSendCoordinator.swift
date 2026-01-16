@@ -78,13 +78,13 @@ final class ConversationSendCoordinator {
         availableTools: [AITool]
     ) async throws -> AIServiceResponse {
         var response = try await aiInteractionCoordinator
-            .sendMessageWithRetry(
+            .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: historyCoordinator.messages,
                 explicitContext: explicitContext,
                 tools: availableTools,
                 mode: mode,
                 projectRoot: projectRoot
-            )
+            ))
             .get()
 
         if mode == .agent,
@@ -100,13 +100,13 @@ final class ConversationSendCoordinator {
             )
 
             response = try await aiInteractionCoordinator
-                .sendMessageWithRetry(
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: historyCoordinator.messages + [followupSystem, lastUserMessage],
                     explicitContext: explicitContext,
                     tools: availableTools,
                     mode: mode,
                     projectRoot: projectRoot
-                )
+                ))
                 .get()
         }
 
@@ -176,13 +176,13 @@ final class ConversationSendCoordinator {
             }
 
             currentResponse = try await aiInteractionCoordinator
-                .sendMessageWithRetry(
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: historyCoordinator.messages,
                     explicitContext: explicitContext,
                     tools: availableTools,
                     mode: mode,
                     projectRoot: projectRoot
-                )
+                ))
                 .get()
         }
 
@@ -242,13 +242,13 @@ final class ConversationSendCoordinator {
                 content: "Your <ide_reasoning> block must include ALL four sections: Analyze, Research, Plan, Reflect."
             )
             currentResponse = try await aiInteractionCoordinator
-                .sendMessageWithRetry(
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: historyCoordinator.messages + [correctionSystem],
                     explicitContext: explicitContext,
                     tools: availableTools,
                     mode: mode,
                     projectRoot: projectRoot
-                )
+                ))
                 .get()
         }
 
@@ -260,13 +260,13 @@ final class ConversationSendCoordinator {
                     "If unknown, write 'N/A' and state what information is needed."
             )
             currentResponse = try await aiInteractionCoordinator
-                .sendMessageWithRetry(
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: historyCoordinator.messages + [correctionSystem],
                     explicitContext: explicitContext,
                     tools: availableTools,
                     mode: mode,
                     projectRoot: projectRoot
-                )
+                ))
                 .get()
         }
 

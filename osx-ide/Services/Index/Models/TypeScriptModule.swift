@@ -20,20 +20,24 @@ public final class TypeScriptModule: RegexLanguageModule, @unchecked Sendable {
         applyDoubleAndSingleQuotedStringHighlighting(color: NSColor.systemRed, in: attr, code: code)
         applyLineAndBlockCommentHighlighting(color: NSColor.systemGreen, in: attr, code: code)
         applyDecimalNumberHighlighting(color: NSColor.systemOrange, in: attr, code: code)
-        LanguageKeywordHighlighter.highlight(
-            LanguageKeywordRepository.javascript,
-            color: NSColor.systemBlue,
-            attr: attr,
-            code: code,
-            using: self
-        )
-        LanguageKeywordHighlighter.highlight(
-            LanguageKeywordRepository.typescriptExtras,
-            color: NSColor.systemPurple,
-            attr: attr,
-            code: code,
-            using: self
-        )
+        LanguageKeywordHighlighter.highlight(LanguageKeywordHighlighter.HighlightRequest(
+            words: LanguageKeywordRepository.javascript,
+            context: LanguageKeywordHighlighter.HighlightContext(
+                color: NSColor.systemBlue,
+                attributedString: attr,
+                code: code,
+                helper: self
+            )
+        ))
+        LanguageKeywordHighlighter.highlight(LanguageKeywordHighlighter.HighlightRequest(
+            words: LanguageKeywordRepository.typescriptExtras,
+            context: LanguageKeywordHighlighter.HighlightContext(
+                color: NSColor.systemPurple,
+                attributedString: attr,
+                code: code,
+                helper: self
+            )
+        ))
 
         return attr
     }

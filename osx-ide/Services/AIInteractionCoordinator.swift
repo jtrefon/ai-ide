@@ -2,6 +2,14 @@ import Foundation
 
 @MainActor
 final class AIInteractionCoordinator {
+    struct SendMessageWithRetryRequest {
+        let messages: [ChatMessage]
+        let explicitContext: String?
+        let tools: [AITool]
+        let mode: AIMode
+        let projectRoot: URL
+    }
+
     private var aiService: AIService
     private var codebaseIndex: CodebaseIndexProtocol?
 
@@ -19,30 +27,26 @@ final class AIInteractionCoordinator {
     }
 
     func sendMessageWithRetry(
-        messages: [ChatMessage],
-        explicitContext: String?,
-        tools: [AITool],
-        mode: AIMode,
-        projectRoot: URL
+        _ request: SendMessageWithRetryRequest
     ) async -> Result<AIServiceResponse, AppError> {
         let maxAttempts = 3
         var lastError: AppError?
 
         for attempt in 1...maxAttempts {
             let augmentedContext = await ContextBuilder.buildContext(
-                userInput: messages.last(where: { $0.role == .user })?.content ?? "",
-                explicitContext: explicitContext,
+                userInput: request.messages.last(where: { $0.role == .user })?.content ?? "",
+                explicitContext: request.explicitContext,
                 index: codebaseIndex,
-                projectRoot: projectRoot
+                projectRoot: request.projectRoot
             )
 
-            let result = await aiService.sendMessageResult(
-                messages,
+            let result = await aiService.sendMessageResult(AIServiceHistoryRequest(
+                messages: request.messages,
                 context: augmentedContext,
-                tools: tools,
-                mode: mode,
-                projectRoot: projectRoot
-            )
+                tools: request.tools,
+                mode: request.mode,
+                projectRoot: request.projectRoot
+            ))
 
             switch result {
             case .success:

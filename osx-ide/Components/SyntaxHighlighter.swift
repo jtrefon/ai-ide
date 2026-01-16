@@ -211,7 +211,12 @@ final class SyntaxHighlighter {
         code: String,
         captureGroup: Int? = nil
     ) {
-        let group = captureGroup
-        regexHelper.applyRegex(pattern, color: color, in: attr, code: code, captureGroup: group)
+        let context = RegexLanguageModule.RegexHighlightContext(attributedString: attr, code: code)
+        regexHelper.applyRegex(RegexLanguageModule.RegexHighlightRequest(
+            pattern: pattern,
+            color: color,
+            context: context,
+            captureGroup: captureGroup
+        ))
     }
 }

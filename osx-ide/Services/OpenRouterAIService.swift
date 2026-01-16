@@ -300,11 +300,14 @@ actor OpenRouterAIService: AIService {
         requestId: String
     ) async throws -> Data {
         do {
-            return try await client.chatCompletion(
-                apiKey: apiKey,
+            let requestContext = OpenRouterAPIClient.RequestContext(
                 baseURL: baseURL,
                 appName: "OSX IDE",
-                referer: "",
+                referer: ""
+            )
+            return try await client.chatCompletion(
+                apiKey: apiKey,
+                context: requestContext,
                 body: body
             )
         } catch {
