@@ -73,7 +73,13 @@ public final class JSONModule: RegexLanguageModule,
 
         let callbacks = JSONTokenHighlighter.Callbacks(
             applyRegex: { [weak self] pattern, color, captureGroup in
-                self?.applyRegex(pattern, color: color, in: attr, code: code, captureGroup: captureGroup)
+                let context = RegexLanguageModule.RegexHighlightContext(attributedString: attr, code: code)
+                self?.applyRegex(RegexLanguageModule.RegexHighlightRequest(
+                    pattern: pattern,
+                    color: color,
+                    context: context,
+                    captureGroup: captureGroup
+                ))
             },
             highlightWholeWords: { [weak self] words, color in
                 self?.highlightWholeWords(words, color: color, in: attr, code: code)

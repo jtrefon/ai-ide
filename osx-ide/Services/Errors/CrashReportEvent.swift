@@ -1,3 +1,5 @@
+import Foundation
+
 public struct CrashReportEvent: Codable, Sendable {
     public let timestamp: String
     public let session: String
