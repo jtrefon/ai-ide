@@ -60,39 +60,40 @@ class ChatPromptBuilder {
             return false
         }
 
-        // If the model literally copied placeholder example text, treat as low quality.
-        if reasoning.contains("Analyze:...") ||
-            reasoning.contains("Research:...") ||
-            reasoning.contains("Plan:...") ||
-            reasoning.contains("Reflect:...") {
+        if containsPlaceholderText(reasoning) {
             return true
         }
 
         let sections = extractReasoningSections(reasoning)
-        guard sections.isEmpty == false else { return true }
+        guard !sections.isEmpty else { return true }
 
-        let badTokens = Set(["...", "…", "n/a", "na", "none", "nil"])
-        var concreteCount = 0
-
-        for (_, value) in sections {
-            let normalized = value
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-
-            if normalized.isEmpty { continue }
-            if badTokens.contains(normalized) { continue }
-            if normalized.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\n", with: "") == "..." {
-                continue
-            }
-
-            // Heuristic: require some actual text beyond a couple of characters.
-            if normalized.count >= 6 {
-                concreteCount += 1
-            }
-        }
-
-        // Require at least 2 sections with concrete content.
+        let concreteCount = countConcreteReasoningSections(sections)
         return concreteCount < 2
+    }
+
+    private static func containsPlaceholderText(_ reasoning: String) -> Bool {
+        let placeholders = ["Analyze:...", "Research:...", "Plan:...", "Reflect:..."]
+        return placeholders.contains(where: { reasoning.contains($0) })
+    }
+
+    private static func countConcreteReasoningSections(_ sections: [(key: String, value: String)]) -> Int {
+        let badTokens = Set(["...", "…", "n/a", "na", "none", "nil"])
+        return sections.filter { _, value in
+            isConcreteReasoningValue(value, badTokens: badTokens)
+        }.count
+    }
+
+    private static func isConcreteReasoningValue(_ value: String, badTokens: Set<String>) -> Bool {
+        let normalized = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if normalized.isEmpty { return false }
+        if badTokens.contains(normalized) { return false }
+        if normalized.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\n", with: "") == "..." {
+            return false
+        }
+        return normalized.count >= 6
     }
 
     private static func extractReasoningSections(_ reasoning: String) -> [(key: String, value: String)] {

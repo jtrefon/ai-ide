@@ -186,38 +186,29 @@ class WorkspaceStateManager: ObservableObject {
 
     /// Validate file/folder name for security and correctness
     private func validateFileName(_ name: String) -> Bool {
-        // Check for empty or whitespace-only names
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else {
-            return false
-        }
-
-        // Check for path traversal attempts
-        if trimmedName.contains("..") || trimmedName.contains("/") {
-            return false
-        }
-
-        // Check for invalid characters
-        guard trimmedName.rangeOfCharacter(from: AppConstantsValidation.invalidFileNameChars) == nil else {
-            return false
-        }
-
-        // Check reserved names (Windows-style, but good practice)
-        if AppConstantsValidation.reservedFileNames.contains(trimmedName.uppercased()) {
-            return false
-        }
-
-        // Check name length
-        if trimmedName.count > AppConstantsFileSystem.maxFileNameLength {
-            return false
-        }
-
-        // Check for leading/trailing spaces or dots
-        if trimmedName.hasPrefix(" ") || trimmedName.hasPrefix(".")
-            || trimmedName.hasSuffix(" ") || trimmedName.hasSuffix(".") {
-            return false
-        }
-
+        guard !name.isEmpty && name.count <= 255 else { return false }
+        guard !containsPathTraversalOrSlash(name) else { return false }
+        guard !hasLeadingOrTrailingSpecialChars(name) else { return false }
+        guard !containsInvalidChars(name) else { return false }
+        guard !isReservedName(name) else { return false }
         return true
+    }
+
+    private func containsPathTraversalOrSlash(_ name: String) -> Bool {
+        name.contains("..") || name.contains("/")
+    }
+
+    private func hasLeadingOrTrailingSpecialChars(_ name: String) -> Bool {
+        name.first == "." || name.last == "." || name.first == " " || name.last == " "
+    }
+
+    private func containsInvalidChars(_ name: String) -> Bool {
+        let invalidChars = CharacterSet(charactersIn: ":<>|?*\"\0")
+        return name.rangeOfCharacter(from: invalidChars) != nil
+    }
+
+    private func isReservedName(_ name: String) -> Bool {
+        let reservedNames = ["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"]
+        return reservedNames.contains(name.uppercased())
     }
 }

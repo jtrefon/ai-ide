@@ -52,11 +52,7 @@ class ShellManager: NSObject {
             return
         }
 
-        if !FileManager.default.isExecutableFile(atPath: shellPath) {
-            notifyError("Shell at \(shellPath) is not executable")
-            return
-        }
-
+        guard validateShellPath(shellPath) else { return }
         guard let pty = createPTY() else {
             notifyError("Failed to create PTY")
             return
@@ -74,7 +70,18 @@ class ShellManager: NSObject {
 
         registerRunningProcess(process, pty: pty)
         setupOutputMonitoring()
+        launchProcessAndFinalize(process, pty: pty)
+    }
 
+    private func validateShellPath(_ shellPath: String) -> Bool {
+        guard FileManager.default.isExecutableFile(atPath: shellPath) else {
+            notifyError("Shell at \(shellPath) is not executable")
+            return false
+        }
+        return true
+    }
+
+    private func launchProcessAndFinalize(_ process: Process, pty: PTYHandles) {
         do {
             try process.run()
             finalizeStartAfterRun(slaveHandle: pty.slaveHandle)

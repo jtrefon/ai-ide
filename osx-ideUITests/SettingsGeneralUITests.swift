@@ -51,20 +51,18 @@ final class SettingsGeneralUITests: XCTestCase {
         app.launchEnvironment["XCUI_TESTING"] = "1"
         app.launch()
 
+        let editor = setupAndVerifyEditorUI(app: app)
+        let settingsWindow = openSettingsWindow(app: app)
+        interactWithSettingsControls(app: app, settingsWindow: settingsWindow)
+        verifyEditorStillExists(editor: editor)
+    }
+
+    private func setupAndVerifyEditorUI(app: XCUIApplication) -> XCUIElement {
         let mainWindow = app.windows.firstMatch
         skipIfElementNotDiscoverable(mainWindow, name: "Main window", timeout: 5)
-
         let editor = app.textViews["CodeEditorTextView"]
         skipIfElementNotDiscoverable(editor, name: "Code editor", timeout: 5)
-
-        // Given: Settings window is opened
-        let settingsWindow = openSettingsWindow(app: app)
-
-        // When: Settings controls are interacted with
-        interactWithSettingsControls(app: app, settingsWindow: settingsWindow)
-
-        // Then: Editor should still exist and be focused
-        verifyEditorStillExists(editor: editor)
+        return editor
     }
 
     /// Opens the settings window and returns it

@@ -38,15 +38,15 @@ public actor IndexerActor {
         let resourceId = url.absoluteString
         let fileModTime = fileModificationTime(at: url)
 
-        if let skipDecision = try await shouldSkipIndexing(
-            url: url,
-            resourceId: resourceId,
-            fileModTime: fileModTime
-        ) {
-            return try await handleSkipDecision(skipDecision, url: url, resourceId: resourceId, language: language)
-        }
+        try await processFileIndexing(url: url, resourceId: resourceId, language: language, fileModTime: fileModTime)
+    }
 
-        try await indexFromDisk(url: url, resourceId: resourceId, language: language, timestamp: fileModTime)
+    private func processFileIndexing(url: URL, resourceId: String, language: CodeLanguage, fileModTime: Double?) async throws {
+        if let skipDecision = try await shouldSkipIndexing(url: url, resourceId: resourceId, fileModTime: fileModTime) {
+            try await handleSkipDecision(skipDecision, url: url, resourceId: resourceId, language: language)
+        } else {
+            try await indexFromDisk(url: url, resourceId: resourceId, language: language, timestamp: fileModTime)
+        }
     }
 
     private func handleSkipDecision(
