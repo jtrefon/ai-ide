@@ -19,18 +19,36 @@ public final class PythonModule: RegexLanguageModule, @unchecked Sendable {
 
         applyDoubleAndSingleQuotedStringHighlighting(color: NSColor.systemRed, in: attr, code: code)
         applyDecimalNumberHighlighting(color: NSColor.systemOrange, in: attr, code: code)
-        LanguageKeywordHighlighter.highlight(
-            LanguageKeywordRepository.python,
-            color: NSColor.systemBlue,
-            attr: attr,
-            code: code,
-            using: self
-        )
+        LanguageKeywordHighlighter.highlight(LanguageKeywordHighlighter.HighlightRequest(
+            words: LanguageKeywordRepository.python,
+            context: LanguageKeywordHighlighter.HighlightContext(
+                color: NSColor.systemBlue,
+                attributedString: attr,
+                code: code,
+                helper: self
+            )
+        ))
 
         // Python specific
-        applyRegex("#.*", color: NSColor.systemGreen, in: attr, code: code)
-        applyRegex("\"\"\"[\\s\\S]*?\"\"\"", color: NSColor.systemRed, in: attr, code: code)
-        applyRegex("'''[\\s\\S]*?'''", color: NSColor.systemRed, in: attr, code: code)
+        let regexContext = RegexLanguageModule.RegexHighlightContext(attributedString: attr, code: code)
+        applyRegex(RegexLanguageModule.RegexHighlightRequest(
+            pattern: "#.*",
+            color: NSColor.systemGreen,
+            context: regexContext,
+            captureGroup: nil
+        ))
+        applyRegex(RegexLanguageModule.RegexHighlightRequest(
+            pattern: "\"\"\"[\\s\\S]*?\"\"\"",
+            color: NSColor.systemRed,
+            context: regexContext,
+            captureGroup: nil
+        ))
+        applyRegex(RegexLanguageModule.RegexHighlightRequest(
+            pattern: "'''[\\s\\S]*?'''",
+            color: NSColor.systemRed,
+            context: regexContext,
+            captureGroup: nil
+        ))
 
         return attr
     }

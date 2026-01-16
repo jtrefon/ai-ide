@@ -54,6 +54,14 @@ final class OpenRouterSettingsViewModel: ObservableObject {
     private let referer = ""
     private var hasLoadedModels = false
 
+    private func requestContext() -> OpenRouterAPIClient.RequestContext {
+        OpenRouterAPIClient.RequestContext(
+            baseURL: baseURL,
+            appName: appName,
+            referer: referer
+        )
+    }
+
     init(
         store: OpenRouterSettingsStore = OpenRouterSettingsStore(),
         client: OpenRouterAPIClient = OpenRouterAPIClient()
@@ -75,9 +83,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
         do {
             let models = try await client.fetchModels(
                 apiKey: apiKey.isEmpty ? nil : apiKey,
-                baseURL: baseURL,
-                appName: appName,
-                referer: referer
+                context: requestContext()
             )
             let sorted = models.sorted {
                 $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
@@ -100,9 +106,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
         do {
             try await client.validateKey(
                 apiKey: apiKey,
-                baseURL: baseURL,
-                appName: appName,
-                referer: referer
+                context: requestContext()
             )
             keyStatus = Status(kind: .success, message: "Key is valid.")
         } catch {
@@ -142,9 +146,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             let latency = try await client.testModel(
                 apiKey: apiKey,
                 model: activeModel,
-                baseURL: baseURL,
-                appName: appName,
-                referer: referer
+                context: requestContext()
             )
             let ms = Int(latency * 1000)
             testStatus = Status(kind: .success, message: "Response in \(ms) ms.")
