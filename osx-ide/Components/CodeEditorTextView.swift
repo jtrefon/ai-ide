@@ -81,7 +81,7 @@ final class CodeEditorTextView: NSTextView {
         addCursorVertically(direction: .down)
     }
 
-    private func addCursorVertically(direction: MultiCursorUtilities.VerticalDirection) {
+    private func addCursorVertically(direction: MultiCursorVerticalDirection) {
         let existingRanges = selectedRanges
             .compactMap { ($0 as? NSValue)?.rangeValue }
             .sorted(by: { $0.location < $1.location })

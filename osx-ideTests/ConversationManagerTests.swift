@@ -24,16 +24,26 @@ final class ConversationManagerTests: XCTestCase {
         mockErrorManager = MockErrorManager()
         let eventBus = EventBus()
         let fileSystemService = FileSystemService()
-        manager = ConversationManager(
-            aiService: mockAIService,
+        let workspaceService = WorkspaceService(
             errorManager: mockErrorManager,
-            workspaceService: WorkspaceService(
-                errorManager: mockErrorManager,
-                eventBus: eventBus,
-                fileSystemService: fileSystemService
-            ),
             eventBus: eventBus,
-            projectRoot: URL(fileURLWithPath: "/tmp")
+            fileSystemService: fileSystemService
+        )
+        manager = ConversationManager(
+            dependencies: ConversationManager.Dependencies(
+                services: ConversationManager.ServiceDependencies(
+                    aiService: mockAIService,
+                    errorManager: mockErrorManager,
+                    fileSystemService: fileSystemService,
+                    fileEditorService: nil
+                ),
+                environment: ConversationManager.EnvironmentDependencies(
+                    workspaceService: workspaceService,
+                    eventBus: eventBus,
+                    projectRoot: URL(fileURLWithPath: "/tmp"),
+                    codebaseIndex: nil
+                )
+            )
         )
     }
 
@@ -114,25 +124,16 @@ final class ConversationManagerTests: XCTestCase {
 
 final class MockAIService: AIService, @unchecked Sendable {
     func sendMessage(
-        _ message: String,
-        context: String?,
-        tools: [AITool]?,
-        mode: AIMode?
+        _ request: AIServiceMessageWithProjectRootRequest
     ) async throws -> AIServiceResponse {
+        _ = request
         return AIServiceResponse(content: "Mock response", toolCalls: nil)
     }
 
     func sendMessage(
-        _ message: String,
-        context: String?,
-        tools: [AITool]?,
-        mode: AIMode?,
-        projectRoot: URL?
+        _ request: AIServiceHistoryRequest
     ) async throws -> AIServiceResponse {
-        return AIServiceResponse(content: "Mock response", toolCalls: nil)
-    }
-
-    func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+        _ = request
         return AIServiceResponse(content: "Mock response", toolCalls: nil)
     }
 

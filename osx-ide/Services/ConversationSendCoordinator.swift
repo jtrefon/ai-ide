@@ -2,6 +2,16 @@ import Foundation
 
 @MainActor
 final class ConversationSendCoordinator {
+    struct SendRequest {
+        let userInput: String
+        let explicitContext: String?
+        let mode: AIMode
+        let projectRoot: URL
+        let conversationId: String
+        let availableTools: [AITool]
+        let cancelledToolCallIds: @Sendable () -> Set<String>
+    }
+
     private let historyCoordinator: ChatHistoryCoordinator
     private let aiInteractionCoordinator: AIInteractionCoordinator
     private let toolExecutionCoordinator: ToolExecutionCoordinator
@@ -17,42 +27,36 @@ final class ConversationSendCoordinator {
     }
 
     func send(
-        userInput: String,
-        explicitContext: String?,
-        mode: AIMode,
-        projectRoot: URL,
-        conversationId: String,
-        availableTools: [AITool],
-        cancelledToolCallIds: @escaping () -> Set<String>
+        _ request: SendRequest
     ) async throws {
-        try await foldConversationIfNeeded(projectRoot: projectRoot)
+        try await foldConversationIfNeeded(projectRoot: request.projectRoot)
 
         var response = try await sendInitialResponse(
-            explicitContext: explicitContext,
-            mode: mode,
-            projectRoot: projectRoot,
-            availableTools: availableTools
+            explicitContext: request.explicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            availableTools: request.availableTools
         )
 
         response = try await handleToolLoopIfNeeded(
             response: response,
-            explicitContext: explicitContext,
-            mode: mode,
-            projectRoot: projectRoot,
-            conversationId: conversationId,
-            availableTools: availableTools,
-            cancelledToolCallIds: cancelledToolCallIds
+            explicitContext: request.explicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            conversationId: request.conversationId,
+            availableTools: request.availableTools,
+            cancelledToolCallIds: request.cancelledToolCallIds
         )
 
         response = try await applyReasoningCorrectionsIfNeeded(
             response: response,
-            explicitContext: explicitContext,
-            mode: mode,
-            projectRoot: projectRoot,
-            availableTools: availableTools
+            explicitContext: request.explicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            availableTools: request.availableTools
         )
 
-        appendFinalMessageAndLog(response: response, conversationId: conversationId)
+        appendFinalMessageAndLog(response: response, conversationId: request.conversationId)
     }
 
     private func foldConversationIfNeeded(projectRoot: URL) async throws {
@@ -202,10 +206,11 @@ final class ConversationSendCoordinator {
             await AppLogger.shared.info(
                 category: .conversation,
                 message: "chat.assistant_tool_calls",
-                metadata: [
+                context: AppLogger.LogCallContext(metadata: [
                     "conversationId": conversationId,
                     "toolCalls": toolCallsCount
                 ])
+            )
             await ConversationLogStore.shared.append(
                 conversationId: conversationId,
                 type: "chat.assistant_tool_calls",
@@ -291,11 +296,12 @@ final class ConversationSendCoordinator {
             await AppLogger.shared.info(
                 category: .conversation,
                 message: "chat.assistant_message",
-                metadata: [
+                context: AppLogger.LogCallContext(metadata: [
                     "conversationId": conversationId,
                     "contentLength": contentLength,
                     "hasReasoning": hasReasoning
                 ])
+            )
             await ConversationLogStore.shared.append(
                 conversationId: conversationId,
                 type: "chat.assistant_message",

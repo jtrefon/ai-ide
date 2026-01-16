@@ -1,39 +1,69 @@
 import Foundation
 
 extension AIToolExecutor {
+    struct ToolExecutionMessageContext {
+        let toolName: String
+        let status: ToolExecutionStatus
+        let targetFile: String?
+        let toolCallId: String
+    }
+
+    struct ToolProgressSnapshotContext {
+        let toolName: String
+        let toolCallId: String
+        let targetFile: String?
+    }
+
+    struct ExecuteToolAndCaptureRequest: @unchecked Sendable {
+        let tool: AITool
+        let toolCall: AIToolCall
+        let mergedArguments: [String: Any]
+        let conversationId: String?
+        let targetFile: String?
+        let onProgress: @MainActor @Sendable (ChatMessage) -> Void
+    }
+
+    struct ExecuteToolCallRequest {
+        let toolCall: AIToolCall
+        let availableTools: [AITool]
+        let conversationId: String?
+        let onProgress: @MainActor @Sendable (ChatMessage) -> Void
+        let targetFile: String?
+    }
+
     nonisolated static func makeToolExecutionMessage(
         content: String,
-        toolName: String,
-        status: ToolExecutionStatus,
-        targetFile: String?,
-        toolCallId: String
+        context: ToolExecutionMessageContext
     ) -> ChatMessage {
         ChatMessage(
             role: .tool,
             content: content,
             tool: ChatMessageToolContext(
-                toolName: toolName,
-                toolStatus: status,
-                target: ToolInvocationTarget(targetFile: targetFile, toolCallId: toolCallId)
+                toolName: context.toolName,
+                toolStatus: context.status,
+                target: ToolInvocationTarget(
+                    targetFile: context.targetFile,
+                    toolCallId: context.toolCallId
+                )
             )
         )
     }
 
     nonisolated static func sendToolProgressSnapshot(
         snapshot: String,
-        toolName: String,
-        toolCallId: String,
-        targetFile: String?,
+        context: ToolProgressSnapshotContext,
         onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void
     ) {
         Task { @MainActor in
             onProgress(
                 Self.makeToolExecutionMessage(
                     content: snapshot,
-                    toolName: toolName,
-                    status: .executing,
-                    targetFile: targetFile,
-                    toolCallId: toolCallId
+                    context: ToolExecutionMessageContext(
+                        toolName: context.toolName,
+                        status: .executing,
+                        targetFile: context.targetFile,
+                        toolCallId: context.toolCallId
+                    )
                 )
             )
         }
@@ -59,24 +89,18 @@ extension AIToolExecutor {
     }
 
     func executeToolAndCaptureResult(
-        tool: AITool,
-        toolCall: AIToolCall,
-        mergedArguments: [String: Any],
-        conversationId: String?,
-        targetFile: String?,
-        onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void
+        _ request: ExecuteToolAndCaptureRequest
     ) async throws -> String {
-        if let streamingTool = tool as? any AIToolProgressReporting {
-            let toolCallId = toolCall.id
+        if let streamingTool = request.tool as? any AIToolProgressReporting {
+            let toolCallId = request.toolCall.id
             let accumulator = StringAccumulator()
-            return try await streamingTool.execute(arguments: ToolArguments(mergedArguments)) { chunk in
+            return try await streamingTool.execute(arguments: ToolArguments(request.mergedArguments)) { chunk in
                 let (snapshot, totalLength) = accumulator.appendAndSnapshot(chunk)
 
                 Task {
                     await self.logToolExecuteProgress(
-                        conversationId: conversationId,
-                        toolName: toolCall.name,
-                        toolCallId: toolCallId,
+                        conversationId: request.conversationId,
+                        toolCall: request.toolCall,
                         chunk: chunk,
                         totalLength: totalLength
                     )
@@ -84,15 +108,17 @@ extension AIToolExecutor {
 
                 Self.sendToolProgressSnapshot(
                     snapshot: snapshot,
-                    toolName: toolCall.name,
-                    toolCallId: toolCallId,
-                    targetFile: targetFile,
-                    onProgress: onProgress
+                    context: ToolProgressSnapshotContext(
+                        toolName: request.toolCall.name,
+                        toolCallId: toolCallId,
+                        targetFile: request.targetFile
+                    ),
+                    onProgress: request.onProgress
                 )
             }
         }
 
-        return try await tool.execute(arguments: ToolArguments(mergedArguments))
+        return try await request.tool.execute(arguments: ToolArguments(request.mergedArguments))
     }
 
     func makeToolCallFinalMessage(
@@ -104,72 +130,107 @@ extension AIToolExecutor {
         case .success(let content):
             return Self.makeToolExecutionMessage(
                 content: content,
-                toolName: toolCall.name,
-                status: .completed,
-                targetFile: targetFile,
-                toolCallId: toolCall.id
+                context: ToolExecutionMessageContext(
+                    toolName: toolCall.name,
+                    status: .completed,
+                    targetFile: targetFile,
+                    toolCallId: toolCall.id
+                )
             )
         case .failure(let error):
             let errorContent = Self.formatError(error, toolName: toolCall.name)
             return Self.makeToolExecutionMessage(
                 content: errorContent,
-                toolName: toolCall.name,
-                status: .failed,
-                targetFile: targetFile,
-                toolCallId: toolCall.id
+                context: ToolExecutionMessageContext(
+                    toolName: toolCall.name,
+                    status: .failed,
+                    targetFile: targetFile,
+                    toolCallId: toolCall.id
+                )
             )
         }
     }
 
     func executeToolCall(
-        toolCall: AIToolCall,
-        availableTools: [AITool],
-        conversationId: String?,
-        onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void,
-        targetFile: String?
+        _ request: ExecuteToolCallRequest
     ) async -> ChatMessage {
-        await logToolExecuteStart(conversationId: conversationId, toolCall: toolCall, targetFile: targetFile)
+        await logToolExecuteStart(
+            conversationId: request.conversationId,
+            toolCall: request.toolCall,
+            targetFile: request.targetFile
+        )
 
-        let resultMessage: ChatMessage
-        if let tool = availableTools.first(where: { $0.name == toolCall.name }) {
-            let result: Result<String, Error>
-            do {
-                let mergedArguments = await buildMergedArguments(toolCall: toolCall, conversationId: conversationId)
-                let content = try await executeToolAndCaptureResult(
-                    tool: tool,
-                    toolCall: toolCall,
-                    mergedArguments: mergedArguments,
-                    conversationId: conversationId,
-                    targetFile: targetFile,
-                    onProgress: onProgress
-                )
-                await logToolExecuteSuccess(
-                    conversationId: conversationId,
-                    toolCall: toolCall,
-                    resultLength: content.count
-                )
-                result = .success(content)
-            } catch {
-                await logToolExecuteError(conversationId: conversationId, toolCall: toolCall, error: error)
-                result = .failure(error)
-            }
-
-            resultMessage = makeToolCallFinalMessage(result: result, toolCall: toolCall, targetFile: targetFile)
-        } else {
-            await logToolNotFound(conversationId: conversationId, toolCall: toolCall)
-            resultMessage = Self.makeToolExecutionMessage(
-                content: "Tool not found",
-                toolName: toolCall.name,
-                status: .failed,
-                targetFile: targetFile,
-                toolCallId: toolCall.id
-            )
-        }
+        let resultMessage = await resolveToolAndExecute(request)
 
         Task { @MainActor in
-            onProgress(resultMessage)
+            request.onProgress(resultMessage)
         }
 
         return resultMessage
+    }
+
+    private func resolveToolAndExecute(
+        _ request: ExecuteToolCallRequest
+    ) async -> ChatMessage {
+        guard let tool = request.availableTools.first(where: { $0.name == request.toolCall.name }) else {
+            await logToolNotFound(conversationId: request.conversationId, toolCall: request.toolCall)
+            return makeToolNotFoundMessage(request)
+        }
+
+        let result = await executeKnownTool(tool, request: request)
+        return makeToolCallFinalMessage(
+            result: result,
+            toolCall: request.toolCall,
+            targetFile: request.targetFile
+        )
+    }
+
+    private func executeKnownTool(
+        _ tool: AITool,
+        request: ExecuteToolCallRequest
+    ) async -> Result<String, Error> {
+        do {
+            let mergedArguments = await buildMergedArguments(
+                toolCall: request.toolCall,
+                conversationId: request.conversationId
+            )
+            let content = try await executeToolAndCaptureResult(
+                ExecuteToolAndCaptureRequest(
+                    tool: tool,
+                    toolCall: request.toolCall,
+                    mergedArguments: mergedArguments,
+                    conversationId: request.conversationId,
+                    targetFile: request.targetFile,
+                    onProgress: request.onProgress
+                )
+            )
+            await logToolExecuteSuccess(
+                conversationId: request.conversationId,
+                toolCall: request.toolCall,
+                resultLength: content.count
+            )
+            return .success(content)
+        } catch {
+            await logToolExecuteError(
+                conversationId: request.conversationId,
+                toolCall: request.toolCall,
+                error: error
+            )
+            return .failure(error)
+        }
+    }
+
+    private func makeToolNotFoundMessage(
+        _ request: ExecuteToolCallRequest
+    ) -> ChatMessage {
+        Self.makeToolExecutionMessage(
+            content: "Tool not found",
+            context: ToolExecutionMessageContext(
+                toolName: request.toolCall.name,
+                status: .failed,
+                targetFile: request.targetFile,
+                toolCallId: request.toolCall.id
+            )
+        )
     }
 }

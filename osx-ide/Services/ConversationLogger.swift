@@ -14,13 +14,13 @@ struct ConversationLogger {
     // MARK: - Public Methods
 
     /// Logs a user message
-    func logUserMessage(
-        text: String,
-        mode: String,
-        projectRootPath: String,
-        conversationId: String,
-        hasSelectionContext: Bool
-    ) {
+    func logUserMessage(_ context: ConversationUserMessageLogContext) {
+        let conversationId = context.identity.conversationId
+        let projectRootPath = context.identity.projectRootPath
+        let mode = context.details.mode
+        let text = context.details.text
+        let hasSelectionContext = context.details.hasSelectionContext
+        
         Task.detached(priority: .utility) {
             await AIToolTraceLogger.shared.log(
                 type: "chat.user_message",
@@ -33,14 +33,15 @@ struct ConversationLogger {
             )
 
             await AppLogger.shared.info(
-                category: .conversation, message: "chat.user_message",
-                metadata: [
+                category: .conversation,
+                message: "chat.user_message",
+                context: AppLogger.LogCallContext(metadata: [
                     "conversationId": conversationId,
                     "mode": mode,
                     "projectRoot": projectRootPath,
                     "inputLength": text.count,
                     "hasSelectionContext": hasSelectionContext
-                ]
+                ])
             )
             await ConversationLogStore.shared.append(
                 conversationId: conversationId,
@@ -55,12 +56,14 @@ struct ConversationLogger {
 
     /// Logs an AI request start
     func logAIRequestStart(mode: String, historyCount: Int) {
+        let modeValue = mode
+        let historyValue = historyCount
         Task.detached(priority: .utility) {
             await AIToolTraceLogger.shared.log(
                 type: "chat.ai_request_start",
                 data: [
-                    "mode": mode,
-                    "historyCount": historyCount
+                    "mode": modeValue,
+                    "historyCount": historyValue
                 ]
             )
         }
@@ -71,19 +74,22 @@ struct ConversationLogger {
         conversationId: String,
         errorDescription: String
     ) {
+        let convId = conversationId
+        let errorDesc = errorDescription
         Task.detached(priority: .utility) {
             await AppLogger.shared.error(
-                category: .error, message: "chat.error",
-                metadata: [
-                    "conversationId": conversationId,
-                    "error": errorDescription
-                ]
+                category: .error,
+                message: "chat.error",
+                context: AppLogger.LogCallContext(metadata: [
+                    "conversationId": convId,
+                    "error": errorDesc
+                ])
             )
             await ConversationLogStore.shared.append(
-                conversationId: conversationId,
+                conversationId: convId,
                 type: "chat.error",
                 data: [
-                    "error": errorDescription
+                    "error": errorDesc
                 ]
             )
         }
@@ -96,67 +102,78 @@ struct ConversationLogger {
         projectRootPath: String,
         previousConversationId: String? = nil
     ) {
+        let convId = conversationId
+        let modeValue = mode
+        let projectPath = projectRootPath
+        let prevId = previousConversationId
+        
         Task.detached(priority: .utility) {
             var metadata: [String: Any] = [
-                "conversationId": conversationId,
-                "mode": mode,
-                "projectRoot": projectRootPath
+                "conversationId": convId,
+                "mode": modeValue,
+                "projectRoot": projectPath
             ]
-            if let previousId = previousConversationId {
+            if let previousId = prevId {
                 metadata["previousConversationId"] = previousId
             }
 
             await AppLogger.shared.info(
-                category: .conversation, message: "conversation.start",
-                metadata: metadata
+                category: .conversation,
+                message: "conversation.start",
+                context: AppLogger.LogCallContext(metadata: metadata)
             )
             await ConversationLogStore.shared.append(
-                conversationId: conversationId,
+                conversationId: convId,
                 type: "conversation.start",
                 data: [
-                    "mode": mode,
-                    "projectRoot": projectRootPath,
-                    "previousConversationId": previousConversationId as Any
+                    "mode": modeValue,
+                    "projectRoot": projectPath,
+                    "previousConversationId": prevId as Any
                 ]
             )
             await ConversationIndexStore.shared.appendStart(
-                conversationId: conversationId,
-                mode: mode,
-                projectRootPath: projectRootPath
+                conversationId: convId,
+                mode: modeValue,
+                projectRootPath: projectPath
             )
         }
     }
 
     /// Initializes logging stores for a project root
     func initializeProjectRoot(_ root: URL) {
+        let projectRoot = root
         Task.detached(priority: .utility) {
-            await AppLogger.shared.setProjectRoot(root)
-            await CrashReporter.shared.setProjectRoot(root)
-            await ConversationLogStore.shared.setProjectRoot(root)
-            await ExecutionLogStore.shared.setProjectRoot(root)
-            await ConversationIndexStore.shared.setProjectRoot(root)
-            await ConversationPlanStore.shared.setProjectRoot(root)
-            await PatchSetStore.shared.setProjectRoot(root)
-            await CheckpointManager.shared.setProjectRoot(root)
+            await AppLogger.shared.setProjectRoot(projectRoot)
+            await CrashReporter.shared.setProjectRoot(projectRoot)
+            await ConversationLogStore.shared.setProjectRoot(projectRoot)
+            await ExecutionLogStore.shared.setProjectRoot(projectRoot)
+            await ConversationIndexStore.shared.setProjectRoot(projectRoot)
+            await ConversationPlanStore.shared.setProjectRoot(projectRoot)
+            await PatchSetStore.shared.setProjectRoot(projectRoot)
+            await CheckpointManager.shared.setProjectRoot(projectRoot)
 
             await AppLogger.shared.info(
-                category: .app, message: "logging.project_root_set",
-                metadata: [
-                    "projectRoot": root.path
-                ]
+                category: .app,
+                message: "logging.project_root_set",
+                context: AppLogger.LogCallContext(metadata: [
+                    "projectRoot": projectRoot.path
+                ])
             )
         }
     }
 
     /// Logs trace start
     func logTraceStart(mode: String, projectRootPath: String, logPath: String) {
+        let modeValue = mode
+        let projectPath = projectRootPath
+        let logFilePath = logPath
         Task.detached(priority: .utility) {
             await AIToolTraceLogger.shared.log(
                 type: "trace.start",
                 data: [
-                    "logFile": logPath,
-                    "mode": mode,
-                    "projectRoot": projectRootPath
+                    "logFile": logFilePath,
+                    "mode": modeValue,
+                    "projectRoot": projectPath
                 ]
             )
         }

@@ -11,62 +11,75 @@ extension CodebaseIndex {
         aiEnrichmentTask = Task { @MainActor in
             let scoringEngine = QualityScoringEngine(projectRoot: projectRoot, scorers: [SwiftHeuristicScorer()])
             let start = Date()
-            await IndexLogger.shared.log("AI Enrichment started")
-            await eventBus.publish(AIEnrichmentStartedEvent())
+
+            await announceEnrichmentStart()
 
             let files = aiEnrichmentFiles()
             let total = files.count
             await IndexLogger.shared.log("Found \(total) files for AI enrichment")
 
-            var processed = 0
-            for file in files {
-                if Task.isCancelled { break }
-                if !isEnabled {
-                    await IndexLogger.shared.log("AI Enrichment aborted: Indexing disabled during process")
-                    break
-                }
-
-                await IndexLogger.shared.log("Enriching file \(processed + 1)/\(total): \(file.lastPathComponent)")
-                await eventBus.publish(
-                    AIEnrichmentProgressEvent(
-                        processedCount: processed,
-                        totalCount: total,
-                        currentFile: file
-                    )
-                )
-
-                if await shouldSkipAIEnrichment(for: file) {
-                    await IndexLogger.shared.log("Skipping \(file.lastPathComponent) (already enriched)")
-                    processed += 1
-                    await eventBus.publish(
-                        AIEnrichmentProgressEvent(
-                            processedCount: processed,
-                            totalCount: total,
-                            currentFile: file
-                        )
-                    )
-                    continue
-                }
-
-                await enrichFileForAI(file, scoringEngine: scoringEngine)
-
-                processed += 1
-                await eventBus.publish(
-                    AIEnrichmentProgressEvent(
-                        processedCount: processed,
-                        totalCount: total,
-                        currentFile: file
-                    )
-                )
-            }
+            let processed = await processEnrichmentFiles(files, total: total, scoringEngine: scoringEngine)
 
             if Task.isCancelled { return }
-
-            let duration = Date().timeIntervalSince(start)
-            let formattedDuration = String(format: "%.2f", duration)
-            await IndexLogger.shared.log("AI Enrichment completed in \(formattedDuration)s")
-            await eventBus.publish(AIEnrichmentCompletedEvent(processedCount: processed, duration: duration))
+            await finishEnrichment(start: start, processed: processed)
         }
+    }
+
+    private func announceEnrichmentStart() async {
+        await IndexLogger.shared.log("AI Enrichment started")
+        await eventBus.publish(AIEnrichmentStartedEvent())
+    }
+
+    private func processEnrichmentFiles(
+        _ files: [URL],
+        total: Int,
+        scoringEngine: QualityScoringEngine
+    ) async -> Int {
+        var processed = 0
+        for file in files {
+            if Task.isCancelled { break }
+            if !isEnabled {
+                await IndexLogger.shared.log("AI Enrichment aborted: Indexing disabled during process")
+                break
+            }
+
+            await logEnrichmentProgress(processed: processed, total: total, file: file)
+
+            if await shouldSkipAIEnrichment(for: file) {
+                await IndexLogger.shared.log("Skipping \(file.lastPathComponent) (already enriched)")
+                processed += 1
+                await publishEnrichmentProgress(processed: processed, total: total, file: file)
+                continue
+            }
+
+            await enrichFileForAI(file, scoringEngine: scoringEngine)
+
+            processed += 1
+            await publishEnrichmentProgress(processed: processed, total: total, file: file)
+        }
+        return processed
+    }
+
+    private func logEnrichmentProgress(processed: Int, total: Int, file: URL) async {
+        await IndexLogger.shared.log("Enriching file \(processed + 1)/\(total): \(file.lastPathComponent)")
+        await publishEnrichmentProgress(processed: processed, total: total, file: file)
+    }
+
+    private func publishEnrichmentProgress(processed: Int, total: Int, file: URL) async {
+        await eventBus.publish(
+            AIEnrichmentProgressEvent(
+                processedCount: processed,
+                totalCount: total,
+                currentFile: file
+            )
+        )
+    }
+
+    private func finishEnrichment(start: Date, processed: Int) async {
+        let duration = Date().timeIntervalSince(start)
+        let formattedDuration = String(format: "%.2f", duration)
+        await IndexLogger.shared.log("AI Enrichment completed in \(formattedDuration)s")
+        await eventBus.publish(AIEnrichmentCompletedEvent(processedCount: processed, duration: duration))
     }
 
     private func aiEnrichmentFiles() -> [URL] {
@@ -100,13 +113,13 @@ extension CodebaseIndex {
             await persistHeuristicQuality(heuristicScore, assessment: assessment, file: file, relPath: relPath)
 
             let response = try await withTimeout(seconds: 45) {
-                try await self.aiService.sendMessage(
-                    Self.makeEnrichmentPrompt(path: file.path, content: content),
+                try await self.aiService.sendMessage(AIServiceMessageWithProjectRootRequest(
+                    message: Self.makeEnrichmentPrompt(path: file.path, content: content),
                     context: nil,
                     tools: nil,
                     mode: nil,
                     projectRoot: self.projectRoot
-                )
+                ))
             }
 
             let result = Self.parseEnrichmentResponse(from: response.content)

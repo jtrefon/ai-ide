@@ -1,28 +1,8 @@
 import Foundation
 
 public protocol AIService: Sendable {
-    func sendMessage(
-        _ message: String,
-        context: String?,
-        tools: [AITool]?,
-        mode: AIMode?
-    ) async throws -> AIServiceResponse
-
-    func sendMessage(
-        _ message: String,
-        context: String?,
-        tools: [AITool]?,
-        mode: AIMode?,
-        projectRoot: URL?
-    ) async throws -> AIServiceResponse
-
-    func sendMessage(
-        _ messages: [ChatMessage],
-        context: String?,
-        tools: [AITool]?,
-        mode: AIMode?,
-        projectRoot: URL?
-    ) async throws -> AIServiceResponse
+    func sendMessage(_ request: AIServiceMessageWithProjectRootRequest) async throws -> AIServiceResponse
+    func sendMessage(_ request: AIServiceHistoryRequest) async throws -> AIServiceResponse
 
     func explainCode(_ code: String) async throws -> String
     func refactorCode(_ code: String, instructions: String) async throws -> String

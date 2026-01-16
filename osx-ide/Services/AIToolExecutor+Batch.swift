@@ -108,10 +108,12 @@ extension AIToolExecutor {
     ) -> ChatMessage {
         Self.makeToolExecutionMessage(
             content: "Error: \(error.localizedDescription)",
-            toolName: toolCall.name,
-            status: .failed,
-            targetFile: targetFile,
-            toolCallId: toolCall.id
+            context: ToolExecutionMessageContext(
+                toolName: toolCall.name,
+                status: .failed,
+                targetFile: targetFile,
+                toolCallId: toolCall.id
+            )
         )
     }
 
@@ -121,10 +123,12 @@ extension AIToolExecutor {
     ) -> ChatMessage {
         Self.makeToolExecutionMessage(
             content: "Tool executor unavailable",
-            toolName: toolCall.name,
-            status: .failed,
-            targetFile: targetFile,
-            toolCallId: toolCall.id
+            context: ToolExecutionMessageContext(
+                toolName: toolCall.name,
+                status: .failed,
+                targetFile: targetFile,
+                toolCallId: toolCall.id
+            )
         )
     }
 
@@ -135,10 +139,12 @@ extension AIToolExecutor {
     ) {
         let executingMsg = Self.makeToolExecutionMessage(
             content: "Executing \(toolCall.name)...",
-            toolName: toolCall.name,
-            status: .executing,
-            targetFile: targetFile,
-            toolCallId: toolCall.id
+            context: ToolExecutionMessageContext(
+                toolName: toolCall.name,
+                status: .executing,
+                targetFile: targetFile,
+                toolCallId: toolCall.id
+            )
         )
         onProgress(executingMsg)
     }
@@ -154,11 +160,13 @@ extension AIToolExecutor {
                 }
 
                 return await self.executeToolCall(
-                    toolCall: request.toolCall,
-                    availableTools: request.availableTools,
-                    conversationId: request.conversationId,
-                    onProgress: request.onProgress,
-                    targetFile: request.targetFile
+                    ExecuteToolCallRequest(
+                        toolCall: request.toolCall,
+                        availableTools: request.availableTools,
+                        conversationId: request.conversationId,
+                        onProgress: request.onProgress,
+                        targetFile: request.targetFile
+                    )
                 )
             }
         } catch {
