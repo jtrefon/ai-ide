@@ -29,7 +29,7 @@ public final class WorkspaceSearchService {
         if needle.isEmpty { return [] }
 
         if let index = codebaseIndexProvider(),
-           settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true),
+           settingsStore.bool(forKey: AppConstantsStorage.codebaseIndexEnabledKey, default: true),
            let matches = try? await index.searchIndexedText(pattern: needle, limit: limit) {
             return matches.compactMap(Self.parseIndexedMatchLine)
         }

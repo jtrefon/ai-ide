@@ -6,7 +6,7 @@ struct WorkspaceFallbackSearcher {
 
     init(
         fileManager: FileManager = .default,
-        allowedExtensions: Set<String> = Set(AppConstants.Indexing.allowedExtensions)
+        allowedExtensions: Set<String> = Set(AppConstantsIndexing.allowedExtensions)
     ) {
         self.fileManager = fileManager
         self.allowedExtensions = allowedExtensions

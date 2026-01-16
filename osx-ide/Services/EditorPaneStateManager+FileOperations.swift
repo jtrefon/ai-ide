@@ -116,7 +116,7 @@ extension EditorPaneStateManager {
             return false
         }
 
-        if path.count > AppConstants.FileSystem.maxPathLength {
+        if path.count > AppConstantsFileSystem.maxPathLength {
             return false
         }
 

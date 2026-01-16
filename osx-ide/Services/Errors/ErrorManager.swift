@@ -17,7 +17,7 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
 
     private var pendingAutoDismissTask: Task<Void, Never>?
 
-    private let maxHistoryCount = AppConstants.FileSystem.maxHistoryCount
+    private let maxHistoryCount = AppConstantsFileSystem.maxHistoryCount
 
     /// Handle an error with appropriate UI feedback
     func handle(_ error: AppError) {
@@ -44,7 +44,7 @@ class ErrorManager: ObservableObject, ErrorManagerProtocol {
         if error.severity == .info || error.severity == .warning {
             let targetSeverity = error.severity
             pendingAutoDismissTask = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(AppConstants.Time.errorAutoDismissDelay * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(AppConstantsTime.errorAutoDismissDelay * 1_000_000_000))
                 guard !Task.isCancelled else { return }
                 await MainActor.run { [weak self] in
                     if self?.currentError?.severity == targetSeverity {

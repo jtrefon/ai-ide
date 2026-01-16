@@ -118,7 +118,7 @@ actor OpenRouterAIService: AIService {
         return sanitizer.sanitize(messages)
     }
 
-    private func performChat(
+    internal func performChat(
         prompt: String,
         context: String?,
         tools: [AITool]?,
@@ -372,32 +372,6 @@ actor OpenRouterAIService: AIService {
         let head = text.prefix(limit)
         return String(head) + "\n\n[TRUNCATED]"
     }
-}
-
-extension OpenRouterAIService {
-    func explainCode(_ code: String) async throws -> String {
-        let prompt = "Explain the following code in clear, concise terms:\n\n\(code)"
-        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
-        return response.content ?? ""
-    }
-
-    func refactorCode(_ code: String, instructions: String) async throws -> String {
-        let prompt = "Refactor this code using the following instructions:\n\(instructions)\n\nCode:\n\(code)"
-        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
-        return response.content ?? ""
-    }
-
-    func generateCode(_ prompt: String) async throws -> String {
-        let message = "Generate code for the following request:\n\(prompt)"
-        let response = try await performChat(prompt: message, context: nil, tools: nil, mode: nil, projectRoot: nil)
-        return response.content ?? ""
-    }
-
-    func fixCode(_ code: String, error: String) async throws -> String {
-        let prompt = "Fix this code. Error message:\n\(error)\n\nCode:\n\(code)"
-        let response = try await performChat(prompt: prompt, context: nil, tools: nil, mode: nil, projectRoot: nil)
-        return response.content ?? ""
-    }
 
     private struct BuildSystemContentInput {
         let systemPrompt: String
@@ -483,118 +457,4 @@ extension OpenRouterAIService {
         </ide_reasoning>
         """
     }
-}
-
-private struct OpenRouterChatRequest: Encodable {
-    let model: String
-    let messages: [OpenRouterChatMessage]
-    let maxTokens: Int
-    let temperature: Double
-    let tools: [[String: Any]]?
-    let toolChoice: String?
-
-    enum CodingKeys: String, CodingKey {
-        case model
-        case messages
-        case maxTokens = "max_tokens"
-        case temperature
-        case tools
-        case toolChoice = "tool_choice"
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(model, forKey: .model)
-        try container.encode(messages, forKey: .messages)
-        try container.encode(maxTokens, forKey: .maxTokens)
-        try container.encode(temperature, forKey: .temperature)
-        if let tools = tools {
-            // Need to wrap nested dictionaries for encoding since [String: Any] is not Encodable
-            let data = try JSONSerialization.data(withJSONObject: tools)
-            let json = try JSONSerialization.jsonObject(with: data)
-            try container.encode(AnyCodable(json), forKey: .tools)
-        }
-
-        if let toolChoice, !toolChoice.isEmpty {
-            try container.encode(toolChoice, forKey: .toolChoice)
-        }
-    }
-}
-
-// Helper for encoding heterogeneous types
-struct AnyCodable: Encodable {
-    let value: Any
-    init(_ value: Any) { self.value = value }
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        if let val = value as? String {
-            try container.encode(val)
-        } else if let val = value as? Int {
-            try container.encode(val)
-        } else if let val = value as? Double {
-            try container.encode(val)
-        } else if let val = value as? Bool {
-            try container.encode(val)
-        } else if let val = value as? [String: Any] {
-            var mapContainer = encoder.container(keyedBy: DynamicKey.self)
-            for (key, nestedValue) in val {
-                try mapContainer.encode(AnyCodable(nestedValue), forKey: DynamicKey(stringValue: key)!)
-            }
-        } else if let val = value as? [Any] {
-            var arrContainer = encoder.unkeyedContainer()
-            for nestedValue in val {
-                try arrContainer.encode(AnyCodable(nestedValue))
-            }
-        } else {
-            try container.encodeNil()
-        }
-    }
-
-    struct DynamicKey: CodingKey {
-        var stringValue: String
-        var intValue: Int?
-        init?(stringValue: String) { self.stringValue = stringValue }
-        init?(intValue: Int) { return nil }
-    }
-}
-
-private struct OpenRouterChatMessage: Encodable {
-    let role: String
-    let content: String?
-    let toolCallID: String?
-    let toolCalls: [AIToolCall]?
-
-    enum CodingKeys: String, CodingKey {
-        case role
-        case content
-        case toolCallID = "tool_call_id"
-        case toolCalls = "tool_calls"
-    }
-
-    // Custom coding keys to handle optional encoding cleaner (although default works too if nil)
-    // But content is required by some APIs unless it's a tool call assistant msg.
-    // For now, let's keep it simple.
-
-    init(role: String, content: String? = nil, toolCallID: String? = nil, toolCalls: [AIToolCall]? = nil) {
-        self.role = role
-        self.content = content
-        self.toolCallID = toolCallID
-        self.toolCalls = toolCalls
-    }
-}
-
-private struct OpenRouterChatResponse: Decodable {
-    struct Choice: Decodable {
-        struct Message: Decodable {
-            let content: String?
-            let toolCalls: [AIToolCall]?
-
-            enum CodingKeys: String, CodingKey {
-                case content
-                case toolCalls = "tool_calls"
-            }
-        }
-        let message: Message
-    }
-    let choices: [Choice]
 }

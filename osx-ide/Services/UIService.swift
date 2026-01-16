@@ -31,27 +31,27 @@ final class UIService: UIServiceProtocol {
 
     /// Update font size
     func setFontSize(_ size: Double) {
-        guard size >= AppConstants.Editor.minFontSize && size <= AppConstants.Editor.maxFontSize else {
-            errorManager.handle(.invalidFilePath("Font size must be between \(AppConstants.Editor.minFontSize) and \(AppConstants.Editor.maxFontSize)"))
+        guard size >= AppConstantsEditor.minFontSize && size <= AppConstantsEditor.maxFontSize else {
+            errorManager.handle(.invalidFilePath("Font size must be between \(AppConstantsEditor.minFontSize) and \(AppConstantsEditor.maxFontSize)"))
             return
         }
-        settingsStore.set(size, forKey: AppConstants.Storage.fontSizeKey)
+        settingsStore.set(size, forKey: AppConstantsStorage.fontSizeKey)
     }
 
     /// Update font family
     func setFontFamily(_ family: String) {
-        settingsStore.set(family, forKey: AppConstants.Storage.fontFamilyKey)
+        settingsStore.set(family, forKey: AppConstantsStorage.fontFamilyKey)
     }
 
     // MARK: - Indentation
 
     func setIndentationStyle(_ style: IndentationStyle) {
-        settingsStore.set(style.rawValue, forKey: AppConstants.Storage.indentationStyleKey)
+        settingsStore.set(style.rawValue, forKey: AppConstantsStorage.indentationStyleKey)
     }
 
     func setCliTimeoutSeconds(_ seconds: Double) {
         let clamped = max(1, min(300, seconds))
-        settingsStore.set(clamped, forKey: AppConstants.Storage.cliTimeoutSecondsKey)
+        settingsStore.set(clamped, forKey: AppConstantsStorage.cliTimeoutSecondsKey)
     }
 
     // MARK: - Editor Settings
@@ -121,12 +121,12 @@ final class UIService: UIServiceProtocol {
     func loadSettings() -> UISettings {
         let storedTheme: AppTheme = .system
 
-        let storedFontSize = settingsStore.double(forKey: AppConstants.Storage.fontSizeKey)
-        let fontSize = storedFontSize == 0 ? AppConstants.Editor.defaultFontSize : storedFontSize
+        let storedFontSize = settingsStore.double(forKey: AppConstantsStorage.fontSizeKey)
+        let fontSize = storedFontSize == 0 ? AppConstantsEditor.defaultFontSize : storedFontSize
 
-        let sidebarWidth = AppConstants.Layout.defaultSidebarWidth
-        let terminalHeight = AppConstants.Layout.defaultTerminalHeight
-        let chatPanelWidth = AppConstants.Layout.defaultChatPanelWidth
+        let sidebarWidth = AppConstantsLayout.defaultSidebarWidth
+        let terminalHeight = AppConstantsLayout.defaultTerminalHeight
+        let chatPanelWidth = AppConstantsLayout.defaultChatPanelWidth
 
         let showLineNumbers: Bool = true
         let wordWrap: Bool = false
@@ -134,7 +134,7 @@ final class UIService: UIServiceProtocol {
 
         let indentationStyle = IndentationStyle.current(userDefaults: .standard)
 
-        let storedCliTimeout = settingsStore.double(forKey: AppConstants.Storage.cliTimeoutSecondsKey)
+        let storedCliTimeout = settingsStore.double(forKey: AppConstantsStorage.cliTimeoutSecondsKey)
         let cliTimeoutSeconds = storedCliTimeout == 0 ? 30 : storedCliTimeout
 
         // Load terminal settings
@@ -148,9 +148,7 @@ final class UIService: UIServiceProtocol {
         return UISettings(
             selectedTheme: storedTheme,
             fontSize: fontSize,
-            fontFamily: settingsStore.string(
-                forKey: AppConstants.Storage.fontFamilyKey
-            ) ?? AppConstants.Editor.defaultFontFamily,
+            fontFamily: settingsStore.string(forKey: AppConstantsStorage.fontFamilyKey) ?? AppConstantsEditor.defaultFontFamily,
             indentationStyle: indentationStyle,
             cliTimeoutSeconds: cliTimeoutSeconds,
             showLineNumbers: showLineNumbers,
@@ -192,10 +190,10 @@ final class UIService: UIServiceProtocol {
     /// Reset all settings to defaults
     func resetToDefaults() {
         let keys = [
-            AppConstants.Storage.fontSizeKey,
-            AppConstants.Storage.fontFamilyKey,
-            AppConstants.Storage.indentationStyleKey,
-            AppConstants.Storage.cliTimeoutSecondsKey
+            AppConstantsStorage.fontSizeKey,
+            AppConstantsStorage.fontFamilyKey,
+            AppConstantsStorage.indentationStyleKey,
+            AppConstantsStorage.cliTimeoutSecondsKey
         ]
         keys.forEach { settingsStore.removeObject(forKey: $0) }
     }

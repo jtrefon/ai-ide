@@ -16,9 +16,9 @@ final class DatabaseQueryExecutor {
 
         let sql: String
         let parameters: [Any]
-        if hasQuery {
+        if let queryText = trimmed, !queryText.isEmpty {
             sql = "SELECT path FROM resources WHERE LOWER(path) LIKE LOWER(?) ORDER BY path LIMIT ? OFFSET ?;"
-            parameters = ["%\(trimmed!)%", limit, offset]
+            parameters = ["%\(queryText)%", limit, offset]
         } else {
             sql = "SELECT path FROM resources ORDER BY path LIMIT ? OFFSET ?;"
             parameters = [limit, offset]
