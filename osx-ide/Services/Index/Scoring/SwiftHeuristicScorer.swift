@@ -26,11 +26,7 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         functionSymbols: [Symbol],
         lines: [String]
     ) async -> [QualityAssessment] {
-        let children = buildTypeAssessments(
-            typeSymbols: typeSymbols,
-            functionSymbols: functionSymbols,
-            lines: lines
-        )
+        let children = buildTypeAssessments(typeSymbols: typeSymbols, functionSymbols: functionSymbols, lines: lines)
         return children.isEmpty ? [scoreStandaloneFile(lines: lines)] : children
     }
 
@@ -166,10 +162,7 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         var score = 92.0
         var issues: [QualityIssue] = []
 
-        applyLOCHeuristics(loc: metrics.loc, startLine: startLine, score: &score, issues: &issues)
-        applyNestingHeuristics(nesting: metrics.nesting, startLine: startLine, score: &score, issues: &issues)
-        applyTodoHeuristics(hasTodo: metrics.hasTodo, startLine: startLine, score: &score, issues: &issues)
-        applyBranchHeuristics(branches: metrics.branches, startLine: startLine, score: &score, issues: &issues)
+        applyMethodHeuristics(metrics: metrics, startLine: startLine, score: &score, issues: &issues)
 
         let breakdown = makeMethodBreakdown(
             loc: metrics.loc,
@@ -191,6 +184,13 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         )
     }
 
+    private func applyMethodHeuristics(metrics: MethodMetrics, startLine: Int, score: inout Double, issues: inout [QualityIssue]) {
+        applyLOCHeuristics(loc: metrics.loc, startLine: startLine, score: &score, issues: &issues)
+        applyNestingHeuristics(nesting: metrics.nesting, startLine: startLine, score: &score, issues: &issues)
+        applyTodoHeuristics(hasTodo: metrics.hasTodo, startLine: startLine, score: &score, issues: &issues)
+        applyBranchHeuristics(branches: metrics.branches, startLine: startLine, score: &score, issues: &issues)
+    }
+
     private struct MethodMetrics {
         let loc: Int
         let nesting: Int
@@ -201,37 +201,54 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
     private func methodMetrics(lines: [String]) -> MethodMetrics {
         let loc = nonEmptyLineCount(lines)
         let nesting = maxBraceNesting(lines)
-        let hasTodo = lines.contains {
+        let hasTodo = containsTodoOrFixme(lines)
+        let branches = countBranches(lines)
+        return MethodMetrics(loc: loc, nesting: nesting, branches: branches, hasTodo: hasTodo)
+    }
+
+    private func containsTodoOrFixme(_ lines: [String]) -> Bool {
+        lines.contains {
             $0.localizedCaseInsensitiveContains("TODO") ||
                 $0.localizedCaseInsensitiveContains("FIXME")
         }
+    }
+
+    private func countBranches(_ lines: [String]) -> Int {
         let switchCount = lines.filter { $0.contains("switch ") }.count
         let ifCount = lines.filter { $0.contains("if ") }.count
         let guardCount = lines.filter { $0.contains("guard ") }.count
-        return MethodMetrics(loc: loc, nesting: nesting, branches: switchCount + ifCount + guardCount, hasTodo: hasTodo)
+        return switchCount + ifCount + guardCount
     }
 
     private func applyLOCHeuristics(loc: Int, startLine: Int, score: inout Double, issues: inout [QualityIssue]) {
         if loc > 80 {
-            score -= 35
-            issues.append(QualityIssue(
-                severity: .warning,
-                category: .complexity,
-                message: "Long method (\(loc) non-empty lines)",
-                line: startLine
-            ))
+            applyLongMethodPenalty(loc: loc, startLine: startLine, score: &score, issues: &issues)
             return
         }
 
         if loc > 40 {
-            score -= 18
-            issues.append(QualityIssue(
-                severity: .info,
-                category: .complexity,
-                message: "Moderately long method (\(loc) non-empty lines)",
-                line: startLine
-            ))
+            applyModerateLengthPenalty(loc: loc, startLine: startLine, score: &score, issues: &issues)
         }
+    }
+
+    private func applyLongMethodPenalty(loc: Int, startLine: Int, score: inout Double, issues: inout [QualityIssue]) {
+        score -= 35
+        issues.append(QualityIssue(
+            severity: .warning,
+            category: .complexity,
+            message: "Long method (\(loc) non-empty lines)",
+            line: startLine
+        ))
+    }
+
+    private func applyModerateLengthPenalty(loc: Int, startLine: Int, score: inout Double, issues: inout [QualityIssue]) {
+        score -= 18
+        issues.append(QualityIssue(
+            severity: .info,
+            category: .complexity,
+            message: "Moderately long method (\(loc) non-empty lines)",
+            line: startLine
+        ))
     }
 
     private func applyNestingHeuristics(
@@ -241,32 +258,37 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         issues: inout [QualityIssue]
     ) {
         if nesting >= 5 {
-            score -= 20
-            issues.append(QualityIssue(
-                severity: .warning,
-                category: .complexity,
-                message: "Deep nesting (max nesting \(nesting))",
-                line: startLine
-            ))
+            applyDeepNestingPenalty(nesting: nesting, startLine: startLine, score: &score, issues: &issues)
             return
         }
 
         if nesting >= 3 {
-            score -= 10
-            issues.append(QualityIssue(
-                severity: .info,
-                category: .complexity,
-                message: "Nesting depth \(nesting)",
-                line: startLine
-            ))
+            applyModerateNestingPenalty(nesting: nesting, startLine: startLine, score: &score, issues: &issues)
         }
     }
 
-    private func applyTodoHeuristics(hasTodo: Bool, startLine: Int, score: inout Double, issues: inout [QualityIssue]) {
-        guard hasTodo else {
-            return
-        }
+    private func applyDeepNestingPenalty(nesting: Int, startLine: Int, score: inout Double, issues: inout [QualityIssue]) {
+        score -= 20
+        issues.append(QualityIssue(
+            severity: .warning,
+            category: .complexity,
+            message: "Deep nesting (max nesting \(nesting))",
+            line: startLine
+        ))
+    }
 
+    private func applyModerateNestingPenalty(nesting: Int, startLine: Int, score: inout Double, issues: inout [QualityIssue]) {
+        score -= 10
+        issues.append(QualityIssue(
+            severity: .info,
+            category: .complexity,
+            message: "Nesting depth \(nesting)",
+            line: startLine
+        ))
+    }
+
+    private func applyTodoHeuristics(hasTodo: Bool, startLine: Int, score: inout Double, issues: inout [QualityIssue]) {
+        guard hasTodo else { return }
         score -= 5
         issues.append(QualityIssue(
             severity: .info,
@@ -277,10 +299,7 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
     }
 
     private func applyBranchHeuristics(branches: Int, startLine: Int, score: inout Double, issues: inout [QualityIssue]) {
-        guard branches > 12 else {
-            return
-        }
-
+        guard branches > 12 else { return }
         score -= 15
         issues.append(QualityIssue(
             severity: .warning,
@@ -298,14 +317,7 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         startLine: Int,
         endLine: Int
     ) -> QualityBreakdown {
-        let categoryScores: [QualityCategory: Double] = [
-            .readability: clamp(100 - Double(loc) * 0.5 - Double(nesting) * 3),
-            .complexity: clamp(100 - Double(loc) * 0.8 - Double(nesting) * 6 - Double(branches) * 1.2),
-            .maintainability: clamp(score),
-            .correctness: clamp(85),
-            .architecture: clamp(80)
-        ]
-
+        let categoryScores = buildCategoryScores(loc: loc, nesting: nesting, branches: branches, score: score)
         return QualityBreakdown(categoryScores: categoryScores, metrics: [
             "loc": Double(loc),
             "nesting": Double(nesting),
@@ -313,6 +325,16 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
             "startLine": Double(startLine),
             "endLine": Double(endLine)
         ])
+    }
+
+    private func buildCategoryScores(loc: Int, nesting: Int, branches: Int, score: Double) -> [QualityCategory: Double] {
+        [
+            .readability: clamp(100 - Double(loc) * 0.5 - Double(nesting) * 3),
+            .complexity: clamp(100 - Double(loc) * 0.8 - Double(nesting) * 6 - Double(branches) * 1.2),
+            .maintainability: clamp(score),
+            .correctness: clamp(85),
+            .architecture: clamp(80)
+        ]
     }
 
     private enum AggregateKind {
@@ -326,47 +348,14 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
         kind: AggregateKind
     ) -> QualityAssessment {
         guard !children.isEmpty else {
-            let breakdown = QualityBreakdown(categoryScores: [
-                .readability: 50,
-                .complexity: 50,
-                .maintainability: 50,
-                .correctness: 50,
-                .architecture: 50
-            ])
-            let entityType: QualityEntityType = (kind == .file) ? .file : .type
-            return QualityAssessment(
-                entityType: entityType,
-                entityName: parentName,
-                language: .swift,
-                score: 50,
-                breakdown: breakdown
-            )
+            return buildEmptyAggregate(parentName: parentName, kind: kind)
         }
 
         let avg = children.map { $0.score }.reduce(0, +) / Double(children.count)
         let minScore = children.map { $0.score }.min() ?? avg
-        var score = avg
+        var score = computeAggregateScore(avg: avg, minScore: minScore, childCount: children.count, kind: kind)
 
-        if kind == .type {
-            if children.count > 18 {
-                score -= 20
-            } else if children.count > 10 {
-                score -= 10
-            }
-        }
-
-        score = clamp(score * 0.85 + minScore * 0.15)
-
-        var merged: [String: Double] = [:]
-        for child in children {
-            for (category, categoryScore) in child.breakdown.categoryScores {
-                merged[category, default: 0] += categoryScore
-            }
-        }
-        for (category, categoryScore) in merged {
-            merged[category] = categoryScore / Double(children.count)
-        }
-
+        let merged = mergeChildMetrics(children: children)
         let breakdown = QualityBreakdown(categoryScores: merged, metrics: [
             "children": Double(children.count),
             "avg": avg,
@@ -382,6 +371,49 @@ public final class SwiftHeuristicScorer: QualityScorer, @unchecked Sendable {
             breakdown: breakdown
         )
     }
+
+    private func buildEmptyAggregate(parentName: String, kind: AggregateKind) -> QualityAssessment {
+        let breakdown = QualityBreakdown(categoryScores: [
+            .readability: 50,
+            .complexity: 50,
+            .maintainability: 50,
+            .correctness: 50,
+            .architecture: 50
+        ])
+        let entityType: QualityEntityType = (kind == .file) ? .file : .type
+        return QualityAssessment(
+            entityType: entityType,
+            entityName: parentName,
+            language: .swift,
+            score: 50,
+            breakdown: breakdown
+        )
+    }
+
+    private func computeAggregateScore(avg: Double, minScore: Double, childCount: Int, kind: AggregateKind) -> Double {
+        var score = avg
+        if kind == .type {
+            if childCount > 18 {
+                score -= 20
+            } else if childCount > 10 {
+                score -= 10
+            }
+        }
+        return clamp(score * 0.85 + minScore * 0.15)
+    }
+
+    private func mergeChildMetrics(children: [QualityAssessment]) -> [String: Double] {
+        var merged: [String: Double] = [:]
+        for child in children {
+            for (category, categoryScore) in child.breakdown.categoryScores {
+                merged[category, default: 0] += categoryScore
+            }
+        }
+        for (category, categoryScore) in merged {
+            merged[category] = categoryScore / Double(children.count)
+        }
+        return merged
+    }
 }
 
 extension SwiftHeuristicScorer {
@@ -390,25 +422,7 @@ extension SwiftHeuristicScorer {
         var score = 80.0
         var issues: [QualityIssue] = []
 
-        if loc > 800 {
-            score -= 30
-            issues.append(
-                QualityIssue(
-                    severity: .warning,
-                    category: .maintainability,
-                    message: "Large file (\(loc) non-empty lines)"
-                )
-            )
-        } else if loc > 400 {
-            score -= 15
-            issues.append(
-                QualityIssue(
-                    severity: .info,
-                    category: .maintainability,
-                    message: "Moderately large file (\(loc) non-empty lines)"
-                )
-            )
-        }
+        applyFileSizeHeuristics(loc: loc, score: &score, issues: &issues)
 
         let breakdown = QualityBreakdown(categoryScores: [
             .readability: score,
@@ -429,6 +443,28 @@ extension SwiftHeuristicScorer {
             issues: issues,
             children: []
         )
+    }
+
+    private func applyFileSizeHeuristics(loc: Int, score: inout Double, issues: inout [QualityIssue]) {
+        if loc > 800 {
+            score -= 30
+            issues.append(
+                QualityIssue(
+                    severity: .warning,
+                    category: .maintainability,
+                    message: "Large file (\(loc) non-empty lines)"
+                )
+            )
+        } else if loc > 400 {
+            score -= 15
+            issues.append(
+                QualityIssue(
+                    severity: .info,
+                    category: .maintainability,
+                    message: "Moderately large file (\(loc) non-empty lines)"
+                )
+            )
+        }
     }
 
     private func slice(lines: [String], start: Int, end: Int) -> [String] {
