@@ -171,13 +171,11 @@ final class FileEditorStateManager: ObservableObject {
     }
 
     func tab(for filePath: String) -> EditorPaneStateManager.EditorTab? {
-        if let tab = primaryPane.tabs.first(where: { $0.filePath == filePath }) {
-            return tab
-        }
-        if let tab = secondaryPane.tabs.first(where: { $0.filePath == filePath }) {
-            return tab
-        }
-        return nil
+        findTabInPane(primaryPane, filePath: filePath) ?? findTabInPane(secondaryPane, filePath: filePath)
+    }
+
+    private func findTabInPane(_ pane: EditorPaneStateManager, filePath: String) -> EditorPaneStateManager.EditorTab? {
+        pane.tabs.first(where: { $0.filePath == filePath })
     }
 
     func isFileOpenAndDirty(filePath: String) -> Bool {

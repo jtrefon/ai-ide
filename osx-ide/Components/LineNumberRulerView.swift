@@ -102,47 +102,46 @@ final class ModernLineNumberRulerView: NSRulerView {
 
     private func drawLineNumbers(context: DrawLineNumbersContext) {
         var lineNumber = context.startingLineNumber
-
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: textColor
-        ]
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
 
         var glyphIndex = context.glyphRange.location
         while glyphIndex < NSMaxRange(context.glyphRange) {
             let charIndex = context.layoutManager.characterIndexForGlyph(at: glyphIndex)
-            var lineStart: Int = 0
-            var lineEnd: Int = 0
-            context.string.getLineStart(
-                &lineStart,
-                end: &lineEnd,
-                contentsEnd: nil,
-                for: NSRange(location: charIndex, length: 0)
-            )
-
-            let charRange = NSRange(location: lineStart, length: max(0, lineEnd - lineStart))
+            let lineRange = getLineRange(context: context, charIndex: charIndex)
+            let charRange = NSRange(location: lineRange.start, length: max(0, lineRange.end - lineRange.start))
             let lineGlyphRange = context.layoutManager.glyphRange(forCharacterRange: charRange, actualCharacterRange: nil)
             var lineRect = context.layoutManager.boundingRect(forGlyphRange: lineGlyphRange, in: context.textContainer)
             lineRect.origin.x += context.relativePoint.x
             lineRect.origin.y += context.relativePoint.y
 
-            let label = "\(lineNumber)" as NSString
-            let labelSize = label.size(withAttributes: attrs)
-            let labelY = lineRect.minY + (lineRect.height - labelSize.height) / 2
-            let labelX = ruleThickness - 6 - labelSize.width
-
-            if charIndex == context.textView.selectedRange.location {
-                let highlightRect = NSRect(x: 0, y: lineRect.minY, width: ruleThickness, height: lineRect.height)
-                selectionColor.setFill()
-                highlightRect.fill()
-            }
-
-            label.draw(at: NSPoint(x: labelX, y: labelY), withAttributes: attrs)
+            drawLineNumber(lineNumber, at: lineRect, with: attrs, context: context, charIndex: charIndex)
 
             let nextGlyphIndex = NSMaxRange(lineGlyphRange)
             glyphIndex = nextGlyphIndex > glyphIndex ? nextGlyphIndex : (glyphIndex + 1)
             lineNumber += 1
         }
+    }
+
+    private func getLineRange(context: DrawLineNumbersContext, charIndex: Int) -> (start: Int, end: Int) {
+        var lineStart: Int = 0
+        var lineEnd: Int = 0
+        context.string.getLineStart(&lineStart, end: &lineEnd, contentsEnd: nil, for: NSRange(location: charIndex, length: 0))
+        return (lineStart, lineEnd)
+    }
+
+    private func drawLineNumber(_ lineNumber: Int, at lineRect: NSRect, with attrs: [NSAttributedString.Key: Any], context: DrawLineNumbersContext, charIndex: Int) {
+        let label = "\(lineNumber)" as NSString
+        let labelSize = label.size(withAttributes: attrs)
+        let labelY = lineRect.minY + (lineRect.height - labelSize.height) / 2
+        let labelX = ruleThickness - 6 - labelSize.width
+
+        if charIndex == context.textView.selectedRange.location {
+            let highlightRect = NSRect(x: 0, y: lineRect.minY, width: ruleThickness, height: lineRect.height)
+            selectionColor.setFill()
+            highlightRect.fill()
+        }
+
+        label.draw(at: NSPoint(x: labelX, y: labelY), withAttributes: attrs)
     }
 
     // Modern macOS v26 compatibility methods
