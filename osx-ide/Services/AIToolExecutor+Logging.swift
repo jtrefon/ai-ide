@@ -6,12 +6,16 @@ extension AIToolExecutor {
         toolCall: AIToolCall,
         targetFile: String?
     ) async {
-        await AppLogger.shared.info(category: .tool, message: "tool.execute_start", metadata: [
-            "conversationId": conversationId as Any,
-            "tool": toolCall.name,
-            "toolCallId": toolCall.id,
-            "targetPath": targetFile as Any
-        ])
+        await AppLogger.shared.info(
+            category: .tool,
+            message: "tool.execute_start",
+            context: AppLogger.LogCallContext(metadata: [
+                "conversationId": conversationId as Any,
+                "tool": toolCall.name,
+                "toolCallId": toolCall.id,
+                "targetPath": targetFile as Any
+            ])
+        )
 
         await ExecutionLogStore.shared.append(
             ExecutionLogAppendRequest(
@@ -46,33 +50,36 @@ extension AIToolExecutor {
 
     func logToolExecuteProgress(
         conversationId: String?,
-        toolName: String,
-        toolCallId: String,
+        toolCall: AIToolCall,
         chunk: String,
         totalLength: Int
     ) async {
         let cappedChunk = String(chunk.suffix(16_384))
         await ExecutionLogStore.shared.append(
             ExecutionLogAppendRequest(
-                toolCallId: toolCallId,
+                toolCallId: toolCall.id,
                 type: "tool.execute_progress",
                 data: [
                     "chunk": cappedChunk,
                     "chunkLength": chunk.count,
                     "totalLength": totalLength
                 ],
-                context: ExecutionLogContext(conversationId: conversationId, tool: toolName)
+                context: ExecutionLogContext(conversationId: conversationId, tool: toolCall.name)
             )
         )
     }
 
     func logToolExecuteSuccess(conversationId: String?, toolCall: AIToolCall, resultLength: Int) async {
-        await AppLogger.shared.info(category: .tool, message: "tool.execute_success", metadata: [
-            "conversationId": conversationId as Any,
-            "tool": toolCall.name,
-            "toolCallId": toolCall.id,
-            "resultLength": resultLength
-        ])
+        await AppLogger.shared.info(
+            category: .tool,
+            message: "tool.execute_success",
+            context: AppLogger.LogCallContext(metadata: [
+                "conversationId": conversationId as Any,
+                "tool": toolCall.name,
+                "toolCallId": toolCall.id,
+                "resultLength": resultLength
+            ])
+        )
 
         await ExecutionLogStore.shared.append(
             ExecutionLogAppendRequest(
@@ -105,12 +112,16 @@ extension AIToolExecutor {
     }
 
     func logToolExecuteError(conversationId: String?, toolCall: AIToolCall, error: Error) async {
-        await AppLogger.shared.error(category: .tool, message: "tool.execute_error", metadata: [
-            "conversationId": conversationId as Any,
-            "tool": toolCall.name,
-            "toolCallId": toolCall.id,
-            "error": error.localizedDescription
-        ])
+        await AppLogger.shared.error(
+            category: .tool,
+            message: "tool.execute_error",
+            context: AppLogger.LogCallContext(metadata: [
+                "conversationId": conversationId as Any,
+                "tool": toolCall.name,
+                "toolCallId": toolCall.id,
+                "error": error.localizedDescription
+            ])
+        )
 
         await ExecutionLogStore.shared.append(
             ExecutionLogAppendRequest(
@@ -143,11 +154,15 @@ extension AIToolExecutor {
     }
 
     func logToolNotFound(conversationId: String?, toolCall: AIToolCall) async {
-        await AppLogger.shared.error(category: .tool, message: "tool.not_found", metadata: [
-            "conversationId": conversationId as Any,
-            "tool": toolCall.name,
-            "toolCallId": toolCall.id
-        ])
+        await AppLogger.shared.error(
+            category: .tool,
+            message: "tool.not_found",
+            context: AppLogger.LogCallContext(metadata: [
+                "conversationId": conversationId as Any,
+                "tool": toolCall.name,
+                "toolCallId": toolCall.id
+            ])
+        )
 
         if let conversationId {
             await ConversationLogStore.shared.append(

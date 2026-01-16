@@ -33,20 +33,8 @@ struct ArchitectAdvisorTool: AITool {
     }
 
     func execute(arguments: ToolArguments) async throws -> String {
-        let arguments = arguments.raw
-        guard let task = arguments["task"] as? String,
-              !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw AppError.aiServiceError("Missing 'task' argument for architect_advisor")
-        }
-        let constraints = (arguments["constraints"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let explicit: String?
-        if let constraints = constraints, !constraints.isEmpty {
-            explicit = "Constraints:\n\(constraints)"
-        } else {
-            explicit = nil
-        }
-
+        let task = try extractTask(from: arguments)
+        let explicit = extractExplicitConstraints(from: arguments)
         let context = await ContextBuilder.buildContext(
             userInput: task,
             explicitContext: explicit,
@@ -54,6 +42,34 @@ struct ArchitectAdvisorTool: AITool {
             projectRoot: projectRoot
         )
 
+        let messages = buildAdvisorMessages(task: task)
+        let response = try await aiService.sendMessage(AIServiceHistoryRequest(
+            messages: messages,
+            context: context,
+            tools: nil,
+            mode: nil,
+            projectRoot: projectRoot
+        ))
+        return response.content ?? "No response received."
+    }
+
+    private func extractTask(from arguments: ToolArguments) throws -> String {
+        let raw = arguments.raw
+        guard let task = raw["task"] as? String,
+              !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw AppError.aiServiceError("Missing 'task' argument for architect_advisor")
+        }
+        return task
+    }
+
+    private func extractExplicitConstraints(from arguments: ToolArguments) -> String? {
+        let raw = arguments.raw
+        let constraints = (raw["constraints"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let constraints, !constraints.isEmpty else { return nil }
+        return "Constraints:\n\(constraints)"
+    }
+
+    private func buildAdvisorMessages(task: String) -> [ChatMessage] {
         let system = ChatMessage(
             role: .system,
             content: """
@@ -77,15 +93,7 @@ struct ArchitectAdvisorTool: AITool {
             - Do NOT invent files/APIs.
             """
         )
-
         let user = ChatMessage(role: .user, content: task)
-        let response = try await aiService.sendMessage(
-            [system, user],
-            context: context,
-            tools: nil,
-            mode: nil,
-            projectRoot: projectRoot
-        )
-        return response.content ?? "No response received."
+        return [system, user]
     }
 }

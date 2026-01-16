@@ -22,95 +22,28 @@ actor OpenRouterAIService: AIService {
     }
 
     func sendMessage(
-        _ message: String,
-        context: String?,
-        tools: [AITool]?,
-        mode: AIMode?
+        _ request: AIServiceMessageWithProjectRootRequest
     ) async throws -> AIServiceResponse {
-        try await performChat(
-            prompt: message,
-            context: context,
-            tools: tools,
-            mode: mode,
-            projectRoot: nil
-        )
+        try await performChat(OpenRouterChatInput(
+            prompt: request.message,
+            context: request.context,
+            tools: request.tools,
+            mode: request.mode,
+            projectRoot: request.projectRoot
+        ))
     }
 
     func sendMessage(
-        _ message: String,
-        context: String?,
-        tools: [AITool]?,
-        mode: AIMode?,
-        projectRoot: URL?
+        _ request: AIServiceHistoryRequest
     ) async throws -> AIServiceResponse {
-        try await performChat(
-            prompt: message,
-            context: context,
-            tools: tools,
-            mode: mode,
-            projectRoot: projectRoot
-        )
-    }
-
-    func sendMessage(
-        _ messages: [ChatMessage],
-        context: String?,
-        tools: [AITool]?,
-        mode: AIMode?,
-        projectRoot: URL?
-    ) async throws -> AIServiceResponse {
-        let sanitizedMessages = Self.sanitizeToolCallOrdering(messages)
-
-        let validToolCallIds: Set<String> = Set(
-            sanitizedMessages
-                .compactMap { $0.toolCalls }
-                .flatMap { $0 }
-                .map { $0.id }
-        )
-
-        // Convert [ChatMessage] to [OpenRouterChatMessage]
-        let openRouterMessages = sanitizedMessages.compactMap { msg -> OpenRouterChatMessage? in
-            switch msg.role {
-            case .user:
-                return OpenRouterChatMessage(role: "user", content: msg.content)
-            case .assistant:
-                if let toolCalls = msg.toolCalls {
-                    // Map tool calls
-                    return OpenRouterChatMessage(
-                        role: "assistant",
-                        content: msg.content.isEmpty ? nil : msg.content,
-                        toolCalls: toolCalls
-                    )
-                }
-                return OpenRouterChatMessage(role: "assistant", content: msg.content)
-            case .system:
-                return OpenRouterChatMessage(role: "system", content: msg.content)
-            case .tool:
-                if msg.toolStatus == .executing {
-                    return nil
-                }
-                // For tool outputs
-                if let toolCallId = msg.toolCallId {
-                    guard validToolCallIds.contains(toolCallId) else {
-                        return nil
-                    }
-                    let content = Self.truncate(msg.content, limit: Self.maxToolOutputCharsForModel)
-                    return OpenRouterChatMessage(role: "tool", content: content, toolCallID: toolCallId)
-                } else {
-                    // Fallback if ID missing (shouldn't happen with new logic)
-                    let content = Self.truncate(msg.content, limit: Self.maxToolOutputCharsForModel)
-                    return OpenRouterChatMessage(role: "user", content: "Tool Output: \(content)")
-                }
-            }
-        }
-
-        return try await performChatWithHistory(
+        let openRouterMessages = buildOpenRouterMessages(from: request.messages)
+        return try await performChatWithHistory(OpenRouterChatHistoryInput(
             messages: openRouterMessages,
-            context: context,
-            tools: tools,
-            mode: mode,
-            projectRoot: projectRoot
-        )
+            context: request.context,
+            tools: request.tools,
+            mode: request.mode,
+            projectRoot: request.projectRoot
+        ))
     }
 
     private static func sanitizeToolCallOrdering(_ messages: [ChatMessage]) -> [ChatMessage] {
@@ -118,91 +51,114 @@ actor OpenRouterAIService: AIService {
         return sanitizer.sanitize(messages)
     }
 
-    internal func performChat(
-        prompt: String,
-        context: String?,
-        tools: [AITool]?,
-        mode: AIMode?,
-        projectRoot: URL?
-    ) async throws -> AIServiceResponse {
-        return try await performChatWithHistory(
-            messages: [OpenRouterChatMessage(role: "user", content: prompt)],
-            context: context,
-            tools: tools,
-            mode: mode,
-            projectRoot: projectRoot
+    private func buildOpenRouterMessages(from messages: [ChatMessage]) -> [OpenRouterChatMessage] {
+        let sanitizedMessages = Self.sanitizeToolCallOrdering(messages)
+        let validToolCallIds = buildValidToolCallIds(from: sanitizedMessages)
+        return sanitizedMessages.compactMap { message in
+            mapOpenRouterChatMessage(message, validToolCallIds: validToolCallIds)
+        }
+    }
+
+    private func buildValidToolCallIds(from messages: [ChatMessage]) -> Set<String> {
+        Set(
+            messages
+                .compactMap { $0.toolCalls }
+                .flatMap { $0 }
+                .map { $0.id }
         )
     }
 
-    private func performChatWithHistory(
-        messages: [OpenRouterChatMessage],
-        context: String?,
-        tools: [AITool]?,
-        mode: AIMode?,
-        projectRoot: URL?
+    private func mapOpenRouterChatMessage(
+        _ message: ChatMessage,
+        validToolCallIds: Set<String>
+    ) -> OpenRouterChatMessage? {
+        switch message.role {
+        case .user:
+            return OpenRouterChatMessage(role: "user", content: message.content)
+        case .assistant:
+            if let toolCalls = message.toolCalls {
+                return OpenRouterChatMessage(
+                    role: "assistant",
+                    content: message.content.isEmpty ? nil : message.content,
+                    toolCalls: toolCalls
+                )
+            }
+            return OpenRouterChatMessage(role: "assistant", content: message.content)
+        case .system:
+            return OpenRouterChatMessage(role: "system", content: message.content)
+        case .tool:
+            return mapToolMessage(message, validToolCallIds: validToolCallIds)
+        }
+    }
+
+    private func mapToolMessage(
+        _ message: ChatMessage,
+        validToolCallIds: Set<String>
+    ) -> OpenRouterChatMessage? {
+        if message.toolStatus == .executing {
+            return nil
+        }
+        if let toolCallId = message.toolCallId {
+            guard validToolCallIds.contains(toolCallId) else { return nil }
+            let content = Self.truncate(message.content, limit: Self.maxToolOutputCharsForModel)
+            return OpenRouterChatMessage(role: "tool", content: content, toolCallID: toolCallId)
+        }
+        let content = Self.truncate(message.content, limit: Self.maxToolOutputCharsForModel)
+        return OpenRouterChatMessage(role: "user", content: "Tool Output: \(content)")
+    }
+
+    private func performChat(
+        _ request: OpenRouterChatInput
     ) async throws -> AIServiceResponse {
-        let requestId = UUID().uuidString
-        let settings = settingsStore.load()
-        let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        let systemPrompt = settings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try await performChatWithHistory(OpenRouterChatHistoryInput(
+            messages: [OpenRouterChatMessage(role: "user", content: request.prompt)],
+            context: request.context,
+            tools: request.tools,
+            mode: request.mode,
+            projectRoot: request.projectRoot
+        ))
+    }
 
-        try validateSettings(apiKey: apiKey, model: model)
+    private func performChatWithHistory(
+        _ request: OpenRouterChatHistoryInput
+    ) async throws -> AIServiceResponse {
+        let preparation = try buildChatPreparation(request: request)
 
-        let systemContent = buildSystemContent(
-            input: BuildSystemContentInput(
-                systemPrompt: systemPrompt,
-                hasTools: tools != nil,
-                mode: mode,
-                projectRoot: projectRoot,
-                reasoningEnabled: settings.reasoningEnabled
-            )
-        )
+        await logRequestStart(RequestStartContext(
+            requestId: preparation.requestId,
+            model: preparation.settings.model,
+            messageCount: preparation.finalMessages.count,
+            toolCount: preparation.toolDefinitions?.count ?? 0,
+            mode: request.mode,
+            projectRoot: request.projectRoot
+        ))
 
-        let finalMessages = buildFinalMessages(
-            systemContent: systemContent,
-            context: context,
-            messages: messages
-        )
-
-        let toolDefinitions = buildToolDefinitions(tools: tools)
-        let toolChoice = toolDefinitions?.isEmpty == false ? "auto" : nil
-
-        await logRequestStart(
-            requestId: requestId,
-            model: model,
-            messageCount: finalMessages.count,
-            toolCount: toolDefinitions?.count ?? 0,
-            mode: mode,
-            projectRoot: projectRoot
-        )
-
-        let request = OpenRouterChatRequest(
-            model: model,
-            messages: finalMessages,
+        let requestBody = OpenRouterChatRequest(
+            model: preparation.settings.model,
+            messages: preparation.finalMessages,
             maxTokens: 2048,
             temperature: 0.2,
-            tools: toolDefinitions,
-            toolChoice: toolChoice
+            tools: preparation.toolDefinitions,
+            toolChoice: preparation.toolChoice
         )
 
-        let body = try JSONEncoder().encode(request)
-        await logRequestBody(requestId: requestId, bytes: body.count)
+        let body = try JSONEncoder().encode(requestBody)
+        await logRequestBody(requestId: preparation.requestId, bytes: body.count)
 
         let data = try await executeChatCompletion(
-            apiKey: apiKey,
-            baseURL: settings.baseURL,
+            apiKey: preparation.settings.apiKey,
+            baseURL: preparation.settings.baseURL,
             body: body,
-            requestId: requestId
+            requestId: preparation.requestId
         )
 
-        let response = try await decodeResponse(data: data, requestId: requestId)
+        let response = try await decodeResponse(data: data, requestId: preparation.requestId)
         guard let choice = response.choices.first else {
             throw AppError.aiServiceError("OpenRouter response was empty.")
         }
 
         await logRequestSuccess(
-            requestId: requestId,
+            requestId: preparation.requestId,
             contentLength: choice.message.content?.count ?? 0,
             toolCalls: choice.message.toolCalls?.count ?? 0,
             responseBytes: data.count
@@ -257,36 +213,39 @@ actor OpenRouterAIService: AIService {
     }
 
     private func logRequestStart(
-        requestId: String,
-        model: String,
-        messageCount: Int,
-        toolCount: Int,
-        mode: AIMode?,
-        projectRoot: URL?
+        _ context: RequestStartContext
     ) async {
-        await AppLogger.shared.info(category: .ai, message: "openrouter.request_start", metadata: [
-            "requestId": requestId,
-            "model": model,
-            "messageCount": messageCount,
-            "toolCount": toolCount,
-            "mode": mode?.rawValue as Any,
-            "projectRoot": projectRoot?.path as Any
-        ])
+        await AppLogger.shared.info(
+            category: .ai,
+            message: "openrouter.request_start",
+            context: AppLogger.LogCallContext(metadata: [
+                "requestId": context.requestId,
+                "model": context.model,
+                "messageCount": context.messageCount,
+                "toolCount": context.toolCount,
+                "mode": context.mode?.rawValue as Any,
+                "projectRoot": context.projectRoot?.path as Any
+            ])
+        )
 
         await AIToolTraceLogger.shared.log(type: "openrouter.request", data: [
-            "model": model,
-            "messages": messageCount,
-            "tools": toolCount,
-            "mode": mode?.rawValue as Any,
-            "projectRoot": projectRoot?.path as Any
+            "model": context.model,
+            "messages": context.messageCount,
+            "tools": context.toolCount,
+            "mode": context.mode?.rawValue as Any,
+            "projectRoot": context.projectRoot?.path as Any
         ])
     }
 
     private func logRequestBody(requestId: String, bytes: Int) async {
-        await AppLogger.shared.debug(category: .ai, message: "openrouter.request_body", metadata: [
-            "requestId": requestId,
-            "bytes": bytes
-        ])
+        await AppLogger.shared.debug(
+            category: .ai,
+            message: "openrouter.request_body",
+            context: AppLogger.LogCallContext(metadata: [
+                "requestId": requestId,
+                "bytes": bytes
+            ])
+        )
 
         await AIToolTraceLogger.shared.log(type: "openrouter.request_body", data: [
             "bytes": bytes
@@ -322,11 +281,15 @@ actor OpenRouterAIService: AIService {
     }
 
     private func logRequestError(requestId: String, status: Int, bodySnippet: String) async {
-        await AppLogger.shared.error(category: .ai, message: "openrouter.request_error", metadata: [
-            "requestId": requestId,
-            "status": status,
-            "bodySnippet": bodySnippet
-        ])
+        await AppLogger.shared.error(
+            category: .ai,
+            message: "openrouter.request_error",
+            context: AppLogger.LogCallContext(metadata: [
+                "requestId": requestId,
+                "status": status,
+                "bodySnippet": bodySnippet
+            ])
+        )
 
         await AIToolTraceLogger.shared.log(type: "openrouter.error", data: [
             "status": status,
@@ -339,11 +302,15 @@ actor OpenRouterAIService: AIService {
             return try JSONDecoder().decode(OpenRouterChatResponse.self, from: data)
         } catch {
             let bodySnippet = String(data: data.prefix(2000), encoding: .utf8) ?? ""
-            await AppLogger.shared.error(category: .ai, message: "openrouter.decode_error", metadata: [
-                "requestId": requestId,
-                "error": error.localizedDescription,
-                "bodySnippet": bodySnippet
-            ])
+            await AppLogger.shared.error(
+                category: .ai,
+                message: "openrouter.decode_error",
+                context: AppLogger.LogCallContext(metadata: [
+                    "requestId": requestId,
+                    "error": error.localizedDescription,
+                    "bodySnippet": bodySnippet
+                ])
+            )
             throw error
         }
     }
@@ -354,12 +321,16 @@ actor OpenRouterAIService: AIService {
         toolCalls: Int,
         responseBytes: Int
     ) async {
-        await AppLogger.shared.info(category: .ai, message: "openrouter.request_success", metadata: [
-            "requestId": requestId,
-            "contentLength": contentLength,
-            "toolCalls": toolCalls,
-            "responseBytes": responseBytes
-        ])
+        await AppLogger.shared.info(
+            category: .ai,
+            message: "openrouter.request_success",
+            context: AppLogger.LogCallContext(metadata: [
+                "requestId": requestId,
+                "contentLength": contentLength,
+                "toolCalls": toolCalls,
+                "responseBytes": responseBytes
+            ])
+        )
 
         await AIToolTraceLogger.shared.log(type: "openrouter.response", data: [
             "contentLength": contentLength,
@@ -379,6 +350,93 @@ actor OpenRouterAIService: AIService {
         let mode: AIMode?
         let projectRoot: URL?
         let reasoningEnabled: Bool
+    }
+
+    private struct OpenRouterChatInput {
+        let prompt: String
+        let context: String?
+        let tools: [AITool]?
+        let mode: AIMode?
+        let projectRoot: URL?
+    }
+
+    private struct OpenRouterChatHistoryInput {
+        let messages: [OpenRouterChatMessage]
+        let context: String?
+        let tools: [AITool]?
+        let mode: AIMode?
+        let projectRoot: URL?
+    }
+
+    private struct RequestStartContext {
+        let requestId: String
+        let model: String
+        let messageCount: Int
+        let toolCount: Int
+        let mode: AIMode?
+        let projectRoot: URL?
+    }
+
+    private struct SettingsSnapshot {
+        let apiKey: String
+        let model: String
+        let systemPrompt: String
+        let baseURL: String
+        let reasoningEnabled: Bool
+    }
+
+    private struct ChatPreparation {
+        let requestId: String
+        let settings: SettingsSnapshot
+        let finalMessages: [OpenRouterChatMessage]
+        let toolDefinitions: [[String: Any]]?
+        let toolChoice: String?
+    }
+
+    private func buildChatPreparation(
+        request: OpenRouterChatHistoryInput
+    ) throws -> ChatPreparation {
+        let requestId = UUID().uuidString
+        let settings = loadSettingsSnapshot()
+        try validateSettings(apiKey: settings.apiKey, model: settings.model)
+
+        let systemContent = buildSystemContent(
+            input: BuildSystemContentInput(
+                systemPrompt: settings.systemPrompt,
+                hasTools: request.tools != nil,
+                mode: request.mode,
+                projectRoot: request.projectRoot,
+                reasoningEnabled: settings.reasoningEnabled
+            )
+        )
+
+        let finalMessages = buildFinalMessages(
+            systemContent: systemContent,
+            context: request.context,
+            messages: request.messages
+        )
+
+        let toolDefinitions = buildToolDefinitions(tools: request.tools)
+        let toolChoice = toolDefinitions?.isEmpty == false ? "auto" : nil
+
+        return ChatPreparation(
+            requestId: requestId,
+            settings: settings,
+            finalMessages: finalMessages,
+            toolDefinitions: toolDefinitions,
+            toolChoice: toolChoice
+        )
+    }
+
+    private func loadSettingsSnapshot() -> SettingsSnapshot {
+        let settings = settingsStore.load()
+        return SettingsSnapshot(
+            apiKey: settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            model: settings.model.trimmingCharacters(in: .whitespacesAndNewlines),
+            systemPrompt: settings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines),
+            baseURL: settings.baseURL,
+            reasoningEnabled: settings.reasoningEnabled
+        )
     }
 
     private func buildSystemContent(input: BuildSystemContentInput) -> String {

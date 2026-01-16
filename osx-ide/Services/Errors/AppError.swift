@@ -76,11 +76,3 @@ public enum AppError: LocalizedError {
         }
     }
 }
-
-/// Error severity levels for UI feedback
-public enum ErrorSeverity {
-    case info
-    case warning
-    case error
-    case critical
-}

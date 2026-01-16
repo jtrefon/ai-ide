@@ -19,7 +19,11 @@ public enum MultiCursorUtilities {
     }
 
     /// Returns caret index moved one line up/down keeping the same column when possible.
-    public static func caretMovedVertically(text: String, caret: Int, direction: VerticalDirection) -> Int? {
+    public static func caretMovedVertically(
+        text: String,
+        caret: Int,
+        direction: MultiCursorVerticalDirection
+    ) -> Int? {
         let ns = text as NSString
         let safeCaret = max(0, min(caret, ns.length))
         let currentLine = lineRange(text: ns, index: safeCaret)
@@ -53,8 +57,4 @@ public enum MultiCursorUtilities {
         return line.location + col
     }
 
-    public enum VerticalDirection {
-        case up
-        case down
-    }
 }

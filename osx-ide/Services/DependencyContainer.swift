@@ -40,13 +40,20 @@ class DependencyContainer {
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
 
         _conversationManager = ConversationManager(
-            aiService: _aiService,
-            errorManager: errorManager,
-            fileSystemService: _fileSystemService,
-            fileEditorService: _fileEditorService,
-            workspaceService: _workspaceService,
-            eventBus: _eventBus,
-            codebaseIndex: nil
+            dependencies: ConversationManager.Dependencies(
+                services: ConversationManager.ServiceDependencies(
+                    aiService: _aiService,
+                    errorManager: errorManager,
+                    fileSystemService: _fileSystemService,
+                    fileEditorService: _fileEditorService
+                ),
+                environment: ConversationManager.EnvironmentDependencies(
+                    workspaceService: _workspaceService,
+                    eventBus: _eventBus,
+                    projectRoot: nil,
+                    codebaseIndex: nil
+                )
+            )
         )
 
         _projectCoordinator = ProjectCoordinator(
