@@ -87,14 +87,16 @@ final class MarkdownParserTests: XCTestCase {
     func testParse_withMultipleCodeBlocks_preservesOrder() {
         let input = "A\n```swift\nlet a = 1\n```\nB\n```python\nprint('x')\n```\nC"
         let document = MarkdownDocument.parse(input)
-
         XCTAssertEqual(document.blocks.count, 5)
+        verifyMultipleCodeBlocksOrder(document.blocks)
+    }
 
-        assertRichTextBlock(document.blocks[0], equals: "A\n")
-        assertCodeBlock(document.blocks[1], code: "let a = 1", language: "swift")
-        assertRichTextBlock(document.blocks[2], equals: "\nB\n")
-        assertCodeBlock(document.blocks[3], code: "print('x')", language: "python")
-        assertRichTextBlock(document.blocks[4], equals: "\nC")
+    private func verifyMultipleCodeBlocksOrder(_ blocks: [MarkdownBlock]) {
+        assertRichTextBlock(blocks[0], equals: "A\n")
+        assertCodeBlock(blocks[1], code: "let a = 1", language: "swift")
+        assertRichTextBlock(blocks[2], equals: "\nB\n")
+        assertCodeBlock(blocks[3], code: "print('x')", language: "python")
+        assertRichTextBlock(blocks[4], equals: "\nC")
     }
 
     func testParse_withUnclosedCodeFence_treatsAsRichText() {

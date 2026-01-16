@@ -37,13 +37,18 @@ actor OpenRouterAIService: AIService {
         _ request: AIServiceHistoryRequest
     ) async throws -> AIServiceResponse {
         let openRouterMessages = buildOpenRouterMessages(from: request.messages)
-        return try await performChatWithHistory(OpenRouterChatHistoryInput(
-            messages: openRouterMessages,
+        let historyInput = buildHistoryInput(messages: openRouterMessages, from: request)
+        return try await performChatWithHistory(historyInput)
+    }
+
+    private func buildHistoryInput(messages: [OpenRouterChatMessage], from request: AIServiceHistoryRequest) -> OpenRouterChatHistoryInput {
+        OpenRouterChatHistoryInput(
+            messages: messages,
             context: request.context,
             tools: request.tools,
             mode: request.mode,
             projectRoot: request.projectRoot
-        ))
+        )
     }
 
     private static func sanitizeToolCallOrdering(_ messages: [ChatMessage]) -> [ChatMessage] {
@@ -95,14 +100,20 @@ actor OpenRouterAIService: AIService {
         _ message: ChatMessage,
         validToolCallIds: Set<String>
     ) -> OpenRouterChatMessage? {
-        if message.toolStatus == .executing {
-            return nil
-        }
+        guard message.toolStatus != .executing else { return nil }
         if let toolCallId = message.toolCallId {
-            guard validToolCallIds.contains(toolCallId) else { return nil }
-            let content = Self.truncate(message.content, limit: Self.maxToolOutputCharsForModel)
-            return OpenRouterChatMessage(role: "tool", content: content, toolCallID: toolCallId)
+            return mapValidToolMessage(message, toolCallId: toolCallId, validToolCallIds: validToolCallIds)
         }
+        return mapFallbackToolMessage(message)
+    }
+
+    private func mapValidToolMessage(_ message: ChatMessage, toolCallId: String, validToolCallIds: Set<String>) -> OpenRouterChatMessage? {
+        guard validToolCallIds.contains(toolCallId) else { return nil }
+        let content = Self.truncate(message.content, limit: Self.maxToolOutputCharsForModel)
+        return OpenRouterChatMessage(role: "tool", content: content, toolCallID: toolCallId)
+    }
+
+    private func mapFallbackToolMessage(_ message: ChatMessage) -> OpenRouterChatMessage {
         let content = Self.truncate(message.content, limit: Self.maxToolOutputCharsForModel)
         return OpenRouterChatMessage(role: "user", content: "Tool Output: \(content)")
     }

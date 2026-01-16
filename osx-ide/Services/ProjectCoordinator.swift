@@ -83,37 +83,44 @@ class ProjectCoordinator {
 
         pendingAutoReindexTask?.cancel()
         pendingAutoReindexTask = nil
-
         codebaseIndex?.stop()
         codebaseIndex = nil
 
         if overwriteDB {
-            Task {
-                await IndexLogger.shared.setup(projectRoot: root)
-                await IndexLogger.shared.log("ProjectCoordinator: Rebuilding index DB (delete + recreate)")
-            }
-
-            let dbURL = CodebaseIndex.indexDatabaseURL(projectRoot: root)
-            let walURL = URL(fileURLWithPath: dbURL.path + "-wal")
-            let shmURL = URL(fileURLWithPath: dbURL.path + "-shm")
-
-            do {
-                try FileManager.default.createDirectory(
-                    at: dbURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                for url in [dbURL, walURL, shmURL] {
-                    if FileManager.default.fileExists(atPath: url.path) {
-                        try FileManager.default.removeItem(at: url)
-                    }
-                }
-            } catch {
-                errorManager.handle(.unknown("Failed to reset index DB: \(error.localizedDescription)"))
-            }
+            cleanupIndexDatabase(projectRoot: root)
         }
 
+        initializeAndStartIndex(projectRoot: root, aiEnrichment: aiEnrichment)
+    }
+
+    private func cleanupIndexDatabase(projectRoot: URL) {
+        Task {
+            await IndexLogger.shared.setup(projectRoot: projectRoot)
+            await IndexLogger.shared.log("ProjectCoordinator: Rebuilding index DB (delete + recreate)")
+        }
+
+        let dbURL = CodebaseIndex.indexDatabaseURL(projectRoot: projectRoot)
+        let walURL = URL(fileURLWithPath: dbURL.path + "-wal")
+        let shmURL = URL(fileURLWithPath: dbURL.path + "-shm")
+
         do {
-            let index = try CodebaseIndex(eventBus: eventBus, projectRoot: root, aiService: aiService)
+            try FileManager.default.createDirectory(
+                at: dbURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            for url in [dbURL, walURL, shmURL] {
+                if FileManager.default.fileExists(atPath: url.path) {
+                    try FileManager.default.removeItem(at: url)
+                }
+            }
+        } catch {
+            errorManager.handle(.unknown("Failed to reset index DB: \(error.localizedDescription)"))
+        }
+    }
+
+    private func initializeAndStartIndex(projectRoot: URL, aiEnrichment: Bool) {
+        do {
+            let index = try CodebaseIndex(eventBus: eventBus, projectRoot: projectRoot, aiService: aiService)
             self.codebaseIndex = index
             index.start()
 
@@ -122,18 +129,14 @@ class ProjectCoordinator {
 
             if let cm = conversationManager as? ConversationManager {
                 cm.updateCodebaseIndex(index)
-                cm.updateProjectRoot(root)
+                cm.updateProjectRoot(projectRoot)
             }
 
             if isIndexEnabled {
-                index.reindexProject(
-                    aiEnrichmentEnabled: aiEnrichment
-                )
+                index.reindexProject(aiEnrichmentEnabled: aiEnrichment)
             } else {
                 Task {
-                    await IndexLogger.shared.log(
-                        "ProjectCoordinator: Reindex requested but Codebase Index is disabled"
-                    )
+                    await IndexLogger.shared.log("ProjectCoordinator: Reindex requested but Codebase Index is disabled")
                 }
             }
         } catch {
