@@ -42,13 +42,13 @@ extension CodebaseIndex {
     static func isIndexableFile(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
         if ext.isEmpty { return false }
-        return AppConstants.Indexing.allowedExtensions.contains(ext)
+        return AppConstantsIndexing.allowedExtensions.contains(ext)
     }
 
     static func isAIEnrichableFile(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
         if ext.isEmpty { return false }
-        return AppConstants.Indexing.aiEnrichableExtensions.contains(ext)
+        return AppConstantsIndexing.aiEnrichableExtensions.contains(ext)
     }
 
     static func resolveIndexDirectory(projectRoot: URL) -> URL {

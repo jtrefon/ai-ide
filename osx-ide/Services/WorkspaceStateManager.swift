@@ -135,8 +135,8 @@ class WorkspaceStateManager: ObservableObject {
         recentlyOpenedFiles.insert(url, at: 0)
 
         // Limit to maxRecentFiles
-        if recentlyOpenedFiles.count > AppConstants.FileSystem.maxRecentFiles {
-            recentlyOpenedFiles = Array(recentlyOpenedFiles.prefix(AppConstants.FileSystem.maxRecentFiles))
+        if recentlyOpenedFiles.count > AppConstantsFileSystem.maxRecentFiles {
+            recentlyOpenedFiles = Array(recentlyOpenedFiles.prefix(AppConstantsFileSystem.maxRecentFiles))
         }
     }
 
@@ -198,17 +198,17 @@ class WorkspaceStateManager: ObservableObject {
         }
 
         // Check for invalid characters
-        guard trimmedName.rangeOfCharacter(from: AppConstants.Validation.invalidFileNameChars) == nil else {
+        guard trimmedName.rangeOfCharacter(from: AppConstantsValidation.invalidFileNameChars) == nil else {
             return false
         }
 
         // Check reserved names (Windows-style, but good practice)
-        if AppConstants.Validation.reservedFileNames.contains(trimmedName.uppercased()) {
+        if AppConstantsValidation.reservedFileNames.contains(trimmedName.uppercased()) {
             return false
         }
 
         // Check name length
-        if trimmedName.count > AppConstants.FileSystem.maxFileNameLength {
+        if trimmedName.count > AppConstantsFileSystem.maxFileNameLength {
             return false
         }
 

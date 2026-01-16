@@ -167,7 +167,9 @@ extension CodebaseIndex {
                 throw AppError.aiServiceError("AI request timed out after \(seconds)s")
             }
 
-            let result = try await group.next()!
+            guard let result = try await group.next() else {
+                throw AppError.aiServiceError("Task group returned no result")
+            }
             group.cancelAll()
             return result
         }

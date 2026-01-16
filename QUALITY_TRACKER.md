@@ -20,6 +20,43 @@ Please carry on with development with set of priorities:
 
 ## 🔴 Critical Issues (Priority 1)
 
+### 4. Insecure API Key Storage - Security Vulnerability
+
+**File:** `osx-ide/Services/OpenRouterService.swift`
+**Status:** ✅ Completed - Migrated to Keychain Services with backward compatibility
+**Impact:** API Keys are stored in plain text in UserDefaults.
+**Estimated Effort:** 1 Day
+
+**Actions:**
+- [x] Migrate `OpenRouterSettingsStore` to use Keychain Services.
+- [x] Ensure backward compatibility (migrate existing keys if possible).
+- [x] Verify keys are no longer stored in UserDefaults.
+
+### 5. Force Unwraps - Stability Risk
+
+**Files:** `DatabaseQueryExecutor.swift`, `CodeFoldingManager.swift`, and others.
+**Status:** ✅ Completed - Audited and fixed unsafe instances
+**Impact:** Potential runtime crashes.
+**Estimated Effort:** 1 Day
+
+**Actions:**
+- [x] Replace `!` with `if let` or `guard let` in `DatabaseQueryExecutor`.
+- [x] Audit `Services/` for other instances of force unwrapping.
+
+### 6. Code Duplication - Message Mapping
+
+**File:** `osx-ide/Services/OpenRouterAIService.swift`
+**Status:** ✅ Completed - Extracted OpenRouterMessageMapper
+**Impact:** High maintenance burden and risk of inconsistencies.
+**Estimated Effort:** 2 Days
+
+**Actions:**
+- [x] Extract message conversion logic into `OpenRouterMessageMapper`.
+- [x] Implement unit tests for the mapper.
+- [x] Remove redundant code in `OpenRouterAIService`.
+
+
+
 ### 1. AIToolExecutor.executeBatch - Extreme Complexity
 
 **File:** `osx-ide/Services/AIToolExecutor.swift:464-490`

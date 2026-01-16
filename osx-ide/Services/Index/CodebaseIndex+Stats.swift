@@ -53,7 +53,7 @@ extension CodebaseIndex {
     private func loadScopedStats(
         fallbackIndexedCount: Int
     ) async -> (indexedCount: Int, aiEnrichedCount: Int, avgAIQuality: Double) {
-        let allowed = AppConstants.Indexing.allowedExtensions
+        let allowed = AppConstantsIndexing.allowedExtensions
         let indexedCount = (try? await database.getIndexedResourceCountScoped(
             projectRoot: projectRoot,
             allowedExtensions: allowed
