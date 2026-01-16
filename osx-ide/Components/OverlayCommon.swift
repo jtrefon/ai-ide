@@ -18,13 +18,15 @@ extension View {
         @ViewBuilder content: () -> some View
     ) -> some View {
         OverlayScaffold(
-            title: config.title,
-            placeholder: config.placeholder,
+            configuration: OverlayScaffoldConfiguration(
+                title: config.title,
+                placeholder: config.placeholder,
+                textFieldMinWidth: config.textFieldMinWidth,
+                showsProgress: config.showsProgress,
+                onSubmit: config.onSubmit,
+                onClose: config.onClose
+            ),
             query: config.query,
-            textFieldMinWidth: config.textFieldMinWidth,
-            showsProgress: config.showsProgress,
-            onSubmit: config.onSubmit,
-            onClose: config.onClose,
             content: content
         )
     }
