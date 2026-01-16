@@ -1,11 +1,5 @@
 import Foundation
 
-struct BraceAnalysisResult {
-    let openingCount: Int
-    let closingCount: Int
-    let startsWithClosing: Bool
-}
-
 struct BraceAnalyzer {
     func analyze(_ trimmedLine: String) -> BraceAnalysisResult {
         let startsWithClosing = trimmedLine.hasPrefix("}") || trimmedLine.hasPrefix("]") || trimmedLine.hasPrefix(")")
