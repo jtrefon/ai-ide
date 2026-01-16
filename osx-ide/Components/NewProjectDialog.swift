@@ -170,22 +170,3 @@ struct NewProjectDialog: View {
         dismiss()
     }
 }
-
-struct NewProjectDialog_Previews: PreviewProvider {
-    static var previews: some View {
-        NewProjectDialog(
-            fileDialogService: MockFileDialogService(),
-            onCreateProject: { _, _ in }
-        )
-    }
-}
-
-// Mock for preview
-class MockFileDialogService: FileDialogServiceProtocol {
-    func openFileOrFolder() async -> URL? { nil }
-    func openFolder() async -> URL? { nil }
-    func saveFile(defaultFileName: String, allowedContentTypes: [UTType]) async -> URL? { nil }
-    func promptForNewProjectFolder(defaultName: String) async -> URL? {
-        URL(fileURLWithPath: "/Users/test/Desktop").appendingPathComponent(defaultName)
-    }
-}

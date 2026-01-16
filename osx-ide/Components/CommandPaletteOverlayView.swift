@@ -41,17 +41,19 @@ struct CommandPaletteOverlayView: View {
 
     var body: some View {
         OverlayScaffold(
-            title: localized("command_palette.title"),
-            placeholder: localized("command_palette.placeholder"),
-            query: $query,
-            textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
-            showsProgress: false,
-            onSubmit: {
-                runFirstMatch()
-            },
-            onClose: {
-                close()
-            }
+            configuration: OverlayScaffoldConfiguration(
+                title: localized("command_palette.title"),
+                placeholder: localized("command_palette.placeholder"),
+                textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
+                showsProgress: false,
+                onSubmit: {
+                    runFirstMatch()
+                },
+                onClose: {
+                    close()
+                }
+            ),
+            query: $query
         ) {
             List {
                 ForEach(items) { item in
