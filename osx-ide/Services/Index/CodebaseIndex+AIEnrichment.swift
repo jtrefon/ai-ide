@@ -94,7 +94,8 @@ extension CodebaseIndex {
         ))?.contentModificationDate?.timeIntervalSince1970
         let existingModTime = try? await database.getResourceLastModified(resourceId: file.absoluteString)
 
-        guard let fileModTime, let existingModTime else { return false }
+        guard let fileModTime else { return false }
+        guard let existingModTime else { return false }
         guard abs(existingModTime - fileModTime) < 0.000_001 else { return false }
         return (try? await database.isResourceAIEnriched(resourceId: file.absoluteString)) == true
     }

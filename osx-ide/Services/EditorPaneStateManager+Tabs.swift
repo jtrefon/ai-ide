@@ -101,7 +101,8 @@ extension EditorPaneStateManager {
     }
 
     func persistActiveEditorStateToTab() {
-        guard let activeID = activeTabID, let idx = tabs.firstIndex(where: { $0.id == activeID }) else { return }
+        guard let activeID = activeTabID else { return }
+        guard let idx = tabs.firstIndex(where: { $0.id == activeID }) else { return }
         tabs[idx].content = editorContent
         tabs[idx].language = editorLanguage
         tabs[idx].isDirty = isDirty
@@ -109,14 +110,16 @@ extension EditorPaneStateManager {
     }
 
     func updateActiveTabFromEditor() {
-        guard let activeID = activeTabID, let idx = tabs.firstIndex(where: { $0.id == activeID }) else { return }
+        guard let activeID = activeTabID else { return }
+        guard let idx = tabs.firstIndex(where: { $0.id == activeID }) else { return }
         tabs[idx].content = editorContent
         tabs[idx].language = editorLanguage
         tabs[idx].isDirty = true
     }
 
     func updateActiveTabSelectionFromEditor() {
-        guard let activeID = activeTabID, let idx = tabs.firstIndex(where: { $0.id == activeID }) else { return }
+        guard let activeID = activeTabID else { return }
+        guard let idx = tabs.firstIndex(where: { $0.id == activeID }) else { return }
         tabs[idx].selectedRange = selectedRange
     }
 }

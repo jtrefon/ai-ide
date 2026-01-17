@@ -145,8 +145,10 @@ final class ProjectSessionCoordinator {
             return
         }
 
-        if let frame = session.windowFrame?.rect, let window {
-            window.setFrame(frame, display: true)
+        if let frame = session.windowFrame?.rect {
+            if let window {
+                window.setFrame(frame, display: true)
+            }
         }
 
         ui.isSidebarVisible = session.isSidebarVisible

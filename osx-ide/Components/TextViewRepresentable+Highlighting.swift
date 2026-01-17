@@ -203,7 +203,8 @@ extension TextViewRepresentable.Coordinator {
         pendingHighlightTask = Task { [weak self, weak textView] in
             try? await Task.sleep(nanoseconds: 50_000_000)
             guard !Task.isCancelled else { return }
-            guard let self, let textView else { return }
+            guard let self else { return }
+            guard let textView else { return }
             await MainActor.run {
                 self.performAsyncHighlight(for: text, in: textView, language: language, font: font)
             }

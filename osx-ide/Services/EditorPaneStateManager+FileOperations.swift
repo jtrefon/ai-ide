@@ -27,8 +27,10 @@ extension EditorPaneStateManager {
         fileEditorService.saveFile()
         isDirty = false
         persistActiveEditorStateToTab()
-        if let activeID = activeTabID, let idx = tabs.firstIndex(where: { $0.id == activeID }) {
-            tabs[idx].isDirty = false
+        if let activeID = activeTabID {
+            if let idx = tabs.firstIndex(where: { $0.id == activeID }) {
+                tabs[idx].isDirty = false
+            }
         }
     }
 
