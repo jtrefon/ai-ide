@@ -27,7 +27,8 @@ struct DiagnosticsParser {
                 break
             }
         }
-        guard let li = lineIndex, let lineNo = intAt(li) else { return nil }
+        guard let li = lineIndex else { return nil }
+        guard let lineNo = intAt(li) else { return nil }
 
         let path = parts[0..<li].joined(separator: ":").trimmingCharacters(in: .whitespaces)
         guard !path.isEmpty else { return nil }

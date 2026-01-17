@@ -24,7 +24,8 @@ final class CodeEditorTextView: NSTextView {
     }
 
     private func reflowForFoldingChange() {
-        guard let layoutManager, let textContainer else { return }
+        guard let layoutManager else { return }
+        guard let textContainer else { return }
         layoutManager.invalidateLayout(
             forCharacterRange: NSRange(location: 0, length: (string as NSString).length),
             actualCharacterRange: nil

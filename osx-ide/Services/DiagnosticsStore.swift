@@ -46,8 +46,12 @@ final class DiagnosticsStore: ObservableObject {
     func selectNext() -> Diagnostic? {
         guard !diagnostics.isEmpty else { return nil }
         let currentIndex: Int
-        if let id = selectedDiagnosticID, let idx = diagnostics.firstIndex(where: { $0.id == id }) {
-            currentIndex = idx
+        if let id = selectedDiagnosticID {
+            if let idx = diagnostics.firstIndex(where: { $0.id == id }) {
+                currentIndex = idx
+            } else {
+                currentIndex = 0
+            }
         } else {
             currentIndex = 0
         }
@@ -60,8 +64,12 @@ final class DiagnosticsStore: ObservableObject {
     func selectPrevious() -> Diagnostic? {
         guard !diagnostics.isEmpty else { return nil }
         let currentIndex: Int
-        if let id = selectedDiagnosticID, let idx = diagnostics.firstIndex(where: { $0.id == id }) {
-            currentIndex = idx
+        if let id = selectedDiagnosticID {
+            if let idx = diagnostics.firstIndex(where: { $0.id == id }) {
+                currentIndex = idx
+            } else {
+                currentIndex = 0
+            }
         } else {
             currentIndex = 0
         }

@@ -128,29 +128,46 @@ public class IndexCoordinator {
     }
 
     private func setupFileEventSubscriptions() {
+        setupFileCreatedSubscription()
+        setupFileModifiedSubscription()
+        setupFileRenamedSubscription()
+        setupFileDeletedSubscription()
+    }
+
+    private func setupFileCreatedSubscription() {
         eventBus.subscribe(to: FileCreatedEvent.self) { [weak self] event in
-            guard let self, self.isEnabled else { return }
+            guard let self else { return }
+            guard self.isEnabled else { return }
             self.debounceSubject.send(event.url)
         }
         .store(in: &cancellables)
+    }
 
+    private func setupFileModifiedSubscription() {
         eventBus.subscribe(to: FileModifiedEvent.self) { [weak self] event in
-            guard let self, self.isEnabled else { return }
+            guard let self else { return }
+            guard self.isEnabled else { return }
             self.debounceSubject.send(event.url)
         }
         .store(in: &cancellables)
+    }
 
+    private func setupFileRenamedSubscription() {
         eventBus.subscribe(to: FileRenamedEvent.self) { [weak self] event in
-            guard let self, self.isEnabled else { return }
+            guard let self else { return }
+            guard self.isEnabled else { return }
             Task {
                 try? await self.indexer.removeFile(at: event.oldUrl)
                 self.debounceSubject.send(event.newUrl)
             }
         }
         .store(in: &cancellables)
+    }
 
+    private func setupFileDeletedSubscription() {
         eventBus.subscribe(to: FileDeletedEvent.self) { [weak self] event in
-            guard let self, self.isEnabled else { return }
+            guard let self else { return }
+            guard self.isEnabled else { return }
             Task {
                 try? await self.indexer.removeFile(at: event.url)
             }

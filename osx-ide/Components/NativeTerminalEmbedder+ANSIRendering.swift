@@ -195,17 +195,17 @@ extension NativeTerminalEmbedder {
 
     func handleEraseInLine(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         let mode = parameters.first ?? 0
-        if let terminalView = terminalView, let storage = terminalView.textStorage {
-            eraseInLine(mode: mode, in: storage)
-        }
+        guard let terminalView = terminalView else { return ([:], true) }
+        guard let storage = terminalView.textStorage else { return ([:], true) }
+        eraseInLine(mode: mode, in: storage)
         return ([:], true)
     }
 
     func handleDeleteCharacters(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         let characterCount = max(1, parameters.first ?? 1)
-        if let terminalView = terminalView, let storage = terminalView.textStorage {
-            deleteCharacters(characterCount, in: storage)
-        }
+        guard let terminalView = terminalView else { return ([:], true) }
+        guard let storage = terminalView.textStorage else { return ([:], true) }
+        deleteCharacters(characterCount, in: storage)
         return ([:], true)
     }
 
@@ -234,25 +234,25 @@ extension NativeTerminalEmbedder {
     }
 
     func moveCursorToEndForUnsupportedPositioning() {
-        if let terminalView = terminalView, let storage = terminalView.textStorage {
-            currentLineStartLocation = storage.length
-            cursorColumn = 0
-            pendingEraseToEndOfLine = false
-        }
+        guard let terminalView = terminalView else { return }
+        guard let storage = terminalView.textStorage else { return }
+        currentLineStartLocation = storage.length
+        cursorColumn = 0
+        pendingEraseToEndOfLine = false
     }
 
     func eraseInDisplay(mode: Int) {
-        if let terminalView = terminalView, let storage = terminalView.textStorage {
-            if mode == 2 || mode == 3 {
-                storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: "")
-                currentLineStartLocation = 0
-                cursorColumn = 0
-                pendingEraseToEndOfLine = false
-            } else {
-                currentLineStartLocation = storage.length
-                cursorColumn = 0
-                pendingEraseToEndOfLine = false
-            }
+        guard let terminalView = terminalView else { return }
+        guard let storage = terminalView.textStorage else { return }
+        if mode == 2 || mode == 3 {
+            storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: "")
+            currentLineStartLocation = 0
+            cursorColumn = 0
+            pendingEraseToEndOfLine = false
+        } else {
+            currentLineStartLocation = storage.length
+            cursorColumn = 0
+            pendingEraseToEndOfLine = false
         }
     }
 

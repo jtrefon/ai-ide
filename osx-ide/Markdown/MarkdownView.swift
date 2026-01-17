@@ -71,8 +71,10 @@ private struct MarkdownRichTextView: View {
 
     private func resolveBaseFont() -> Font? {
         guard let fontSize else { return nil }
-        if let fontFamily, let nsFont = NSFont(name: fontFamily, size: CGFloat(fontSize)) {
-            return Font(nsFont)
+        if let fontFamily {
+            if let nsFont = NSFont(name: fontFamily, size: CGFloat(fontSize)) {
+                return Font(nsFont)
+            }
         }
         return .system(size: CGFloat(fontSize))
     }

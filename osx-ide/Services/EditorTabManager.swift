@@ -18,13 +18,15 @@ final class EditorTabManager {
 
     func nextTabID(activeTabID: UUID?, tabs: [EditorPaneStateManager.EditorTab]) -> UUID? {
         guard !tabs.isEmpty else { return nil }
-        guard let activeTabID, let idx = tabs.firstIndex(where: { $0.id == activeTabID }) else { return tabs[0].id }
+        guard let activeTabID else { return tabs[0].id }
+        guard let idx = tabs.firstIndex(where: { $0.id == activeTabID }) else { return tabs[0].id }
         return tabs[(idx + 1) % tabs.count].id
     }
 
     func previousTabID(activeTabID: UUID?, tabs: [EditorPaneStateManager.EditorTab]) -> UUID? {
         guard !tabs.isEmpty else { return nil }
-        guard let activeTabID, let idx = tabs.firstIndex(where: { $0.id == activeTabID }) else { return tabs[0].id }
+        guard let activeTabID else { return tabs[0].id }
+        guard let idx = tabs.firstIndex(where: { $0.id == activeTabID }) else { return tabs[0].id }
         return tabs[(idx - 1 + tabs.count) % tabs.count].id
     }
 }
