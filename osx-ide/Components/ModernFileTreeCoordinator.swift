@@ -329,16 +329,13 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
     private func scheduleSearch(query: String) {
         let searchContext = beginSearch(query: query)
-        if handleEmptySearchQueryIfNeeded(searchContext) {
-            return
-        }
+        guard !handleEmptySearchQueryIfNeeded(searchContext) else { return }
 
         if shouldRunSearchSynchronously {
             runSynchronousSearch(searchContext)
-            return
+        } else {
+            scheduleAsynchronousSearch(searchContext)
         }
-
-        scheduleAsynchronousSearch(searchContext)
     }
 
     private var shouldRunSearchSynchronously: Bool {
