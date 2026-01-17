@@ -168,9 +168,11 @@ struct QuickOpenOverlayView: View {
         let parts = trimmed.split(separator: ":", omittingEmptySubsequences: false)
         guard parts.count >= 2 else { return (trimmed, nil) }
 
-        if let last = parts.last, let line = Int(last) {
-            let file = parts.dropLast().joined(separator: ":")
-            return (String(file), max(1, line))
+        if let last = parts.last {
+            if let line = Int(last) {
+                let file = parts.dropLast().joined(separator: ":")
+                return (String(file), max(1, line))
+            }
         }
 
         return (trimmed, nil)

@@ -8,7 +8,9 @@ extension NativeTerminalEmbedder {
         eventBus.publish(TerminalOutputProducedEvent(output: text))
 
         Task { @MainActor [weak self] in
-            guard let self = self, let terminalView = self.terminalView, !self.isCleaningUp else { return }
+            guard let self else { return }
+            guard let terminalView = self.terminalView else { return }
+            guard !self.isCleaningUp else { return }
             let shouldAutoscroll = self.isNearBottom(terminalView)
             self.applyTerminalOutput(text, to: terminalView)
 
