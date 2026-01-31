@@ -170,6 +170,13 @@ final class FileEditorStateManager: ObservableObject {
         }
     }
 
+    func handleExternalFileChanges(paths: [String]) {
+        for path in paths {
+            primaryPane.reloadFileIfOpen(path: path)
+            secondaryPane.reloadFileIfOpen(path: path)
+        }
+    }
+
     func tab(for filePath: String) -> EditorPaneStateManager.EditorTab? {
         findTabInPane(primaryPane, filePath: filePath) ?? findTabInPane(secondaryPane, filePath: filePath)
     }

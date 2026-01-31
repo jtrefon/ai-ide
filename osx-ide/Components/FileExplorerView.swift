@@ -203,6 +203,9 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
             refreshToken += 1
             syncSelectionFromAppState()
         }
+        .onChange(of: context.fileTreeRefreshToken) {
+            refreshToken = context.fileTreeRefreshToken
+        }
         .onChange(of: context.fileEditor.selectedFile) {
             syncSelectionFromAppState()
         }

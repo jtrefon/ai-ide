@@ -22,6 +22,20 @@ struct ReasoningMessageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                MarkdownMessageView(
+                    content: message.content,
+                    fontSize: fontSize,
+                    fontFamily: fontFamily
+                )
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(NSColor.controlBackgroundColor))
+                .foregroundColor(.primary)
+                .cornerRadius(16)
+                .textSelection(.enabled)
+            }
+
             // Reasoning toggle button
             reasoningToggleButton
 

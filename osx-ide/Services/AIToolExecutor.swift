@@ -27,7 +27,6 @@ public final class AIToolExecutor {
     // Specialized services
     let logger: ToolExecutionLogger
     let argumentResolver: ToolArgumentResolver
-    let messageBuilder: ToolMessageBuilder
     let scheduler: ToolScheduler
 
     public init(
@@ -43,7 +42,6 @@ public final class AIToolExecutor {
             projectRoot: projectRoot,
             defaultFilePathProvider: defaultFilePathProvider
         )
-        self.messageBuilder = ToolMessageBuilder()
         self.scheduler = ToolScheduler()
     }
 
@@ -59,38 +57,5 @@ public final class AIToolExecutor {
 
     func resolveTargetFile(for toolCall: AIToolCall) -> String? {
         return argumentResolver.resolveTargetFile(for: toolCall)
-    }
-
-    private nonisolated static func isFilePathLikeTool(_ toolName: String) -> Bool {
-        switch toolName {
-        case "read_file", "write_file", "write_files", "create_file", "delete_file", "replace_in_file":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private nonisolated static func explicitFilePath(from arguments: [String: Any]) -> String? {
-        let candidates: [Any?] = [
-            arguments["path"],
-            arguments["targetPath"],
-            arguments["target_path"],
-            arguments["file_path"],
-            arguments["file"],
-            arguments["target"]
-        ]
-
-        return candidates
-            .compactMap { $0 as? String }
-            .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
-    }
-
-    private func resolvedOrInjectedFilePath(arguments: [String: Any], toolName: String) -> String? {
-        if let explicit = Self.explicitFilePath(from: arguments) {
-            return explicit
-        }
-
-        guard Self.isFilePathLikeTool(toolName) else { return nil }
-        return nil
     }
 }

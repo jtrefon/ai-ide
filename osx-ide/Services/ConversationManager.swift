@@ -162,6 +162,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             await ConversationPlanStore.shared.setProjectRoot(root)
             await PatchSetStore.shared.setProjectRoot(root)
             await CheckpointManager.shared.setProjectRoot(root)
+            await OrchestrationRunStore.shared.setProjectRoot(root)
         }
     }
 
@@ -251,6 +252,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private func startSendTask(userContext: UserMessageContext, explicitContext: String?) {
         Task { [weak self] in
             guard let self = self else { return }
+            let runId = UUID().uuidString
 
             do {
                 conversationLogger.logAIRequestStart(
@@ -265,8 +267,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                         mode: self.currentMode,
                         projectRoot: self.projectRoot,
                         conversationId: self.conversationId,
+                        runId: runId,
                         availableTools: self.availableTools,
-                        cancelledToolCallIds: { [cancelledIds = self.cancelledToolCallIds] in cancelledIds }
+                        cancelledToolCallIds: { [cancelledIds = self.cancelledToolCallIds] in cancelledIds },
+                        qaReviewEnabled: self.currentMode == .agent
                     )
                 )
 
