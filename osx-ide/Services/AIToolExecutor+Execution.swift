@@ -1,6 +1,14 @@
 import Foundation
 
 extension AIToolExecutor {
+    struct ToolExecutionCrashError: LocalizedError, Sendable {
+        let message: String
+
+        var errorDescription: String? {
+            message
+        }
+    }
+
     struct ToolExecutionMessageContext {
         let toolName: String
         let status: ToolExecutionStatus
@@ -35,9 +43,35 @@ extension AIToolExecutor {
         content: String,
         context: ToolExecutionMessageContext
     ) -> ChatMessage {
-        ChatMessage(
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let payload = trimmed.isEmpty ? nil : content
+        let message: String
+
+        switch context.status {
+        case .executing:
+            message = "Tool execution in progress."
+        case .completed:
+            message = payload == nil
+                ? "Tool completed with no payload."
+                : "Tool completed successfully."
+        case .failed:
+            message = trimmed.isEmpty
+                ? "Tool failed with no error details."
+                : content
+        }
+
+        let envelope = ToolExecutionEnvelope(
+            status: context.status,
+            message: message,
+            payload: context.status == .failed ? nil : payload,
+            toolName: context.toolName,
+            toolCallId: context.toolCallId,
+            targetFile: context.targetFile
+        )
+
+        return ChatMessage(
             role: .tool,
-            content: content,
+            content: envelope.encodedString(),
             tool: ChatMessageToolContext(
                 toolName: context.toolName,
                 toolStatus: context.status,
@@ -204,6 +238,19 @@ extension AIToolExecutor {
                     onProgress: request.onProgress
                 )
             )
+            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                let error = ToolExecutionCrashError(
+                    message: "Tool returned an empty response. Treat this as a crash."
+                )
+                await logToolExecuteError(
+                    conversationId: request.conversationId,
+                    toolCall: request.toolCall,
+                    error: error
+                )
+                return .failure(error)
+            }
+
             await logToolExecuteSuccess(
                 conversationId: request.conversationId,
                 toolCall: request.toolCall,

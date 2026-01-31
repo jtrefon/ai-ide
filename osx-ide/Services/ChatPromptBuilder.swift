@@ -9,6 +9,11 @@ import Foundation
 
 /// Responsible for constructing and formatting prompts for the AI service.
 class ChatPromptBuilder {
+    enum DeliveryStatus {
+        case done
+        case needsWork
+    }
+
 
     /// Splits reasoning from the raw AI response text.
     /// - Parameter text: The raw response text.
@@ -47,7 +52,7 @@ class ChatPromptBuilder {
         guard let reasoning = split.reasoning, !reasoning.isEmpty else { return false }
 
         let lowercasedReasoning = reasoning.lowercased()
-        let required = ["analyze:", "research:", "plan:", "reflect:"]
+        let required = ["analyze:", "research:", "plan:", "reflect:", "action:", "delivery:"]
         return required.contains(where: { !lowercasedReasoning.contains($0) })
     }
 
@@ -72,7 +77,14 @@ class ChatPromptBuilder {
     }
 
     private static func containsPlaceholderText(_ reasoning: String) -> Bool {
-        let placeholders = ["Analyze:...", "Research:...", "Plan:...", "Reflect:..."]
+        let placeholders = [
+            "Analyze:...",
+            "Research:...",
+            "Plan:...",
+            "Reflect:...",
+            "Action:...",
+            "Delivery:..."
+        ]
         return placeholders.contains(where: { reasoning.contains($0) })
     }
 
@@ -99,7 +111,7 @@ class ChatPromptBuilder {
     private static func extractReasoningSections(_ reasoning: String) -> [(key: String, value: String)] {
         // Parse lines like "Analyze: ..."; tolerate leading/trailing whitespace.
         let lines = reasoning.split(whereSeparator: \.isNewline).map { String($0) }
-        let keys = ["Analyze:", "Research:", "Plan:", "Reflect:"]
+        let keys = ["Analyze:", "Research:", "Plan:", "Reflect:", "Action:", "Delivery:"]
         var results: [(String, String)] = []
 
         for line in lines {
@@ -136,5 +148,44 @@ class ChatPromptBuilder {
         ]
 
         return triggers.contains(where: { text.contains($0) })
+    }
+
+    /// Determines whether the response indicates delivery is complete.
+    /// Returns .needsWork if the Delivery section is missing or does not mark completion.
+    static func deliveryStatus(from text: String) -> DeliveryStatus? {
+        let split = splitReasoning(from: text)
+        guard let reasoning = split.reasoning, !reasoning.isEmpty else { return nil }
+
+        let sections = extractReasoningSections(reasoning)
+        guard let deliveryLine = sections.first(where: { $0.key.lowercased().hasPrefix("delivery:") })?.value else {
+            return .needsWork
+        }
+
+        let normalized = deliveryLine
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        let needsWorkTokens = [
+            "needs_work",
+            "needs work",
+            "not done",
+            "in_progress",
+            "in progress"
+        ]
+        let doneTokens = [
+            "done",
+            "complete",
+            "completed"
+        ]
+
+        if containsAnyToken(needsWorkTokens, in: normalized) {
+            return .needsWork
+        }
+
+        return containsAnyToken(doneTokens, in: normalized) ? .done : .needsWork
+    }
+
+    private static func containsAnyToken(_ tokens: [String], in text: String) -> Bool {
+        tokens.contains(where: text.contains)
     }
 }

@@ -17,6 +17,7 @@ class ProjectCoordinator {
     private let conversationManager: ConversationManagerProtocol
     private let settingsStore: SettingsStore
     private var currentProjectRoot: URL?
+    private var rootWatcher: ProjectRootFileWatcher?
 
     private(set) var codebaseIndex: CodebaseIndexProtocol?
     private var pendingAutoReindexTask: Task<Void, Never>?
@@ -39,6 +40,9 @@ class ProjectCoordinator {
         pendingAutoReindexTask?.cancel()
         pendingAutoReindexTask = nil
 
+        rootWatcher?.stop()
+        rootWatcher = nil
+
         codebaseIndex?.stop()
         codebaseIndex = nil
 
@@ -52,6 +56,8 @@ class ProjectCoordinator {
             let index = try CodebaseIndex(eventBus: eventBus, projectRoot: root, aiService: aiService)
             self.codebaseIndex = index
             index.start()
+
+            startRootWatcher(projectRoot: root)
 
             let isIndexEnabled = settingsStore.bool(forKey: AppConstantsStorage.codebaseIndexEnabledKey, default: true)
             index.setEnabled(isIndexEnabled)
@@ -124,6 +130,8 @@ class ProjectCoordinator {
             self.codebaseIndex = index
             index.start()
 
+            startRootWatcher(projectRoot: projectRoot)
+
             let isIndexEnabled = settingsStore.bool(forKey: AppConstantsStorage.codebaseIndexEnabledKey, default: true)
             index.setEnabled(isIndexEnabled)
 
@@ -165,5 +173,19 @@ class ProjectCoordinator {
             )
             self.reindexProject(aiEnrichment: aiEnrichmentEnabled)
         }
+    }
+
+    private func startRootWatcher(projectRoot: URL) {
+        let excludePatterns = IndexExcludePatternManager.loadExcludePatterns(
+            projectRoot: projectRoot,
+            defaultPatterns: IndexConfiguration.default.excludePatterns
+        )
+        let watcher = ProjectRootFileWatcher(
+            rootURL: projectRoot,
+            eventBus: eventBus,
+            excludePatterns: excludePatterns
+        )
+        rootWatcher = watcher
+        watcher.start()
     }
 }
