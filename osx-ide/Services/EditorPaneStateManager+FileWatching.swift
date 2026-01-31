@@ -57,6 +57,11 @@ extension EditorPaneStateManager {
         applyReloadedContent(newContent, tabIndex: idx)
     }
 
+    func reloadFileIfOpen(path: String) {
+        guard tabs.contains(where: { $0.filePath == path }) else { return }
+        reloadFileFromDisk(for: path)
+    }
+
     func shouldReloadTab(at index: Int, forPath path: String) -> Bool {
         guard !tabs[index].isDirty else { return false }
         guard FileManager.default.fileExists(atPath: path) else { return false }

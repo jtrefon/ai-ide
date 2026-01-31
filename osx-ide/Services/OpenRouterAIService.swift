@@ -175,9 +175,13 @@ actor OpenRouterAIService: AIService {
             responseBytes: data.count
         )
 
+        let resolvedToolCalls = request.tools?.isEmpty == false
+            ? choice.message.toolCalls
+            : nil
+
         return AIServiceResponse(
             content: choice.message.content,
-            toolCalls: choice.message.toolCalls
+            toolCalls: resolvedToolCalls
         )
     }
 
@@ -502,7 +506,8 @@ actor OpenRouterAIService: AIService {
     }
 
     private func buildReasoningPromptIfNeeded(reasoningEnabled: Bool, mode: AIMode?) -> String? {
-        guard reasoningEnabled, mode != nil else { return nil }
+        guard let mode else { return nil }
+        if mode != .agent, !reasoningEnabled { return nil }
         return """
 
         ## Reasoning
@@ -510,8 +515,10 @@ actor OpenRouterAIService: AIService {
         This block will be shown in a separate, foldable UI panel.
 
         Requirements:
-        - ALWAYS include all four sections in this exact order: Analyze, Research, Plan, Reflect.
+        - ALWAYS include all six sections in this exact order: Analyze, Research, Plan, Reflect, Action, Delivery.
         - If a section is not applicable, write 'N/A' (do not omit the section).
+        - If no action is needed, write 'None' in Action.
+        - Delivery MUST start with either 'DONE' or 'NEEDS_WORK'. Use DONE only when the task is fully complete.
         - Keep it concise and actionable; use short bullets or short sentences.
         - Do NOT include code blocks in <ide_reasoning>.
         - Do NOT use placeholders like '...' or copy the format example text verbatim.
@@ -523,6 +530,8 @@ actor OpenRouterAIService: AIService {
         Research: - ... (write real bullets)
         Plan: - ... (write real bullets)
         Reflect: - ... (write real bullets)
+        Action: - ... (write real bullets)
+        Delivery: DONE - ... (write real bullets)
         </ide_reasoning>
         """
     }

@@ -24,6 +24,8 @@ class AppState: ObservableObject, IDEContext {
 
     @Published var fileTreeSelectedRelativePath: String?
 
+    @Published var fileTreeRefreshToken: Int = 0
+
     @Published var isGlobalSearchPresented: Bool = false
     @Published var isQuickOpenPresented: Bool = false
 
@@ -62,6 +64,7 @@ class AppState: ObservableObject, IDEContext {
     private let setCodebaseIndexEnabledImpl: (Bool) -> Void
     private let setAIEnrichmentIndexingEnabledImpl: (Bool) -> Void
     private let reindexProjectNowImpl: () -> Void
+    private var eventCancellables = Set<AnyCancellable>()
 
     private lazy var projectSessionCoordinator = ProjectSessionCoordinator(
         workspace: workspace,
@@ -193,6 +196,8 @@ class AppState: ObservableObject, IDEContext {
             showHiddenFilesInFileTreePublisher: $showHiddenFilesInFileTree
         )
 
+        setupFileTreeRefreshSubscription()
+
         projectSessionCoordinator.loadProjectSessionIfAvailable()
     }
 
@@ -300,6 +305,10 @@ class AppState: ObservableObject, IDEContext {
         }
     }
 
+    func requestFileTreeRefresh() {
+        fileTreeRefreshToken += 1
+    }
+
     // UI Operations
     func toggleSidebar() {
         ui.toggleSidebar()
@@ -349,6 +358,14 @@ class AppState: ObservableObject, IDEContext {
         guard let projectRoot = workspace.currentDirectory?.standardizedFileURL else { return nil }
         guard let relative = fileTreeSelectedRelativePath, !relative.isEmpty else { return nil }
         return projectRoot.appendingPathComponent(relative).standardizedFileURL
+    }
+
+    private func setupFileTreeRefreshSubscription() {
+        eventBus.subscribe(to: FileTreeRefreshRequestedEvent.self) { [weak self] event in
+            self?.fileEditor.handleExternalFileChanges(paths: event.paths)
+            self?.requestFileTreeRefresh()
+        }
+        .store(in: &eventCancellables)
     }
 
     private func scheduleSaveProjectSession() {

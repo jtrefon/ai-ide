@@ -2,11 +2,14 @@ import Foundation
 
 @MainActor
 final class FileWatchCoordinator {
+    static var usesProjectRootWatcher = true
+    static var allowsOpenFileWatchers = true
     private var fileWatchers: [String: FileChangeMonitor] = [:]
     private var pendingReloads: [String: Task<Void, Never>] = [:]
     private var pendingWatchRestarts: [String: Task<Void, Never>] = [:]
 
     func beginWatchingFile(at path: String, onEvent: @escaping (DispatchSource.FileSystemEvent) -> Void) {
+        guard !Self.usesProjectRootWatcher || Self.allowsOpenFileWatchers else { return }
         guard fileWatchers[path] == nil else { return }
         let url = URL(fileURLWithPath: path)
         let watcher = FileChangeMonitor(
@@ -20,6 +23,7 @@ final class FileWatchCoordinator {
     }
 
     func endWatchingFile(at path: String) {
+        guard !Self.usesProjectRootWatcher || Self.allowsOpenFileWatchers else { return }
         pendingReloads[path]?.cancel()
         pendingReloads.removeValue(forKey: path)
 
@@ -33,6 +37,7 @@ final class FileWatchCoordinator {
     }
 
     func stopWatchingAllFiles(except keepPath: String? = nil) {
+        guard !Self.usesProjectRootWatcher || Self.allowsOpenFileWatchers else { return }
         let paths = fileWatchers.keys.filter { $0 != keepPath }
         for path in paths {
             endWatchingFile(at: path)
