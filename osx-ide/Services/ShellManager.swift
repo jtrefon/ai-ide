@@ -24,8 +24,8 @@ class ShellManager: NSObject {
     private var shellProcess: Process?
     private var readHandle: FileHandle?
     private var writeHandle: FileHandle?
-    private var ptyMasterFD: Int32?
-    private var ptySlaveFD: Int32?
+    private var ptyPrimaryFD: Int32?
+    private var ptySecondaryFD: Int32?
 
     private let queue = DispatchQueue(label: "com.osx-ide.shell-manager", qos: .userInitiated)
     private let cleanupLock = NSLock()
@@ -63,7 +63,7 @@ class ShellManager: NSObject {
                 shellPath: shellPath,
                 arguments: arguments,
                 directory: directory,
-                slaveHandle: pty.slaveHandle,
+                secondaryHandle: pty.secondaryHandle,
                 environmentOverrides: environmentOverrides
             )
         )
@@ -84,7 +84,7 @@ class ShellManager: NSObject {
     private func launchProcessAndFinalize(_ process: Process, pty: PTYHandles) {
         do {
             try process.run()
-            finalizeStartAfterRun(slaveHandle: pty.slaveHandle)
+            finalizeStartAfterRun(secondaryHandle: pty.secondaryHandle)
             schedulePostLaunchVerification()
         } catch {
             notifyError("Failed to start shell: \(error.localizedDescription)")
@@ -106,16 +106,16 @@ class ShellManager: NSObject {
     }
 
     private struct PTYHandles {
-        let masterFD: Int32
-        let slaveFD: Int32
-        let masterHandle: FileHandle
-        let slaveHandle: FileHandle
+        let primaryFD: Int32
+        let secondaryFD: Int32
+        let primaryHandle: FileHandle
+        let secondaryHandle: FileHandle
     }
 
     private func createPTY() -> PTYHandles? {
-        var master: Int32 = 0
-        var slave: Int32 = 0
-        guard openpty(&master, &slave, nil, nil, nil) == 0 else {
+        var primary: Int32 = 0
+        var secondary: Int32 = 0
+        guard openpty(&primary, &secondary, nil, nil, nil) == 0 else {
             return nil
         }
 
@@ -125,13 +125,13 @@ class ShellManager: NSObject {
             ws_xpixel: 0,
             ws_ypixel: 0
         )
-        _ = ioctl(master, TIOCSWINSZ, &winSize)
+        _ = ioctl(primary, TIOCSWINSZ, &winSize)
 
         return PTYHandles(
-            masterFD: master,
-            slaveFD: slave,
-            masterHandle: FileHandle(fileDescriptor: master, closeOnDealloc: false),
-            slaveHandle: FileHandle(fileDescriptor: slave, closeOnDealloc: false)
+            primaryFD: primary,
+            secondaryFD: secondary,
+            primaryHandle: FileHandle(fileDescriptor: primary, closeOnDealloc: false),
+            secondaryHandle: FileHandle(fileDescriptor: secondary, closeOnDealloc: false)
         )
     }
 
@@ -139,7 +139,7 @@ class ShellManager: NSObject {
         let shellPath: String
         let arguments: [String]
         let directory: URL?
-        let slaveHandle: FileHandle
+        let secondaryHandle: FileHandle
         let environmentOverrides: [String: String]
     }
 
@@ -148,19 +148,19 @@ class ShellManager: NSObject {
         process.executableURL = URL(fileURLWithPath: request.shellPath)
         process.arguments = request.arguments
         process.currentDirectoryURL = request.directory ?? FileManager.default.homeDirectoryForCurrentUser
-        process.standardInput = request.slaveHandle
-        process.standardOutput = request.slaveHandle
-        process.standardError = request.slaveHandle
+        process.standardInput = request.secondaryHandle
+        process.standardOutput = request.secondaryHandle
+        process.standardError = request.secondaryHandle
         process.environment = Self.buildEnvironment(environmentOverrides: request.environmentOverrides)
         return process
     }
 
     private func registerRunningProcess(_ process: Process, pty: PTYHandles) {
         shellProcess = process
-        ptyMasterFD = pty.masterFD
-        ptySlaveFD = pty.slaveFD
-        readHandle = pty.masterHandle
-        writeHandle = pty.masterHandle
+        ptyPrimaryFD = pty.primaryFD
+        ptySecondaryFD = pty.secondaryFD
+        readHandle = pty.primaryHandle
+        writeHandle = pty.primaryHandle
     }
 
     nonisolated static func buildEnvironment(environmentOverrides: [String: String]) -> [String: String] {
@@ -182,9 +182,9 @@ class ShellManager: NSObject {
         return environment
     }
 
-    private func finalizeStartAfterRun(slaveHandle: FileHandle) {
-        try? slaveHandle.close()
-        ptySlaveFD = nil
+    private func finalizeStartAfterRun(secondaryHandle: FileHandle) {
+        try? secondaryHandle.close()
+        ptySecondaryFD = nil
     }
 
     private func schedulePostLaunchVerification() {
@@ -288,8 +288,8 @@ class ShellManager: NSObject {
         shellProcess = nil
         readHandle = nil
         writeHandle = nil
-        ptyMasterFD = nil
-        ptySlaveFD = nil
+        ptyPrimaryFD = nil
+        ptySecondaryFD = nil
     }
 
     private func notifyError(_ message: String) {
