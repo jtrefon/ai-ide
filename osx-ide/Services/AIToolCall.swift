@@ -2,11 +2,13 @@ import Foundation
 
 public struct AIToolCall: Codable, @unchecked Sendable {
     public let id: String
+    public let type: String
     public let name: String
     public let arguments: [String: Any]
 
     public enum CodingKeys: String, CodingKey {
         case id
+        case type
         case function
     }
 
@@ -18,6 +20,8 @@ public struct AIToolCall: Codable, @unchecked Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
+
+        type = (try? container.decode(String.self, forKey: .type)) ?? "function"
 
         let functionContainer = try container.nestedContainer(keyedBy: FunctionCodingKeys.self, forKey: .function)
         name = try functionContainer.decode(String.self, forKey: .name)
@@ -33,6 +37,7 @@ public struct AIToolCall: Codable, @unchecked Sendable {
 
     init(id: String, name: String, arguments: [String: Any]) {
         self.id = id
+        self.type = "function"
         self.name = name
         self.arguments = arguments
     }
@@ -40,6 +45,7 @@ public struct AIToolCall: Codable, @unchecked Sendable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
+        try container.encode(type, forKey: .type)
 
         var functionContainer = container.nestedContainer(keyedBy: FunctionCodingKeys.self, forKey: .function)
         try functionContainer.encode(name, forKey: .name)

@@ -261,7 +261,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 )
 
                 try await self.sendCoordinator.send(
-                    ConversationSendCoordinator.SendRequest(
+                    SendRequest(
                         userInput: userContext.text,
                         explicitContext: explicitContext,
                         mode: self.currentMode,

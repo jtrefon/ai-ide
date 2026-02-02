@@ -94,7 +94,7 @@ open class RegexLanguageModule: LanguageModule, @unchecked Sendable {
         let fullRange = NSRange(location: 0, length: ns.length)
         let matches = regex.matches(in: request.context.code, options: [], range: fullRange)
         for match in matches {
-            let range = request.captureGroup != nil ? match.range(at: request.captureGroup!) : match.range
+            let range = request.captureGroup.map { match.range(at: $0) } ?? match.range
             if range.location != NSNotFound && range.length > 0 {
                 request.context.attributedString.addAttribute(.foregroundColor, value: request.color, range: range)
             }
