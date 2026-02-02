@@ -139,6 +139,13 @@ struct IndexStatusBarView: View {
             }
 
             HStack(spacing: 6) {
+                if !viewModel.openRouterContextUsageText.isEmpty {
+                    Text(viewModel.openRouterContextUsageText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+
                 Text(viewModel.metricsText)
                     .font(.caption)
                     .foregroundColor(.secondary)
