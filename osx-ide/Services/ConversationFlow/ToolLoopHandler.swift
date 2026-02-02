@@ -338,6 +338,10 @@ final class ToolLoopHandler {
         }
         guard !failedToolResults.isEmpty else { return nil }
 
+        let failedOutputs = failedToolResults.map { toolOutputText(from: $0) }
+        let hasTimeoutFailure = failedOutputs.contains { $0.localizedCaseInsensitiveContains("timed out") }
+        let hasCancelledFailure = failedOutputs.contains { $0.localizedCaseInsensitiveContains("cancelled") }
+
         let toolCallIndex = Dictionary(
             uniqueKeysWithValues: toolCalls.map { ($0.id, $0) }
         )
@@ -352,16 +356,30 @@ final class ToolLoopHandler {
             return "- \(toolName) (\(toolCallId)): \(output) [\(argumentSummary)]"
         }
 
+        var recoveryLines: [String] = [
+            "Tool execution failures detected.",
+            "Review the failures below and adjust your approach.",
+            "If a failure is environmental, network, or resource-related, propose a fallback plan or use different parameters.",
+            "Do not repeat the same failing call without changes."
+        ]
+
+        if hasTimeoutFailure || hasCancelledFailure {
+            recoveryLines.append(contentsOf: [
+                "",
+                "IMPORTANT (timeouts/cancellations): One or more tools were terminated for safety to prevent the agent from getting stuck.",
+                "This usually indicates a non-returning command (watcher/server), an interactive prompt, or a command producing no progress.",
+                "",
+                "Recovery instructions:",
+                "- Do NOT re-run the same command unchanged.",
+                "- Prefer short, finite commands that return control.",
+                "- Use non-interactive flags and bounded output.",
+                "- If you need long work, break it into smaller steps (diagnostics first, then targeted execution)."
+            ])
+        }
+
         let systemMessage = ChatMessage(
             role: .system,
-            content: [
-                "Tool execution failures detected.",
-                "Review the failures below and adjust your approach.",
-                "If a failure is environmental, network, or resource-related, propose a fallback plan or use different parameters.",
-                "Do not repeat the same failing call without changes.",
-                "",
-                failureDetails.joined(separator: "\n")
-            ].joined(separator: "\n")
+            content: (recoveryLines + ["", failureDetails.joined(separator: "\n")]).joined(separator: "\n")
         )
         return systemMessage
     }

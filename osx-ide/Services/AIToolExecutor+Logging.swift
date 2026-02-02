@@ -182,6 +182,35 @@ extension AIToolExecutor {
     }
 
     nonisolated static func formatError(_ error: Error, toolName: String) -> String {
+        if let timeoutError = error as? ToolExecutionTimedOutError {
+            return [
+                "Error: Tool execution timed out after \(timeoutError.timeoutSeconds)s.",
+                "",
+                "IMPORTANT: This tool was terminated for safety to prevent the agent from getting stuck.",
+                "This usually means the command/tool did not return control (e.g. started a long-running process, waited for user input, or tailed logs).",
+                "",
+                "Recovery instructions (do NOT repeat the same call unchanged):",
+                "- Use a different approach that completes quickly or produces incremental output.",
+                "- Avoid non-terminating commands (dev servers/watchers, \"tail -f\", interactive prompts).",
+                "- Prefer non-interactive flags (e.g. --yes, --no-prompt, --non-interactive) and bounded output (e.g. head, sed, grep with limits).",
+                "- If you must run something potentially slow, run a safer diagnostic first (e.g. list files, check version, run a narrower query).",
+                "- If re-running a shell command, make it explicitly finite (e.g. add a max count, filter scope, or only run the build/test target you need)."
+            ].joined(separator: "\n")
+        }
+
+        if error is ToolExecutionCancelledError {
+            return [
+                "Error: Tool execution cancelled.",
+                "",
+                "IMPORTANT: The tool was stopped intentionally (user action or protective cancellation).",
+                "Assume the previous approach risked hanging or was no longer desired.",
+                "",
+                "Recovery instructions (do NOT repeat the same call unchanged):",
+                "- Choose a safer, non-blocking alternative that returns control.",
+                "- If the task requires execution, prefer short commands that terminate (build/test/format), not long-running servers/watchers."
+            ].joined(separator: "\n")
+        }
+
         if toolName == "index_read_file" {
             let msg = error.localizedDescription
             if msg.lowercased().hasPrefix("file not found") {

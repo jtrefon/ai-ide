@@ -3,6 +3,7 @@ import Foundation
 final class OpenRouterSettingsStore {
     private let settingsStore = SettingsStore(userDefaults: .standard)
     private let apiKeyKey = "OpenRouterAPIKey"
+    private let apiKeyMigrationCompleteKey = "OpenRouterAPIKeyKeychainMigrationComplete"
     private let modelKey = "OpenRouterModel"
     private let baseURLKey = "OpenRouterBaseURL"
     private let systemPromptKey = "OpenRouterSystemPrompt"
@@ -12,6 +13,9 @@ final class OpenRouterSettingsStore {
     private let keychainAccount = "apiKey"
 
     private func migrateApiKeyFromUserDefaultsIfNeeded() {
+        if settingsStore.bool(forKey: apiKeyMigrationCompleteKey, default: false) {
+            return
+        }
         guard let legacy = settingsStore.string(forKey: apiKeyKey), !legacy.isEmpty else { return }
         do {
             let existingKeychainValue = try keychainStore.readPassword(account: keychainAccount)
@@ -19,7 +23,18 @@ final class OpenRouterSettingsStore {
                 try keychainStore.savePassword(legacy, account: keychainAccount)
             }
             settingsStore.removeObject(forKey: apiKeyKey)
+            settingsStore.set(true, forKey: apiKeyMigrationCompleteKey)
         } catch {
+            Task {
+                await AppLogger.shared.error(
+                    category: .ai,
+                    message: "openrouter.keychain_migration_failed",
+                    context: AppLogger.LogCallContext(metadata: [
+                        "error": error.localizedDescription
+                    ])
+                )
+            }
+            settingsStore.set(true, forKey: apiKeyMigrationCompleteKey)
         }
     }
 

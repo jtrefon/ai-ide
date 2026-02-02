@@ -71,7 +71,7 @@ struct PanelCoordinator {
 
         if ui.isAIChatVisible, let pluginView = rightViews.first {
             pluginView.makeView()
-                .frame(minWidth: 240, idealWidth: 340, maxWidth: .infinity)
+                .frame(minWidth: 240, idealWidth: 340, maxWidth: 480)
                 .background(Color(NSColor.windowBackgroundColor))
         } else {
             EmptyView()

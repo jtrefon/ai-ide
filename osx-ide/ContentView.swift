@@ -68,7 +68,7 @@ struct ContentView: View {
                 editorAndTerminal
 
                 if uiState.isAIChatVisible, let pluginView = registry.views(for: .panelRight).first {
-                    pluginView.makeView().frame(minWidth: 240, idealWidth: 340, maxWidth: .infinity)
+                    pluginView.makeView().frame(minWidth: 240, idealWidth: 340, maxWidth: 480)
                 }
             }
         }

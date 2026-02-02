@@ -195,6 +195,18 @@ actor OpenRouterAIService: AIService {
         do {
             return try JSONDecoder().decode(OpenRouterChatResponse.self, from: data)
         } catch {
+            if let openRouterErrorMessage = decodeOpenRouterErrorMessage(from: data) {
+                await AppLogger.shared.error(
+                    category: .ai,
+                    message: "openrouter.response_error",
+                    context: AppLogger.LogCallContext(metadata: [
+                        "requestId": requestId,
+                        "error": openRouterErrorMessage
+                    ])
+                )
+                throw AppError.aiServiceError(openRouterErrorMessage)
+            }
+
             let bodySnippet = String(data: data.prefix(2000), encoding: .utf8) ?? ""
             await AppLogger.shared.error(
                 category: .ai,
@@ -207,5 +219,44 @@ actor OpenRouterAIService: AIService {
             )
             throw AppError.aiServiceError("Failed to decode OpenRouter response: \(error.localizedDescription)")
         }
+    }
+
+    private func decodeOpenRouterErrorMessage(from data: Data) -> String? {
+        struct ErrorEnvelope: Decodable {
+            struct ErrorBody: Decodable {
+                struct Metadata: Decodable {
+                    let raw: String?
+                    let providerName: String?
+                    let isByok: Bool?
+
+                    private enum CodingKeys: String, CodingKey {
+                        case raw
+                        case providerName = "provider_name"
+                        case isByok = "is_byok"
+                    }
+                }
+
+                let message: String?
+                let code: Int?
+                let metadata: Metadata?
+            }
+
+            let error: ErrorBody?
+        }
+
+        guard let envelope = try? JSONDecoder().decode(ErrorEnvelope.self, from: data),
+              let err = envelope.error else {
+            return nil
+        }
+
+        let providerName = err.metadata?.providerName
+        let providerSuffix = providerName?.isEmpty == false ? " Provider: \(providerName!)." : ""
+        if let code = err.code, let message = err.message, !message.isEmpty {
+            return "OpenRouter error (\(code)): \(message).\(providerSuffix)"
+        }
+        if let message = err.message, !message.isEmpty {
+            return "OpenRouter error: \(message).\(providerSuffix)"
+        }
+        return nil
     }
 }
