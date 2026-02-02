@@ -304,9 +304,9 @@ Prevent context window overflow while preserving continuity.
 - [x] Ensure QA never mutates final message
 
 ### 11.5 Reasoning
-- [ ] Macro warmup reasoning on each user message (Agent + reasoning enabled)
-- [ ] Micro reasoning on each subsequent agentic step
-- [ ] Strip full reasoning from history; persist `ReasoningOutcome`
+- [x] Macro warmup reasoning on each user message (Agent + reasoning enabled)
+- [x] Micro reasoning on each subsequent agentic step
+- [x] Strip full reasoning from history; persist `ReasoningOutcome`
 
 ### 11.6 Context compression
 - [x] Define summarization trigger
@@ -320,4 +320,3 @@ Prevent context window overflow while preserving continuity.
 ### 11.8 Observability
 - [x] Add `runId` + `stage` to OpenRouter logging
 - [x] Assert invariants in debug builds
-

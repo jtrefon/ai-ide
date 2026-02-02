@@ -368,7 +368,7 @@ struct OSXIDEApp: App {
             }
             }
         }
-        .windowResizability(.contentMinSize)
+        .windowResizability(.automatic)
 
         Settings {
             if isUnitTesting {
