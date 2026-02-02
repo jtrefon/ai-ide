@@ -100,6 +100,31 @@ final class ReasoningCorrectionsHandler {
                 .get()
         }
 
+        let implementationSplit = ChatPromptBuilder.splitReasoning(from: currentResponse.content ?? "")
+        if let reasoning = implementationSplit.reasoning,
+           ChatPromptBuilder.reasoningContainsImplementation(reasoning) {
+            let promptText = PromptRepository.shared.prompt(
+                key: "ConversationFlow/DeliveryGate/no_implementation_in_reasoning",
+                defaultValue: "Your <ide_reasoning> block contains implementation details (code, diffs, patches, or tool instructions). " +
+                    "This is not allowed. Keep <ide_reasoning> concise and high-level only. " +
+                    "Move ALL implementation details and code to the user-visible response AFTER </ide_reasoning>. " +
+                    "Reply again now with: (1) a corrected <ide_reasoning> block and (2) the full user-visible response.",
+                projectRoot: projectRoot
+            )
+            let correctionSystem = ChatMessage(role: .system, content: promptText)
+            currentResponse = try await aiInteractionCoordinator
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                    messages: historyCoordinator.messages + [correctionSystem],
+                    explicitContext: explicitContext,
+                    tools: [],
+                    mode: mode,
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.delivery_gate
+                ))
+                .get()
+        }
+
         return currentResponse
     }
 

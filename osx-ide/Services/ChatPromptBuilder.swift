@@ -163,6 +163,39 @@ class ChatPromptBuilder {
         )
     }
 
+    static func reasoningContainsImplementation(_ reasoning: String) -> Bool {
+        let text = reasoning.lowercased()
+        if text.isEmpty { return false }
+
+        if text.contains("```") { return true }
+        if text.contains("diff --git") { return true }
+        if text.contains("*** begin patch") { return true }
+        if text.contains("apply_patch") { return true }
+        if text.contains("write_to_file") { return true }
+        if text.contains("import ") && (text.contains("swift") || text.contains("typescript") || text.contains("python")) {
+            return true
+        }
+
+        let strongSignals = [
+            "here's the code",
+            "here is the code",
+            "implementation:",
+            "code:",
+            "final code",
+            "new file",
+            "updated file",
+            "modified file",
+            "changes:",
+            "patch:",
+            "diff:"
+        ]
+        if strongSignals.contains(where: { text.contains($0) }) {
+            return true
+        }
+
+        return false
+    }
+
     /// Determines if the AI's response indicates it should have emitted tool calls but didn't.
     /// - Parameter content: The AI response content.
     /// - Returns: True if a tool followup should be forced.
