@@ -5,7 +5,7 @@ extension CodebaseIndex {
     public convenience init(eventBus: EventBusProtocol) throws {
         let fileManager = FileManager.default
         let root = URL(fileURLWithPath: fileManager.currentDirectoryPath)
-        try self.init(eventBus: eventBus, projectRoot: root, aiService: OpenRouterAIService())
+        try self.init(eventBus: eventBus, projectRoot: root, aiService: OpenRouterAIService(eventBus: eventBus))
     }
 
     public func start() {

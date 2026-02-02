@@ -35,7 +35,7 @@ class DependencyContainer {
             fileSystemService: _fileSystemService,
             eventBus: _eventBus
         )
-        _aiService = OpenRouterAIService()
+        _aiService = OpenRouterAIService(eventBus: _eventBus)
 
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
 
