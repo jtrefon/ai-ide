@@ -197,38 +197,7 @@ final class ConversationSendCoordinator {
             }
         }
 
-        response = try await finalResponseHandler.requestFinalResponseIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            toolResults: lastToolResults,
-            runId: request.runId
-        )
-
-        response = try await qaReviewHandler.performToolOutputReviewIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            qaReviewEnabled: request.qaReviewEnabled,
-            availableTools: request.availableTools,
-            toolResults: lastToolResults,
-            runId: request.runId,
-            userInput: request.userInput
-        )
-
-        response = try await qaReviewHandler.performQualityReviewIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            qaReviewEnabled: request.qaReviewEnabled,
-            availableTools: request.availableTools,
-            runId: request.runId,
-            userInput: request.userInput
-        )
-
+        // Final delivery enforcement must happen before QA. QA is advisory and must be the last stage.
         response = try await reasoningCorrectionsHandler.enforceDeliveryCompletionIfNeeded(
             response: response,
             explicitContext: request.explicitContext,
@@ -254,6 +223,49 @@ final class ConversationSendCoordinator {
             response = followupToolLoopResult.response
             lastToolResults = followupToolLoopResult.lastToolResults
         }
+
+        response = try await finalResponseHandler.requestFinalResponseIfNeeded(
+            response: response,
+            explicitContext: request.explicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            toolResults: lastToolResults,
+            runId: request.runId
+        )
+
+        // The final_response stage can still produce malformed reasoning (e.g. quoting code inside <ide_reasoning>).
+        // Re-apply reasoning corrections here so delivery-gate fixes can run before QA and before appending.
+        response = try await reasoningCorrectionsHandler.applyReasoningCorrectionsIfNeeded(
+            response: response,
+            explicitContext: request.explicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            availableTools: request.availableTools,
+            runId: request.runId
+        )
+
+        response = try await qaReviewHandler.performToolOutputReviewIfNeeded(
+            response: response,
+            explicitContext: request.explicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            qaReviewEnabled: request.qaReviewEnabled,
+            availableTools: request.availableTools,
+            toolResults: lastToolResults,
+            runId: request.runId,
+            userInput: request.userInput
+        )
+
+        response = try await qaReviewHandler.performQualityReviewIfNeeded(
+            response: response,
+            explicitContext: request.explicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            qaReviewEnabled: request.qaReviewEnabled,
+            availableTools: request.availableTools,
+            runId: request.runId,
+            userInput: request.userInput
+        )
 
         return response
     }
