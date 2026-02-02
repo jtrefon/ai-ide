@@ -15,6 +15,8 @@ struct ToolExecutionMessageView: View {
     var fontSize: Double
     var fontFamily: String
 
+    @ObservedObject private var timeoutCenter = ToolTimeoutCenter.shared
+
     @State private var isExpanded = false
 
     private func localized(_ key: String) -> String {
@@ -75,6 +77,39 @@ struct ToolExecutionMessageView: View {
             }
 
             Spacer()
+
+            if message.toolStatus == .executing,
+               let toolCallId = message.toolCallId,
+               timeoutCenter.activeToolCallId == toolCallId {
+                HStack(spacing: 6) {
+                    if let seconds = timeoutCenter.countdownSeconds {
+                        Text("\(seconds)s")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                    }
+
+                    Button {
+                        timeoutCenter.cancelActiveToolNow()
+                    } label: {
+                        Image(systemName: "xmark.octagon")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Kill tool")
+
+                    Button {
+                        timeoutCenter.togglePause()
+                    } label: {
+                        Image(systemName: timeoutCenter.isPaused ? "play.fill" : "pause.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(timeoutCenter.isPaused ? "Resume timeout" : "Pause timeout")
+                }
+            }
 
             // Expand/Collapse button
             if message.toolStatus != .executing &&
