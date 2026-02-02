@@ -1,6 +1,15 @@
 import Foundation
 
 extension AIToolExecutor {
+    struct ToolExecutionCancelledError: LocalizedError, Sendable {
+        var errorDescription: String? { "Tool execution cancelled." }
+    }
+
+    struct ToolExecutionTimedOutError: LocalizedError, Sendable {
+        let timeoutSeconds: Int
+        var errorDescription: String? { "Tool execution timed out after \(timeoutSeconds)s." }
+    }
+
     struct ToolExecutionCrashError: LocalizedError, Sendable {
         let message: String
 
@@ -131,6 +140,10 @@ extension AIToolExecutor {
             return try await streamingTool.execute(arguments: ToolArguments(request.mergedArguments)) { chunk in
                 let (snapshot, totalLength) = accumulator.appendAndSnapshot(chunk)
 
+                Task { @MainActor in
+                    ToolTimeoutCenter.shared.markProgress(toolCallId: toolCallId)
+                }
+
                 Task {
                     await self.logToolExecuteProgress(
                         conversationId: request.conversationId,
@@ -223,20 +236,35 @@ extension AIToolExecutor {
         _ tool: AITool,
         request: ExecuteToolCallRequest
     ) async -> Result<String, Error> {
+        let timeoutSeconds = resolveToolTimeoutSeconds()
+        await MainActor.run {
+            ToolTimeoutCenter.shared.begin(
+                toolCallId: request.toolCall.id,
+                toolName: request.toolCall.name,
+                targetFile: request.targetFile,
+                timeoutSeconds: timeoutSeconds
+            )
+        }
+
+        defer {
+            Task { @MainActor in
+                ToolTimeoutCenter.shared.finish(toolCallId: request.toolCall.id)
+            }
+        }
         do {
             let mergedArguments = await buildMergedArguments(
                 toolCall: request.toolCall,
                 conversationId: request.conversationId
             )
-            let content = try await executeToolAndCaptureResult(
-                ExecuteToolAndCaptureRequest(
-                    tool: tool,
-                    toolCall: request.toolCall,
-                    mergedArguments: mergedArguments,
-                    conversationId: request.conversationId,
-                    targetFile: request.targetFile,
-                    onProgress: request.onProgress
-                )
+
+            let content = try await executeToolAndCaptureResultWithWatchdog(
+                tool: tool,
+                toolCall: request.toolCall,
+                mergedArguments: mergedArguments,
+                conversationId: request.conversationId,
+                targetFile: request.targetFile,
+                onProgress: request.onProgress,
+                timeoutSeconds: timeoutSeconds
             )
             let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
@@ -264,6 +292,71 @@ extension AIToolExecutor {
                 error: error
             )
             return .failure(error)
+        }
+    }
+
+    private func resolveToolTimeoutSeconds() -> TimeInterval {
+        let stored = UserDefaults.standard.double(forKey: AppConstantsStorage.cliTimeoutSecondsKey)
+        let normalized = stored == 0 ? 30 : stored
+        return max(1, min(300, normalized))
+    }
+
+    private func executeToolAndCaptureResultWithWatchdog(
+        tool: AITool,
+        toolCall: AIToolCall,
+        mergedArguments: [String: Any],
+        conversationId: String?,
+        targetFile: String?,
+        onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void,
+        timeoutSeconds: TimeInterval
+    ) async throws -> String {
+        try await withThrowingTaskGroup(of: String.self) { group in
+            let toolTask = Task {
+                try await self.executeToolAndCaptureResult(
+                    ExecuteToolAndCaptureRequest(
+                        tool: tool,
+                        toolCall: toolCall,
+                        mergedArguments: mergedArguments,
+                        conversationId: conversationId,
+                        targetFile: targetFile,
+                        onProgress: onProgress
+                    )
+                )
+            }
+
+            group.addTask {
+                try await toolTask.value
+            }
+
+            group.addTask {
+                let timeoutSecondsInt = Int(timeoutSeconds)
+                while true {
+                    let (isCancelled, remaining) = await MainActor.run {
+                        (
+                            ToolTimeoutCenter.shared.isCancelled(toolCallId: toolCall.id),
+                            ToolTimeoutCenter.shared.remainingSeconds(toolCallId: toolCall.id)
+                        )
+                    }
+                    if isCancelled {
+                        toolTask.cancel()
+                        throw ToolExecutionCancelledError()
+                    }
+
+                    if let remaining, remaining <= 0 {
+                        await MainActor.run {
+                            ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
+                        }
+                        toolTask.cancel()
+                        throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
+                    }
+
+                    try await Task.sleep(nanoseconds: 200_000_000)
+                }
+            }
+
+            let first = try await group.next() ?? ""
+            group.cancelAll()
+            return first
         }
     }
 
