@@ -110,7 +110,7 @@ final class DatabaseSymbolManager {
                 let lineStart = Int(sqlite3_column_int(statement, 4))
                 let lineEnd = Int(sqlite3_column_int(statement, 5))
                 let descriptionPtr = sqlite3_column_text(statement, 6)
-                let description = descriptionPtr != nil ? String(cString: descriptionPtr!) : nil
+                let description = descriptionPtr.flatMap { String(cString: $0) }
 
                 let kind = SymbolKind(rawValue: kindRaw) ?? .unknown
                 results.append(
@@ -161,10 +161,10 @@ final class DatabaseSymbolManager {
         let lineStart = Int(sqlite3_column_int(statement, 4))
         let lineEnd = Int(sqlite3_column_int(statement, 5))
         let descriptionPtr = sqlite3_column_text(statement, 6)
-        let description = descriptionPtr != nil ? String(cString: descriptionPtr!) : nil
+        let description = descriptionPtr.flatMap { String(cString: $0) }
 
         let pathPtr = sqlite3_column_text(statement, 7)
-        let path = pathPtr != nil ? String(cString: pathPtr!) : nil
+        let path = pathPtr.flatMap { String(cString: $0) }
 
         let kind = SymbolKind(rawValue: kindRaw) ?? .unknown
         let symbol = Symbol(
