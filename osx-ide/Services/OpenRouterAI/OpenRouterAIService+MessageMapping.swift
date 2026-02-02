@@ -34,7 +34,7 @@ extension OpenRouterAIService {
             if let toolCalls = message.toolCalls {
                 return OpenRouterChatMessage(
                     role: "assistant",
-                    content: message.content.isEmpty ? nil : message.content,
+                    content: message.content.isEmpty ? "" : message.content,
                     toolCalls: toolCalls
                 )
             }

@@ -14,6 +14,8 @@ final class IndexStatusBarViewModel: ObservableObject {
     @Published private(set) var aiTotalCount: Int = 0
     @Published private(set) var aiCurrentFile: URL?
 
+    @Published private(set) var openRouterContextUsageText: String = ""
+
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
     private let eventBus: EventBusProtocol
     private var cancellables = Set<AnyCancellable>()
@@ -127,6 +129,17 @@ final class IndexStatusBarViewModel: ObservableObject {
             self.isAIEnriching = false
             self.aiCurrentFile = nil
             self.refreshStats()
+        }
+        .store(in: &cancellables)
+
+        eventBus.subscribe(to: OpenRouterUsageUpdatedEvent.self) { [weak self] event in
+            guard let self else { return }
+            guard let contextLength = event.contextLength, contextLength > 0 else {
+                self.openRouterContextUsageText = ""
+                return
+            }
+            let used = min(event.usage.totalTokens, contextLength)
+            self.openRouterContextUsageText = "CTX \(used)/\(contextLength)"
         }
         .store(in: &cancellables)
     }

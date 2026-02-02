@@ -3,15 +3,19 @@ import Foundation
 actor OpenRouterAIService: AIService {
     internal let settingsStore: OpenRouterSettingsStore
     internal let client: OpenRouterAPIClient
+    private let eventBus: EventBusProtocol
+    private var contextLengthByModelId: [String: Int] = [:]
 
     internal static let maxToolOutputCharsForModel = 12_000
 
     init(
         settingsStore: OpenRouterSettingsStore = OpenRouterSettingsStore(),
-        client: OpenRouterAPIClient = OpenRouterAPIClient()
+        client: OpenRouterAPIClient = OpenRouterAPIClient(),
+        eventBus: EventBusProtocol
     ) {
         self.settingsStore = settingsStore
         self.client = client
+        self.eventBus = eventBus
     }
 
     func sendMessage(
@@ -100,6 +104,29 @@ actor OpenRouterAIService: AIService {
             throw AppError.aiServiceError("OpenRouter response was empty.")
         }
 
+        if let usage = response.usage,
+           let promptTokens = usage.promptTokens,
+           let completionTokens = usage.completionTokens,
+           let totalTokens = usage.totalTokens {
+            let contextLength = try? await fetchContextLength(
+                modelId: preparation.settings.model,
+                apiKey: preparation.settings.apiKey,
+                baseURL: preparation.settings.baseURL
+            )
+            let event = OpenRouterUsageUpdatedEvent(
+                modelId: preparation.settings.model,
+                usage: OpenRouterUsageUpdatedEvent.Usage(
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    totalTokens: totalTokens
+                ),
+                contextLength: contextLength
+            )
+            await MainActor.run {
+                eventBus.publish(event)
+            }
+        }
+
         await logRequestSuccess(
             requestId: preparation.requestId,
             contentLength: choice.message.content?.count ?? 0,
@@ -115,6 +142,25 @@ actor OpenRouterAIService: AIService {
             content: choice.message.content,
             toolCalls: resolvedToolCalls
         )
+    }
+
+    private func fetchContextLength(modelId: String, apiKey: String, baseURL: String) async throws -> Int? {
+        if let cached = contextLengthByModelId[modelId] {
+            return cached
+        }
+        let requestContext = OpenRouterAPIClient.RequestContext(
+            baseURL: baseURL,
+            appName: "OSX IDE",
+            referer: ""
+        )
+        let models = try await client.fetchModels(apiKey: apiKey, context: requestContext)
+        guard let model = models.first(where: { $0.id == modelId }) else {
+            return nil
+        }
+        if let contextLength = model.contextLength {
+            contextLengthByModelId[modelId] = contextLength
+        }
+        return model.contextLength
     }
 
     private func executeChatCompletion(
