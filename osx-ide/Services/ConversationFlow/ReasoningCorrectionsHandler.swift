@@ -18,42 +18,57 @@ final class ReasoningCorrectionsHandler {
         explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
-        availableTools: [AITool]
+        availableTools: [AITool],
+        runId: String
     ) async throws -> AIServiceResponse {
         var currentResponse = response
 
         if ChatPromptBuilder.needsReasoningFormatCorrection(text: currentResponse.content ?? "") {
+            let promptText = PromptRepository.shared.prompt(
+                key: "ConversationFlow/DeliveryGate/reasoning_format_correction",
+                defaultValue: "Your <ide_reasoning> block must include ALL six sections: Analyze, Research, Plan, Reflect, Action, Delivery. " +
+                    "If a section is not applicable, write 'N/A' (do not omit it).",
+                projectRoot: projectRoot
+            )
             let correctionSystem = ChatMessage(
                 role: .system,
-                content: "Your <ide_reasoning> block must include ALL six sections: Analyze, Research, Plan, Reflect, Action, Delivery. " +
-                    "If a section is not applicable, write 'N/A' (do not omit it)."
+                content: promptText
             )
             currentResponse = try await aiInteractionCoordinator
                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: historyCoordinator.messages + [correctionSystem],
                     explicitContext: explicitContext,
-                    tools: availableTools,
+                    tools: [],
                     mode: mode,
-                    projectRoot: projectRoot
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.delivery_gate
                 ))
                 .get()
         }
 
         if ChatPromptBuilder.isLowQualityReasoning(text: currentResponse.content ?? "") {
-            let correctionSystem = ChatMessage(
-                role: .system,
-                content: "Your <ide_reasoning> block is too vague (placeholders like '...' are not allowed). " +
+            let promptText = PromptRepository.shared.prompt(
+                key: "ConversationFlow/DeliveryGate/low_quality_reasoning",
+                defaultValue: "Your <ide_reasoning> block is too vague (placeholders like '...' are not allowed). " +
                     "Provide concise, concrete bullet points for EACH section: Analyze, Research, Plan, Reflect, Action, Delivery. " +
                     "If unknown, write 'N/A' and state what information is needed. " +
-                    "If no action is needed, write 'None' in Action."
+                    "If no action is needed, write 'None' in Action.",
+                projectRoot: projectRoot
+            )
+            let correctionSystem = ChatMessage(
+                role: .system,
+                content: promptText
             )
             currentResponse = try await aiInteractionCoordinator
                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: historyCoordinator.messages + [correctionSystem],
                     explicitContext: explicitContext,
-                    tools: availableTools,
+                    tools: [],
                     mode: mode,
-                    projectRoot: projectRoot
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.delivery_gate
                 ))
                 .get()
         }
@@ -61,18 +76,26 @@ final class ReasoningCorrectionsHandler {
         let split = ChatPromptBuilder.splitReasoning(from: currentResponse.content ?? "")
         if split.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            let promptText = PromptRepository.shared.prompt(
+                key: "ConversationFlow/DeliveryGate/reasoning_only_no_answer",
+                defaultValue: "You returned a <ide_reasoning> block without a user-visible answer. " +
+                    "In Agent mode, you MUST still provide a user-visible response after </ide_reasoning>. " +
+                    "Reply again now and include BOTH: (1) a complete <ide_reasoning> block and (2) the user-visible response after it.",
+                projectRoot: projectRoot
+            )
             let correctionSystem = ChatMessage(
                 role: .system,
-                content: "You returned only a <ide_reasoning> block without a user-visible answer. " +
-                    "Provide a final response in plain text now, without any <ide_reasoning> block."
+                content: promptText
             )
             currentResponse = try await aiInteractionCoordinator
                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: historyCoordinator.messages + [correctionSystem],
                     explicitContext: explicitContext,
                     tools: [],
-                    mode: .chat,
-                    projectRoot: projectRoot
+                    mode: mode,
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.delivery_gate
                 ))
                 .get()
         }
@@ -85,25 +108,52 @@ final class ReasoningCorrectionsHandler {
         explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
-        availableTools: [AITool]
+        availableTools: [AITool],
+        runId: String,
+        userInput: String
     ) async throws -> AIServiceResponse {
         guard mode == .agent else { return response }
 
         let content = response.content ?? ""
+        let executionExpected = ChatPromptBuilder.userRequestRequiresExecution(userInput: userInput)
         let status = ChatPromptBuilder.deliveryStatus(from: content)
-        if status == .done { return response }
+        if status == .done {
+            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasToolCalls = (response.toolCalls?.isEmpty == false)
+
+            if !hasToolCalls,
+               (
+                    ChatPromptBuilder.indicatesWorkWasPerformed(content: trimmed)
+                        || ChatPromptBuilder.shouldForceToolFollowup(content: trimmed)
+                        || (executionExpected && ChatPromptBuilder.isRequestingUserInputForNextStep(content: trimmed))
+                        || (executionExpected && !trimmed.isEmpty)
+               ) {
+                // Delivery claims completion, but execution was expected or the assistant implies it performed work.
+                // Force an immediate followup instead of accepting DONE.
+            } else {
+                return response
+            }
+        }
 
         if status == nil {
             let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return response }
-            guard ChatPromptBuilder.shouldForceToolFollowup(content: trimmed) else { return response }
+            guard ChatPromptBuilder.indicatesWorkWasPerformed(content: trimmed)
+                || ChatPromptBuilder.shouldForceToolFollowup(content: trimmed)
+                || (executionExpected && ChatPromptBuilder.isRequestingUserInputForNextStep(content: trimmed))
+                || (executionExpected && !trimmed.isEmpty)
+            else { return response }
         }
 
         let correctionSystem = ChatMessage(
             role: .system,
-            content: "In Agent mode, you must either (1) continue by calling tools to perform the work, or " +
-                "(2) if the task is complete, explicitly mark Delivery: DONE and provide a user-visible response. " +
-                "Continue the work now."
+            content: PromptRepository.shared.prompt(
+                key: "ConversationFlow/DeliveryGate/enforce_delivery_completion",
+                defaultValue: "In Agent mode, you must either (1) continue by calling tools to perform the work, or " +
+                    "(2) if the task is complete, explicitly mark Delivery: DONE and provide a user-visible response. " +
+                    "Continue the work now.",
+                projectRoot: projectRoot
+            )
         )
 
         return try await aiInteractionCoordinator
@@ -112,7 +162,9 @@ final class ReasoningCorrectionsHandler {
                 explicitContext: explicitContext,
                 tools: availableTools,
                 mode: mode,
-                projectRoot: projectRoot
+                projectRoot: projectRoot,
+                runId: runId,
+                stage: AIRequestStage.tool_loop
             ))
             .get()
     }

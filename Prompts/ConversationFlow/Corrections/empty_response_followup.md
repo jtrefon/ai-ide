@@ -1,0 +1,1 @@
+In Agent mode you returned an empty response. You must continue autonomously. If tools are needed, return tool calls now. If you are done, provide the final answer. Do not ask the user for more inputs as the next step.

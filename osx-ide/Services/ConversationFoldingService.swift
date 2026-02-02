@@ -37,12 +37,49 @@ public enum ConversationFoldingService {
             .map { $0.content.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
-        let joined = userSnippets.prefix(3).joined(separator: " | ")
-        if joined.isEmpty {
-            return "Folded \(messages.count) messages (\(fmt.string(from: start)) → \(fmt.string(from: end)))."
-        }
-        return "Folded \(messages.count) messages (\(fmt.string(from: start)) → \(fmt.string(from: end))). " +
-            "User topics: \(joined)"
+        let assistantSnippets = messages
+            .filter { $0.role == .assistant }
+            .map { $0.content.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let toolSnippets = messages
+            .filter { $0.role == .tool }
+            .compactMap { msg -> String? in
+                guard let toolCallId = msg.toolCallId else { return nil }
+                let status = msg.toolStatus?.rawValue ?? "unknown"
+                let preview = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if preview.isEmpty { return nil }
+                return "- \(msg.toolName ?? "unknown_tool") (\(toolCallId)) [\(status)]"
+            }
+
+        let reasoningOutcomeSnippets = messages
+            .filter { $0.role == .system }
+            .map { $0.content.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.hasPrefix("ReasoningOutcome:") }
+
+        let timeHeader = "Folded \(messages.count) messages (\(fmt.string(from: start)) → \(fmt.string(from: end)))."
+        let userHeader = userSnippets.isEmpty ? "(none)" : userSnippets.prefix(5).joined(separator: " | ")
+        let assistantHeader = assistantSnippets.isEmpty ? "(none)" : assistantSnippets.prefix(3).joined(separator: " | ")
+
+        let toolSection = toolSnippets.isEmpty ? "(none)" : toolSnippets.prefix(8).joined(separator: "\n")
+        let outcomeSection = reasoningOutcomeSnippets.isEmpty ? "(none)" : reasoningOutcomeSnippets.suffix(3).joined(separator: "\n\n")
+
+        return """
+        Context summary (auto-generated):
+        \(timeHeader)
+
+        User requests/topics:
+        \(userHeader)
+
+        Assistant responses (high level):
+        \(assistantHeader)
+
+        Tool activity (collapsed):
+        \(toolSection)
+
+        Latest ReasoningOutcome (collapsed):
+        \(outcomeSection)
+        """
     }
 
     private static func serialize(messages: [ChatMessage]) -> String {
@@ -51,8 +88,6 @@ public enum ConversationFoldingService {
             var parts: [String] = []
             parts.append("[\(fmt.string(from: msg.timestamp))] \(msg.role.rawValue.uppercased())")
             if !msg.content.isEmpty { parts.append(msg.content) }
-            if let reasoning = msg.reasoning, !reasoning.isEmpty { parts.append("REASONING:\n\(reasoning)") }
-            if let codeContext = msg.codeContext, !codeContext.isEmpty { parts.append("CODE_CONTEXT:\n\(codeContext)") }
             return parts.joined(separator: "\n")
         }.joined(separator: "\n\n---\n\n")
     }

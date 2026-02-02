@@ -12,7 +12,11 @@ final class ConversationFoldingHandler {
             projectRoot: projectRoot,
             thresholds: thresholds
         ) {
-            historyCoordinator.removeOldestMessages(count: foldResult.foldedMessageCount)
+            let summaryMessage = ChatMessage(
+                role: .system,
+                content: foldResult.entry.summary
+            )
+            historyCoordinator.replaceOldestMessages(count: foldResult.foldedMessageCount, with: summaryMessage)
             await AIToolTraceLogger.shared.log(type: "chat.context_folded", data: [
                 "foldId": foldResult.entry.id,
                 "foldedMessageCount": foldResult.foldedMessageCount,

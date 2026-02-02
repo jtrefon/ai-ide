@@ -19,6 +19,7 @@ public protocol CodebaseIndexProtocol: Sendable {
     func searchSymbolsWithPaths(nameLike query: String, limit: Int) async throws -> [SymbolSearchResult]
     func getSummaries(projectRoot: URL, limit: Int) async throws -> [(path: String, summary: String)]
     func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry]
+    func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry
     func getStats() async throws -> IndexStats
 }
 

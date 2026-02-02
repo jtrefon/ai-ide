@@ -10,6 +10,7 @@ protocol UIServiceProtocol {
     func setFontFamily(_ family: String)
     func setIndentationStyle(_ style: IndentationStyle)
     func setCliTimeoutSeconds(_ seconds: Double)
+    func setAgentMemoryEnabled(_ enabled: Bool)
     func setShowLineNumbers(_ show: Bool)
     func setWordWrap(_ wrap: Bool)
     func setMinimapVisible(_ visible: Bool)

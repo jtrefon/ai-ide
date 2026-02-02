@@ -1,0 +1,1 @@
+Your <ide_reasoning> block is too vague (placeholders like '...' are not allowed). Provide concise, concrete bullet points for EACH section: Analyze, Research, Plan, Reflect, Action, Delivery. If unknown, write 'N/A' and state what information is needed. If no action is needed, write 'None' in Action.

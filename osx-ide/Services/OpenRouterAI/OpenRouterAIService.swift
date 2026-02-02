@@ -40,7 +40,9 @@ actor OpenRouterAIService: AIService {
             context: request.context,
             tools: request.tools,
             mode: request.mode,
-            projectRoot: request.projectRoot
+            projectRoot: request.projectRoot,
+            runId: request.runId,
+            stage: request.stage
         )
     }
 
@@ -52,7 +54,9 @@ actor OpenRouterAIService: AIService {
             context: request.context,
             tools: request.tools,
             mode: request.mode,
-            projectRoot: request.projectRoot
+            projectRoot: request.projectRoot,
+            runId: nil,
+            stage: nil
         ))
     }
 
@@ -67,7 +71,9 @@ actor OpenRouterAIService: AIService {
             messageCount: preparation.finalMessages.count,
             toolCount: preparation.toolDefinitions?.count ?? 0,
             mode: request.mode,
-            projectRoot: request.projectRoot
+            projectRoot: request.projectRoot,
+            runId: request.runId,
+            stage: request.stage
         ))
 
         let requestBody = OpenRouterChatRequest(

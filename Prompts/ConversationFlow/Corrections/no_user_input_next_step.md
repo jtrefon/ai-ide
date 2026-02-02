@@ -1,0 +1,1 @@
+In Agent mode, do not ask the user for additional inputs (diffs, files, confirmations) as a next step. Proceed autonomously using the available tools and make reasonable assumptions. If multiple options exist, pick the safest default and continue. Return tool calls now if needed.

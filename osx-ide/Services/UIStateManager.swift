@@ -42,6 +42,7 @@ class UIStateManager: ObservableObject {
     // MARK: - Agent Settings
 
     @Published var cliTimeoutSeconds: Double = 30
+    @Published var agentMemoryEnabled: Bool = true
 
     // MARK: - Theme State
 
@@ -199,6 +200,11 @@ class UIStateManager: ObservableObject {
         uiService.setCliTimeoutSeconds(clamped)
     }
 
+    func setAgentMemoryEnabled(_ enabled: Bool) {
+        agentMemoryEnabled = enabled
+        uiService.setAgentMemoryEnabled(enabled)
+    }
+
     private func updateTheme() {
         switch selectedTheme {
         case .light:
@@ -224,6 +230,7 @@ class UIStateManager: ObservableObject {
         fontFamily = settings.fontFamily
         indentationStyle = settings.indentationStyle
         cliTimeoutSeconds = settings.cliTimeoutSeconds
+        agentMemoryEnabled = settings.agentMemoryEnabled
         showLineNumbers = settings.showLineNumbers
         wordWrap = settings.wordWrap
         minimapVisible = settings.minimapVisible
@@ -258,6 +265,7 @@ class UIStateManager: ObservableObject {
         fontFamily = AppConstants.Editor.defaultFontFamily
         indentationStyle = .tabs
         cliTimeoutSeconds = 30
+        agentMemoryEnabled = true
         selectedTheme = .system
 
         // Reset terminal settings to defaults
