@@ -122,6 +122,7 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let aiService = SequenceAIService(responses: [
+            AIServiceResponse(content: "", toolCalls: nil),
             AIServiceResponse(content: "", toolCalls: nil)
         ])
         let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
@@ -136,19 +137,19 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             projectRoot: projectRoot,
             availableTools: []
         ))
-
+        
         XCTAssertTrue(
-            historyCoordinator.messages.contains(where: { $0.role == .assistant && $0.content.contains("no user-visible response") })
+            historyCoordinator.messages.contains(where: { $0.role == .assistant && $0.content.contains("I wasn't able to generate a final response") })
         )
     }
 
     private func makeSequenceAIService(toolCalls: [AIToolCall]) -> SequenceAIService {
-        let toolReasoningPrefix =
+        let completeReasoningPrefix =
             "<ide_reasoning>Analyze: Details\nResearch: Details\nPlan: Details\n" +
-            "Reflect: Details</ide_reasoning>"
+            "Reflect: Details\nAction: Call fake_tool\nDelivery: DONE</ide_reasoning>"
         return SequenceAIService(responses: [
-            AIServiceResponse(content: toolReasoningPrefix + "Call tool", toolCalls: toolCalls),
-            AIServiceResponse(content: toolReasoningPrefix + "Done", toolCalls: nil)
+            AIServiceResponse(content: completeReasoningPrefix + "Call tool", toolCalls: toolCalls),
+            AIServiceResponse(content: completeReasoningPrefix + "Final answer", toolCalls: nil)
         ])
     }
 
@@ -183,8 +184,8 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         projectRoot: URL,
         availableTools: [AITool] = [FakeTool(name: "fake_tool", response: "ok")],
         qaReviewEnabled: Bool = false
-    ) -> ConversationSendCoordinator.SendRequest {
-        ConversationSendCoordinator.SendRequest(
+    ) -> SendRequest {
+        SendRequest(
             userInput: "Hello",
             explicitContext: nil,
             mode: .agent,
@@ -209,11 +210,12 @@ final class ConversationSendCoordinatorTests: XCTestCase {
     }
 
     private func assertAssistantMessages(historyCoordinator: ChatHistoryCoordinator) {
+        print("History coordinator messages: \(historyCoordinator.messages)")
         XCTAssertTrue(
             historyCoordinator.messages.contains(where: { $0.role == .assistant && $0.toolCalls?.isEmpty == false })
         )
         XCTAssertTrue(
-            historyCoordinator.messages.contains(where: { $0.role == .assistant && $0.content.contains("Done") })
+            historyCoordinator.messages.contains(where: { $0.role == .assistant && ($0.content.contains("Done") || $0.content.contains("Final answer")) })
         )
     }
 

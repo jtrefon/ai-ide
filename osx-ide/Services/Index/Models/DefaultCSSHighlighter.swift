@@ -110,7 +110,7 @@ public enum DefaultCSSHighlighter {
         let fullRange = NSRange(location: 0, length: ns.length)
         let matches = regex.matches(in: code, options: [], range: fullRange)
         for match in matches {
-            let range = captureGroup != nil ? match.range(at: captureGroup!) : match.range
+            let range = captureGroup.map { match.range(at: $0) } ?? match.range
             if range.location != NSNotFound && range.length > 0 {
                 attr.addAttribute(.foregroundColor, value: color, range: range)
             }
