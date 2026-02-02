@@ -91,25 +91,6 @@ final class ConversationSendCoordinator {
 
         var response = toolLoopResult.response
 
-        response = try await qaReviewHandler.performToolOutputReviewIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            qaReviewEnabled: request.qaReviewEnabled,
-            toolResults: toolLoopResult.lastToolResults,
-            runId: request.runId,
-            userInput: request.userInput
-        )
-
-        response = try await qaReviewHandler.performQualityReviewIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            qaReviewEnabled: request.qaReviewEnabled
-        )
-
         response = try await reasoningCorrectionsHandler.applyReasoningCorrectionsIfNeeded(
             response: response,
             explicitContext: request.explicitContext,
@@ -131,6 +112,27 @@ final class ConversationSendCoordinator {
             explicitContext: request.explicitContext,
             projectRoot: request.projectRoot,
             toolResults: toolLoopResult.lastToolResults
+        )
+
+        response = try await qaReviewHandler.performToolOutputReviewIfNeeded(
+            response: response,
+            explicitContext: request.explicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            qaReviewEnabled: request.qaReviewEnabled,
+            toolResults: toolLoopResult.lastToolResults,
+            runId: request.runId,
+            userInput: request.userInput
+        )
+
+        response = try await qaReviewHandler.performQualityReviewIfNeeded(
+            response: response,
+            explicitContext: request.explicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            qaReviewEnabled: request.qaReviewEnabled,
+            runId: request.runId,
+            userInput: request.userInput
         )
 
         return response

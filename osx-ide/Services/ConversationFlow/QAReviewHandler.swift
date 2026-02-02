@@ -52,6 +52,24 @@ final class QAReviewHandler {
             ))
             .get()
 
+        Task.detached(priority: .utility) {
+            await AppLogger.shared.info(
+                category: .conversation,
+                message: "qa.tool_output_review_completed",
+                context: AppLogger.LogCallContext(metadata: [
+                    "conversationId": self.historyCoordinator.currentConversationId,
+                    "hasResponse": (qaResponse.content?.isEmpty == false)
+                ])
+            )
+            await ConversationLogStore.shared.append(
+                conversationId: self.historyCoordinator.currentConversationId,
+                type: "qa.tool_output_review_completed",
+                data: [
+                    "responseLength": qaResponse.content?.count ?? 0
+                ]
+            )
+        }
+
         await appendRunSnapshot(payload: RunSnapshotPayload(
             runId: runId,
             conversationId: historyCoordinator.currentConversationId,
@@ -74,7 +92,9 @@ final class QAReviewHandler {
         explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
-        qaReviewEnabled: Bool
+        qaReviewEnabled: Bool,
+        runId: String,
+        userInput: String
     ) async throws -> AIServiceResponse {
         guard qaReviewEnabled, mode == .agent else { return response }
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -100,6 +120,36 @@ final class QAReviewHandler {
                 projectRoot: projectRoot
             ))
             .get()
+
+        Task.detached(priority: .utility) {
+            await AppLogger.shared.info(
+                category: .conversation,
+                message: "qa.quality_review_completed",
+                context: AppLogger.LogCallContext(metadata: [
+                    "conversationId": self.historyCoordinator.currentConversationId,
+                    "hasResponse": (qaResponse.content?.isEmpty == false)
+                ])
+            )
+            await ConversationLogStore.shared.append(
+                conversationId: self.historyCoordinator.currentConversationId,
+                type: "qa.quality_review_completed",
+                data: [
+                    "responseLength": qaResponse.content?.count ?? 0
+                ]
+            )
+        }
+
+        await appendRunSnapshot(payload: RunSnapshotPayload(
+            runId: runId,
+            conversationId: historyCoordinator.currentConversationId,
+            phase: "quality_review",
+            iteration: nil,
+            userInput: userInput,
+            assistantDraft: qaResponse.content,
+            failureReason: nil,
+            toolCalls: [],
+            toolResults: []
+        ))
 
         let qaContent = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalContent = qaContent?.isEmpty == false ? qaResponse.content : response.content
