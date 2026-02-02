@@ -88,14 +88,22 @@ final class ReasoningCorrectionsHandler {
         availableTools: [AITool]
     ) async throws -> AIServiceResponse {
         guard mode == .agent else { return response }
-        guard let status = ChatPromptBuilder.deliveryStatus(from: response.content ?? "") else { return response }
-        guard status == .needsWork else { return response }
+
+        let content = response.content ?? ""
+        let status = ChatPromptBuilder.deliveryStatus(from: content)
+        if status == .done { return response }
+
+        if status == nil {
+            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return response }
+            guard ChatPromptBuilder.shouldForceToolFollowup(content: trimmed) else { return response }
+        }
 
         let correctionSystem = ChatMessage(
             role: .system,
-            content: "Your Delivery section indicates the task is not complete. " +
-                "Continue the work now. When finished, set Delivery: DONE and provide a user-visible response. " +
-                "If you need tools, call them."
+            content: "In Agent mode, you must either (1) continue by calling tools to perform the work, or " +
+                "(2) if the task is complete, explicitly mark Delivery: DONE and provide a user-visible response. " +
+                "Continue the work now."
         )
 
         return try await aiInteractionCoordinator
