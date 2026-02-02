@@ -29,6 +29,16 @@ struct AgentSettingsTab: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+
+                    SettingsRow(
+                        title: "Memory",
+                        subtitle: "Allow the agent to store and retrieve local memories.",
+                        systemImage: "brain"
+                    ) {
+                        Toggle("", isOn: memoryEnabledBinding)
+                            .toggleStyle(.switch)
+                            .accessibilityIdentifier("Settings.Agent.MemoryEnabled")
+                    }
                 }
             }
             .padding(.top, AppConstants.Settings.contentTopPadding)
@@ -39,6 +49,13 @@ struct AgentSettingsTab: View {
         Binding(
             get: { ui.cliTimeoutSeconds },
             set: { ui.setCliTimeoutSeconds($0) }
+        )
+    }
+
+    private var memoryEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { ui.agentMemoryEnabled },
+            set: { ui.setAgentMemoryEnabled($0) }
         )
     }
 }

@@ -9,6 +9,8 @@ extension OpenRouterAIService {
             message: "openrouter.request_start",
             context: AppLogger.LogCallContext(metadata: [
                 "requestId": context.requestId,
+                "runId": context.runId as Any,
+                "stage": context.stage?.rawValue as Any,
                 "model": context.model,
                 "messageCount": context.messageCount,
                 "toolCount": context.toolCount,
@@ -22,7 +24,9 @@ extension OpenRouterAIService {
             "messages": context.messageCount,
             "tools": context.toolCount,
             "mode": context.mode?.rawValue as Any,
-            "projectRoot": context.projectRoot?.path as Any
+            "projectRoot": context.projectRoot?.path as Any,
+            "runId": context.runId as Any,
+            "stage": context.stage?.rawValue as Any
         ])
     }
 

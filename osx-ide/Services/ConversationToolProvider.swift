@@ -31,6 +31,8 @@ final class ConversationToolProvider {
         let projectRoot = projectRootProvider()
         let aiService = aiServiceProvider()
         let codebaseIndex = codebaseIndexProvider()
+        let settingsStore = SettingsStore(userDefaults: .standard)
+        let agentMemoryEnabled = settingsStore.bool(forKey: AppConstantsStorage.agentMemoryEnabledKey, default: true)
 
         var tools: [AITool] = []
 
@@ -40,6 +42,11 @@ final class ConversationToolProvider {
             tools.append(IndexSearchTextTool(index: codebaseIndex))
             tools.append(IndexReadFileTool(index: codebaseIndex))
             tools.append(IndexSearchSymbolsTool(index: codebaseIndex))
+
+            if agentMemoryEnabled {
+                tools.append(IndexListMemoriesTool(index: codebaseIndex))
+                tools.append(IndexAddMemoryTool(index: codebaseIndex))
+            }
         }
 
         tools.append(

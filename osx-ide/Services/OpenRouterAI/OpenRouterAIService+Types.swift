@@ -23,6 +23,8 @@ extension OpenRouterAIService {
         let tools: [AITool]?
         let mode: AIMode?
         let projectRoot: URL?
+        let runId: String?
+        let stage: AIRequestStage?
     }
 
     internal struct RequestStartContext {
@@ -32,6 +34,8 @@ extension OpenRouterAIService {
         let toolCount: Int
         let mode: AIMode?
         let projectRoot: URL?
+        let runId: String?
+        let stage: AIRequestStage?
     }
 
     struct SettingsSnapshot {

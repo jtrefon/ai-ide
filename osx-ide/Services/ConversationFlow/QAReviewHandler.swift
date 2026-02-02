@@ -19,6 +19,7 @@ final class QAReviewHandler {
         mode: AIMode,
         projectRoot: URL,
         qaReviewEnabled: Bool,
+        availableTools: [AITool],
         toolResults: [ChatMessage],
         runId: String,
         userInput: String
@@ -30,27 +31,49 @@ final class QAReviewHandler {
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !draft.isEmpty else { return response }
 
+        let toolOutputReviewSystemPrompt = PromptRepository.shared.prompt(
+            key: "ConversationFlow/QA/tool_output_review_system",
+            defaultValue: "You are the QA reviewer for tool execution results. Validate the assistant draft against " +
+                "the tool outputs and user request. Identify mistakes, omissions, and risk. " +
+                "Return a QA report only (do not rewrite the assistant draft). " +
+                "Do not call tools.",
+            projectRoot: projectRoot
+        )
         let qaSystem = ChatMessage(
             role: .system,
-            content: "You are the QA reviewer for tool execution results. Validate the assistant draft against " +
-                "the tool outputs and user request. If steps are missing or tool failures occurred, " +
-                "revise the draft to include recovery guidance or next actions. " +
-                "Return the improved draft response only. Do not call tools. Do not include <ide_reasoning>."
+            content: toolOutputReviewSystemPrompt
         )
         let qaUser = ChatMessage(
             role: .user,
-            content: "User request:\n\(userInput)\n\nTool outputs:\n\(toolSummary)\n\nDraft response:\n\(draft)"
+            content: "User request:\n\(userInput)\n\nTool outputs:\n\(toolSummary)\n\nDraft response:\n\(draft)\n\n" +
+                "Produce:\n" +
+                "- Summary\n" +
+                "- Issues (bullets)\n" +
+                "- Missing steps (bullets)\n" +
+                "- Suggested next actions (bullets)"
         )
 
         let qaResponse = try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: [qaSystem, qaUser],
                 explicitContext: explicitContext,
-                tools: [],
-                mode: .chat,
-                projectRoot: projectRoot
+                tools: readOnlyTools(from: availableTools),
+                mode: mode,
+                projectRoot: projectRoot,
+                runId: runId,
+                stage: AIRequestStage.qa_tool_output_review
             ))
             .get()
+
+        let qaReport = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !qaReport.isEmpty {
+            historyCoordinator.append(
+                ChatMessage(
+                    role: .assistant,
+                    content: "QA Review (advisory):\n\n\(qaReport)"
+                )
+            )
+        }
 
         Task.detached(priority: .utility) {
             await AppLogger.shared.info(
@@ -82,9 +105,7 @@ final class QAReviewHandler {
             toolResults: toolResults
         ))
 
-        let qaContent = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalContent = qaContent?.isEmpty == false ? qaResponse.content : response.content
-        return AIServiceResponse(content: finalContent, toolCalls: nil)
+        return response
     }
 
     func performQualityReviewIfNeeded(
@@ -93,6 +114,7 @@ final class QAReviewHandler {
         mode: AIMode,
         projectRoot: URL,
         qaReviewEnabled: Bool,
+        availableTools: [AITool],
         runId: String,
         userInput: String
     ) async throws -> AIServiceResponse {
@@ -100,26 +122,48 @@ final class QAReviewHandler {
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !draft.isEmpty else { return response }
 
+        let qualityReviewSystemPrompt = PromptRepository.shared.prompt(
+            key: "ConversationFlow/QA/quality_review_system",
+            defaultValue: "You are the QA reviewer. Review the assistant draft response for correctness, completeness, " +
+                "and adherence to the user request. Return a QA report only (do not rewrite the response). " +
+                "Do not call tools.",
+            projectRoot: projectRoot
+        )
         let qaSystem = ChatMessage(
             role: .system,
-            content: "You are the QA reviewer. Review the assistant draft response for correctness, completeness, " +
-                "and adherence to the user request. Return the improved final response only. " +
-                "If the draft is already perfect, repeat it verbatim. Do not call tools. Do not include <ide_reasoning>."
+            content: qualityReviewSystemPrompt
         )
         let qaUser = ChatMessage(
             role: .user,
-            content: "Review and refine this draft response:\n\n\(draft)"
+            content: "User request:\n\(userInput)\n\nDraft response:\n\(draft)\n\n" +
+                "Produce:\n" +
+                "- Summary\n" +
+                "- Issues (bullets)\n" +
+                "- Missing steps (bullets)\n" +
+                "- Suggested next actions (bullets)"
         )
 
         let qaResponse = try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: [qaSystem, qaUser],
                 explicitContext: explicitContext,
-                tools: [],
-                mode: .chat,
-                projectRoot: projectRoot
+                tools: readOnlyTools(from: availableTools),
+                mode: mode,
+                projectRoot: projectRoot,
+                runId: runId,
+                stage: AIRequestStage.qa_quality_review
             ))
             .get()
+
+        let qaReport = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !qaReport.isEmpty {
+            historyCoordinator.append(
+                ChatMessage(
+                    role: .assistant,
+                    content: "QA Review (advisory):\n\n\(qaReport)"
+                )
+            )
+        }
 
         Task.detached(priority: .utility) {
             await AppLogger.shared.info(
@@ -151,9 +195,18 @@ final class QAReviewHandler {
             toolResults: []
         ))
 
-        let qaContent = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalContent = qaContent?.isEmpty == false ? qaResponse.content : response.content
-        return AIServiceResponse(content: finalContent, toolCalls: nil)
+        return response
+    }
+
+    private func readOnlyTools(from tools: [AITool]) -> [AITool] {
+        let allowed = Set([
+            "index_find_files",
+            "index_list_files",
+            "index_search_text",
+            "index_read_file",
+            "index_search_symbols"
+        ])
+        return tools.filter { allowed.contains($0.name) }
     }
 
     private func toolResultsSummaryText(_ toolResults: [ChatMessage]) -> String {

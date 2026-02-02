@@ -40,6 +40,10 @@ final class ChatHistoryCoordinator {
         historyManager.removeOldestMessages(count: count)
     }
 
+    func replaceOldestMessages(count: Int, with message: ChatMessage) {
+        historyManager.replaceOldestMessages(count: count, with: message)
+    }
+
     func clearConversation() {
         historyManager.clear()
     }

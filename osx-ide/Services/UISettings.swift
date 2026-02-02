@@ -6,6 +6,7 @@ struct UISettings {
     let fontFamily: String
     let indentationStyle: IndentationStyle
     let cliTimeoutSeconds: Double
+    let agentMemoryEnabled: Bool
     let showLineNumbers: Bool
     let wordWrap: Bool
     let minimapVisible: Bool
