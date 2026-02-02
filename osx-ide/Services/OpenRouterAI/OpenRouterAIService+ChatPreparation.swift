@@ -18,6 +18,16 @@ extension OpenRouterAIService {
             )
         )
 
+#if DEBUG
+        assertReasoningPromptDeterminism(
+            systemContent: systemContent,
+            mode: request.mode,
+            reasoningEnabled: settings.reasoningEnabled,
+            runId: request.runId,
+            stage: request.stage
+        )
+#endif
+
         let finalMessages = buildFinalMessages(
             systemContent: systemContent,
             context: request.context,
@@ -35,6 +45,31 @@ extension OpenRouterAIService {
             toolChoice: toolChoice
         )
     }
+
+#if DEBUG
+    private func assertReasoningPromptDeterminism(
+        systemContent: String,
+        mode: AIMode?,
+        reasoningEnabled: Bool,
+        runId: String?,
+        stage: AIRequestStage?
+    ) {
+        let shouldIncludeReasoning = (mode == .agent && reasoningEnabled)
+        let hasReasoningMarker = systemContent.contains("<ide_reasoning>")
+
+        if shouldIncludeReasoning {
+            assert(
+                hasReasoningMarker,
+                "Invariant violated: reasoningEnabled is true in Agent mode but reasoning prompt is missing (runId=\(runId ?? "nil"), stage=\(stage?.rawValue ?? "nil"))"
+            )
+        } else {
+            assert(
+                !hasReasoningMarker,
+                "Invariant violated: reasoning prompt present when it should not be (mode=\(mode?.rawValue ?? "nil"), reasoningEnabled=\(reasoningEnabled), runId=\(runId ?? "nil"), stage=\(stage?.rawValue ?? "nil"))"
+            )
+        }
+    }
+#endif
 
     internal func loadSettingsSnapshot() -> SettingsSnapshot {
         let settings = settingsStore.load()
@@ -109,7 +144,7 @@ extension OpenRouterAIService {
 
     internal func buildReasoningPromptIfNeeded(reasoningEnabled: Bool, mode: AIMode?) -> String? {
         guard let mode else { return nil }
-        if mode != .agent, !reasoningEnabled { return nil }
+        if mode != .agent || !reasoningEnabled { return nil }
         return """
 
         ## Reasoning

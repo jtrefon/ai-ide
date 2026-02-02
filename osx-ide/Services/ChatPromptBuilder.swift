@@ -125,6 +125,44 @@ class ChatPromptBuilder {
         return results
     }
 
+    static func reasoningOutcome(from reasoning: String) -> ReasoningOutcome? {
+        let trimmed = reasoning.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let sections = extractReasoningSections(trimmed)
+        guard !sections.isEmpty else { return nil }
+
+        func value(for key: String) -> String? {
+            sections.first(where: { $0.key.lowercased().hasPrefix(key.lowercased()) })?
+                .value
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let planDelta = value(for: "Plan:")
+        let nextAction = value(for: "Action:")
+        let knownRisks = value(for: "Reflect:")
+
+        let deliveryValue = (value(for: "Delivery:") ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        let deliveryState: ReasoningOutcomeDeliveryState
+        if deliveryValue.contains("needs_work") || deliveryValue.contains("needs work") {
+            deliveryState = .needs_work
+        } else if deliveryValue.contains("done") || deliveryValue.contains("complete") {
+            deliveryState = .done
+        } else {
+            deliveryState = .needs_work
+        }
+
+        return ReasoningOutcome(
+            planDelta: planDelta?.isEmpty == false ? planDelta : nil,
+            nextAction: nextAction?.isEmpty == false ? nextAction : nil,
+            knownRisks: knownRisks?.isEmpty == false ? knownRisks : nil,
+            deliveryState: deliveryState
+        )
+    }
+
     /// Determines if the AI's response indicates it should have emitted tool calls but didn't.
     /// - Parameter content: The AI response content.
     /// - Returns: True if a tool followup should be forced.
@@ -145,6 +183,144 @@ class ChatPromptBuilder {
             "i'm going to implement",
             "next i will",
             "now i will"
+        ]
+
+        return triggers.contains(where: { text.contains($0) })
+    }
+
+    static func indicatesWorkWasPerformed(content: String) -> Bool {
+        let text = content.lowercased()
+        if text.isEmpty { return false }
+
+        let directClaims = [
+            "i implemented",
+            "i've implemented",
+            "i have implemented",
+            "i updated",
+            "i've updated",
+            "i have updated",
+            "i patched",
+            "i've patched",
+            "i have patched",
+            "i fixed",
+            "i've fixed",
+            "i have fixed",
+            "i changed",
+            "i've changed",
+            "i have changed",
+            "i added",
+            "i've added",
+            "i have added",
+            "i created",
+            "i've created",
+            "i have created",
+            "i removed",
+            "i've removed",
+            "i have removed",
+            "i refactored",
+            "i've refactored",
+            "i have refactored"
+        ]
+
+        if directClaims.contains(where: { text.contains($0) }) {
+            return true
+        }
+
+        let artifactClaims = [
+            "here's the diff",
+            "here is the diff",
+            "here's a patch",
+            "here is a patch",
+            "i committed",
+            "i pushed",
+            "updated file",
+            "modified file",
+            "created file",
+            "changed file",
+            "applied patch"
+        ]
+
+        return artifactClaims.contains(where: { text.contains($0) })
+    }
+
+    static func userRequestRequiresExecution(userInput: String) -> Bool {
+        let text = userInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if text.isEmpty { return false }
+
+        let executionTriggers = [
+            "implement",
+            "fix",
+            "refactor",
+            "add ",
+            "remove ",
+            "delete ",
+            "rename",
+            "move ",
+            "update ",
+            "change ",
+            "migrate",
+            "wire up",
+            "hook up",
+            "integrate",
+            "run tests",
+            "build",
+            "compile",
+            "deploy",
+            "create file",
+            "edit file",
+            "apply patch"
+        ]
+
+        if executionTriggers.contains(where: { text.contains($0) }) {
+            return true
+        }
+
+        let analysisOnlyTriggers = [
+            "explain",
+            "why",
+            "what is",
+            "what does",
+            "how does",
+            "help me understand",
+            "summarize",
+            "review",
+            "analyze",
+            "compare",
+            "pros and cons",
+            "tradeoffs",
+            "best approach",
+            "recommend"
+        ]
+
+        if analysisOnlyTriggers.contains(where: { text.contains($0) }) {
+            return false
+        }
+
+        // Default to analysis-only unless the user explicitly requests execution.
+        return false
+    }
+
+    static func isRequestingUserInputForNextStep(content: String) -> Bool {
+        let text = content.lowercased()
+        if text.isEmpty { return false }
+
+        let triggers = [
+            "please provide",
+            "can you provide",
+            "please share",
+            "can you share",
+            "paste",
+            "send me",
+            "show me",
+            "what is the diff",
+            "provide the diff",
+            "share the diff",
+            "need your input",
+            "need more information",
+            "which option",
+            "which one",
+            "should i proceed",
+            "do you want me to"
         ]
 
         return triggers.contains(where: { text.contains($0) })

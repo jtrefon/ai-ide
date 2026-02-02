@@ -316,12 +316,11 @@ private struct WindowSetupView: View {
             appState.windowProvider.setWindow(window)
             appState.attachWindow(window)
             window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = true
-            window.isMovableByWindowBackground = true
+            window.titlebarAppearsTransparent = false
+            window.isMovableByWindowBackground = false
             window.isOpaque = true
             window.backgroundColor = NSColor.windowBackgroundColor
             window.hasShadow = true
-            window.styleMask.insert(.fullSizeContentView)
             window.styleMask.insert(.unifiedTitleAndToolbar)
         }
         .frame(width: 0, height: 0)

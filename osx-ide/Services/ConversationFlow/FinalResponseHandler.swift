@@ -16,8 +16,10 @@ final class FinalResponseHandler {
     func requestFinalResponseIfNeeded(
         response: AIServiceResponse,
         explicitContext: String?,
+        mode: AIMode,
         projectRoot: URL,
-        toolResults: [ChatMessage]
+        toolResults: [ChatMessage],
+        runId: String
     ) async throws -> AIServiceResponse {
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard draft.isEmpty else { return response }
@@ -26,23 +28,29 @@ final class FinalResponseHandler {
         let correctionContent: String
         if toolResults.isEmpty {
             correctionContent = "You returned no user-visible response. Provide a final response in plain text now. " +
-                "Do not call tools."
+                "Do not call tools. Do not ask the user for more inputs (diffs, files, confirmations)."
         } else {
             correctionContent = "You returned no user-visible response after tool execution. " +
-                "Provide a final response in plain text now. Do not call tools.\n\nTool outputs:\n\(toolSummary)"
+                "Provide a final response in plain text now. Do not call tools. " +
+                "Do not ask the user for more inputs (diffs, files, confirmations). " +
+                "Make reasonable assumptions and state them briefly.\n\nTool outputs:\n\(toolSummary)"
         }
         let correctionSystem = ChatMessage(
             role: .system,
             content: correctionContent
         )
 
+        let followupMode: AIMode = (mode == .agent) ? .agent : .chat
+
         let followup = try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: historyCoordinator.messages + [correctionSystem],
                 explicitContext: explicitContext,
                 tools: [],
-                mode: .chat,
-                projectRoot: projectRoot
+                mode: followupMode,
+                projectRoot: projectRoot,
+                runId: runId,
+                stage: AIRequestStage.final_response
             ))
             .get()
 
@@ -64,6 +72,22 @@ final class FinalResponseHandler {
         let displayContent = trimmedContent.isEmpty
             ? "Assistant returned no user-visible response. Please retry or rephrase."
             : splitFinal.content
+        if let reasoning = splitFinal.reasoning,
+           let outcome = ChatPromptBuilder.reasoningOutcome(from: reasoning) {
+            let outcomeMessage = """
+            ReasoningOutcome:
+            plan_delta: \(outcome.planDelta ?? "")
+            next_action: \(outcome.nextAction ?? "")
+            known_risks: \(outcome.knownRisks ?? "")
+            delivery_state: \(outcome.deliveryState.rawValue)
+            """
+            historyCoordinator.append(
+                ChatMessage(
+                    role: .system,
+                    content: outcomeMessage
+                )
+            )
+        }
         let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: response.content ?? "")
         let deliveryStatusText: String
         switch deliveryStatus {

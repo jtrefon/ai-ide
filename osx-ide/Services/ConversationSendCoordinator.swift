@@ -62,7 +62,8 @@ final class ConversationSendCoordinator {
             explicitContext: request.explicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
-            availableTools: request.availableTools
+            availableTools: request.availableTools,
+            runId: request.runId
         )
 
         await appendRunSnapshot(payload: RunSnapshotPayload(
@@ -90,28 +91,119 @@ final class ConversationSendCoordinator {
         )
 
         var response = toolLoopResult.response
+        var lastToolResults = toolLoopResult.lastToolResults
 
         response = try await reasoningCorrectionsHandler.applyReasoningCorrectionsIfNeeded(
             response: response,
             explicitContext: request.explicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
-            availableTools: request.availableTools
+            availableTools: request.availableTools,
+            runId: request.runId
         )
+
+        if request.mode == .agent, response.toolCalls?.isEmpty == false {
+            let followupToolLoopResult = try await toolLoopHandler.handleToolLoopIfNeeded(
+                response: response,
+                explicitContext: request.explicitContext,
+                mode: request.mode,
+                projectRoot: request.projectRoot,
+                conversationId: request.conversationId,
+                availableTools: request.availableTools,
+                cancelledToolCallIds: request.cancelledToolCallIds,
+                runId: request.runId,
+                userInput: request.userInput
+            )
+            response = followupToolLoopResult.response
+            lastToolResults = followupToolLoopResult.lastToolResults
+        }
 
         response = try await reasoningCorrectionsHandler.enforceDeliveryCompletionIfNeeded(
             response: response,
             explicitContext: request.explicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
-            availableTools: request.availableTools
+            availableTools: request.availableTools,
+            runId: request.runId,
+            userInput: request.userInput
         )
+
+        if request.mode == .agent, response.toolCalls?.isEmpty == false {
+            let followupToolLoopResult = try await toolLoopHandler.handleToolLoopIfNeeded(
+                response: response,
+                explicitContext: request.explicitContext,
+                mode: request.mode,
+                projectRoot: request.projectRoot,
+                conversationId: request.conversationId,
+                availableTools: request.availableTools,
+                cancelledToolCallIds: request.cancelledToolCallIds,
+                runId: request.runId,
+                userInput: request.userInput
+            )
+            response = followupToolLoopResult.response
+            lastToolResults = followupToolLoopResult.lastToolResults
+        }
+
+        if request.mode == .agent {
+            let trimmed = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let hasToolCalls = (response.toolCalls?.isEmpty == false)
+            if trimmed.isEmpty, !hasToolCalls {
+                let promptText = PromptRepository.shared.prompt(
+                    key: "ConversationFlow/Corrections/empty_response_followup",
+                    defaultValue: "In Agent mode you returned an empty response. You must continue autonomously. " +
+                        "If tools are needed, return tool calls now. If you are done, provide the final answer. " +
+                        "Do not ask the user for more inputs as the next step.",
+                    projectRoot: request.projectRoot
+                )
+                let followupSystem = ChatMessage(
+                    role: .system,
+                    content: promptText
+                )
+                let lastUserMessage = historyCoordinator.messages.last(where: { $0.role == .user })
+
+                var followupMessages = historyCoordinator.messages
+                followupMessages.append(followupSystem)
+                if let lastUserMessage {
+                    followupMessages.append(lastUserMessage)
+                }
+
+                response = try await aiInteractionCoordinator
+                    .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                        messages: followupMessages,
+                        explicitContext: request.explicitContext,
+                        tools: request.availableTools,
+                        mode: request.mode,
+                        projectRoot: request.projectRoot,
+                        runId: request.runId,
+                        stage: AIRequestStage.delivery_gate
+                    ))
+                    .get()
+
+                if response.toolCalls?.isEmpty == false {
+                    let followupToolLoopResult = try await toolLoopHandler.handleToolLoopIfNeeded(
+                        response: response,
+                        explicitContext: request.explicitContext,
+                        mode: request.mode,
+                        projectRoot: request.projectRoot,
+                        conversationId: request.conversationId,
+                        availableTools: request.availableTools,
+                        cancelledToolCallIds: request.cancelledToolCallIds,
+                        runId: request.runId,
+                        userInput: request.userInput
+                    )
+                    response = followupToolLoopResult.response
+                    lastToolResults = followupToolLoopResult.lastToolResults
+                }
+            }
+        }
 
         response = try await finalResponseHandler.requestFinalResponseIfNeeded(
             response: response,
             explicitContext: request.explicitContext,
+            mode: request.mode,
             projectRoot: request.projectRoot,
-            toolResults: toolLoopResult.lastToolResults
+            toolResults: lastToolResults,
+            runId: request.runId
         )
 
         response = try await qaReviewHandler.performToolOutputReviewIfNeeded(
@@ -120,7 +212,8 @@ final class ConversationSendCoordinator {
             mode: request.mode,
             projectRoot: request.projectRoot,
             qaReviewEnabled: request.qaReviewEnabled,
-            toolResults: toolLoopResult.lastToolResults,
+            availableTools: request.availableTools,
+            toolResults: lastToolResults,
             runId: request.runId,
             userInput: request.userInput
         )
@@ -131,9 +224,36 @@ final class ConversationSendCoordinator {
             mode: request.mode,
             projectRoot: request.projectRoot,
             qaReviewEnabled: request.qaReviewEnabled,
+            availableTools: request.availableTools,
             runId: request.runId,
             userInput: request.userInput
         )
+
+        response = try await reasoningCorrectionsHandler.enforceDeliveryCompletionIfNeeded(
+            response: response,
+            explicitContext: request.explicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            availableTools: request.availableTools,
+            runId: request.runId,
+            userInput: request.userInput
+        )
+
+        if request.mode == .agent, response.toolCalls?.isEmpty == false {
+            let followupToolLoopResult = try await toolLoopHandler.handleToolLoopIfNeeded(
+                response: response,
+                explicitContext: request.explicitContext,
+                mode: request.mode,
+                projectRoot: request.projectRoot,
+                conversationId: request.conversationId,
+                availableTools: request.availableTools,
+                cancelledToolCallIds: request.cancelledToolCallIds,
+                runId: request.runId,
+                userInput: request.userInput
+            )
+            response = followupToolLoopResult.response
+            lastToolResults = followupToolLoopResult.lastToolResults
+        }
 
         return response
     }

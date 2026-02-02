@@ -121,7 +121,9 @@ final class ToolLoopHandler {
                     explicitContext: explicitContext,
                     tools: availableTools,
                     mode: mode,
-                    projectRoot: projectRoot
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.tool_loop
                 ))
                 .get()
 
@@ -130,11 +132,16 @@ final class ToolLoopHandler {
                let content = currentResponse.content,
                ChatPromptBuilder.shouldForceToolFollowup(content: content),
                let lastUserMessage = historyCoordinator.messages.last(where: { $0.role == .user }) {
+                let promptText = PromptRepository.shared.prompt(
+                    key: "ConversationFlow/Corrections/force_tool_followup",
+                    defaultValue: "You indicated you will implement changes, but you returned no tool calls. " +
+                        "In Agent mode, you MUST now proceed by calling the appropriate tools. " +
+                        "Return tool calls now.",
+                    projectRoot: projectRoot
+                )
                 let followupSystem = ChatMessage(
                     role: .system,
-                    content: "You indicated you will implement changes, but you returned no tool calls. " +
-                        "In Agent mode, you MUST now proceed by calling the appropriate tools. " +
-                        "Return tool calls now."
+                    content: promptText
                 )
                 currentResponse = try await aiInteractionCoordinator
                     .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
@@ -142,7 +149,37 @@ final class ToolLoopHandler {
                         explicitContext: explicitContext,
                         tools: availableTools,
                         mode: mode,
-                        projectRoot: projectRoot
+                        projectRoot: projectRoot,
+                        runId: runId,
+                        stage: AIRequestStage.tool_loop
+                    ))
+                    .get()
+            }
+
+            if mode == .agent,
+               currentResponse.toolCalls?.isEmpty ?? true,
+               let content = currentResponse.content,
+               ChatPromptBuilder.isRequestingUserInputForNextStep(content: content) {
+                let promptText = PromptRepository.shared.prompt(
+                    key: "ConversationFlow/Corrections/no_user_input_next_step",
+                    defaultValue: "In Agent mode, do not ask the user for additional inputs (diffs, files, confirmations) as a next step. " +
+                        "Proceed autonomously using the available tools and make reasonable assumptions. " +
+                        "If multiple options exist, pick the safest default and continue. Return tool calls now if needed.",
+                    projectRoot: projectRoot
+                )
+                let followupSystem = ChatMessage(
+                    role: .system,
+                    content: promptText
+                )
+                currentResponse = try await aiInteractionCoordinator
+                    .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                        messages: historyCoordinator.messages + [followupSystem],
+                        explicitContext: explicitContext,
+                        tools: availableTools,
+                        mode: mode,
+                        projectRoot: projectRoot,
+                        runId: runId,
+                        stage: AIRequestStage.tool_loop
                     ))
                     .get()
             }
@@ -158,8 +195,10 @@ final class ToolLoopHandler {
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     explicitContext: explicitContext,
                     projectRoot: projectRoot,
+                    mode: mode,
                     userInput: userInput,
-                    toolResults: lastToolResults
+                    toolResults: lastToolResults,
+                    runId: runId
                 )
                 break
             }
@@ -340,8 +379,10 @@ final class ToolLoopHandler {
     private func requestFinalResponseForStalledToolLoop(
         explicitContext: String?,
         projectRoot: URL,
+        mode: AIMode,
         userInput: String,
-        toolResults: [ChatMessage]
+        toolResults: [ChatMessage],
+        runId: String
     ) async throws -> AIServiceResponse {
         let toolSummary = toolResultsSummaryText(toolResults)
         let correctionSystem = ChatMessage(
@@ -355,13 +396,16 @@ final class ToolLoopHandler {
             content: "Provide the final response now."
         )
 
+        let followupMode: AIMode = (mode == .agent) ? .agent : .chat
         let followup = try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: [correctionSystem, correctionUser],
                 explicitContext: explicitContext,
                 tools: [],
-                mode: .chat,
-                projectRoot: projectRoot
+                mode: followupMode,
+                projectRoot: projectRoot,
+                runId: runId,
+                stage: AIRequestStage.final_response
             ))
             .get()
 

@@ -16,4 +16,8 @@ extension CodebaseIndex {
     public func getMemories(tier: MemoryTier? = nil) async throws -> [MemoryEntry] {
         try await queryService.getMemories(tier: tier)
     }
+
+    public func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
+        try await memoryManager.addMemory(content: content, tier: tier, category: category)
+    }
 }

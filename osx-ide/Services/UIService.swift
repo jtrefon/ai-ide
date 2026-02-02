@@ -54,6 +54,10 @@ final class UIService: UIServiceProtocol {
         settingsStore.set(clamped, forKey: AppConstantsStorage.cliTimeoutSecondsKey)
     }
 
+    func setAgentMemoryEnabled(_ enabled: Bool) {
+        settingsStore.set(enabled, forKey: AppConstantsStorage.agentMemoryEnabledKey)
+    }
+
     // MARK: - Editor Settings
 
     /// Toggle line numbers visibility
@@ -137,6 +141,8 @@ final class UIService: UIServiceProtocol {
         let storedCliTimeout = settingsStore.double(forKey: AppConstantsStorage.cliTimeoutSecondsKey)
         let cliTimeoutSeconds = storedCliTimeout == 0 ? 30 : storedCliTimeout
 
+        let agentMemoryEnabled = settingsStore.bool(forKey: AppConstantsStorage.agentMemoryEnabledKey, default: true)
+
         // Load terminal settings
         let terminalFontSize = settingsStore.double(forKey: "terminalFontSize")
         let terminalFontSizeValue = terminalFontSize == 0 ? 12 : terminalFontSize
@@ -151,6 +157,7 @@ final class UIService: UIServiceProtocol {
             fontFamily: settingsStore.string(forKey: AppConstantsStorage.fontFamilyKey) ?? AppConstantsEditor.defaultFontFamily,
             indentationStyle: indentationStyle,
             cliTimeoutSeconds: cliTimeoutSeconds,
+            agentMemoryEnabled: agentMemoryEnabled,
             showLineNumbers: showLineNumbers,
             wordWrap: wordWrap,
             minimapVisible: minimapVisible,
@@ -172,6 +179,7 @@ final class UIService: UIServiceProtocol {
         setFontFamily(settings.fontFamily)
         setIndentationStyle(settings.indentationStyle)
         setCliTimeoutSeconds(settings.cliTimeoutSeconds)
+        setAgentMemoryEnabled(settings.agentMemoryEnabled)
         setShowLineNumbers(settings.showLineNumbers)
         setWordWrap(settings.wordWrap)
         setMinimapVisible(settings.minimapVisible)
@@ -193,7 +201,8 @@ final class UIService: UIServiceProtocol {
             AppConstantsStorage.fontSizeKey,
             AppConstantsStorage.fontFamilyKey,
             AppConstantsStorage.indentationStyleKey,
-            AppConstantsStorage.cliTimeoutSecondsKey
+            AppConstantsStorage.cliTimeoutSecondsKey,
+            AppConstantsStorage.agentMemoryEnabledKey
         ]
         keys.forEach { settingsStore.removeObject(forKey: $0) }
     }
@@ -207,6 +216,7 @@ final class UIService: UIServiceProtocol {
             "fontFamily": settings.fontFamily,
             "indentationStyle": settings.indentationStyle.rawValue,
             "cliTimeoutSeconds": settings.cliTimeoutSeconds,
+            "agentMemoryEnabled": settings.agentMemoryEnabled,
             "showLineNumbers": settings.showLineNumbers,
             "wordWrap": settings.wordWrap,
             "minimapVisible": settings.minimapVisible,
@@ -228,6 +238,7 @@ final class UIService: UIServiceProtocol {
         applyFontFamily(from: settings)
         applyIndentationStyle(from: settings)
         applyCliTimeoutSeconds(from: settings)
+        applyAgentMemoryEnabled(from: settings)
         applyShowLineNumbers(from: settings)
         applyWordWrap(from: settings)
         applyMinimapVisible(from: settings)
@@ -272,6 +283,11 @@ final class UIService: UIServiceProtocol {
     private func applyCliTimeoutSeconds(from settings: [String: Any]) {
         guard let timeout = settings["cliTimeoutSeconds"] as? Double else { return }
         setCliTimeoutSeconds(timeout)
+    }
+
+    private func applyAgentMemoryEnabled(from settings: [String: Any]) {
+        guard let enabled = settings["agentMemoryEnabled"] as? Bool else { return }
+        setAgentMemoryEnabled(enabled)
     }
 
     private func applyShowLineNumbers(from settings: [String: Any]) {
