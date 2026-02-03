@@ -224,6 +224,7 @@ final class IndexToolsTests: XCTestCase {
 
 // MARK: - Mock CodebaseIndex
 
+@MainActor
 class MockCodebaseIndex: CodebaseIndexProtocol {
     var mockFindFilesResult: [IndexedFileMatch] = []
     var mockListFilesResult: [String] = []
@@ -239,9 +240,22 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
     func reindexProject() {}
     func reindexProject(aiEnrichmentEnabled: Bool) {}
     func runAIEnrichment() {}
-    func getSummaries(projectRoot: URL, limit: Int) throws -> [(path: String, summary: String)] { [] }
-    func getMemories(tier: MemoryTier?) throws -> [MemoryEntry] { [] }
-    func getStats() throws -> IndexStats {
+
+    func getSummaries(projectRoot: URL, limit: Int) async throws -> [(path: String, summary: String)] { [] }
+    func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry] { [] }
+
+    func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
+        MemoryEntry(
+            id: UUID().uuidString,
+            tier: tier,
+            content: content,
+            category: category,
+            timestamp: Date(),
+            protectionLevel: 0
+        )
+    }
+
+    func getStats() async throws -> IndexStats {
         IndexStats(
             indexedResourceCount: 0,
             aiEnrichedResourceCount: 0,
@@ -264,13 +278,8 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
         )
     }
 
-    func listIndexedFiles(matching filter: String?, limit: Int, offset: Int) throws -> [String] {
-        return mockListFilesResult
-    }
-
-    func findIndexedFiles(query: String, limit: Int) throws -> [IndexedFileMatch] {
-        return mockFindFilesResult
-    }
+    func listIndexedFiles(matching filter: String?, limit: Int, offset: Int) async throws -> [String] { mockListFilesResult }
+    func findIndexedFiles(query: String, limit: Int) async throws -> [IndexedFileMatch] { mockFindFilesResult }
 
     func readIndexedFile(path: String, startLine: Int?, endLine: Int?) throws -> String {
         if shouldThrowReadFileError {
@@ -283,15 +292,6 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
         return mockSearchTextResult
     }
 
-    func searchSymbols(nameLike query: String, limit: Int) throws -> [Symbol] {
-        return mockSearchSymbolsResult
-    }
-
-    func searchSymbolsWithPaths(nameLike query: String, limit: Int) throws -> [SymbolSearchResult] {
-        return mockSearchSymbolsWithPathsResult
-    }
-
-    var isIndexing: Bool = false
-    var indexingProgress: Double = 0.0
-    var indexingStatus: String = ""
+    func searchSymbols(nameLike query: String, limit: Int) async throws -> [Symbol] { mockSearchSymbolsResult }
+    func searchSymbolsWithPaths(nameLike query: String, limit: Int) async throws -> [SymbolSearchResult] { mockSearchSymbolsWithPathsResult }
 }
