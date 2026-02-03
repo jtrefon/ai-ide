@@ -13,38 +13,41 @@ import SwiftUI
 public class ChatHistoryManager: ObservableObject {
     @Published public var messages: [ChatMessage] = []
     private var projectRoot: URL?
-    
+    private static let defaultGreetingMessage = "Hello! I'm your AI coding assistant. How can I help you today?"
+
     public init() {
-        if messages.isEmpty {
-            messages.append(ChatMessage(
+        ensureDefaultGreetingMessageIfNeeded()
+    }
+
+    private func ensureDefaultGreetingMessageIfNeeded() {
+        guard messages.isEmpty else { return }
+        messages.append(
+            ChatMessage(
                 role: .assistant,
-                content: "Hello! I'm your AI coding assistant. How can I help you today?"
-            ))
-        }
+                content: Self.defaultGreetingMessage
+            )
+        )
     }
 
     public func setProjectRoot(_ root: URL) {
         projectRoot = root
         loadHistory()
-        if messages.isEmpty {
-            messages.append(ChatMessage(
-                role: .assistant,
-                content: "Hello! I'm your AI coding assistant. How can I help you today?"
-            ))
-        }
+        ensureDefaultGreetingMessageIfNeeded()
     }
-    
+
     public func append(_ message: ChatMessage) {
         // Skip empty assistant messages at the source
         let isAssistant = message.role == MessageRole.assistant
         let isContentEmpty = message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty
-        let isReasoningEmpty = (message.reasoning?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty ?? true)
+        let isReasoningEmpty = (message.reasoning?
+                                    .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                                    .isEmpty ?? true)
         let isToolCallsEmpty = (message.toolCalls?.isEmpty ?? true)
-        
+
         if isAssistant && isContentEmpty && isReasoningEmpty && isToolCallsEmpty {
             return
         }
-        
+
         messages.append(message)
         saveHistory()
     }
@@ -62,7 +65,7 @@ public class ChatHistoryManager: ObservableObject {
             append(message)
         }
     }
-    
+
     public func removeLast() {
         if !messages.isEmpty {
             messages.removeLast()
@@ -80,15 +83,25 @@ public class ChatHistoryManager: ObservableObject {
             messages.removeFirst(count)
         }
 
-        if messages.isEmpty {
-            messages.append(ChatMessage(
-                role: .assistant,
-                content: "Hello! I'm your AI coding assistant. How can I help you today?"
-            ))
-        }
+        ensureDefaultGreetingMessageIfNeeded()
         saveHistory()
     }
-    
+
+    public func replaceOldestMessages(count: Int, with message: ChatMessage) {
+        guard count > 0 else { return }
+        guard !messages.isEmpty else { return }
+
+        if count >= messages.count {
+            messages.removeAll()
+        } else {
+            messages.removeFirst(count)
+        }
+
+        messages.insert(message, at: 0)
+        ensureDefaultGreetingMessageIfNeeded()
+        saveHistory()
+    }
+
     public func clear() {
         messages.removeAll()
         messages.append(ChatMessage(
@@ -104,7 +117,10 @@ public class ChatHistoryManager: ObservableObject {
             messages[index] = ChatMessage(
                 role: oldMessage.role,
                 content: content ?? oldMessage.content,
-                context: ChatMessageContentContext(reasoning: oldMessage.reasoning, codeContext: oldMessage.codeContext),
+                context: ChatMessageContentContext(
+                    reasoning: oldMessage.reasoning,
+                    codeContext: oldMessage.codeContext
+                ),
                 tool: ChatMessageToolContext(
                     toolName: oldMessage.toolName,
                     toolStatus: status,
@@ -115,7 +131,7 @@ public class ChatHistoryManager: ObservableObject {
             saveHistory()
         }
     }
-    
+
     public func saveHistory() {
         guard let url = historyFileURL() else { return }
         do {
@@ -123,18 +139,36 @@ public class ChatHistoryManager: ObservableObject {
             try ensureDirectoryExists(for: url)
             try data.write(to: url, options: Data.WritingOptions.atomic)
         } catch {
-            print("Failed to save conversation history: \(error)")
+            Task {
+                await CrashReporter.shared.capture(
+                    error,
+                    context: CrashReportContext(operation: "ChatHistoryManager.saveHistory"),
+                    metadata: ["url": url.path],
+                    file: #fileID,
+                    function: #function,
+                    line: #line
+                )
+            }
         }
     }
-    
+
     private func loadHistory() {
         guard let url = historyFileURL() else { return }
         guard let data = try? Data(contentsOf: url) else { return }
-        
+
         do {
             messages = try JSONDecoder().decode([ChatMessage].self, from: data)
         } catch {
-            print("Failed to load conversation history: \(error)")
+            Task {
+                await CrashReporter.shared.capture(
+                    error,
+                    context: CrashReportContext(operation: "ChatHistoryManager.loadHistory"),
+                    metadata: ["url": url.path],
+                    file: #fileID,
+                    function: #function,
+                    line: #line
+                )
+            }
         }
     }
 

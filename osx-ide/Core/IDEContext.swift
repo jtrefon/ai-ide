@@ -36,12 +36,14 @@ protocol IDEContext: AnyObject {
 
     var fileTreeExpandedRelativePaths: Set<String> { get set }
     var fileTreeSelectedRelativePath: String? { get set }
+    var fileTreeRefreshToken: Int { get }
 
     var showHiddenFilesInFileTree: Bool { get set }
 
     func loadFile(from url: URL)
     func openFile()
     func newProject()
+    func requestFileTreeRefresh()
 
     func relativePath(for url: URL) -> String?
 }

@@ -16,9 +16,9 @@ final class EditorHighlightDiagnosticsStore: ObservableObject {
             queue: .main
         ) { [weak self] note in
             guard let self else { return }
-            if let d = note.userInfo?["diagnostics"] as? String {
+            if let diagnosticsText = note.userInfo?["diagnostics"] as? String {
                 Task { @MainActor in
-                    self.diagnostics = d
+                    self.diagnostics = diagnosticsText
                 }
             }
         }

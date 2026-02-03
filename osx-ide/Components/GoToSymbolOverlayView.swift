@@ -22,29 +22,24 @@ struct GoToSymbolOverlayView: View {
         self._isPresented = isPresented
     }
 
-    var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Text("Go to Symbol")
-                    .font(.headline)
-
-                TextField("Type a symbol…", text: $query)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
-                    .onSubmit {
-                        openFirst(openToSide: NSEvent.modifierFlags.contains(.command))
-                    }
-
-                if isSearching {
-                    ProgressView()
-                        .scaleEffect(0.75)
-                }
-
-                Button("Close") {
-                    close()
-                }
+    private var overlayHeader: OverlayHeaderConfiguration {
+        OverlayHeaderConfiguration(
+            title: OverlayLocalizer.localized("go_to_symbol.title"),
+            placeholder: OverlayLocalizer.localized("go_to_symbol.placeholder"),
+            query: $query,
+            textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
+            showsProgress: isSearching,
+            onSubmit: {
+                Task { await refreshResults() }
+            },
+            onClose: {
+                close()
             }
+        )
+    }
 
+    var body: some View {
+        overlayScaffold(using: overlayHeader) {
             List {
                 ForEach(results, id: \.id) { item in
                     Button(action: {
@@ -72,16 +67,12 @@ struct GoToSymbolOverlayView: View {
             }
             .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
-        .padding(AppConstants.Overlay.containerPadding)
-        .background(.regularMaterial)
-        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
-        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             if searchService == nil {
                 searchService = WorkspaceSymbolSearchService(codebaseIndexProvider: { appState.codebaseIndex })
             }
             query = ""
-            refreshResults()
+            Task { await refreshResults() }
         }
         .onChange(of: query) { _, _ in
             debounceSearch()
@@ -92,14 +83,15 @@ struct GoToSymbolOverlayView: View {
     }
 
     private func debounceSearch() {
-        searchTask?.cancel()
-        searchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds)
-            refreshResults()
-        }
+        OverlaySearchDebouncer.reschedule(
+            searchTask: &searchTask,
+            debounceNanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds,
+            action: { await refreshResults() }
+        )
     }
 
-    private func refreshResults() {
+    @MainActor
+    private func refreshResults() async {
         guard let root = workspace.currentDirectory?.standardizedFileURL else {
             results = []
             return
@@ -117,18 +109,18 @@ struct GoToSymbolOverlayView: View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
 
         isSearching = true
-        Task { @MainActor in
-            let newResults = await searchService.search(
-                query: trimmed,
+        let newResults = await searchService.search(
+            WorkspaceSymbolSearchService.SearchRequest(
+                rawQuery: trimmed,
                 projectRoot: root,
                 currentFilePath: currentFilePath,
                 currentContent: currentContent,
                 currentLanguage: currentLanguage,
                 limit: 200
             )
-            self.results = newResults
-            self.isSearching = false
-        }
+        )
+        self.results = newResults
+        self.isSearching = false
     }
 
     private func openFirst(openToSide: Bool) {
@@ -140,7 +132,9 @@ struct GoToSymbolOverlayView: View {
         guard let root = workspace.currentDirectory?.standardizedFileURL else { return }
 
         do {
-            let url = try appState.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(item.relativePath)
+            let url = try appState.workspaceService
+                .makePathValidator(projectRoot: root)
+                .validateAndResolve(item.relativePath)
             if openToSide {
                 fileEditor.openInOtherPane(from: url)
             } else {

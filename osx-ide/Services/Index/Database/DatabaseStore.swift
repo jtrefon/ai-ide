@@ -9,13 +9,36 @@ public enum DatabaseValue: Sendable {
 
     var anyValue: Any {
         switch self {
-        case .string(let v): return v
-        case .int(let v): return v
-        case .int64(let v): return v
-        case .double(let v): return v
+        case .string(let stringValue): return stringValue
+        case .int(let intValue): return intValue
+        case .int64(let int64Value): return int64Value
+        case .double(let doubleValue): return doubleValue
         case .null: return NSNull()
         }
     }
+}
+
+public struct IndexStatsCounts: Sendable {
+    public let indexedResourceCount: Int
+    public let symbolCount: Int
+    public let memoryCount: Int
+    public let longTermMemoryCount: Int
+
+    public init(indexedResourceCount: Int, symbolCount: Int, memoryCount: Int, longTermMemoryCount: Int) {
+        self.indexedResourceCount = indexedResourceCount
+        self.symbolCount = symbolCount
+        self.memoryCount = memoryCount
+        self.longTermMemoryCount = longTermMemoryCount
+    }
+}
+
+public struct UpsertResourceAndFTSRequest: Sendable {
+    public let resourceId: String
+    public let path: String
+    public let language: String
+    public let timestamp: Double
+    public let contentHash: String
+    public let content: String
 }
 
 public actor DatabaseStore {
@@ -123,7 +146,7 @@ public actor DatabaseStore {
         try database.getAIEnrichedSummaries(projectRoot: projectRoot, limit: limit)
     }
 
-    public func getIndexStatsCounts() throws -> (indexedResourceCount: Int, symbolCount: Int, memoryCount: Int, longTermMemoryCount: Int) {
+    public func getIndexStatsCounts() throws -> IndexStatsCounts {
         try database.getIndexStatsCounts()
     }
 
@@ -151,14 +174,7 @@ public actor DatabaseStore {
         try database.execute(sql: sql, parameters: parameters.map { $0.anyValue })
     }
 
-    public func upsertResourceAndFTS(
-        resourceId: String,
-        path: String,
-        language: String,
-        timestamp: Double,
-        contentHash: String,
-        content: String
-    ) throws {
+    public func upsertResourceAndFTS(_ request: UpsertResourceAndFTSRequest) throws {
         let sql = """
         INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
         VALUES (?, ?, ?, ?, ?, 0.0)
@@ -172,9 +188,18 @@ public actor DatabaseStore {
         let ftsInsertSql = "INSERT INTO resources_fts (path, content, content_id) VALUES (?, ?, ?);"
 
         try database.transaction {
-            try database.execute(sql: sql, parameters: [resourceId, path, language, timestamp, contentHash])
-            try database.execute(sql: ftsDeleteSql, parameters: [resourceId])
-            try database.execute(sql: ftsInsertSql, parameters: [path, content, resourceId])
+            try database.execute(
+                sql: sql,
+                parameters: [
+                    request.resourceId,
+                    request.path,
+                    request.language,
+                    request.timestamp,
+                    request.contentHash
+                ]
+            )
+            try database.execute(sql: ftsDeleteSql, parameters: [request.resourceId])
+            try database.execute(sql: ftsInsertSql, parameters: [request.path, request.content, request.resourceId])
         }
     }
 

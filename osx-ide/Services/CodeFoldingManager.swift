@@ -9,8 +9,8 @@ public final class CodeFoldingManager: NSObject {
     }
 
     public func isIndexFolded(_ index: Int) -> Bool {
-        for r in foldedRanges {
-            if index >= r.location && index < NSMaxRange(r) {
+        for range in foldedRanges {
+            if index >= range.location && index < NSMaxRange(range) {
                 return true
             }
         }
@@ -31,9 +31,9 @@ public final class CodeFoldingManager: NSObject {
     }
 
     private func normalize() {
-        foldedRanges.sort { a, b in
-            if a.location != b.location { return a.location < b.location }
-            return a.length < b.length
+        foldedRanges.sort { left, right in
+            if left.location != right.location { return left.location < right.location }
+            return left.length < right.length
         }
     }
 }
@@ -64,16 +64,16 @@ public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelega
         var outProps: [NSLayoutManager.GlyphProperty] = Array(repeating: [], count: count)
         var outCharIndexes: [Int] = Array(repeating: 0, count: count)
 
-        for i in 0..<count {
-            let chIdx = charIndexes[i]
-            outCharIndexes[i] = chIdx
+        for index in 0..<count {
+            let chIdx = charIndexes[index]
+            outCharIndexes[index] = chIdx
 
             if manager.isIndexFolded(chIdx) {
-                outGlyphs[i] = 0
-                outProps[i] = .null
+                outGlyphs[index] = 0
+                outProps[index] = .null
             } else {
-                outGlyphs[i] = glyphs[i]
-                outProps[i] = props[i]
+                outGlyphs[index] = glyphs[index]
+                outProps[index] = props[index]
             }
         }
 
@@ -93,13 +93,25 @@ public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelega
         font: NSFont,
         glyphRange: NSRange
     ) {
+        guard !output.glyphs.isEmpty,
+              !output.properties.isEmpty,
+              !output.characterIndexes.isEmpty else {
+            return
+        }
+
         output.glyphs.withUnsafeBufferPointer { gPtr in
             output.properties.withUnsafeBufferPointer { pPtr in
                 output.characterIndexes.withUnsafeBufferPointer { cPtr in
+                    guard let gBase = gPtr.baseAddress,
+                          let pBase = pPtr.baseAddress,
+                          let cBase = cPtr.baseAddress else {
+                        return
+                    }
+                    
                     layoutManager.setGlyphs(
-                        gPtr.baseAddress!,
-                        properties: pPtr.baseAddress!,
-                        characterIndexes: cPtr.baseAddress!,
+                        gBase,
+                        properties: pBase,
+                        characterIndexes: cBase,
                         font: font,
                         forGlyphRange: glyphRange
                     )

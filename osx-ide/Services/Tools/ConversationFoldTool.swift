@@ -2,7 +2,8 @@ import Foundation
 
 struct ConversationFoldTool: AITool {
     let name: String = "conversation_fold"
-    let description: String = "Access folded (condensed) conversation context stored outside the active prompt context. Supports listing folds and reading a fold by id."
+    let description: String = "Access folded (condensed) conversation context stored outside the " +
+        "active prompt context. Supports listing folds and reading a fold by id."
 
     var parameters: [String: Any] {
         [
@@ -11,24 +12,25 @@ struct ConversationFoldTool: AITool {
                 "action": [
                     "type": "string",
                     "description": "One of: list, read",
-                    "enum": ["list", "read"],
+                    "enum": ["list", "read"]
                 ],
                 "id": [
                     "type": "string",
-                    "description": "Fold id (required for action=read)",
+                    "description": "Fold id (required for action=read)"
                 ],
                 "limit": [
                     "type": "integer",
-                    "description": "Max number of folds to return (action=list)",
-                ],
+                    "description": "Max number of folds to return (action=list)"
+                ]
             ],
-            "required": ["action"],
+            "required": ["action"]
         ]
     }
 
     let projectRoot: URL
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let action = arguments["action"] as? String else {
             throw AppError.aiServiceError("Missing 'action' argument for conversation_fold")
         }
@@ -42,7 +44,7 @@ struct ConversationFoldTool: AITool {
             let payload = entries.map { [
                 "id": $0.id,
                 "summary": $0.summary,
-                "createdAt": ISO8601DateFormatter().string(from: $0.createdAt),
+                "createdAt": ISO8601DateFormatter().string(from: $0.createdAt)
             ] }
             let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
             return String(decoding: data, as: UTF8.self)

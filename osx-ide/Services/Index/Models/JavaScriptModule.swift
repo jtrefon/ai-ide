@@ -12,42 +12,31 @@ public final class JavaScriptModule: RegexLanguageModule, @unchecked Sendable {
     public init() {
         super.init(id: .javascript, fileExtensions: ["js", "jsx"])
     }
-    
+
     public override func highlight(_ code: String, font: NSFont) -> NSAttributedString {
-        let attr = NSMutableAttributedString(string: code)
-        let fullRange = NSRange(location: 0, length: (code as NSString).length)
-        
-        attr.addAttributes([
-            .font: font,
-            .foregroundColor: NSColor.labelColor
-        ], range: fullRange)
-        
-        applyGenericHighlighting(in: attr, code: code)
-        
-        let keywords = [
-            "break","case","catch","class","const","continue","debugger","default","delete","do","else","export","extends","finally","for","function","if","import","in","instanceof","let","new","return","super","switch","this","throw","try","typeof","var","void","while","with","yield","async","await"
-        ]
-        
-        highlightWholeWords(keywords, color: NSColor.systemBlue, in: attr, code: code)
-        
+        let base = makeBaseAttributedString(code: code, font: font)
+        let attr = base.attributed
+
+        applyDoubleAndSingleQuotedStringHighlighting(color: NSColor.systemRed, in: attr, code: code)
+        applyLineAndBlockCommentHighlighting(color: NSColor.systemGreen, in: attr, code: code)
+        applyDecimalNumberHighlighting(color: NSColor.systemOrange, in: attr, code: code)
+        LanguageKeywordHighlighter.highlight(LanguageKeywordHighlighter.HighlightRequest(
+            words: LanguageKeywordRepository.javascript,
+            context: LanguageKeywordHighlighter.HighlightContext(
+                color: NSColor.systemBlue,
+                attributedString: attr,
+                code: code,
+                helper: self
+            )
+        ))
+
         return attr
     }
-    
-    private func applyGenericHighlighting(in attr: NSMutableAttributedString, code: String) {
-        // Strings
-        applyRegex("\"(?:\\\\.|[^\"\\\\])*\"", color: NSColor.systemRed, in: attr, code: code)
-        applyRegex("'(?:\\\\.|[^'\\\\])*'", color: NSColor.systemRed, in: attr, code: code)
-        // Comments
-        applyRegex("//.*", color: NSColor.systemGreen, in: attr, code: code)
-        applyRegex("/\\*[\\s\\S]*?\\*/", color: NSColor.systemGreen, in: attr, code: code)
-        // Numbers
-        applyRegex("\\b\\d+(?:\\.\\d+)?\\b", color: NSColor.systemOrange, in: attr, code: code)
-    }
-    
+
     public override func parseSymbols(content: String, resourceId: String) -> [Symbol] {
         return JavaScriptParser.parse(content: content, resourceId: resourceId)
     }
-    
+
     public override func format(_ code: String) -> String {
         return CodeFormatter.format(code, language: .javascript)
     }

@@ -2,6 +2,32 @@ import XCTest
 @testable import osx_ide
 
 final class MarkdownParserTests: XCTestCase {
+
+    private func assertRichTextBlock(_ block: MarkdownBlock, equals expected: String, file: StaticString = #filePath, line: UInt = #line) {
+        switch block.kind {
+        case .richText(let text):
+            XCTAssertEqual(text, expected, file: file, line: line)
+        case .code, .horizontalRule:
+            XCTFail("Expected .richText", file: file, line: line)
+        }
+    }
+
+    private func assertCodeBlock(
+        _ block: MarkdownBlock,
+        code expectedCode: String,
+        language expectedLanguage: String?,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        switch block.kind {
+        case .code(let code, let language):
+            XCTAssertEqual(language, expectedLanguage, file: file, line: line)
+            XCTAssertEqual(code, expectedCode, file: file, line: line)
+        case .richText, .horizontalRule:
+            XCTFail("Expected .code", file: file, line: line)
+        }
+    }
+
     func testParse_withPlainText_returnsSingleRichTextBlock() {
         let input = "Hello world"
         let document = MarkdownDocument.parse(input)
@@ -61,45 +87,16 @@ final class MarkdownParserTests: XCTestCase {
     func testParse_withMultipleCodeBlocks_preservesOrder() {
         let input = "A\n```swift\nlet a = 1\n```\nB\n```python\nprint('x')\n```\nC"
         let document = MarkdownDocument.parse(input)
-
         XCTAssertEqual(document.blocks.count, 5)
+        verifyMultipleCodeBlocksOrder(document.blocks)
+    }
 
-        switch document.blocks[0].kind {
-        case .richText(let text):
-            XCTAssertEqual(text, "A\n")
-        case .code, .horizontalRule:
-            XCTFail("Expected .richText")
-        }
-
-        switch document.blocks[1].kind {
-        case .code(let code, let language):
-            XCTAssertEqual(language, "swift")
-            XCTAssertEqual(code, "let a = 1")
-        case .richText, .horizontalRule:
-            XCTFail("Expected .code")
-        }
-
-        switch document.blocks[2].kind {
-        case .richText(let text):
-            XCTAssertEqual(text, "\nB\n")
-        case .code, .horizontalRule:
-            XCTFail("Expected .richText")
-        }
-
-        switch document.blocks[3].kind {
-        case .code(let code, let language):
-            XCTAssertEqual(language, "python")
-            XCTAssertEqual(code, "print('x')")
-        case .richText, .horizontalRule:
-            XCTFail("Expected .code")
-        }
-
-        switch document.blocks[4].kind {
-        case .richText(let text):
-            XCTAssertEqual(text, "\nC")
-        case .code, .horizontalRule:
-            XCTFail("Expected .richText")
-        }
+    private func verifyMultipleCodeBlocksOrder(_ blocks: [MarkdownBlock]) {
+        assertRichTextBlock(blocks[0], equals: "A\n")
+        assertCodeBlock(blocks[1], code: "let a = 1", language: "swift")
+        assertRichTextBlock(blocks[2], equals: "\nB\n")
+        assertCodeBlock(blocks[3], code: "print('x')", language: "python")
+        assertRichTextBlock(blocks[4], equals: "\nC")
     }
 
     func testParse_withUnclosedCodeFence_treatsAsRichText() {

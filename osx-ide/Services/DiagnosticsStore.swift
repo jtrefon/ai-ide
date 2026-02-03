@@ -4,7 +4,7 @@ import Combine
 @MainActor
 final class DiagnosticsStore: ObservableObject {
     @Published private(set) var diagnostics: [Diagnostic] = []
-    @Published private(set) var selectedDiagnosticID: String? = nil
+    @Published private(set) var selectedDiagnosticID: String?
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -16,13 +16,13 @@ final class DiagnosticsStore: ObservableObject {
 
             // Append and de-dupe by id (stable across runs), keep most recent last.
             var map: [String: Diagnostic] = Dictionary(uniqueKeysWithValues: self.diagnostics.map { ($0.id, $0) })
-            for d in new {
-                map[d.id] = d
+            for diagnostic in new {
+                map[diagnostic.id] = diagnostic
             }
-            self.diagnostics = Array(map.values).sorted { a, b in
-                if a.relativePath != b.relativePath { return a.relativePath < b.relativePath }
-                if a.line != b.line { return a.line < b.line }
-                return (a.column ?? 0) < (b.column ?? 0)
+            self.diagnostics = Array(map.values).sorted { left, right in
+                if left.relativePath != right.relativePath { return left.relativePath < right.relativePath }
+                if left.line != right.line { return left.line < right.line }
+                return (left.column ?? 0) < (right.column ?? 0)
             }
 
             if self.selectedDiagnosticID == nil {
@@ -46,8 +46,12 @@ final class DiagnosticsStore: ObservableObject {
     func selectNext() -> Diagnostic? {
         guard !diagnostics.isEmpty else { return nil }
         let currentIndex: Int
-        if let id = selectedDiagnosticID, let idx = diagnostics.firstIndex(where: { $0.id == id }) {
-            currentIndex = idx
+        if let id = selectedDiagnosticID {
+            if let idx = diagnostics.firstIndex(where: { $0.id == id }) {
+                currentIndex = idx
+            } else {
+                currentIndex = 0
+            }
         } else {
             currentIndex = 0
         }
@@ -60,8 +64,12 @@ final class DiagnosticsStore: ObservableObject {
     func selectPrevious() -> Diagnostic? {
         guard !diagnostics.isEmpty else { return nil }
         let currentIndex: Int
-        if let id = selectedDiagnosticID, let idx = diagnostics.firstIndex(where: { $0.id == id }) {
-            currentIndex = idx
+        if let id = selectedDiagnosticID {
+            if let idx = diagnostics.firstIndex(where: { $0.id == id }) {
+                currentIndex = idx
+            } else {
+                currentIndex = 0
+            }
         } else {
             currentIndex = 0
         }

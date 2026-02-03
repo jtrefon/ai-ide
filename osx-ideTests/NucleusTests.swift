@@ -13,21 +13,22 @@ import SwiftUI
 private actor ToolExecutionMockAIService: AIService {
     private var callCount: Int = 0
 
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws
-        -> AIServiceResponse
-    {
-        try await sendMessage([ChatMessage(role: .user, content: message)], context: context, tools: tools, mode: mode, projectRoot: nil)
+    func sendMessage(
+        _ request: AIServiceMessageWithProjectRootRequest
+    ) async throws -> AIServiceResponse {
+        let messages = [ChatMessage(role: .user, content: request.message)]
+        return try await sendMessage(AIServiceHistoryRequest(
+            messages: messages,
+            context: request.context,
+            tools: request.tools,
+            mode: request.mode,
+            projectRoot: request.projectRoot
+        ))
     }
 
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws
-        -> AIServiceResponse
-    {
-        try await sendMessage([ChatMessage(role: .user, content: message)], context: context, tools: tools, mode: mode, projectRoot: projectRoot)
-    }
-
-    func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws
-        -> AIServiceResponse
-    {
+    func sendMessage(
+        _ request: AIServiceHistoryRequest
+    ) async throws -> AIServiceResponse {
         callCount += 1
         if callCount == 1 {
             return AIServiceResponse(
@@ -98,76 +99,76 @@ final class NucleusTests: XCTestCase {
     var cancellables = Set<AnyCancellable>()
 
     // MARK: - EventBus Tests
-    
+
     @MainActor
     func testEventBusPublishSubscribe() {
         let expectation = expectation(description: "Event received")
         let bus = EventBus()
-        
+
         struct TestEvent: Event {
             let value: String
         }
-        
+
         bus.subscribe(to: TestEvent.self) { event in
             XCTAssertEqual(event.value, "test")
             expectation.fulfill()
         }
         .store(in: &cancellables)
-        
+
         bus.publish(TestEvent(value: "test"))
-        
+
         waitForExpectations(timeout: 1.0)
     }
-    
+
     // MARK: - CommandRegistry Tests
-    
+
     @MainActor
     func testCommandRegistryExecution() async throws {
         let registry = CommandRegistry()
         let commandID: CommandID = "test.command"
         var executed = false
-        
+
         registry.register(command: commandID) { _ in
             executed = true
         }
-        
+
         try await registry.execute(commandID)
         XCTAssertTrue(executed, "Command handler should have been executed")
     }
-    
+
     @MainActor
     func testCommandRegistryHijacking() async throws {
         let registry = CommandRegistry()
         let commandID: CommandID = "test.hijack"
         var result = ""
-        
+
         // Initial registration
         registry.register(command: commandID) { _ in
             result = "original"
         }
-        
+
         // Hijack
         registry.register(command: commandID) { _ in
             result = "hijacked"
         }
-        
+
         try await registry.execute(commandID)
         XCTAssertEqual(result, "hijacked", "Last registered handler should win (Hijacking)")
     }
-    
+
     // MARK: - UIRegistry Tests
-    
+
     @MainActor
     func testUIRegistryRegistration() {
         let registry = UIRegistry()
         let point: ExtensionPoint = .sidebarLeft
-        
+
         // Ensure empty initially
         XCTAssertTrue(registry.views(for: point).isEmpty)
-        
+
         // Register view
         registry.register(point: point, name: "TestView", icon: "star", view: Text("Content"))
-        
+
         // Verify
         let views = registry.views(for: point)
         XCTAssertEqual(views.count, 1)
@@ -188,13 +189,20 @@ final class NucleusTests: XCTestCase {
         let aiService = ToolExecutionMockAIService()
 
         let conversationManager = ConversationManager(
-            aiService: aiService,
-            errorManager: errorManager,
-            fileSystemService: FileSystemService(),
-            workspaceService: workspaceService,
-            eventBus: eventBus,
-            projectRoot: projectRoot,
-            codebaseIndex: nil
+            dependencies: ConversationManager.Dependencies(
+                services: ConversationManager.ServiceDependencies(
+                    aiService: aiService,
+                    errorManager: errorManager,
+                    fileSystemService: FileSystemService(),
+                    fileEditorService: nil
+                ),
+                environment: ConversationManager.EnvironmentDependencies(
+                    workspaceService: workspaceService,
+                    eventBus: eventBus,
+                    projectRoot: projectRoot,
+                    codebaseIndex: nil
+                )
+            )
         )
         conversationManager.currentMode = .agent
         conversationManager.currentInput = "Create a file hello_from_test.txt"

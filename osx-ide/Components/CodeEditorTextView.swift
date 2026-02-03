@@ -24,8 +24,12 @@ final class CodeEditorTextView: NSTextView {
     }
 
     private func reflowForFoldingChange() {
-        guard let layoutManager, let textContainer else { return }
-        layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: (string as NSString).length), actualCharacterRange: nil)
+        guard let layoutManager else { return }
+        guard let textContainer else { return }
+        layoutManager.invalidateLayout(
+            forCharacterRange: NSRange(location: 0, length: (string as NSString).length),
+            actualCharacterRange: nil
+        )
         layoutManager.ensureLayout(for: textContainer)
 
         enclosingScrollView?.verticalRulerView?.needsDisplay = true
@@ -50,12 +54,23 @@ final class CodeEditorTextView: NSTextView {
         }
 
         let needle = ns.substring(with: needleRange)
-        let fromIndex = max(NSMaxRange(needleRange), NSMaxRange(existingRanges.last ?? needleRange))
-        guard let next = MultiCursorUtilities.nextOccurrenceRange(text: string, needle: needle, fromIndex: fromIndex) else { return }
+        let fromIndex = max(
+            NSMaxRange(needleRange),
+            NSMaxRange(existingRanges.last ?? needleRange)
+        )
+        guard let next = MultiCursorUtilities.nextOccurrenceRange(
+            text: string,
+            needle: needle,
+            fromIndex: fromIndex
+        ) else { return }
 
         var newSelections = existingRanges
         newSelections.append(next)
-        setSelectedRanges(uniqueSorted(newSelections).map { NSValue(range: $0) }, affinity: .downstream, stillSelecting: false)
+        setSelectedRanges(
+            uniqueSorted(newSelections).map { NSValue(range: $0) },
+            affinity: .downstream,
+            stillSelecting: false
+        )
         scrollRangeToVisible(next)
     }
 
@@ -67,7 +82,7 @@ final class CodeEditorTextView: NSTextView {
         addCursorVertically(direction: .down)
     }
 
-    private func addCursorVertically(direction: MultiCursorUtilities.VerticalDirection) {
+    private func addCursorVertically(direction: MultiCursorVerticalDirection) {
         let existingRanges = selectedRanges
             .compactMap { ($0 as? NSValue)?.rangeValue }
             .sorted(by: { $0.location < $1.location })
@@ -75,8 +90,8 @@ final class CodeEditorTextView: NSTextView {
         let base = existingRanges.isEmpty ? [selectedRange] : existingRanges
         var out = existingRanges
 
-        for r in base {
-            let caret = r.location
+        for range in base {
+            let caret = range.location
             if let moved = MultiCursorUtilities.caretMovedVertically(text: string, caret: caret, direction: direction) {
                 out.append(NSRange(location: moved, length: 0))
             }
@@ -87,15 +102,15 @@ final class CodeEditorTextView: NSTextView {
 
     private func uniqueSorted(_ ranges: [NSRange]) -> [NSRange] {
         var seen = Set<String>()
-        let sorted = ranges.sorted { a, b in
-            if a.location != b.location { return a.location < b.location }
-            return a.length < b.length
+        let sorted = ranges.sorted { left, right in
+            if left.location != right.location { return left.location < right.location }
+            return left.length < right.length
         }
         var out: [NSRange] = []
-        for r in sorted {
-            let key = "\(r.location):\(r.length)"
+        for range in sorted {
+            let key = "\(range.location):\(range.length)"
             if seen.insert(key).inserted {
-                out.append(r)
+                out.append(range)
             }
         }
         return out
@@ -105,9 +120,9 @@ final class CodeEditorTextView: NSTextView {
         let safe = max(0, min(index, ns.length))
         if ns.length == 0 { return nil }
 
-        func isWord(_ s: String) -> Bool {
-            guard let u = s.unicodeScalars.first else { return false }
-            return CharacterSet.alphanumerics.contains(u) || s == "_"
+        func isWord(_ characterString: String) -> Bool {
+            guard let scalar = characterString.unicodeScalars.first else { return false }
+            return CharacterSet.alphanumerics.contains(scalar) || characterString == "_"
         }
 
         var start = safe

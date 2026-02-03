@@ -5,6 +5,10 @@ struct ToolExecutionTimelineView: View {
 
     @State private var expandedToolCallIds: Set<String> = []
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     private struct ToolEntry: Identifiable {
         let id: String
         let toolName: String
@@ -34,7 +38,7 @@ struct ToolExecutionTimelineView: View {
             .map { (toolCallId, message) in
                 ToolEntry(
                     id: toolCallId,
-                    toolName: message.toolName ?? "Tool",
+                    toolName: message.toolName ?? localized("tool.default_name"),
                     target: message.targetFile,
                     status: message.toolStatus,
                     content: message.content,
@@ -47,9 +51,9 @@ struct ToolExecutionTimelineView: View {
         VStack(alignment: .leading, spacing: 0) {
             if entries.isEmpty {
                 VStack(spacing: 8) {
-                    Text("No tool executions yet")
+                    Text(localized("tool_timeline.empty.title"))
                         .font(.headline)
-                    Text("Switch to Agent mode and run a task that calls tools.")
+                    Text(localized("tool_timeline.empty.subtitle"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -79,7 +83,8 @@ struct ToolExecutionTimelineView: View {
                             Button {
                                 toggleExpanded(toolCallId: entry.id)
                             } label: {
-                                Image(systemName: expandedToolCallIds.contains(entry.id) ? "chevron.up" : "chevron.down")
+                                Image(systemName: expandedToolCallIds.contains(entry.id) ?
+                                        "chevron.up" : "chevron.down")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             }

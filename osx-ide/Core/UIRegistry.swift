@@ -14,7 +14,7 @@ public struct PluginView: Identifiable {
     public let makeView: () -> AnyView
     public let name: String
     public let iconName: String?
-    
+
     public init<V: View>(name: String, iconName: String? = nil, makeView: @escaping () -> V) {
         self.name = name
         self.iconName = iconName
@@ -27,9 +27,9 @@ public struct PluginView: Identifiable {
 @MainActor
 public final class UIRegistry: ObservableObject {
     @Published private var extensions: [ExtensionPoint: [PluginView]] = [:]
-    
+
     public init() {}
-    
+
     /// Registers a view for a specific extension point.
     /// - Parameters:
     ///   - point: The location to inject the view.
@@ -57,10 +57,10 @@ public final class UIRegistry: ObservableObject {
         }
         let pluginView = PluginView(name: name, iconName: icon, makeView: makeView)
         extensions[point]?.append(pluginView)
-        
+
         print("[UIRegistry] Registered '\(name)' at \(point.rawValue)")
     }
-    
+
     /// Retrieves all registered views for an extension point.
     public func views(for point: ExtensionPoint) -> [PluginView] {
         return extensions[point] ?? []

@@ -32,27 +32,29 @@ struct CommandPaletteOverlayView: View {
     let commandRegistry: CommandRegistry
     @Binding var isPresented: Bool
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     @State private var query: String = ""
     @State private var items: [CommandPaletteItem] = []
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Text("Command Palette")
-                    .font(.headline)
-
-                TextField("Type a command…", text: $query)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
-                    .onSubmit {
-                        runFirstMatch()
-                    }
-
-                Button("Close") {
+        OverlayScaffold(
+            configuration: OverlayScaffoldConfiguration(
+                title: localized("command_palette.title"),
+                placeholder: localized("command_palette.placeholder"),
+                textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
+                showsProgress: false,
+                onSubmit: {
+                    runFirstMatch()
+                },
+                onClose: {
                     close()
                 }
-            }
-
+            ),
+            query: $query
+        ) {
             List {
                 ForEach(items) { item in
                     Button(action: {
@@ -72,10 +74,6 @@ struct CommandPaletteOverlayView: View {
             }
             .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
-        .padding(AppConstants.Overlay.containerPadding)
-        .background(.regularMaterial)
-        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
-        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             query = ""
             refreshItems()
@@ -108,15 +106,15 @@ struct CommandPaletteOverlayView: View {
         scored.reserveCapacity(all.count)
 
         for command in all {
-            let s = CommandPaletteScoring.score(candidate: command.value, query: trimmed)
-            if s > 0 {
-                scored.append((command, s))
+            let score = CommandPaletteScoring.score(candidate: command.value, query: trimmed)
+            if score > 0 {
+                scored.append((command, score))
             }
         }
 
-        scored.sort { a, b in
-            if a.1 != b.1 { return a.1 > b.1 }
-            return a.0.value < b.0.value
+        scored.sort { left, right in
+            if left.1 != right.1 { return left.1 > right.1 }
+            return left.0.value < right.0.value
         }
 
         items = scored.prefix(60).map { (cmd, _) in

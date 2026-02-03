@@ -20,6 +20,10 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
     @State private var newFileName: String = ""
     @State private var newFolderName: String = ""
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
@@ -29,11 +33,11 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: max(10, context.ui.fontSize - 2)))
                         .foregroundColor(.secondary)
-                    
-                    TextField("Search...", text: $searchQuery)
+
+                    TextField(localized("file_explorer.search.placeholder"), text: $searchQuery)
                         .textFieldStyle(.plain)
                         .font(.system(size: CGFloat(context.ui.fontSize)))
-                    
+
                     if !searchQuery.isEmpty {
                         Button(action: { searchQuery = "" }) {
                             Image(systemName: "xmark.circle.fill")
@@ -50,15 +54,15 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                     RoundedRectangle(cornerRadius: 6)
                         .stroke(Color.primary.opacity(0.1), lineWidth: 1)
                 )
-                
+
                 Button(action: {
                     refreshToken += 1
                 }) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: max(10, context.ui.fontSize - 2))) 
+                        .font(.system(size: max(10, context.ui.fontSize - 2)))
                 }
                 .buttonStyle(BorderlessButtonStyle())
-                .help("Refresh")
+                .help(localized("file_explorer.refresh_help"))
             }
             .padding(8)
             .frame(height: 48) // Slightly taller for search bar
@@ -79,7 +83,10 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 refreshToken: refreshToken,
                 onOpenFile: { url in
                     Task {
-                        try? await context.commandRegistry.execute(.explorerOpenSelection, args: ExplorerPathArgs(path: url.path))
+                        try? await context.commandRegistry.execute(
+                            .explorerOpenSelection,
+                            args: ExplorerPathArgs(path: url.path)
+                        )
                     }
                 },
                 onCreateFile: { directory, name in
@@ -92,7 +99,10 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 },
                 onDeleteItem: { url in
                     Task {
-                        try? await context.commandRegistry.execute(.explorerDeleteSelection, args: ExplorerPathArgs(path: url.path))
+                        try? await context.commandRegistry.execute(
+                            .explorerDeleteSelection,
+                            args: ExplorerPathArgs(path: url.path)
+                        )
                         await MainActor.run {
                             refreshToken += 1
                             syncSelectionFromAppState()
@@ -101,7 +111,10 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 },
                 onRenameItem: { url, newName in
                     Task {
-                        try? await context.commandRegistry.execute(.explorerRenameSelection, args: ExplorerRenameArgs(path: url.path, newName: newName))
+                        try? await context.commandRegistry.execute(
+                            .explorerRenameSelection,
+                            args: ExplorerRenameArgs(path: url.path, newName: newName)
+                        )
                         await MainActor.run {
                             refreshToken += 1
                             syncSelectionFromAppState()
@@ -110,39 +123,43 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 },
                 onRevealInFinder: { url in
                     Task {
-                        try? await context.commandRegistry.execute(.explorerRevealInFinder, args: ExplorerPathArgs(path: url.path))
+                        try? await context.commandRegistry.execute(
+                            .explorerRevealInFinder,
+                            args: ExplorerPathArgs(path: url.path)
+                        )
                     }
                 },
                 fontSize: context.ui.fontSize,
                 fontFamily: context.ui.fontFamily
             )
             .background(Color(NSColor.windowBackgroundColor))
-            .contextMenu {
-                Button("New File") {
-                    newFileName = ""
-                    isShowingNewFileSheet = true
-                }
-                Button("New Folder") {
-                    newFolderName = ""
-                    isShowingNewFolderSheet = true
-                }
-            }
+            // SwiftUI context menu disabled to allow NSOutlineView native menu
+            // .contextMenu {
+            //     Button(localized("file_tree.context.new_file")) {
+            //         newFileName = ""
+            //         isShowingNewFileSheet = true
+            //     }
+            //     Button(localized("file_tree.context.new_folder")) {
+            //         newFolderName = ""
+            //         isShowingNewFolderSheet = true
+            //     }
+            // }
             .sheet(isPresented: $isShowingNewFileSheet) {
                 VStack(spacing: 20) {
-                    Text("Create New File")
+                    Text(localized("file_tree.create_file.title"))
                         .font(.headline)
-                    TextField("File name", text: $newFileName)
+                    TextField(localized("file_tree.create_file.name_placeholder"), text: $newFileName)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding()
                         .onSubmit {
                             createNewFile()
                         }
                     HStack {
-                        Button("Cancel") {
+                        Button(localized("common.cancel")) {
                             isShowingNewFileSheet = false
                         }
                         Spacer()
-                        Button("Create") {
+                        Button(localized("common.create")) {
                             createNewFile()
                         }
                         .disabled(newFileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -154,20 +171,20 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
             }
             .sheet(isPresented: $isShowingNewFolderSheet) {
                 VStack(spacing: 20) {
-                    Text("Create New Folder")
+                    Text(localized("file_tree.create_folder.title"))
                         .font(.headline)
-                    TextField("Folder name", text: $newFolderName)
+                    TextField(localized("file_tree.create_folder.name_placeholder"), text: $newFolderName)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding()
                         .onSubmit {
                             createNewFolder()
                         }
                     HStack {
-                        Button("Cancel") {
+                        Button(localized("common.cancel")) {
                             isShowingNewFolderSheet = false
                         }
                         Spacer()
-                        Button("Create") {
+                        Button(localized("common.create")) {
                             createNewFolder()
                         }
                         .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -185,6 +202,9 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
         .onChange(of: context.workspace.currentDirectory) {
             refreshToken += 1
             syncSelectionFromAppState()
+        }
+        .onChange(of: context.fileTreeRefreshToken) {
+            refreshToken = context.fileTreeRefreshToken
         }
         .onChange(of: context.fileEditor.selectedFile) {
             syncSelectionFromAppState()
@@ -204,7 +224,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
         defer { isShowingNewFileSheet = false }
         let trimmedName = newFileName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
         context.workspace.createFile(named: trimmedName)
         refreshToken += 1
     }
@@ -213,13 +233,15 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
         defer { isShowingNewFolderSheet = false }
         let trimmedName = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
         context.workspace.createFolder(named: trimmedName)
         refreshToken += 1
     }
 }
 
-#Preview {
-    FileExplorerView(context: DependencyContainer().makeAppState())
-        .frame(width: 250, height: 400)
+struct FileExplorerView_Previews: PreviewProvider {
+    static var previews: some View {
+        FileExplorerView(context: DependencyContainer().makeAppState())
+            .frame(width: 250, height: 400)
+    }
 }

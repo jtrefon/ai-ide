@@ -13,8 +13,8 @@ import Combine
 class DependencyContainer {
 
     private let settingsStore: SettingsStore
-    
-    init() {
+
+    init(isTesting: Bool = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil) {
         settingsStore = SettingsStore(userDefaults: .standard)
         let errorManager = ErrorManager()
         _errorManager = errorManager
@@ -22,8 +22,12 @@ class DependencyContainer {
         _commandRegistry = CommandRegistry()
         _uiRegistry = UIRegistry()
         _uiService = UIService(errorManager: errorManager, eventBus: _eventBus)
-        _workspaceService = WorkspaceService(errorManager: errorManager, eventBus: _eventBus)
         _fileSystemService = FileSystemService()
+        _workspaceService = WorkspaceService(
+            errorManager: errorManager,
+            eventBus: _eventBus,
+            fileSystemService: _fileSystemService
+        )
         _windowProvider = WindowProvider()
         _fileDialogService = FileDialogService(windowProvider: _windowProvider)
         _fileEditorService = FileEditorService(
@@ -31,18 +35,25 @@ class DependencyContainer {
             fileSystemService: _fileSystemService,
             eventBus: _eventBus
         )
-        _aiService = OpenRouterAIService()
+        _aiService = OpenRouterAIService(eventBus: _eventBus)
 
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
 
         _conversationManager = ConversationManager(
-            aiService: _aiService,
-            errorManager: errorManager,
-            fileSystemService: _fileSystemService,
-            fileEditorService: _fileEditorService,
-            workspaceService: _workspaceService,
-            eventBus: _eventBus,
-            codebaseIndex: nil
+            dependencies: ConversationManager.Dependencies(
+                services: ConversationManager.ServiceDependencies(
+                    aiService: _aiService,
+                    errorManager: errorManager,
+                    fileSystemService: _fileSystemService,
+                    fileEditorService: _fileEditorService
+                ),
+                environment: ConversationManager.EnvironmentDependencies(
+                    workspaceService: _workspaceService,
+                    eventBus: _eventBus,
+                    projectRoot: nil,
+                    codebaseIndex: nil
+                )
+            )
         )
 
         _projectCoordinator = ProjectCoordinator(
@@ -52,24 +63,24 @@ class DependencyContainer {
             conversationManager: _conversationManager
         )
 
-        if let root = _workspaceService.currentDirectory {
+        if !isTesting, let root = _workspaceService.currentDirectory {
             _conversationManager.updateProjectRoot(root)
             _projectCoordinator.configureProject(root: root)
         }
     }
-    
+
     // MARK: - Public Accessors
-    
+
     /// Error manager instance
     var errorManager: ErrorManagerProtocol {
         return _errorManager
     }
-    
+
     /// UI service instance
     var uiService: UIServiceProtocol {
         return _uiService
     }
-    
+
     /// Workspace service instance
     var workspaceService: WorkspaceServiceProtocol {
         return _workspaceService
@@ -90,7 +101,7 @@ class DependencyContainer {
     var diagnosticsStore: DiagnosticsStore {
         return _diagnosticsStore
     }
-    
+
     /// File editor service instance
     var fileEditorService: FileEditorServiceProtocol {
         return _fileEditorService
@@ -109,12 +120,12 @@ class DependencyContainer {
     var windowProvider: WindowProvider {
         return _windowProvider
     }
-    
+
     /// AI service instance
     var aiService: AIService {
         return _aiService
     }
-    
+
     /// Conversation manager instance
     var conversationManager: ConversationManagerProtocol {
         return _conversationManager
@@ -124,7 +135,7 @@ class DependencyContainer {
     var projectCoordinator: ProjectCoordinator {
         return _projectCoordinator
     }
-    
+
     /// Codebase index instance (proxied through coordinator)
     var codebaseIndex: CodebaseIndexProtocol? {
         return _projectCoordinator.codebaseIndex
@@ -148,7 +159,7 @@ class DependencyContainer {
 
     func setAIEnrichmentIndexingEnabled(_ enabled: Bool) {
         if enabled {
-            let settings = OpenRouterSettingsStore().load()
+            let settings = OpenRouterSettingsStore().load(includeApiKey: false)
             let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
             if model.isEmpty {
                 settingsStore.set(false, forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey)
@@ -166,9 +177,9 @@ class DependencyContainer {
     func configureCodebaseIndex(projectRoot: URL) {
         _projectCoordinator.configureProject(root: projectRoot)
     }
-    
+
     // MARK: - Factory Methods
-    
+
     /// Creates a configured AppState instance
     func makeAppState() -> AppState {
         return AppState(
@@ -201,7 +212,7 @@ class DependencyContainer {
             }
         )
     }
-    
+
     /// Updates the AI service used by the application
     func updateAIService(_ newService: AIService) {
         _aiService = newService

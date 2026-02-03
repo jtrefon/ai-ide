@@ -6,16 +6,18 @@ struct WindowAccessor: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        DispatchQueue.main.async { [weak view] in
-            guard let view, let window = view.window else { return }
+        Task { @MainActor [weak view] in
+            guard let view else { return }
+            guard let window = view.window else { return }
             context.coordinator.resolveIfNeeded(window: window, onResolve: onResolve)
         }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { [weak nsView] in
-            guard let nsView, let window = nsView.window else { return }
+        Task { @MainActor [weak nsView] in
+            guard let nsView else { return }
+            guard let window = nsView.window else { return }
             context.coordinator.resolveIfNeeded(window: window, onResolve: onResolve)
         }
     }

@@ -11,112 +11,167 @@ import CryptoKit
 public actor IndexerActor {
     private let database: DatabaseStore
     private let config: IndexConfiguration
-    
+
     public init(database: DatabaseStore, config: IndexConfiguration = .default) {
         self.database = database
         self.config = config
     }
-    
+
+    private struct IndexResourceRequest {
+        let url: URL
+        let resourceId: String
+        let languageRawValue: String
+        let timestamp: Double
+        let content: String
+        let contentHash: String
+        let language: CodeLanguage
+    }
+
     public func indexFile(at url: URL) async throws {
         await IndexLogger.shared.log("IndexerActor: Processing file \(url.path)")
-        // Skip if matches exclude patterns
-        if shouldExclude(url) {
+        guard !shouldExclude(url) else {
             await IndexLogger.shared.log("IndexerActor: Skipping excluded file \(url.lastPathComponent)")
             return
         }
 
         let language = LanguageDetector.detect(at: url)
-
-        // Basic metadata extraction for Phase 1
         let resourceId = url.absoluteString
-        let fileModTime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
+        let fileModTime = fileModificationTime(at: url)
 
-        let existingModTime = try? await database.getResourceLastModified(resourceId: resourceId)
-        if let fileModTime,
-           let existingModTime,
-           abs(existingModTime - fileModTime) < 0.000_001 {
-            // Modtimes can have limited resolution; verify hash before skipping.
-            let content = try String(contentsOf: url, encoding: .utf8)
-            let currentHash = computeHash(for: content)
-            let existingHash = (try? await database.getResourceContentHash(resourceId: resourceId)) ?? nil
+        try await processFileIndexing(url: url, resourceId: resourceId, language: language, fileModTime: fileModTime)
+    }
 
-            if let existingHash, !existingHash.isEmpty, existingHash == currentHash {
-                await IndexLogger.shared.log("IndexerActor: File \(url.lastPathComponent) already indexed (hash match), skipping")
-                return
-            }
+    private func processFileIndexing(url: URL, resourceId: String, language: CodeLanguage, fileModTime: Double?) async throws {
+        if let skipDecision = try await shouldSkipIndexing(url: url, resourceId: resourceId, fileModTime: fileModTime) {
+            try await handleSkipDecision(skipDecision, url: url, resourceId: resourceId, language: language)
+        } else {
+            try await indexFromDisk(url: url, resourceId: resourceId, language: language, timestamp: fileModTime)
+        }
+    }
 
-            // If hash differs (or missing), continue indexing using the content we already loaded.
-            await IndexLogger.shared.log("IndexerActor: File \(url.lastPathComponent) modtime matched but hash differs; reindexing")
-
-            await IndexLogger.shared.log("IndexerActor: Indexing \(url.lastPathComponent) (Language: \(language.rawValue))")
-            let timestamp = fileModTime
-
-            try await database.upsertResourceAndFTS(
-                resourceId: resourceId,
-                path: url.path,
-                language: language.rawValue,
-                timestamp: timestamp,
-                contentHash: currentHash,
-                content: content
+    private func handleSkipDecision(
+        _ skipDecision: SkipDecision,
+        url: URL,
+        resourceId: String,
+        language: CodeLanguage
+    ) async throws {
+        if skipDecision.shouldSkip {
+            await IndexLogger.shared.log(
+                "IndexerActor: File \(url.lastPathComponent) already indexed (hash match), skipping"
             )
-
-            // Extract symbols if supported language
-            let symbols: [Symbol]
-            if let module = await LanguageModuleManager.shared.getModule(for: language) {
-                symbols = module.symbolExtractor.extractSymbols(content: content, resourceId: resourceId)
-            } else {
-                symbols = []
-            }
-
-            if !symbols.isEmpty {
-                await IndexLogger.shared.log("IndexerActor: Extracted \(symbols.count) symbols from \(url.lastPathComponent)")
-                try await database.deleteSymbols(for: resourceId)
-                try await database.saveSymbolsBatched(symbols)
-            }
-
             return
         }
 
-        await IndexLogger.shared.log("IndexerActor: Indexing \(url.lastPathComponent) (Language: \(language.rawValue))")
-        let timestamp = fileModTime ?? Date().timeIntervalSince1970
-        
-        // Read file content
+        await IndexLogger.shared.log(
+            "IndexerActor: File \(url.lastPathComponent) modtime matched but hash differs; reindexing"
+        )
+
+        await IndexLogger.shared.log(
+            "IndexerActor: Indexing \(url.lastPathComponent) (Language: \(language.rawValue))"
+        )
+
+        let request = IndexResourceRequest(
+            url: url,
+            resourceId: resourceId,
+            languageRawValue: language.rawValue,
+            timestamp: skipDecision.timestamp,
+            content: skipDecision.content,
+            contentHash: skipDecision.contentHash,
+            language: language
+        )
+        try await upsertResourceAndIndexSymbols(request)
+    }
+
+    private func indexFromDisk(
+        url: URL,
+        resourceId: String,
+        language: CodeLanguage,
+        timestamp: Double?
+    ) async throws {
+        await IndexLogger.shared.log(
+            "IndexerActor: Indexing \(url.lastPathComponent) (Language: \(language.rawValue))"
+        )
+
+        let resolvedTimestamp = timestamp ?? Date().timeIntervalSince1970
         let content = try String(contentsOf: url, encoding: .utf8)
         let contentHash = computeHash(for: content)
-        
-        let sql = """
-        INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-        VALUES (?, ?, ?, ?, ?, 0.0)
-        ON CONFLICT(id) DO UPDATE SET
-            last_modified = excluded.last_modified,
-            content_hash = excluded.content_hash,
-            language = excluded.language;
-        """
-        
-        try await database.upsertResourceAndFTS(
+
+        let request = IndexResourceRequest(
+            url: url,
             resourceId: resourceId,
-            path: url.path,
-            language: language.rawValue,
-            timestamp: timestamp,
+            languageRawValue: language.rawValue,
+            timestamp: resolvedTimestamp,
+            content: content,
             contentHash: contentHash,
-            content: content
+            language: language
         )
-        
-        // Extract symbols if supported language
-        let symbols: [Symbol]
-        if let module = await LanguageModuleManager.shared.getModule(for: language) {
-            symbols = module.symbolExtractor.extractSymbols(content: content, resourceId: resourceId)
-        } else {
-            symbols = []
+        try await upsertResourceAndIndexSymbols(request)
+    }
+
+    private func fileModificationTime(at url: URL) -> Double? {
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
+    }
+
+    private struct SkipDecision {
+        let shouldSkip: Bool
+        let timestamp: Double
+        let content: String
+        let contentHash: String
+    }
+
+    private func shouldSkipIndexing(
+        url: URL,
+        resourceId: String,
+        fileModTime: Double?
+    ) async throws -> SkipDecision? {
+        guard let fileModTime else { return nil }
+        let existingModTime = try? await database.getResourceLastModified(resourceId: resourceId)
+        guard let existingModTime else { return nil }
+        guard abs(existingModTime - fileModTime) < 0.000_001 else { return nil }
+
+        let content = try String(contentsOf: url, encoding: .utf8)
+        let currentHash = computeHash(for: content)
+        let existingHash = (try? await database.getResourceContentHash(resourceId: resourceId)) ?? nil
+
+        if let existingHash, !existingHash.isEmpty, existingHash == currentHash {
+            return SkipDecision(shouldSkip: true, timestamp: fileModTime, content: content, contentHash: currentHash)
         }
 
-        if !symbols.isEmpty {
-            await IndexLogger.shared.log("IndexerActor: Extracted \(symbols.count) symbols from \(url.lastPathComponent)")
-            try await database.deleteSymbols(for: resourceId)
-            try await database.saveSymbolsBatched(symbols)
-        }
+        return SkipDecision(shouldSkip: false, timestamp: fileModTime, content: content, contentHash: currentHash)
     }
-    
+
+    private func upsertResourceAndIndexSymbols(_ request: IndexResourceRequest) async throws {
+        try await database.upsertResourceAndFTS(
+            UpsertResourceAndFTSRequest(
+                resourceId: request.resourceId,
+                path: request.url.path,
+                language: request.languageRawValue,
+                timestamp: request.timestamp,
+                contentHash: request.contentHash,
+                content: request.content
+            )
+        )
+
+        let symbols = await extractSymbols(content: request.content, resourceId: request.resourceId, language: request.language)
+        try await storeSymbolsIfNeeded(symbols, resourceId: request.resourceId, fileName: request.url.lastPathComponent)
+    }
+
+    private func extractSymbols(content: String, resourceId: String, language: CodeLanguage) async -> [Symbol] {
+        guard let module = await LanguageModuleManager.shared.getModule(for: language) else {
+            return []
+        }
+        return module.symbolExtractor.extractSymbols(content: content, resourceId: resourceId)
+    }
+
+    private func storeSymbolsIfNeeded(_ symbols: [Symbol], resourceId: String, fileName: String) async throws {
+        guard !symbols.isEmpty else { return }
+        await IndexLogger.shared.log(
+            "IndexerActor: Extracted \(symbols.count) symbols from \(fileName)"
+        )
+        try await database.deleteSymbols(for: resourceId)
+        try await database.saveSymbolsBatched(symbols)
+    }
+
     public func removeFile(at url: URL) async throws {
         let resourceId = url.absoluteString
         try await database.deleteResource(resourceId: resourceId)
@@ -124,17 +179,17 @@ public actor IndexerActor {
         // Cascade delete should handle symbols, but let's be safe if we didn't enable foreign keys
         try await database.deleteSymbols(for: resourceId)
     }
-    
+
     private func computeHash(for content: String) -> String {
         guard let data = content.data(using: .utf8) else { return "" }
         let hash = SHA256.hash(data: data)
         return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
-    
+
     private func shouldExclude(_ url: URL) -> Bool {
         let path = url.standardizedFileURL.path.replacingOccurrences(of: "\\", with: "/")
         let relativePath: String
-        
+
         // Try to get a relative path if possible for better matching
         // In a real scenario, we'd pass the project root here.
         // For now, we'll use the last component or the full path if not possible.
@@ -144,7 +199,7 @@ public actor IndexerActor {
             if GlobMatcher.match(path: relativePath, pattern: pattern) {
                 return true
             }
-            
+
             // Also check components for simple directory names
             let components = relativePath.split(separator: "/").map(String.init)
             if components.contains(pattern) {

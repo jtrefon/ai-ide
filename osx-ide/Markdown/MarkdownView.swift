@@ -6,14 +6,24 @@ struct MarkdownView<CodeBlockContent: View>: View {
     private let fontSize: Double?
     private let fontFamily: String?
 
-    init(markdown: String, fontSize: Double? = nil, fontFamily: String? = nil, @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent) {
+    init(
+        markdown: String,
+        fontSize: Double? = nil,
+        fontFamily: String? = nil,
+        @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent
+    ) {
         self.document = MarkdownDocument.parse(markdown)
         self.codeBlock = codeBlock
         self.fontSize = fontSize
         self.fontFamily = fontFamily
     }
 
-    init(document: MarkdownDocument, fontSize: Double? = nil, fontFamily: String? = nil, @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent) {
+    init(
+        document: MarkdownDocument,
+        fontSize: Double? = nil,
+        fontFamily: String? = nil,
+        @ViewBuilder codeBlock: @escaping (String, String?) -> CodeBlockContent
+    ) {
         self.document = document
         self.codeBlock = codeBlock
         self.fontSize = fontSize
@@ -61,8 +71,10 @@ private struct MarkdownRichTextView: View {
 
     private func resolveBaseFont() -> Font? {
         guard let fontSize else { return nil }
-        if let fontFamily, let nsFont = NSFont(name: fontFamily, size: CGFloat(fontSize)) {
-            return Font(nsFont)
+        if let fontFamily {
+            if let nsFont = NSFont(name: fontFamily, size: CGFloat(fontSize)) {
+                return Font(nsFont)
+            }
         }
         return .system(size: CGFloat(fontSize))
     }
@@ -98,12 +110,12 @@ private struct MarkdownRichTextView: View {
         var out = ""
         out.reserveCapacity(text.count)
 
-        for i in 0..<lines.count {
-            let line = String(lines[i])
+        for index in 0..<lines.count {
+            let line = String(lines[index])
             out += line
 
-            guard i < lines.count - 1 else { break }
-            let nextLine = String(lines[i + 1])
+            guard index < lines.count - 1 else { break }
+            let nextLine = String(lines[index + 1])
 
             if line.isEmpty || nextLine.isEmpty {
                 out += "\n"

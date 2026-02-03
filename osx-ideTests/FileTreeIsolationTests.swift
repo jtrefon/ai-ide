@@ -12,47 +12,47 @@ import SwiftUI
 
 @MainActor
 final class FileTreeIsolationTests: XCTestCase {
-    
+
     var dataSource: FileTreeDataSource!
     var tempDirectory: URL!
-    
+
     override func setUp() async throws {
         try await super.setUp()
         dataSource = FileTreeDataSource()
         tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
     }
-    
+
     override func tearDown() async throws {
         try? FileManager.default.removeItem(at: tempDirectory)
         dataSource = nil
         try await super.tearDown()
     }
-    
+
     func testRapidRootChange() throws {
         // Create dummy files
-        for i in 0..<100 {
-            let fileURL = tempDirectory.appendingPathComponent("file_\(i).txt")
+        for fileIndex in 0..<100 {
+            let fileURL = tempDirectory.appendingPathComponent("file_\(fileIndex).txt")
             try? "content".write(to: fileURL, atomically: true, encoding: .utf8)
         }
-        
+
         // Rapidly change root/search to provoke race conditions
-        for i in 0..<50 {
-            if i % 2 == 0 {
+        for updateIndex in 0..<50 {
+            if updateIndex % 2 == 0 {
                 self.dataSource.setRootURL(self.tempDirectory)
             } else {
                 self.dataSource.setSearchQuery("file")
             }
         }
     }
-    
+
     func testDataSourceConsistency() throws {
         // Setup
         let folderA = tempDirectory.appendingPathComponent("FolderA")
         try? FileManager.default.createDirectory(at: folderA, withIntermediateDirectories: true)
         let fileA = folderA.appendingPathComponent("FileA.txt")
         try? "content".write(to: fileA, atomically: true, encoding: .utf8)
-        
+
         dataSource.setRootURL(tempDirectory)
 
         // Allow any pending work to settle.
@@ -85,10 +85,10 @@ final class FileTreeIsolationTests: XCTestCase {
         dataSource.setRootURL(tempDirectory)
 
         let outlineView = NSOutlineView()
-        let rootChildCount = dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil)
+        let rootChildCount = dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil as Any?)
         XCTAssertGreaterThan(rootChildCount, 0)
 
-        let folderAItemAny = dataSource.outlineView(outlineView, child: 0, ofItem: nil)
+        let folderAItemAny = dataSource.outlineView(outlineView, child: 0, ofItem: nil as Any?)
         guard let folderAItem = folderAItemAny as? FileTreeItem else {
             XCTFail("Expected FileTreeItem")
             return
@@ -108,15 +108,17 @@ final class FileTreeIsolationTests: XCTestCase {
 
         let expanded = Binding<Set<String>>(get: { [] }, set: { _ in })
         let selected = Binding<String?>(get: { nil }, set: { _ in })
-        let coordinator = ModernCoordinator(
-            expandedRelativePaths: expanded,
-            selectedRelativePath: selected,
-            onOpenFile: { _ in },
-            onCreateFile: { _, _ in },
-            onCreateFolder: { _, _ in },
-            onDeleteItem: { _ in },
-            onRenameItem: { _, _ in },
-            onRevealInFinder: { _ in }
+        let coordinator = ModernFileTreeCoordinator(
+            configuration: ModernFileTreeCoordinator.Configuration(
+                expandedRelativePaths: expanded,
+                selectedRelativePath: selected,
+                onOpenFile: { _ in },
+                onCreateFile: { _, _ in },
+                onCreateFolder: { _, _ in },
+                onDeleteItem: { _ in },
+                onRenameItem: { _, _ in },
+                onRevealInFinder: { _ in }
+            )
         )
 
         let outlineView = NSOutlineView()
@@ -131,50 +133,100 @@ final class FileTreeIsolationTests: XCTestCase {
         coordinator.dataSource.setRootURL(tempDirectory)
         outlineView.reloadData()
 
-        let rootChildCount = coordinator.dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil)
+        let rootChildCount = coordinator.dataSource.outlineView(outlineView, numberOfChildrenOfItem: nil as Any?)
         XCTAssertGreaterThan(rootChildCount, 0)
 
-        for i in 0..<min(rootChildCount, 5) {
-            let childAny = coordinator.dataSource.outlineView(outlineView, child: i, ofItem: nil)
+        for rootChildIndex in 0..<min(rootChildCount, 5) {
+            let childAny = coordinator.dataSource.outlineView(
+                outlineView,
+                child: rootChildIndex,
+                ofItem: nil as Any?
+            )
             _ = coordinator.outlineView(outlineView, viewFor: column, item: childAny)
 
             if coordinator.dataSource.outlineView(outlineView, isItemExpandable: childAny) {
                 let nestedCount = coordinator.dataSource.outlineView(outlineView, numberOfChildrenOfItem: childAny)
-                for j in 0..<min(nestedCount, 5) {
-                    let nestedAny = coordinator.dataSource.outlineView(outlineView, child: j, ofItem: childAny)
+                for nestedChildIndex in 0..<min(nestedCount, 5) {
+                    let nestedAny = coordinator.dataSource.outlineView(
+                        outlineView,
+                        child: nestedChildIndex,
+                        ofItem: childAny
+                    )
                     _ = coordinator.outlineView(outlineView, viewFor: column, item: nestedAny)
                 }
             }
         }
     }
 
-    func testSearchTypingDoesNotCrashAndProducesResults() throws {
-        for i in 0..<50 {
-            let fileURL = tempDirectory.appendingPathComponent("file_\(i).txt")
+    private func createTemporaryFiles(count: Int) throws {
+        for fileIndex in 0..<count {
+            let fileURL = tempDirectory.appendingPathComponent("file_\(fileIndex).txt")
             try "content".write(to: fileURL, atomically: true, encoding: .utf8)
         }
+    }
+
+    func testSearchTypingDoesNotCrashAndProducesResults() throws {
+        try createTemporaryFiles(count: 50)
 
         let expanded = Binding<Set<String>>(get: { [] }, set: { _ in })
         let selected = Binding<String?>(get: { nil }, set: { _ in })
-        let coordinator = ModernCoordinator(
-            expandedRelativePaths: expanded,
-            selectedRelativePath: selected,
-            onOpenFile: { _ in },
-            onCreateFile: { _, _ in },
-            onCreateFolder: { _, _ in },
-            onDeleteItem: { _ in },
-            onRenameItem: { _, _ in },
-            onRevealInFinder: { _ in }
+        let coordinator = ModernFileTreeCoordinator(
+            configuration: ModernFileTreeCoordinator.Configuration(
+                expandedRelativePaths: expanded,
+                selectedRelativePath: selected,
+                onOpenFile: { _ in },
+                onCreateFile: { _, _ in },
+                onCreateFolder: { _, _ in },
+                onDeleteItem: { _ in },
+                onRenameItem: { _, _ in },
+                onRevealInFinder: { _ in }
+            )
         )
 
         let dataSource = coordinator.dataSource
         dataSource.setRootURL(tempDirectory)
         dataSource.setSearchQuery("")
-        
-        coordinator.update(rootURL: tempDirectory, searchQuery: "", showHiddenFiles: false, refreshToken: 0, fontSize: 13, fontFamily: "SF Mono")
-        coordinator.update(rootURL: tempDirectory, searchQuery: "f", showHiddenFiles: false, refreshToken: 0, fontSize: 13, fontFamily: "SF Mono")
-        coordinator.update(rootURL: tempDirectory, searchQuery: "fi", showHiddenFiles: false, refreshToken: 0, fontSize: 13, fontFamily: "SF Mono")
-        coordinator.update(rootURL: tempDirectory, searchQuery: "file_1", showHiddenFiles: false, refreshToken: 0, fontSize: 13, fontFamily: "SF Mono")
+
+        coordinator.update(
+            rootURL: tempDirectory,
+            parameters: ModernFileTreeCoordinator.UpdateParameters(
+                searchQuery: "",
+                showHiddenFiles: false,
+                refreshToken: 0,
+                fontSize: 13,
+                fontFamily: "SF Mono"
+            )
+        )
+        coordinator.update(
+            rootURL: tempDirectory,
+            parameters: ModernFileTreeCoordinator.UpdateParameters(
+                searchQuery: "f",
+                showHiddenFiles: false,
+                refreshToken: 0,
+                fontSize: 13,
+                fontFamily: "SF Mono"
+            )
+        )
+        coordinator.update(
+            rootURL: tempDirectory,
+            parameters: ModernFileTreeCoordinator.UpdateParameters(
+                searchQuery: "fi",
+                showHiddenFiles: false,
+                refreshToken: 0,
+                fontSize: 13,
+                fontFamily: "SF Mono"
+            )
+        )
+        coordinator.update(
+            rootURL: tempDirectory,
+            parameters: ModernFileTreeCoordinator.UpdateParameters(
+                searchQuery: "file_1",
+                showHiddenFiles: false,
+                refreshToken: 0,
+                fontSize: 13,
+                fontFamily: "SF Mono"
+            )
+        )
 
         let outlineView = NSOutlineView()
         var childCount = 0

@@ -16,15 +16,23 @@ public actor PatchSetStore {
     }
 
     public func patchSetDirectory(patchSetId: String) -> URL? {
-        stagingRootDirectory()?.appendingPathComponent(patchSetId, isDirectory: true)
+        stagingRootDirectory()?.appendingPathComponent(
+            patchSetId,
+            isDirectory: true
+        )
     }
 
     private func manifestURL(patchSetId: String) -> URL? {
-        patchSetDirectory(patchSetId: patchSetId)?.appendingPathComponent("manifest.json")
+        patchSetDirectory(patchSetId: patchSetId)?.appendingPathComponent(
+            "manifest.json"
+        )
     }
 
     private func blobsDirectory(patchSetId: String) -> URL? {
-        patchSetDirectory(patchSetId: patchSetId)?.appendingPathComponent("blobs", isDirectory: true)
+        patchSetDirectory(patchSetId: patchSetId)?.appendingPathComponent(
+            "blobs",
+            isDirectory: true
+        )
     }
 
     public func listPatchSetIds() -> [String] {
@@ -40,7 +48,8 @@ public actor PatchSetStore {
     }
 
     public func upsertManifest(_ manifest: PatchSetManifest) throws {
-        guard let dir = patchSetDirectory(patchSetId: manifest.id), let url = manifestURL(patchSetId: manifest.id) else {
+        guard let dir = patchSetDirectory(patchSetId: manifest.id),
+              let url = manifestURL(patchSetId: manifest.id) else {
             return
         }
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -56,15 +65,27 @@ public actor PatchSetStore {
         let blobURL = blobsDir.appendingPathComponent(blobName)
         try content.data(using: .utf8)?.write(to: blobURL, options: [.atomic])
 
-        var manifest = loadManifest(patchSetId: patchSetId) ?? PatchSetManifest(id: patchSetId, createdAt: Date(), entries: [])
-        let entry = PatchSetEntry(toolCallId: toolCallId, kind: .write, relativePath: relativePath, stagedRelativeBlobPath: "blobs/\(blobName)")
+        var manifest = loadManifest(patchSetId: patchSetId)
+            ?? PatchSetManifest(id: patchSetId, createdAt: Date(), entries: [])
+        let entry = PatchSetEntry(
+            toolCallId: toolCallId,
+            kind: .write,
+            relativePath: relativePath,
+            stagedRelativeBlobPath: "blobs/\(blobName)"
+        )
         manifest.entries.append(entry)
         try upsertManifest(manifest)
     }
 
     public func stageDelete(patchSetId: String, toolCallId: String, relativePath: String) throws {
-        var manifest = loadManifest(patchSetId: patchSetId) ?? PatchSetManifest(id: patchSetId, createdAt: Date(), entries: [])
-        let entry = PatchSetEntry(toolCallId: toolCallId, kind: .delete, relativePath: relativePath, stagedRelativeBlobPath: nil)
+        var manifest = loadManifest(patchSetId: patchSetId)
+            ?? PatchSetManifest(id: patchSetId, createdAt: Date(), entries: [])
+        let entry = PatchSetEntry(
+            toolCallId: toolCallId,
+            kind: .delete,
+            relativePath: relativePath,
+            stagedRelativeBlobPath: nil
+        )
         manifest.entries.append(entry)
         try upsertManifest(manifest)
     }
@@ -74,7 +95,10 @@ public actor PatchSetStore {
         let blobURL = stagingDir.appendingPathComponent(blobRel)
         let data = try Data(contentsOf: blobURL)
         let targetURL = root.appendingPathComponent(entry.relativePath)
-        try FileManager.default.createDirectory(at: targetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: targetURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         try data.write(to: targetURL, options: [.atomic])
     }
 
@@ -86,9 +110,15 @@ public actor PatchSetStore {
     }
 
     public func applyPatchSet(patchSetId: String) throws -> [String] {
-        guard let root = projectRoot else { throw AppError.aiServiceError("PatchSetStore missing project root") }
-        guard let dir = patchSetDirectory(patchSetId: patchSetId) else { throw AppError.aiServiceError("PatchSetStore missing staging directory") }
-        guard let manifest = loadManifest(patchSetId: patchSetId) else { throw AppError.aiServiceError("Patch set not found: \(patchSetId)") }
+        guard let root = projectRoot else {
+            throw AppError.aiServiceError("PatchSetStore missing project root")
+        }
+        guard let dir = patchSetDirectory(patchSetId: patchSetId) else {
+            throw AppError.aiServiceError("PatchSetStore missing staging directory")
+        }
+        guard let manifest = loadManifest(patchSetId: patchSetId) else {
+            throw AppError.aiServiceError("Patch set not found: \(patchSetId)")
+        }
 
         var touched: [String] = []
         touched.reserveCapacity(manifest.entries.count)
