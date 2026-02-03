@@ -7,6 +7,10 @@ struct NavigationLocationsOverlayView: View {
     @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     init(appState: AppState, isPresented: Binding<Bool>) {
         self.appState = appState
         self._workspace = ObservedObject(wrappedValue: appState.workspace)
@@ -22,7 +26,7 @@ struct NavigationLocationsOverlayView: View {
 
                 Spacer()
 
-                Button("Close") {
+                Button(localized("common.close")) {
                     close()
                 }
             }
@@ -61,7 +65,9 @@ struct NavigationLocationsOverlayView: View {
         guard let root = workspace.currentDirectory?.standardizedFileURL else { return }
 
         do {
-            let url = try appState.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(loc.relativePath)
+            let url = try appState.workspaceService
+                .makePathValidator(projectRoot: root)
+                .validateAndResolve(loc.relativePath)
             if openToSide {
                 fileEditor.openInOtherPane(from: url)
             } else {

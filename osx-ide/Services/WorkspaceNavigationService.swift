@@ -33,6 +33,15 @@ public final class WorkspaceNavigationService {
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
     private let settingsStore: SettingsStore
 
+    public struct FindDefinitionRequest {
+        public let identifier: String
+        public let projectRoot: URL
+        public let currentFilePath: String?
+        public let currentContent: String
+        public let currentLanguage: String
+        public let limit: Int
+    }
+
     public init(codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?) {
         self.codebaseIndexProvider = codebaseIndexProvider
         self.settingsStore = SettingsStore(userDefaults: .standard)
@@ -42,51 +51,69 @@ public final class WorkspaceNavigationService {
         Self.identifierAtCursor(in: text, cursor: cursor)
     }
 
-    public func findDefinitionLocations(
-        identifier: String,
-        projectRoot: URL,
-        currentFilePath: String?,
-        currentContent: String,
-        currentLanguage: String,
-        limit: Int = 50
-    ) async -> [WorkspaceCodeLocation] {
-        let needle = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
-        if needle.isEmpty { return [] }
+    public func findDefinitionLocations(_ request: FindDefinitionRequest) async -> [WorkspaceCodeLocation] {
+        let needle = request.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return [] }
 
-        if let index = codebaseIndexProvider(),
-           settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true),
-           let hits = try? await index.searchSymbolsWithPaths(nameLike: needle, limit: limit) {
-            let mapped = hits.compactMap { hit -> WorkspaceCodeLocation? in
-                guard let filePath = hit.filePath else { return nil }
-                let rel = Self.relativePath(projectRoot: projectRoot, filePath: filePath)
-                return WorkspaceCodeLocation(relativePath: rel, line: max(1, hit.symbol.lineStart), snippet: "\(hit.symbol.kind.rawValue) \(hit.symbol.name)")
-            }
-
-            // Prefer exact name matches if index returns fuzzy-like results.
-            let exact = hits
-                .filter { $0.symbol.name == needle }
-                .compactMap { hit -> WorkspaceCodeLocation? in
-                    guard let filePath = hit.filePath else { return nil }
-                    let rel = Self.relativePath(projectRoot: projectRoot, filePath: filePath)
-                    return WorkspaceCodeLocation(relativePath: rel, line: max(1, hit.symbol.lineStart), snippet: "\(hit.symbol.kind.rawValue) \(hit.symbol.name)")
-                }
-            if !exact.isEmpty { return exact }
-
-            return mapped
+        if let indexed = await findDefinitionLocationsUsingIndexIfAvailable(request, needle: needle) {
+            return indexed
         }
 
+        return await findDefinitionLocationsUsingFallback(request, needle: needle)
+    }
+
+    private func findDefinitionLocationsUsingIndexIfAvailable(
+        _ request: FindDefinitionRequest,
+        needle: String
+    ) async -> [WorkspaceCodeLocation]? {
+        guard let index = codebaseIndexProvider() else { return nil }
+        guard settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true) else { return nil }
+        guard let hits = try? await index.searchSymbolsWithPaths(nameLike: needle, limit: request.limit) else { return nil }
+
+        let mapped = mapSymbolSearchResultsToLocations(hits, projectRoot: request.projectRoot)
+        let exact = mapped.filter { $0.snippet.hasSuffix(" \(needle)") }
+        return exact.isEmpty ? mapped : exact
+    }
+
+    private func findDefinitionLocationsUsingFallback(
+        _ request: FindDefinitionRequest,
+        needle: String
+    ) async -> [WorkspaceCodeLocation] {
         let symbolSearch = WorkspaceSymbolSearchService(codebaseIndexProvider: codebaseIndexProvider)
         let results = await symbolSearch.search(
-            query: needle,
-            projectRoot: projectRoot,
-            currentFilePath: currentFilePath,
-            currentContent: currentContent,
-            currentLanguage: currentLanguage,
-            limit: limit
+            WorkspaceSymbolSearchService.SearchRequest(
+                rawQuery: needle,
+                projectRoot: request.projectRoot,
+                currentFilePath: request.currentFilePath,
+                currentContent: request.currentContent,
+                currentLanguage: request.currentLanguage,
+                limit: request.limit
+            )
         )
 
         let exact = results.filter { $0.name == needle }
-        return exact.map { WorkspaceCodeLocation(relativePath: $0.relativePath, line: $0.line, snippet: "\($0.kind.rawValue) \($0.name)") }
+        return exact.map {
+            WorkspaceCodeLocation(
+                relativePath: $0.relativePath,
+                line: $0.line,
+                snippet: "\($0.kind.rawValue) \($0.name)"
+            )
+        }
+    }
+
+    private func mapSymbolSearchResultsToLocations(
+        _ hits: [SymbolSearchResult],
+        projectRoot: URL
+    ) -> [WorkspaceCodeLocation] {
+        hits.compactMap { hit -> WorkspaceCodeLocation? in
+            guard let filePath = hit.filePath else { return nil }
+            let rel = Self.relativePath(projectRoot: projectRoot, filePath: filePath)
+            return WorkspaceCodeLocation(
+                relativePath: rel,
+                line: max(1, hit.symbol.lineStart),
+                snippet: "\(hit.symbol.kind.rawValue) \(hit.symbol.name)"
+            )
+        }
     }
 
     public func findReferenceLocations(
@@ -104,7 +131,11 @@ public final class WorkspaceNavigationService {
         return filtered.map { WorkspaceCodeLocation(relativePath: $0.relativePath, line: $0.line, snippet: $0.snippet) }
     }
 
-    public func renameInCurrentBuffer(content: String, identifier: String, newName: String) throws -> (updated: String, replacements: Int) {
+    public func renameInCurrentBuffer(
+        content: String,
+        identifier: String,
+        newName: String
+    ) throws -> (updated: String, replacements: Int) {
         try Self.renameInCurrentBuffer(content: content, identifier: identifier, newName: newName)
     }
 
@@ -148,7 +179,11 @@ public final class WorkspaceNavigationService {
         return isValidIdentifier(candidate) ? candidate : nil
     }
 
-    public static func renameInCurrentBuffer(content: String, identifier: String, newName: String) throws -> (updated: String, replacements: Int) {
+    public static func renameInCurrentBuffer(
+        content: String,
+        identifier: String,
+        newName: String
+    ) throws -> (updated: String, replacements: Int) {
         let old = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         let replacement = newName.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -166,24 +201,42 @@ public final class WorkspaceNavigationService {
 
         let ns = content as NSString
         let matches = regex.numberOfMatches(in: content, range: NSRange(location: 0, length: ns.length))
-        let updated = regex.stringByReplacingMatches(in: content, range: NSRange(location: 0, length: ns.length), withTemplate: replacement)
+        let updated = regex.stringByReplacingMatches(
+            in: content,
+            range: NSRange(location: 0, length: ns.length),
+            withTemplate: replacement
+        )
         return (updated, matches)
     }
 
-    public static func isValidIdentifier(_ s: String) -> Bool {
-        if s.isEmpty { return false }
-        let ns = s as NSString
+    public static func isValidIdentifier(_ candidate: String) -> Bool {
+        if candidate.isEmpty { return false }
+        let ns = candidate as NSString
         let first = ns.character(at: 0)
-        let isLetterOrUnderscore = (first >= 65 && first <= 90) || (first >= 97 && first <= 122) || first == 95
-        if !isLetterOrUnderscore { return false }
+        if !isIdentifierStartCharacter(first) { return false }
 
-        for i in 1..<ns.length {
-            let ch = ns.character(at: i)
-            let ok = (ch >= 48 && ch <= 57) || (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch == 95
-            if !ok { return false }
+        for index in 1..<ns.length {
+            let ch = ns.character(at: index)
+            if !isIdentifierContinuationCharacter(ch) { return false }
         }
 
         return true
+    }
+
+    private static func isIdentifierStartCharacter(_ ch: unichar) -> Bool {
+        isASCIIAlphabetic(ch) || ch == 95
+    }
+
+    private static func isIdentifierContinuationCharacter(_ ch: unichar) -> Bool {
+        isIdentifierStartCharacter(ch) || isASCIIDigit(ch)
+    }
+
+    private static func isASCIIAlphabetic(_ ch: unichar) -> Bool {
+        (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122)
+    }
+
+    private static func isASCIIDigit(_ ch: unichar) -> Bool {
+        ch >= 48 && ch <= 57
     }
 
     private static func containsWholeWord(_ text: String, word: String) -> Bool {

@@ -49,6 +49,17 @@ public actor AIToolTraceLogger {
             }
         } catch {
             // Intentionally swallow logging errors to avoid impacting app behavior.
+            // However, capture them centrally for quality improvement.
+            Task {
+                await CrashReporter.shared.capture(
+                    error,
+                    context: CrashReportContext(operation: "AIToolTraceLogger.log"),
+                    metadata: ["type": type],
+                    file: file,
+                    function: #function,
+                    line: line
+                )
+            }
         }
     }
 

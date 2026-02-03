@@ -8,21 +8,28 @@ struct AIChatPanel: View {
     @ObservedObject var ui: UIStateManager
 
     @State private var stateTick: UInt = 0
-    @State private var conversationPlan: String? = nil
+    @State private var conversationPlan: String?
+
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
-                Text("AI Assistant")
+                Text(localized("ai_chat.title"))
                     .font(.headline)
                     .padding(.horizontal)
                 Spacer()
                 if let selected = currentSelection, !selected.isEmpty {
-                    Text("Context: \"\(selected.prefix(30))\(selected.count > 30 ? "..." : "")\"")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
+                    Text(String(
+                        format: localized("ai_chat.context_format"),
+                        "\(selected.prefix(30))\(selected.count > 30 ? "..." : "")"
+                    ))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
                 }
                 Button(action: {
                     conversationManager.startNewConversation()
@@ -38,14 +45,14 @@ struct AIChatPanel: View {
             if shouldShowPlanPanel {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("Plan")
+                        Text(localized("ai_chat.plan.title"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Spacer()
                     }
 
                     MarkdownMessageView(
-                        content: conversationPlan ?? "No plan set.",
+                        content: conversationPlan ?? localized("ai_chat.plan.empty"),
                         fontSize: ui.fontSize,
                         fontFamily: ui.fontFamily
                     )
@@ -68,7 +75,7 @@ struct AIChatPanel: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .layoutPriority(1)
             .clipped()
-            
+
             // Error display
             if let error = conversationManager.error {
                 Text(error)
@@ -77,7 +84,7 @@ struct AIChatPanel: View {
                     .padding(.horizontal)
                     .padding(.vertical, 4)
             }
-            
+
             // Input area
             ChatInputView(
                 text: inputBinding,
@@ -88,26 +95,26 @@ struct AIChatPanel: View {
                     sendMessage()
                 }
             )
-            
+
             // Mode selector
             HStack(spacing: 8) {
                 Image(systemName: conversationManager.currentMode.icon)
                     .font(.caption)
                     .foregroundColor(.secondary)
-                
-                Picker("Mode", selection: modeBinding) {
+
+                Picker(localized("ai_chat.mode"), selection: modeBinding) {
                     ForEach(AIMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
                 }
                 .pickerStyle(.menu)
                 .frame(width: 100)
-                
+
                 Text(conversationManager.currentMode.description)
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
-                
+
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -115,7 +122,7 @@ struct AIChatPanel: View {
             .background(Color.gray.opacity(0.1))
         }
         .onReceive(conversationManager.statePublisher) { _ in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 stateTick &+= 1
             }
         }
@@ -129,19 +136,19 @@ struct AIChatPanel: View {
         .background(Color(NSColor.controlBackgroundColor))
     }
 
-    var currentSelection: String? { 
+    var currentSelection: String? {
         selectionContext.selectedText.isEmpty ? nil : selectionContext.selectedText
     }
-    
+
     // MARK: - Bindings
-    
+
     private var inputBinding: Binding<String> {
         Binding(
             get: { conversationManager.currentInput },
             set: { conversationManager.currentInput = $0 }
         )
     }
-    
+
     private var modeBinding: Binding<AIMode> {
         Binding(
             get: { conversationManager.currentMode },
@@ -152,7 +159,9 @@ struct AIChatPanel: View {
     private func sendMessage() {
         // Use selected code as context if available
         let context = currentSelection
-        conversationManager.currentInput = conversationManager.currentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        conversationManager.currentInput = conversationManager.currentInput.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         conversationManager.sendMessage(context: context)
     }
 
@@ -177,16 +186,3 @@ struct AIChatPanel: View {
         conversationPlan = plan
     }
 }
-
-#Preview {
-    Group {
-        let ctx = CodeSelectionContext()
-        let container = DependencyContainer()
-        AIChatPanel(
-            selectionContext: ctx,
-            conversationManager: container.conversationManager,
-            ui: UIStateManager(uiService: UIService(errorManager: ErrorManager(), eventBus: EventBus()), eventBus: EventBus())
-        )
-    }
-}
-

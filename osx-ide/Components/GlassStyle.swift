@@ -9,7 +9,7 @@ enum NativeGlassSurface {
     case toolbar
     case popover
     case sheet
-    
+
     /// Enhanced material configuration for macOS v26 liquid glass effects
     var material: some ShapeStyle {
         switch self {
@@ -32,7 +32,7 @@ enum NativeGlassSurface {
             return .thickMaterial
         }
     }
-    
+
     /// Subtle blur effect for backgrounds only
     var backgroundBlur: CGFloat {
         switch self {
@@ -62,7 +62,7 @@ extension View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
-    
+
     /// Enhanced glass background with custom corner radius for different surfaces
     @ViewBuilder
     func nativeGlassBackground(_ surface: NativeGlassSurface, cornerRadius: CGFloat) -> some View {
@@ -76,7 +76,7 @@ extension View {
             )
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
-    
+
     /// Creates a subtle glass card with minimal elevation effects
     @ViewBuilder
     func liquidGlassCard(elevation: Double = 0.3) -> some View {

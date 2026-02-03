@@ -1,13 +1,5 @@
 import Foundation
 
-public struct ConversationIndexEntry: Codable, Sendable {
-    public let ts: String
-    public let session: String
-    public let conversationId: String
-    public let mode: String
-    public let projectRoot: String?
-}
-
 public actor ConversationIndexStore {
     public static let shared = ConversationIndexStore()
 
@@ -57,30 +49,22 @@ public actor ConversationIndexStore {
             line.append(Data("\n".utf8))
 
             let appIndexURL = appSupportIndexFileURL()
-            try ensureDirectoryExists(for: appIndexURL)
-            try append(line: line, to: appIndexURL)
+            try NDJSONLogFileWriter.ensureDirectoryExists(for: appIndexURL)
+            try NDJSONLogFileWriter.append(line: line, to: appIndexURL)
 
             if let projectIndexURL = projectIndexFileURL() {
-                try ensureDirectoryExists(for: projectIndexURL)
-                try append(line: line, to: projectIndexURL)
+                try NDJSONLogFileWriter.ensureDirectoryExists(for: projectIndexURL)
+                try NDJSONLogFileWriter.append(line: line, to: projectIndexURL)
             }
         } catch {
-        }
-    }
-
-    private func ensureDirectoryExists(for fileURL: URL) throws {
-        let dir = fileURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
-    }
-
-    private func append(line: Data, to fileURL: URL) throws {
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            let handle = try FileHandle(forWritingTo: fileURL)
-            try handle.seekToEnd()
-            try handle.write(contentsOf: line)
-            try handle.close()
-        } else {
-            try line.write(to: fileURL, options: [.atomic])
+            await CrashReporter.shared.capture(
+                error,
+                context: CrashReportContext(operation: "ConversationIndexStore.appendStart"),
+                metadata: ["conversationId": conversationId],
+                file: #fileID,
+                function: #function,
+                line: #line
+            )
         }
     }
 }

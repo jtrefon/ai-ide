@@ -34,10 +34,10 @@ final class IndexToolsTests: XCTestCase {
             IndexedFileMatch(path: "src/utils/helpers.swift", aiEnriched: false, qualityScore: nil)
         ]
 
-        let result = try await indexFindFilesTool.execute(arguments: [
+        let result = try await indexFindFilesTool.execute(arguments: ToolArguments([
             "query": "main",
             "limit": 10
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.contains { $0.contains("src/main.swift") })
@@ -48,10 +48,10 @@ final class IndexToolsTests: XCTestCase {
     func testIndexFindFilesTool_empty() async throws {
         codebaseIndex.mockFindFilesResult = []
 
-        let result = try await indexFindFilesTool.execute(arguments: [
+        let result = try await indexFindFilesTool.execute(arguments: ToolArguments([
             "query": "nonexistent",
             "limit": 10
-        ])
+        ]))
 
         XCTAssertTrue(result.contains("No files found in index."))
     }
@@ -63,11 +63,11 @@ final class IndexToolsTests: XCTestCase {
             "README.md"
         ]
 
-        let result = try await indexListFilesTool.execute(arguments: [
+        let result = try await indexListFilesTool.execute(arguments: ToolArguments([
             "query": nil,
             "limit": 10,
             "offset": 0
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.contains { $0.contains("src/main.swift") })
@@ -80,11 +80,11 @@ final class IndexToolsTests: XCTestCase {
             "src/utils/helpers.swift"
         ]
 
-        let result = try await indexListFilesTool.execute(arguments: [
+        let result = try await indexListFilesTool.execute(arguments: ToolArguments([
             "query": "src",
             "limit": 10,
             "offset": 0
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.allSatisfy { $0.contains("src") })
@@ -93,7 +93,7 @@ final class IndexToolsTests: XCTestCase {
     func testIndexReadFileTool_success() async throws {
         codebaseIndex.mockReadFileResult = """
         1 | import Foundation
-        2 | 
+        2 |
         3 | class MyClass {
         4 |     func hello() {
         5 |         print("Hello")
@@ -101,11 +101,11 @@ final class IndexToolsTests: XCTestCase {
         7 | }
         """
 
-        let result = try await indexReadFileTool.execute(arguments: [
+        let result = try await indexReadFileTool.execute(arguments: ToolArguments([
             "path": "src/main.swift",
             "start_line": nil,
             "end_line": nil
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.contains { $0.contains("1 | import Foundation") })
@@ -113,19 +113,19 @@ final class IndexToolsTests: XCTestCase {
     }
 
     func testIndexReadFileTool_withRange() async throws {
-        codebaseIndex.mockReadFileResult = """
-        2 | 
-        3 | class MyClass {
-        4 |     func hello() {
-        5 |         print("Hello")
-        6 |     }
-        """
+        codebaseIndex.mockReadFileResult = [
+            "2 | ",
+            "3 | class MyClass {",
+            "4 |     func hello() {",
+            "5 |         print(\"Hello\")",
+            "6 |     }"
+        ].joined(separator: "\n")
 
-        let result = try await indexReadFileTool.execute(arguments: [
+        let result = try await indexReadFileTool.execute(arguments: ToolArguments([
             "path": "src/main.swift",
             "start_line": 2,
             "end_line": 6
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertEqual(lines.first, "2 | ")
@@ -136,11 +136,11 @@ final class IndexToolsTests: XCTestCase {
         codebaseIndex.shouldThrowReadFileError = true
 
         do {
-            _ = try await indexReadFileTool.execute(arguments: [
+            _ = try await indexReadFileTool.execute(arguments: ToolArguments([
                 "path": "nonexistent.swift",
                 "start_line": nil,
                 "end_line": nil
-            ])
+            ]))
             XCTFail("Expected error to be thrown")
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("File not found"))
@@ -153,10 +153,10 @@ final class IndexToolsTests: XCTestCase {
             "src/utils/helpers.swift:12:    print(\"Helpers\")"
         ]
 
-        let result = try await indexSearchTextTool.execute(arguments: [
+        let result = try await indexSearchTextTool.execute(arguments: ToolArguments([
             "pattern": "print",
             "limit": 10
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.contains { $0.contains("src/main.swift:5:") })
@@ -166,10 +166,10 @@ final class IndexToolsTests: XCTestCase {
     func testIndexSearchTextTool_noMatches() async throws {
         codebaseIndex.mockSearchTextResult = []
 
-        let result = try await indexSearchTextTool.execute(arguments: [
+        let result = try await indexSearchTextTool.execute(arguments: ToolArguments([
             "pattern": "nonexistent",
             "limit": 10
-        ])
+        ]))
 
         XCTAssertTrue(result.contains("No matches"))
     }
@@ -177,19 +177,33 @@ final class IndexToolsTests: XCTestCase {
     func testIndexSearchSymbolsTool_success() async throws {
         codebaseIndex.mockSearchSymbolsWithPathsResult = [
             SymbolSearchResult(
-                symbol: Symbol(id: UUID().uuidString, resourceId: "res1", name: "MyClass", kind: .class, lineStart: 1, lineEnd: 10),
+                symbol: Symbol(
+                    id: UUID().uuidString,
+                    resourceId: "res1",
+                    name: "MyClass",
+                    kind: .class,
+                    lineStart: 1,
+                    lineEnd: 10
+                ),
                 filePath: "src/main.swift"
             ),
             SymbolSearchResult(
-                symbol: Symbol(id: UUID().uuidString, resourceId: "res1", name: "hello", kind: .function, lineStart: 4, lineEnd: 6),
+                symbol: Symbol(
+                    id: UUID().uuidString,
+                    resourceId: "res1",
+                    name: "hello",
+                    kind: .function,
+                    lineStart: 4,
+                    lineEnd: 6
+                ),
                 filePath: "src/main.swift"
             )
         ]
 
-        let result = try await indexSearchSymbolsTool.execute(arguments: [
+        let result = try await indexSearchSymbolsTool.execute(arguments: ToolArguments([
             "query": "My",
             "limit": 10
-        ])
+        ]))
 
         let lines = result.components(separatedBy: .newlines)
         XCTAssertTrue(lines.contains { $0.contains("MyClass") && $0.contains("class") })
@@ -199,10 +213,10 @@ final class IndexToolsTests: XCTestCase {
     func testIndexSearchSymbolsTool_noMatches() async throws {
         codebaseIndex.mockSearchSymbolsWithPathsResult = []
 
-        let result = try await indexSearchSymbolsTool.execute(arguments: [
+        let result = try await indexSearchSymbolsTool.execute(arguments: ToolArguments([
             "query": "Nonexistent",
             "limit": 10
-        ])
+        ]))
 
         XCTAssertTrue(result.contains("No symbols"))
     }
@@ -210,6 +224,7 @@ final class IndexToolsTests: XCTestCase {
 
 // MARK: - Mock CodebaseIndex
 
+@MainActor
 class MockCodebaseIndex: CodebaseIndexProtocol {
     var mockFindFilesResult: [IndexedFileMatch] = []
     var mockListFilesResult: [String] = []
@@ -225,9 +240,22 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
     func reindexProject() {}
     func reindexProject(aiEnrichmentEnabled: Bool) {}
     func runAIEnrichment() {}
-    func getSummaries(projectRoot: URL, limit: Int) throws -> [(path: String, summary: String)] { [] }
-    func getMemories(tier: MemoryTier?) throws -> [MemoryEntry] { [] }
-    func getStats() throws -> IndexStats { 
+
+    func getSummaries(projectRoot: URL, limit: Int) async throws -> [(path: String, summary: String)] { [] }
+    func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry] { [] }
+
+    func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
+        MemoryEntry(
+            id: UUID().uuidString,
+            tier: tier,
+            content: content,
+            category: category,
+            timestamp: Date(),
+            protectionLevel: 0
+        )
+    }
+
+    func getStats() async throws -> IndexStats {
         IndexStats(
             indexedResourceCount: 0,
             aiEnrichedResourceCount: 0,
@@ -250,13 +278,8 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
         )
     }
 
-    func listIndexedFiles(matching filter: String?, limit: Int, offset: Int) throws -> [String] {
-        return mockListFilesResult
-    }
-
-    func findIndexedFiles(query: String, limit: Int) throws -> [IndexedFileMatch] {
-        return mockFindFilesResult
-    }
+    func listIndexedFiles(matching filter: String?, limit: Int, offset: Int) async throws -> [String] { mockListFilesResult }
+    func findIndexedFiles(query: String, limit: Int) async throws -> [IndexedFileMatch] { mockFindFilesResult }
 
     func readIndexedFile(path: String, startLine: Int?, endLine: Int?) throws -> String {
         if shouldThrowReadFileError {
@@ -269,15 +292,6 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
         return mockSearchTextResult
     }
 
-    func searchSymbols(nameLike query: String, limit: Int) throws -> [Symbol] {
-        return mockSearchSymbolsResult
-    }
-
-    func searchSymbolsWithPaths(nameLike query: String, limit: Int) throws -> [SymbolSearchResult] {
-        return mockSearchSymbolsWithPathsResult
-    }
-
-    var isIndexing: Bool = false
-    var indexingProgress: Double = 0.0
-    var indexingStatus: String = ""
+    func searchSymbols(nameLike query: String, limit: Int) async throws -> [Symbol] { mockSearchSymbolsResult }
+    func searchSymbolsWithPaths(nameLike query: String, limit: Int) async throws -> [SymbolSearchResult] { mockSearchSymbolsWithPathsResult }
 }

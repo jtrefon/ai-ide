@@ -31,12 +31,13 @@ final class LogFileTailer: ObservableObject {
 
         isRunning = true
 
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        let t = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.readIncremental()
             }
         }
-        RunLoop.main.add(timer!, forMode: .common)
+        self.timer = t
+        RunLoop.main.add(t, forMode: .common)
     }
 
     func stop() {

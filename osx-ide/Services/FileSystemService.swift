@@ -24,7 +24,7 @@ public final class FileSystemService: Sendable {
         }
         .mapError { AppError.fileOperationFailed("write file", underlying: $0) }
     }
-    
+
     /// Reads the content of a file at the specified URL.
     public func readFile(at url: URL) throws -> String {
         let data = try Data(contentsOf: url)

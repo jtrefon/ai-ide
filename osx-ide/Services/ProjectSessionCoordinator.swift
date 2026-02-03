@@ -100,6 +100,40 @@ final class ProjectSessionCoordinator {
         }
     }
 
+    private func loadExistingNonDirectoryFileIfPresent(_ url: URL) {
+        let isDir = (try? url.resourceValues(forKeys: [URLResourceKey.isDirectoryKey]))?.isDirectory ?? false
+        if FileManager.default.fileExists(atPath: url.path), !isDir {
+            loadFileFromURL(url)
+        }
+    }
+
+    private func restoreTabs(
+        pane: FileEditorStateManager.PaneID,
+        projectRoot: URL,
+        openTabRelativePaths: [String],
+        activeTabRelativePath: String?
+    ) {
+        guard !openTabRelativePaths.isEmpty else { return }
+        fileEditor.focus(pane)
+        for rel in openTabRelativePaths {
+            loadExistingNonDirectoryFileIfPresent(projectRoot.appendingPathComponent(rel))
+        }
+        if let activeRel = activeTabRelativePath {
+            fileEditor.activateTab(filePath: projectRoot.appendingPathComponent(activeRel).path)
+        }
+    }
+
+    private func relativePathForActiveTab(
+        activeTabID: UUID?,
+        tabs: [EditorPaneStateManager.EditorTab]
+    ) -> String? {
+        guard let activeTabID,
+              let activeTab = tabs.first(where: { $0.id == activeTabID }) else {
+            return nil
+        }
+        return relativePathForURL(URL(fileURLWithPath: activeTab.filePath))
+    }
+
     private func loadProjectSessionImpl(for projectRoot: URL) async {
         isRestoringSession = true
         defer { isRestoringSession = false }
@@ -111,8 +145,10 @@ final class ProjectSessionCoordinator {
             return
         }
 
-        if let frame = session.windowFrame?.rect, let window {
-            window.setFrame(frame, display: true)
+        if let frame = session.windowFrame?.rect {
+            if let window {
+                window.setFrame(frame, display: true)
+            }
         }
 
         ui.isSidebarVisible = session.isSidebarVisible
@@ -147,50 +183,31 @@ final class ProjectSessionCoordinator {
         let focused = FileEditorStateManager.PaneID(rawValue: session.focusedEditorPaneRawValue) ?? .primary
         fileEditor.focusedPane = focused
 
-        let primaryRelPaths = !session.primaryOpenTabRelativePaths.isEmpty ? session.primaryOpenTabRelativePaths : session.openTabRelativePaths
+        let primaryRelPaths = !session.primaryOpenTabRelativePaths.isEmpty
+            ? session.primaryOpenTabRelativePaths
+            : session.openTabRelativePaths
         let primaryActiveRel = session.primaryActiveTabRelativePath ?? session.activeTabRelativePath
 
-        if !primaryRelPaths.isEmpty {
-            fileEditor.focus(.primary)
-            for rel in primaryRelPaths {
-                let url = projectRoot.appendingPathComponent(rel)
-                let isDir = (try? url.resourceValues(forKeys: [URLResourceKey.isDirectoryKey]))?.isDirectory ?? false
-                if FileManager.default.fileExists(atPath: url.path), !isDir {
-                    loadFileFromURL(url)
-                }
-            }
-            if let activeRel = primaryActiveRel {
-                let activeURL = projectRoot.appendingPathComponent(activeRel)
-                fileEditor.activateTab(filePath: activeURL.path)
-            }
-        }
+        restoreTabs(
+            pane: .primary,
+            projectRoot: projectRoot,
+            openTabRelativePaths: primaryRelPaths,
+            activeTabRelativePath: primaryActiveRel
+        )
 
         if session.isSplitEditor {
-            let secondaryRelPaths = session.secondaryOpenTabRelativePaths
-            if !secondaryRelPaths.isEmpty {
-                fileEditor.focus(.secondary)
-                for rel in secondaryRelPaths {
-                    let url = projectRoot.appendingPathComponent(rel)
-                    let isDir = (try? url.resourceValues(forKeys: [URLResourceKey.isDirectoryKey]))?.isDirectory ?? false
-                    if FileManager.default.fileExists(atPath: url.path), !isDir {
-                        loadFileFromURL(url)
-                    }
-                }
-                if let activeRel = session.secondaryActiveTabRelativePath {
-                    let activeURL = projectRoot.appendingPathComponent(activeRel)
-                    fileEditor.activateTab(filePath: activeURL.path)
-                }
-            }
+            restoreTabs(
+                pane: .secondary,
+                projectRoot: projectRoot,
+                openTabRelativePaths: session.secondaryOpenTabRelativePaths,
+                activeTabRelativePath: session.secondaryActiveTabRelativePath
+            )
         }
 
         fileEditor.focus(focused)
 
         if primaryRelPaths.isEmpty, let rel = session.lastOpenFileRelativePath {
-            let url = projectRoot.appendingPathComponent(rel)
-            let isDir = (try? url.resourceValues(forKeys: [URLResourceKey.isDirectoryKey]))?.isDirectory ?? false
-            if FileManager.default.fileExists(atPath: url.path), !isDir {
-                loadFileFromURL(url)
-            }
+            loadExistingNonDirectoryFileIfPresent(projectRoot.appendingPathComponent(rel))
         }
     }
 
@@ -205,65 +222,69 @@ final class ProjectSessionCoordinator {
 
         let focusedPaneState = fileEditor.focusedPaneState
 
-        if let activeID = focusedPaneState.activeTabID, let activeTab = focusedPaneState.tabs.first(where: { $0.id == activeID }) {
-            activeRelative = relativePathForURL(URL(fileURLWithPath: activeTab.filePath))
-        } else {
-            activeRelative = nil
-        }
+        activeRelative = relativePathForActiveTab(
+            activeTabID: focusedPaneState.activeTabID,
+            tabs: focusedPaneState.tabs
+        )
 
-        openTabRelatives = focusedPaneState.tabs.compactMap { relativePathForURL(URL(fileURLWithPath: $0.filePath)) }
+        openTabRelatives = focusedPaneState.tabs.compactMap {
+            relativePathForURL(URL(fileURLWithPath: $0.filePath))
+        }
         lastOpenRelative = activeRelative
 
-        let primaryTabs = fileEditor.primaryPane.tabs.compactMap { relativePathForURL(URL(fileURLWithPath: $0.filePath)) }
-        let secondaryTabs = fileEditor.secondaryPane.tabs.compactMap { relativePathForURL(URL(fileURLWithPath: $0.filePath)) }
-
-        let primaryActive: String?
-        if let activeID = fileEditor.primaryPane.activeTabID, let tab = fileEditor.primaryPane.tabs.first(where: { $0.id == activeID }) {
-            primaryActive = relativePathForURL(URL(fileURLWithPath: tab.filePath))
-        } else {
-            primaryActive = nil
+        let primaryTabs = fileEditor.primaryPane.tabs.compactMap {
+            relativePathForURL(URL(fileURLWithPath: $0.filePath))
+        }
+        let secondaryTabs = fileEditor.secondaryPane.tabs.compactMap {
+            relativePathForURL(URL(fileURLWithPath: $0.filePath))
         }
 
-        let secondaryActive: String?
-        if let activeID = fileEditor.secondaryPane.activeTabID, let tab = fileEditor.secondaryPane.tabs.first(where: { $0.id == activeID }) {
-            secondaryActive = relativePathForURL(URL(fileURLWithPath: tab.filePath))
-        } else {
-            secondaryActive = nil
-        }
+        let primaryActive = relativePathForActiveTab(
+            activeTabID: fileEditor.primaryPane.activeTabID,
+            tabs: fileEditor.primaryPane.tabs
+        )
+
+        let secondaryActive = relativePathForActiveTab(
+            activeTabID: fileEditor.secondaryPane.activeTabID,
+            tabs: fileEditor.secondaryPane.tabs
+        )
 
         let session = ProjectSession(
-            windowFrame: windowFrame,
-            isSidebarVisible: ui.isSidebarVisible,
-            isTerminalVisible: ui.isTerminalVisible,
-            isAIChatVisible: ui.isAIChatVisible,
-            sidebarWidth: ui.sidebarWidth,
-            terminalHeight: ui.terminalHeight,
-            chatPanelWidth: ui.chatPanelWidth,
-
-            selectedThemeRawValue: ui.selectedTheme.rawValue,
-
-            showLineNumbers: ui.showLineNumbers,
-            wordWrap: ui.wordWrap,
-            minimapVisible: ui.minimapVisible,
-
-            showHiddenFilesInFileTree: getShowHiddenFilesInFileTree(),
-
-            aiModeRawValue: conversationManager.currentMode.rawValue,
-            lastOpenFileRelativePath: lastOpenRelative,
-            openTabRelativePaths: openTabRelatives,
-            activeTabRelativePath: activeRelative,
-
-            isSplitEditor: fileEditor.isSplitEditor,
-            splitAxisRawValue: fileEditor.splitAxis.rawValue,
-            focusedEditorPaneRawValue: fileEditor.focusedPane.rawValue,
-            primaryOpenTabRelativePaths: primaryTabs,
-            primaryActiveTabRelativePath: primaryActive,
-            secondaryOpenTabRelativePaths: secondaryTabs,
-            secondaryActiveTabRelativePath: secondaryActive,
-
-            fileTreeExpandedRelativePaths: Array(getFileTreeExpandedRelativePaths()).sorted(),
-
-            languageOverridesByRelativePath: getLanguageOverridesByRelativePath()
+            uiConfiguration: UIConfiguration(
+                windowFrame: windowFrame,
+                isSidebarVisible: ui.isSidebarVisible,
+                isTerminalVisible: ui.isTerminalVisible,
+                isAIChatVisible: ui.isAIChatVisible,
+                sidebarWidth: ui.sidebarWidth,
+                terminalHeight: ui.terminalHeight,
+                chatPanelWidth: ui.chatPanelWidth
+            ),
+            editor: EditorConfiguration(
+                selectedThemeRawValue: ui.selectedTheme.rawValue,
+                showLineNumbers: ui.showLineNumbers,
+                wordWrap: ui.wordWrap,
+                minimapVisible: ui.minimapVisible,
+                showHiddenFilesInFileTree: getShowHiddenFilesInFileTree()
+            ),
+            fileState: FileState(
+                lastOpenFileRelativePath: lastOpenRelative,
+                openTabRelativePaths: openTabRelatives,
+                activeTabRelativePath: activeRelative
+            ),
+            splitEditor: SplitEditorState(
+                isSplitEditor: fileEditor.isSplitEditor,
+                splitAxisRawValue: fileEditor.splitAxis.rawValue,
+                focusedEditorPaneRawValue: fileEditor.focusedPane.rawValue,
+                primaryOpenTabRelativePaths: primaryTabs,
+                primaryActiveTabRelativePath: primaryActive,
+                secondaryOpenTabRelativePaths: secondaryTabs,
+                secondaryActiveTabRelativePath: secondaryActive
+            ),
+            fileTree: FileTreeState(
+                fileTreeExpandedRelativePaths: Array(getFileTreeExpandedRelativePaths()).sorted(),
+                languageOverridesByRelativePath: getLanguageOverridesByRelativePath()
+            ),
+            aiModeRawValue: conversationManager.currentMode.rawValue
         )
 
         Task {

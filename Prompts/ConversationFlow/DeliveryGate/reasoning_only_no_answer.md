@@ -1,0 +1,1 @@
+You returned a <ide_reasoning> block without a user-visible answer. In Agent mode, you MUST still provide a user-visible response after </ide_reasoning>. Reply again now and include BOTH: (1) a complete <ide_reasoning> block and (2) the user-visible response after it.

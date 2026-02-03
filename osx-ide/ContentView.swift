@@ -12,7 +12,7 @@ struct ContentView: View {
     let appState: AppState
     @ObservedObject private var fileEditor: FileEditorStateManager
     @ObservedObject private var workspace: WorkspaceStateManager
-    @ObservedObject private var ui: UIStateManager
+    @ObservedObject private var uiState: UIStateManager
     @ObservedObject private var registry: UIRegistry
 
     @State private var logsFollow: Bool = true
@@ -22,101 +22,14 @@ struct ContentView: View {
         self.appState = appState
         self._fileEditor = ObservedObject(wrappedValue: appState.fileEditor)
         self._workspace = ObservedObject(wrappedValue: appState.workspace)
-        self._ui = ObservedObject(wrappedValue: appState.ui)
+        self._uiState = ObservedObject(wrappedValue: appState.ui)
         self._registry = ObservedObject(wrappedValue: appState.uiRegistry)
     }
 
-    private struct EditorPaneView: View {
-        @ObservedObject var pane: EditorPaneStateManager
-        let isFocused: Bool
-        let onFocus: () -> Void
-        let selectionContext: CodeSelectionContext
-        let showLineNumbers: Bool
-        let wordWrap: Bool
-        let minimapVisible: Bool
-        let fontSize: Double
-        let fontFamily: String
-
-        var body: some View {
-            VStack(spacing: 0) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        if pane.tabs.isEmpty {
-                            Text("Untitled")
-                                .font(.headline)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                        } else {
-                            ForEach(pane.tabs) { tab in
-                                let isActive = tab.id == pane.activeTabID
-                                Button(action: {
-                                    onFocus()
-                                    pane.activateTab(id: tab.id)
-                                }) {
-                                    HStack(spacing: 6) {
-                                        Text(URL(fileURLWithPath: tab.filePath).lastPathComponent + (tab.isDirty ? " •" : ""))
-                                            .lineLimit(1)
-
-                                        Button(action: {
-                                            onFocus()
-                                            pane.closeTab(id: tab.id)
-                                        }) {
-                                            Image(systemName: "xmark")
-                                                .font(.system(size: 10, weight: .semibold))
-                                                .foregroundColor(.secondary)
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(isActive ? Color(NSColor.controlBackgroundColor) : Color.clear)
-                                    .cornerRadius(6)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                }
-                .frame(height: 34)
-                .background(Color(NSColor.windowBackgroundColor))
-
-                HStack(spacing: 0) {
-                    CodeEditorView(
-                        text: $pane.editorContent,
-                        language: pane.editorLanguage,
-                        selectedRange: $pane.selectedRange,
-                        selectionContext: selectionContext,
-                        showLineNumbers: showLineNumbers,
-                        wordWrap: wordWrap,
-                        fontSize: fontSize,
-                        fontFamily: fontFamily
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay(
-                        Rectangle()
-                            .stroke(isFocused ? Color.accentColor.opacity(0.35) : Color.clear, lineWidth: 2)
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        onFocus()
-                    }
-
-                    if minimapVisible {
-                        Divider()
-                        MinimapView(
-                            text: $pane.editorContent,
-                            selectedRange: $pane.selectedRange,
-                            fontFamily: fontFamily
-                        )
-                    }
-                }
-            }
-        }
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
     }
-    
+
     var body: some View {
         rootView
     }
@@ -127,7 +40,7 @@ struct ContentView: View {
             OverlayHostView(appState: appState)
         }
         .background(Color(NSColor.windowBackgroundColor))
-        .environment(\.font, .system(size: CGFloat(ui.fontSize)))
+        .environment(\.font, .system(size: CGFloat(uiState.fontSize)))
         .preferredColorScheme(appState.selectedTheme.colorScheme)
         .accessibilityIdentifier("AppRootView")
         .accessibilityValue("theme=\(appState.selectedTheme.rawValue)")
@@ -137,21 +50,25 @@ struct ContentView: View {
         VStack(spacing: 0) {
             WindowSetupView(appState: appState)
             workspaceLayout
-            IndexStatusBarView(appState: appState, codebaseIndexProvider: { appState.codebaseIndex }, eventBus: appState.eventBus)
+            IndexStatusBarView(
+                appState: appState,
+                codebaseIndexProvider: { appState.codebaseIndex },
+                eventBus: appState.eventBus
+            )
         }
     }
 
     private var workspaceLayout: some View {
         HSplitView {
-            if ui.isSidebarVisible, let pluginView = registry.views(for: .sidebarLeft).first {
+            if uiState.isSidebarVisible, let pluginView = registry.views(for: .sidebarLeft).first {
                 pluginView.makeView().frame(minWidth: 200, maxWidth: 300)
             }
 
             HSplitView {
                 editorAndTerminal
 
-                if ui.isAIChatVisible, let pluginView = registry.views(for: .panelRight).first {
-                    pluginView.makeView().frame(minWidth: 240, idealWidth: 340, maxWidth: .infinity)
+                if uiState.isAIChatVisible, let pluginView = registry.views(for: .panelRight).first {
+                    pluginView.makeView().frame(minWidth: 240, idealWidth: 340, maxWidth: 480)
                 }
             }
         }
@@ -159,9 +76,9 @@ struct ContentView: View {
 
     private var editorAndTerminal: some View {
         EditorTerminalSplitView(
-            isTerminalVisible: ui.isTerminalVisible,
-            terminalHeight: ui.terminalHeight,
-            setTerminalHeight: { ui.updateTerminalHeight($0) },
+            isTerminalVisible: uiState.isTerminalVisible,
+            terminalHeight: uiState.terminalHeight,
+            setTerminalHeight: { uiState.updateTerminalHeight($0) },
             editor: { editorArea },
             terminal: { terminalPanel }
         )
@@ -188,11 +105,11 @@ struct ContentView: View {
                 isFocused: true,
                 onFocus: { fileEditor.focus(.primary) },
                 selectionContext: appState.selectionContext,
-                showLineNumbers: ui.showLineNumbers,
-                wordWrap: ui.wordWrap,
-                minimapVisible: ui.minimapVisible,
-                fontSize: ui.fontSize,
-                fontFamily: ui.fontFamily
+                showLineNumbers: uiState.showLineNumbers,
+                wordWrap: uiState.wordWrap,
+                minimapVisible: uiState.minimapVisible,
+                fontSize: uiState.fontSize,
+                fontFamily: uiState.fontFamily
             )
         }
     }
@@ -206,11 +123,11 @@ struct ContentView: View {
             isFocused: focused,
             onFocus: { fileEditor.focus(pane) },
             selectionContext: appState.selectionContext,
-            showLineNumbers: ui.showLineNumbers,
-            wordWrap: ui.wordWrap,
-            minimapVisible: ui.minimapVisible,
-            fontSize: ui.fontSize,
-            fontFamily: ui.fontFamily
+            showLineNumbers: uiState.showLineNumbers,
+            wordWrap: uiState.wordWrap,
+            minimapVisible: uiState.minimapVisible,
+            fontSize: uiState.fontSize,
+            fontFamily: uiState.fontFamily
         )
     }
 
@@ -224,7 +141,7 @@ struct ContentView: View {
                 .background(Color(NSColor.windowBackgroundColor))
                 .frame(minHeight: 100)
         } else if bottomViews.count > 1 {
-            let selectedName = ui.bottomPanelSelectedName
+            let selectedName = uiState.bottomPanelSelectedName
             let selectedView = bottomViews.first(where: { $0.name == selectedName }) ?? bottomViews[0]
 
             VStack(spacing: 0) {
@@ -243,10 +160,10 @@ struct ContentView: View {
 
             Spacer(minLength: 0)
 
-            Picker("Bottom Panel", selection: $ui.bottomPanelSelectedName) {
-                ForEach(bottomViews) { v in
-                    Text(v.name.replacingOccurrences(of: "Internal.", with: ""))
-                        .tag(v.name)
+            Picker(localized("bottom_panel.picker"), selection: $uiState.bottomPanelSelectedName) {
+                ForEach(bottomViews) { view in
+                    Text(view.name.replacingOccurrences(of: "Internal.", with: ""))
+                        .tag(view.name)
                 }
             }
             .pickerStyle(.segmented)
@@ -266,43 +183,46 @@ struct ContentView: View {
     @ViewBuilder
     private func bottomPanelLeadingControls(selectedName: String) -> some View {
         if selectedName == AppConstants.UI.internalTerminalPanelName {
-            Button(action: {
-                appState.eventBus.publish(TerminalClearRequestedEvent())
-            }) {
-                Image(systemName: "trash")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+            Button(
+                action: {
+                    appState.eventBus.publish(TerminalClearRequestedEvent())
+                },
+                label: {
+                    Image(systemName: "trash")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            )
             .buttonStyle(.borderless)
-            .help("Clear Terminal")
+            .help(localized("terminal.clear_help"))
 
-            Text("Terminal")
-                .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
+            Text(localized("bottom_panel.terminal"))
+                .font(.system(size: max(10, uiState.fontSize - 2), weight: .medium))
         } else if selectedName == "Internal.Logs" {
-            Text("Logs")
-                .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
+            Text(localized("bottom_panel.logs"))
+                .font(.system(size: max(10, uiState.fontSize - 2), weight: .medium))
         } else if selectedName == "Internal.Problems" {
-            Text("Problems")
-                .font(.system(size: max(10, ui.fontSize - 2), weight: .medium))
+            Text(localized("bottom_panel.problems"))
+                .font(.system(size: max(10, uiState.fontSize - 2), weight: .medium))
         }
     }
 
     @ViewBuilder
     private func bottomPanelTrailingControls(selectedName: String) -> some View {
         if selectedName == AppConstants.UI.internalTerminalPanelName {
-            Text(workspace.currentDirectory?.lastPathComponent ?? "Terminal")
-                .font(.system(size: max(10, ui.fontSize - 3)))
+            Text(workspace.currentDirectory?.lastPathComponent ?? localized("bottom_panel.terminal"))
+                .font(.system(size: max(10, uiState.fontSize - 3)))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
         } else if selectedName == "Internal.Logs" {
-            Toggle("Follow", isOn: $logsFollow)
+            Toggle(localized("logs.follow"), isOn: $logsFollow)
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .onChange(of: logsFollow) { _, newValue in
                     appState.eventBus.publish(LogsFollowChangedEvent(follow: newValue))
                 }
 
-            Picker("Source", selection: $logsSource) {
+            Picker(localized("logs.source"), selection: $logsSource) {
                 ForEach(LogsPanelView.LogSource.allCases) { src in
                     Text(src.title).tag(src.rawValue)
                 }
@@ -312,12 +232,12 @@ struct ContentView: View {
                 appState.eventBus.publish(LogsSourceChangedEvent(sourceRawValue: newValue))
             }
 
-            Button("Clear") {
+            Button(localized("common.clear")) {
                 appState.eventBus.publish(LogsClearRequestedEvent())
             }
             .buttonStyle(.borderless)
         } else if selectedName == "Internal.Problems" {
-            Button("Clear") {
+            Button(localized("common.clear")) {
                 appState.eventBus.publish(ProblemsClearRequestedEvent())
             }
             .buttonStyle(.borderless)
@@ -368,7 +288,10 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
 
                                     let start = dragStartTerminalHeight ?? terminalHeight
                                     let proposed = start - value.translation.height
-                                    let clamped = max(AppConstants.Layout.minTerminalHeight, min(maxAllowedTerminal, proposed))
+                                    let clamped = max(
+                                        AppConstants.Layout.minTerminalHeight,
+                                        min(maxAllowedTerminal, proposed)
+                                    )
                                     setTerminalHeight(clamped)
                                 }
                                 .onEnded { _ in
@@ -385,35 +308,6 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
     }
 }
 
-private struct ResizeCursorView: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        CursorRectNSView(cursor: .resizeUpDown)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-    }
-}
-
-private final class CursorRectNSView: NSView {
-    private let cursor: NSCursor
-
-    init(cursor: NSCursor) {
-        self.cursor = cursor
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        addCursorRect(bounds, cursor: cursor)
-    }
-}
-
 private struct WindowSetupView: View {
     @ObservedObject var appState: AppState
 
@@ -422,12 +316,11 @@ private struct WindowSetupView: View {
             appState.windowProvider.setWindow(window)
             appState.attachWindow(window)
             window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = true
-            window.isMovableByWindowBackground = true
+            window.titlebarAppearsTransparent = false
+            window.isMovableByWindowBackground = false
             window.isOpaque = true
             window.backgroundColor = NSColor.windowBackgroundColor
             window.hasShadow = true
-            window.styleMask.insert(.fullSizeContentView)
             window.styleMask.insert(.unifiedTitleAndToolbar)
         }
         .frame(width: 0, height: 0)
@@ -441,50 +334,64 @@ private struct OverlayHostView: View {
         ZStack {
             OverlayContainer(
                 isPresented: $appState.isGlobalSearchPresented,
-                onDismiss: { appState.isGlobalSearchPresented = false }
-            ) {
-                GlobalSearchOverlayView(appState: appState, isPresented: $appState.isGlobalSearchPresented)
-            }
+                onDismiss: { appState.isGlobalSearchPresented = false },
+                content: {
+                    GlobalSearchOverlayView(appState: appState, isPresented: $appState.isGlobalSearchPresented)
+                }
+            )
 
             OverlayContainer(
                 isPresented: $appState.isQuickOpenPresented,
-                onDismiss: { appState.isQuickOpenPresented = false }
-            ) {
-                QuickOpenOverlayView(appState: appState, isPresented: $appState.isQuickOpenPresented)
-            }
+                onDismiss: { appState.isQuickOpenPresented = false },
+                content: {
+                    QuickOpenOverlayView(appState: appState, isPresented: $appState.isQuickOpenPresented)
+                }
+            )
 
             OverlayContainer(
                 isPresented: $appState.isCommandPalettePresented,
-                onDismiss: { appState.isCommandPalettePresented = false }
-            ) {
-                CommandPaletteOverlayView(commandRegistry: appState.commandRegistry, isPresented: $appState.isCommandPalettePresented)
-            }
+                onDismiss: { appState.isCommandPalettePresented = false },
+                content: {
+                    CommandPaletteOverlayView(
+                        commandRegistry: appState.commandRegistry,
+                        isPresented: $appState.isCommandPalettePresented
+                    )
+                }
+            )
 
             OverlayContainer(
                 isPresented: $appState.isGoToSymbolPresented,
-                onDismiss: { appState.isGoToSymbolPresented = false }
-            ) {
-                GoToSymbolOverlayView(appState: appState, isPresented: $appState.isGoToSymbolPresented)
-            }
+                onDismiss: { appState.isGoToSymbolPresented = false },
+                content: {
+                    GoToSymbolOverlayView(appState: appState, isPresented: $appState.isGoToSymbolPresented)
+                }
+            )
 
             OverlayContainer(
                 isPresented: $appState.isNavigationLocationsPresented,
-                onDismiss: { appState.isNavigationLocationsPresented = false }
-            ) {
-                NavigationLocationsOverlayView(appState: appState, isPresented: $appState.isNavigationLocationsPresented)
-            }
+                onDismiss: { appState.isNavigationLocationsPresented = false },
+                content: {
+                    NavigationLocationsOverlayView(
+                        appState: appState,
+                        isPresented: $appState.isNavigationLocationsPresented
+                    )
+                }
+            )
 
             OverlayContainer(
                 isPresented: $appState.isRenameSymbolPresented,
-                onDismiss: { appState.isRenameSymbolPresented = false }
-            ) {
-                RenameSymbolOverlayView(appState: appState, isPresented: $appState.isRenameSymbolPresented)
-            }
+                onDismiss: { appState.isRenameSymbolPresented = false },
+                content: {
+                    RenameSymbolOverlayView(appState: appState, isPresented: $appState.isRenameSymbolPresented)
+                }
+            )
         }
         .background(Color(NSColor.windowBackgroundColor))
     }
 }
 
-#Preview {
-    ContentView(appState: DependencyContainer().makeAppState())
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView(appState: DependencyContainer().makeAppState())
+    }
 }

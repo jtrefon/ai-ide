@@ -12,7 +12,7 @@ import Combine
 /// This allows other components (like AI Chat) to be aware of user selection.
 public class CodeSelectionContext: ObservableObject {
     @Published public var selectedText: String = ""
-    @Published public var selectedRange: NSRange? = nil
-    
+    @Published public var selectedRange: NSRange?
+
     public init() {}
 }

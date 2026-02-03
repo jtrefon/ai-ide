@@ -55,7 +55,8 @@ struct PatchSetApplyTool: AITool {
         }
     }
 
-    func execute(arguments: [String: Any]) async throws -> String {
+    func execute(arguments: ToolArguments) async throws -> String {
+        let arguments = arguments.raw
         guard let id = arguments["patch_set_id"] as? String, !id.isEmpty else {
             throw AppError.aiServiceError("Missing 'patch_set_id' for patchset_apply")
         }
@@ -78,6 +79,7 @@ struct PatchSetApplyTool: AITool {
         if touched.isEmpty {
             return "Applied patch set \(id). Created checkpoint \(checkpointId)."
         }
-        return "Applied patch set \(id). Created checkpoint \(checkpointId). Touched files:\n" + touched.joined(separator: "\n")
+        return "Applied patch set \(id). Created checkpoint \(checkpointId). " +
+            "Touched files:\n" + touched.joined(separator: "\n")
     }
 }

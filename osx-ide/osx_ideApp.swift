@@ -9,16 +9,24 @@ import SwiftUI
 import AppKit
 
 @main
-struct osx_ideApp: App {
+struct OSXIDEApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
+    private let isUnitTesting: Bool
     private let container: DependencyContainer
     @StateObject private var appState: AppState
     @StateObject private var errorManager: ErrorManager
     @AppStorage(AppConstants.Storage.codebaseIndexEnabledKey) private var codebaseIndexEnabled: Bool = true
-    @AppStorage(AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey) private var codebaseIndexAIEnrichmentEnabled: Bool = false
+    @AppStorage(AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey)
+    private var codebaseIndexAIEnrichmentEnabled: Bool = false
     @State private var didInitializeCorePlugin: Bool = false
-    
+
     init() {
-        let container = DependencyContainer()
+        let isUnitTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            && ProcessInfo.processInfo.environment["XCUI_TESTING"] != "1"
+        self.isUnitTesting = isUnitTesting
+
+        let container = DependencyContainer(isTesting: isUnitTesting)
         self.container = container
 
         guard let errorMgr = container.errorManager as? ErrorManager else {
@@ -41,124 +49,137 @@ struct osx_ideApp: App {
             appSt.fileEditor.primaryPane.editorContent = json
             appSt.fileEditor.primaryPane.editorLanguage = "json"
         }
-        
+
         self._errorManager = StateObject(wrappedValue: errorMgr)
         self._appState = StateObject(wrappedValue: appSt)
     }
-    
+
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView(appState: appState)
-                .environmentObject(errorManager)
-                .onAppear {
-                    NSApp.activate(ignoringOtherApps: true)
-                }
-                .task {
-                    if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
-                        return
+            if isUnitTesting {
+                Color.clear.frame(width: 0, height: 0)
+            } else {
+                ContentView(appState: appState)
+                    .environmentObject(errorManager)
+                    .onAppear {
+                        NSApp.activate(ignoringOtherApps: true)
                     }
-                    if didInitializeCorePlugin {
-                        return
-                    }
+                    .task {
+                        if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
+                            return
+                        }
+                        if didInitializeCorePlugin {
+                            return
+                        }
 
-                    CorePlugin.initialize(registry: appState.uiRegistry, context: appState)
-                    didInitializeCorePlugin = true
-                }
-                .alert("Error", isPresented: $errorManager.showErrorAlert) {
-                    Button("OK") {
-                        errorManager.dismissError()
+                        CorePlugin.initialize(registry: appState.uiRegistry, context: appState)
+                        didInitializeCorePlugin = true
                     }
-                } message: {
-                    if let error = errorManager.currentError {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(error.localizedDescription)
-                                .font(.headline)
-                            
-                            if let suggestion = error.recoverySuggestion {
-                                Text("Suggestion: \(suggestion)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                    .alert(localized("alert.error.title"), isPresented: $errorManager.showErrorAlert) {
+                        Button(localized("common.ok")) {
+                            errorManager.dismissError()
+                        }
+                    } message: {
+                        if let error = errorManager.currentError {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(error.localizedDescription)
+                                    .font(.headline)
+
+                                if let suggestion = error.recoverySuggestion {
+                                    Text(String(format: localized("alert.suggestion_format"), suggestion))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
                     }
-                }
+            }
         }
         .windowToolbarStyle(.unifiedCompact)
         .commands {
+            if !isUnitTesting {
             CommandGroup(replacing: .appSettings) {
                 SettingsLink {
-                    Label("Settings...", systemImage: "gearshape")
+                    Label(localized("menu.settings"), systemImage: "gearshape")
                 }
                 .keyboardShortcut(",", modifiers: [.command])
             }
-            
+
             CommandGroup(replacing: .newItem) {
-                Button("New Project") {
+                Button(localized("menu.new_project")) {
                     Task { try? await appState.commandRegistry.execute(.projectNew) }
                 }
                 .keyboardShortcut("n", modifiers: [.command])
             }
-            
+
             CommandGroup(after: .importExport) {
-                Button("Open...") {
+                Button(localized("menu.open")) {
                     Task { try? await appState.commandRegistry.execute(.fileOpen) }
                 }
                 .keyboardShortcut("o", modifiers: [.command])
-                
-                Button("Open Folder...") {
+
+                Button(localized("menu.open_folder")) {
                     Task { try? await appState.commandRegistry.execute(.fileOpenFolder) }
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
-                
-                Button("Save") {
+
+                Button(localized("menu.save")) {
                     Task { try? await appState.commandRegistry.execute(.fileSave) }
                 }
                 .keyboardShortcut("s", modifiers: [.command])
-                
-                Button("Save As...") {
+
+                Button(localized("menu.save_as")) {
                     Task { try? await appState.commandRegistry.execute(.fileSaveAs) }
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
             }
 
             CommandGroup(after: .sidebar) {
-                Toggle("Show File Explorer", isOn: Binding(
+                Toggle(localized("menu.toggle.file_explorer"), isOn: Binding(
                     get: { appState.ui.isSidebarVisible },
                     set: { appState.ui.isSidebarVisible = $0 }
                 ))
 
-                Toggle("Show Terminal", isOn: Binding(
+                Toggle(localized("menu.toggle.terminal"), isOn: Binding(
                     get: { appState.ui.isTerminalVisible },
                     set: { appState.ui.isTerminalVisible = $0 }
                 ))
 
-                Toggle("Show AI Chat", isOn: Binding(
+                Toggle(localized("menu.toggle.ai_chat"), isOn: Binding(
                     get: { appState.ui.isAIChatVisible },
                     set: { appState.ui.isAIChatVisible = $0 }
                 ))
 
                 Divider()
 
-                Toggle("Show Hidden Files", isOn: Binding(
+                Toggle(localized("menu.toggle.hidden_files"), isOn: Binding(
                     get: { appState.showHiddenFilesInFileTree },
                     set: { appState.showHiddenFilesInFileTree = $0 }
                 ))
-                    .keyboardShortcut(".", modifiers: [.command, .shift])
+                .keyboardShortcut(".", modifiers: [.command, .shift])
             }
 
-            CommandMenu("Tools") {
-                Toggle("Codebase Index Enabled", isOn: $codebaseIndexEnabled)
+            CommandMenu(localized("menu.tools")) {
+                Toggle(localized("menu.tools.codebase_index_enabled"), isOn: $codebaseIndexEnabled)
                     .onChange(of: codebaseIndexEnabled) { _, newValue in
                         appState.setCodebaseIndexEnabled(newValue)
                     }
 
-                Toggle("AI Enrichment Indexing", isOn: $codebaseIndexAIEnrichmentEnabled)
+                Toggle(localized("menu.tools.ai_enrichment_indexing"), isOn: $codebaseIndexAIEnrichmentEnabled)
                     .onChange(of: codebaseIndexAIEnrichmentEnabled) { _, newValue in
                         if newValue {
-                            let settings = OpenRouterSettingsStore().load()
+                            let settings = OpenRouterSettingsStore().load(includeApiKey: false)
                             let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
                             if model.isEmpty {
-                                errorManager.handle(.aiServiceError("Select an OpenRouter model in Settings before enabling AI enrichment indexing."))
+                                errorManager.handle(
+                                    .aiServiceError(
+                                        localized("menu.tools.ai_enrichment_indexing.missing_model")
+                                    )
+                                )
                                 codebaseIndexAIEnrichmentEnabled = false
                                 return
                             }
@@ -168,146 +189,157 @@ struct osx_ideApp: App {
 
                 Divider()
 
-                Button("Format Document") {
+                Button(localized("menu.tools.format_document")) {
                     Task { try? await appState.commandRegistry.execute(.editorFormat) }
                 }
                 .keyboardShortcut("f", modifiers: [.command, .option, .shift])
 
-                Button("Reindex Project Now") {
+                Button(localized("menu.tools.reindex_project_now")) {
                     appState.reindexProjectNow()
                 }
             }
 
-            CommandMenu("Editor") {
-                Button("Find") {
+            CommandMenu(localized("menu.editor")) {
+                Button(localized("menu.editor.find")) {
                     Task { try? await appState.commandRegistry.execute(.editorFind) }
                 }
                 .keyboardShortcut("f", modifiers: [.command])
 
-                Button("Replace") {
+                Button(localized("menu.editor.replace")) {
                     Task { try? await appState.commandRegistry.execute(.editorReplace) }
                 }
                 .keyboardShortcut("f", modifiers: [.command, .option])
 
                 Divider()
 
-                Button("AI Inline Assist") {
+                Button(localized("menu.editor.ai_inline_assist")) {
                     Task { try? await appState.commandRegistry.execute(.editorAIInlineAssist) }
                 }
                 .keyboardShortcut("i", modifiers: [.command])
 
                 Divider()
 
-                Button("Close Tab") {
+                Button(localized("menu.editor.close_tab")) {
                     Task { try? await appState.commandRegistry.execute(.editorTabsCloseActive) }
                 }
                 .keyboardShortcut("w", modifiers: [.command])
 
-                Button("Close All Tabs") {
+                Button(localized("menu.editor.close_all_tabs")) {
                     Task { try? await appState.commandRegistry.execute(.editorTabsCloseAll) }
                 }
                 .keyboardShortcut("w", modifiers: [.command, .shift])
 
-                Button("Next Tab") {
+                Button(localized("menu.editor.next_tab")) {
                     Task { try? await appState.commandRegistry.execute(.editorTabsNext) }
                 }
                 .keyboardShortcut(.tab, modifiers: [.control])
 
-                Button("Previous Tab") {
+                Button(localized("menu.editor.previous_tab")) {
                     Task { try? await appState.commandRegistry.execute(.editorTabsPrevious) }
                 }
                 .keyboardShortcut(.tab, modifiers: [.control, .shift])
 
                 Divider()
 
-                Button("Split Right") {
+                Button(localized("menu.editor.split_right")) {
                     Task { try? await appState.commandRegistry.execute(.editorSplitRight) }
                 }
                 .keyboardShortcut("\\", modifiers: [.command])
 
-                Button("Split Down") {
+                Button(localized("menu.editor.split_down")) {
                     Task { try? await appState.commandRegistry.execute(.editorSplitDown) }
                 }
 
-                Button("Focus Next Group") {
+                Button(localized("menu.editor.focus_next_group")) {
                     Task { try? await appState.commandRegistry.execute(.editorFocusNextGroup) }
                 }
                 .keyboardShortcut("\\", modifiers: [.command, .shift])
             }
 
-            CommandMenu("Search") {
-                Button("Find in Workspace") {
+            CommandMenu(localized("menu.search")) {
+                Button(localized("menu.search.find_in_workspace")) {
                     Task { try? await appState.commandRegistry.execute(.searchFindInWorkspace) }
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
 
-                Button("Command Palette") {
+                Button(localized("menu.search.command_palette")) {
                     Task { try? await appState.commandRegistry.execute(.workbenchCommandPalette) }
                 }
                 .keyboardShortcut("p", modifiers: [.command, .shift])
             }
 
-            CommandMenu("Go") {
-                Button("Quick Open") {
+            CommandMenu(localized("menu.go")) {
+                Button(localized("menu.go.quick_open")) {
                     Task { try? await appState.commandRegistry.execute(.workbenchQuickOpen) }
                 }
                 .keyboardShortcut("p", modifiers: [.command])
 
-                Button("Go to Symbol") {
+                Button(localized("menu.go.go_to_symbol")) {
                     Task { try? await appState.commandRegistry.execute(.workbenchGoToSymbol) }
                 }
                 .keyboardShortcut("t", modifiers: [.command])
 
                 Divider()
 
-                Button("Go to Definition") {
+                Button(localized("menu.go.go_to_definition")) {
                     Task { try? await appState.commandRegistry.execute(.editorGoToDefinition) }
                 }
                 .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF12FunctionKey)!)), modifiers: [])
 
-                Button("Find References") {
+                Button(localized("menu.go.find_references")) {
                     Task { try? await appState.commandRegistry.execute(.editorFindReferences) }
                 }
                 .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF12FunctionKey)!)), modifiers: [.shift])
 
-                Button("Rename Symbol") {
+                Button(localized("menu.go.rename_symbol")) {
                     Task { try? await appState.commandRegistry.execute(.editorRenameSymbol) }
                 }
                 .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF2FunctionKey)!)), modifiers: [])
 
                 Divider()
 
-                Button("Add Next Occurrence") {
+                Button(localized("menu.go.add_next_occurrence")) {
                     Task { try? await appState.commandRegistry.execute(.editorAddNextOccurrence) }
                 }
                 .keyboardShortcut("d", modifiers: [.command])
 
-                Button("Add Cursor Above") {
+                Button(localized("menu.go.add_cursor_above")) {
                     Task { try? await appState.commandRegistry.execute(.editorAddCursorAbove) }
                 }
-                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), modifiers: [.command, .option])
+                .keyboardShortcut(
+                    KeyEquivalent(Character(UnicodeScalar(NSUpArrowFunctionKey)!)),
+                    modifiers: [.command, .option]
+                )
 
-                Button("Add Cursor Below") {
+                Button(localized("menu.go.add_cursor_below")) {
                     Task { try? await appState.commandRegistry.execute(.editorAddCursorBelow) }
                 }
-                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), modifiers: [.command, .option])
+                .keyboardShortcut(
+                    KeyEquivalent(Character(UnicodeScalar(NSDownArrowFunctionKey)!)),
+                    modifiers: [.command, .option]
+                )
             }
 
-            CommandMenu("Explorer") {
-                Button("Delete", action: {
+            CommandMenu(localized("menu.explorer")) {
+                Button(localized("menu.explorer.delete"), action: {
                     guard let url = appState.selectedFileTreeURL() else { return }
-                    Task { try? await appState.commandRegistry.execute(.explorerDeleteSelection, args: ExplorerPathArgs(path: url.path)) }
+                    Task {
+                        try? await appState.commandRegistry.execute(
+                            .explorerDeleteSelection,
+                            args: ExplorerPathArgs(path: url.path)
+                        )
+                    }
                 })
                 .keyboardShortcut(.delete, modifiers: [.command])
 
-                Button("Rename", action: {
+                Button(localized("menu.explorer.rename"), action: {
                     guard let url = appState.selectedFileTreeURL() else { return }
                     let alert = NSAlert()
-                    alert.messageText = "Rename"
-                    alert.informativeText = "Enter a new name."
+                    alert.messageText = localized("file_tree.rename.title")
+                    alert.informativeText = localized("file_tree.rename.info")
                     alert.alertStyle = .informational
-                    alert.addButton(withTitle: "Rename")
-                    alert.addButton(withTitle: "Cancel")
+                    alert.addButton(withTitle: localized("file_tree.rename.button"))
+                    alert.addButton(withTitle: localized("common.cancel"))
                     let textField = NSTextField(string: url.lastPathComponent)
                     textField.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
                     alert.accessoryView = textField
@@ -316,21 +348,47 @@ struct osx_ideApp: App {
                     let newName = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !newName.isEmpty else { return }
                     Task {
-                        try? await appState.commandRegistry.execute(.explorerRenameSelection, args: ExplorerRenameArgs(path: url.path, newName: newName))
+                        try? await appState.commandRegistry.execute(
+                            .explorerRenameSelection,
+                            args: ExplorerRenameArgs(path: url.path, newName: newName)
+                        )
                     }
                 })
 
-                Button("Show in Finder", action: {
+                Button(localized("file_tree.context.show_in_finder"), action: {
                     guard let url = appState.selectedFileTreeURL() else { return }
-                    Task { try? await appState.commandRegistry.execute(.explorerRevealInFinder, args: ExplorerPathArgs(path: url.path)) }
+                    Task {
+                        try? await appState.commandRegistry.execute(
+                            .explorerRevealInFinder,
+                            args: ExplorerPathArgs(path: url.path)
+                        )
+                    }
                 })
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }
+            }
         }
-        .windowResizability(.contentMinSize)
-        
+        .windowResizability(.automatic)
+
         Settings {
-            SettingsView(ui: appState.ui)
+            if isUnitTesting {
+                EmptyView()
+            } else {
+                SettingsView(ui: appState.ui)
+            }
+        }
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let isUnitTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            && ProcessInfo.processInfo.environment["XCUI_TESTING"] != "1"
+        guard isUnitTesting else { return }
+
+        NSApp.setActivationPolicy(.accessory)
+        DispatchQueue.main.async {
+            NSApp.windows.forEach { $0.orderOut(nil) }
         }
     }
 }

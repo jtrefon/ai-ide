@@ -47,14 +47,24 @@ final class JSONHighlighterUITests: XCTestCase {
 
         XCTAssertTrue(value.contains("lang=json"), "Expected diagnostics to report json highlighting. Got: \(value)")
         XCTAssertTrue(value.contains("key=true"), "Expected key color (from JSONModule) to be present. Got: \(value)")
-        XCTAssertTrue(value.contains("brace=true"), "Expected brace color (from JSONModule) to be present. Got: \(value)")
-        XCTAssertTrue(value.contains("colon=true"), "Expected colon color (from JSONModule) to be present. Got: \(value)")
+        XCTAssertTrue(
+            value.contains("brace=true"),
+            "Expected brace color (from JSONModule) to be present. Got: \(value)"
+        )
+        XCTAssertTrue(
+            value.contains("colon=true"),
+            "Expected colon color (from JSONModule) to be present. Got: \(value)"
+        )
 
         // If everything is red, unique colors will be very low (usually 1-2 including labelColor).
         // Require at least 4 distinct colors.
         if let uniquePart = value.split(separator: ";").first(where: { $0.hasPrefix("unique=") }),
            let uniqueCount = Int(uniquePart.split(separator: "=").last ?? "") {
-            XCTAssertGreaterThanOrEqual(uniqueCount, 4, "Expected at least 4 unique colors, got \(uniqueCount). Full diagnostics: \(value)")
+            XCTAssertGreaterThanOrEqual(
+                uniqueCount,
+                4,
+                "Expected at least 4 unique colors, got \(uniqueCount). Full diagnostics: \(value)"
+            )
         } else {
             XCTFail("Could not parse unique= from diagnostics: \(value)")
         }

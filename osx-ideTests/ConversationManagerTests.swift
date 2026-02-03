@@ -11,26 +11,42 @@ import Combine
 
 @MainActor
 final class ConversationManagerTests: XCTestCase {
-    
+
     var manager: ConversationManager!
     var mockAIService: MockAIService!
     var mockErrorManager: MockErrorManager!
     let historyKey = "AIChatHistory"
-    
+
     override func setUp() async throws {
         try await super.setUp()
         UserDefaults.standard.removeObject(forKey: historyKey)
         mockAIService = MockAIService()
         mockErrorManager = MockErrorManager()
-        manager = ConversationManager(
-            aiService: mockAIService,
+        let eventBus = EventBus()
+        let fileSystemService = FileSystemService()
+        let workspaceService = WorkspaceService(
             errorManager: mockErrorManager,
-            workspaceService: WorkspaceService(errorManager: mockErrorManager, eventBus: EventBus()),
-            eventBus: EventBus(),
-            projectRoot: URL(fileURLWithPath: "/tmp")
+            eventBus: eventBus,
+            fileSystemService: fileSystemService
+        )
+        manager = ConversationManager(
+            dependencies: ConversationManager.Dependencies(
+                services: ConversationManager.ServiceDependencies(
+                    aiService: mockAIService,
+                    errorManager: mockErrorManager,
+                    fileSystemService: fileSystemService,
+                    fileEditorService: nil
+                ),
+                environment: ConversationManager.EnvironmentDependencies(
+                    workspaceService: workspaceService,
+                    eventBus: eventBus,
+                    projectRoot: URL(fileURLWithPath: "/tmp"),
+                    codebaseIndex: nil
+                )
+            )
         )
     }
-    
+
     override func tearDown() async throws {
         UserDefaults.standard.removeObject(forKey: historyKey)
         manager = nil
@@ -38,33 +54,35 @@ final class ConversationManagerTests: XCTestCase {
         mockErrorManager = nil
         try await super.tearDown()
     }
-    
+
     func testWelcomeMessage() {
         XCTAssertTrue(manager.messages.count >= 1)
-        XCTAssertEqual(manager.messages.first?.role, .assistant)
+        XCTAssertEqual(manager.messages.first?.role, MessageRole.assistant)
     }
-    
+
     func testSendMessageFlow() async throws {
         manager.currentInput = "Hello AI"
-        
+
         let aiResponded = expectation(description: "AI responded")
         aiResponded.assertForOverFulfill = false
-        
+
         // Observe manager's objectWillChange to wait for response
         var cancellables = Set<AnyCancellable>()
         manager.objectWillChange
             .sink { _ in
                 // Using a small delay to allow state to actually change after notification
                 Task { @MainActor in
-                    if self.manager.messages.contains(where: { $0.role == .assistant && $0.content == "Mock response" }) {
+                    if self.manager.messages.contains(where: {
+                        $0.role == MessageRole.assistant && $0.content == "Mock response"
+                    }) {
                         aiResponded.fulfill()
                     }
                 }
             }
             .store(in: &cancellables)
-        
+
         manager.sendMessage()
-        
+
         await fulfillment(of: [aiResponded], timeout: 5.0)
 
         let sendingCleared = self.expectation(description: "Sending cleared")
@@ -105,18 +123,20 @@ final class ConversationManagerTests: XCTestCase {
 // MARK: - Mocks
 
 final class MockAIService: AIService, @unchecked Sendable {
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?) async throws -> AIServiceResponse {
+    func sendMessage(
+        _ request: AIServiceMessageWithProjectRootRequest
+    ) async throws -> AIServiceResponse {
+        _ = request
         return AIServiceResponse(content: "Mock response", toolCalls: nil)
     }
-    
-    func sendMessage(_ message: String, context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
+
+    func sendMessage(
+        _ request: AIServiceHistoryRequest
+    ) async throws -> AIServiceResponse {
+        _ = request
         return AIServiceResponse(content: "Mock response", toolCalls: nil)
     }
-    
-    func sendMessage(_ messages: [ChatMessage], context: String?, tools: [AITool]?, mode: AIMode?, projectRoot: URL?) async throws -> AIServiceResponse {
-        return AIServiceResponse(content: "Mock response", toolCalls: nil)
-    }
-    
+
     func explainCode(_ code: String) async throws -> String { return "Explanation" }
     func refactorCode(_ code: String, instructions: String) async throws -> String { return "Refactored" }
     func generateCode(_ prompt: String) async throws -> String { return "Generated" }
@@ -126,11 +146,11 @@ final class MockAIService: AIService, @unchecked Sendable {
 final class MockErrorManager: ObservableObject, ErrorManagerProtocol {
     @Published var currentError: AppError?
     @Published var showErrorAlert: Bool = false
-    
+
     func handle(_ error: AppError) { self.currentError = error }
     func handle(_ error: Error, context: String) { }
     func dismissError() { self.showErrorAlert = false }
-    
+
     var statePublisher: ObservableObjectPublisher {
         return self.objectWillChange
     }

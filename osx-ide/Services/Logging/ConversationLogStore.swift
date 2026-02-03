@@ -1,13 +1,5 @@
 import Foundation
 
-public struct ConversationLogEvent: Codable, Sendable {
-    public let ts: String
-    public let session: String
-    public let conversationId: String
-    public let type: String
-    public let data: [String: LogValue]?
-}
-
 public actor ConversationLogStore {
     public static let shared = ConversationLogStore()
 
@@ -17,32 +9,6 @@ public actor ConversationLogStore {
 
     public func setProjectRoot(_ root: URL) {
         self.projectRoot = root
-    }
-
-    private func conversationDirectory(conversationId: String) -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-
-        let base = appSupport.appendingPathComponent("osx-ide/Logs", isDirectory: true)
-        return base.appendingPathComponent("conversations", isDirectory: true)
-            .appendingPathComponent(conversationId, isDirectory: true)
-    }
-
-    private func projectConversationDirectory(conversationId: String) -> URL? {
-        guard let projectRoot else { return nil }
-        return projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
-            .appendingPathComponent("logs", isDirectory: true)
-            .appendingPathComponent("conversations", isDirectory: true)
-            .appendingPathComponent(conversationId, isDirectory: true)
-    }
-
-    private func conversationLogFileURL(conversationId: String) -> URL {
-        conversationDirectory(conversationId: conversationId).appendingPathComponent("conversation.ndjson")
-    }
-
-    private func projectConversationLogFileURL(conversationId: String) -> URL? {
-        projectConversationDirectory(conversationId: conversationId)?.appendingPathComponent("conversation.ndjson")
     }
 
     public func append(
@@ -60,33 +26,26 @@ public actor ConversationLogStore {
         )
 
         do {
-            let dir = conversationDirectory(conversationId: conversationId)
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let fileURL = conversationLogFileURL(conversationId: conversationId)
             let json = try JSONEncoder().encode(event)
             var line = Data()
             line.append(json)
             line.append(Data("\n".utf8))
 
-            try append(line: line, to: fileURL)
-
-            if let projectDir = projectConversationDirectory(conversationId: conversationId), let projectFileURL = projectConversationLogFileURL(conversationId: conversationId) {
-                try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
-                try append(line: line, to: projectFileURL)
-            }
+            try ConversationScopedNDJSONStore.appendLine(
+                line,
+                conversationId: conversationId,
+                fileName: "conversation.ndjson",
+                projectRoot: projectRoot
+            )
         } catch {
-            print("ConversationLogStore error: \(error)")
-        }
-    }
-
-    private func append(line: Data, to fileURL: URL) throws {
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            let handle = try FileHandle(forWritingTo: fileURL)
-            try handle.seekToEnd()
-            try handle.write(contentsOf: line)
-            try handle.close()
-        } else {
-            try line.write(to: fileURL, options: [.atomic])
+            await CrashReporter.shared.capture(
+                error,
+                context: CrashReportContext(operation: "ConversationLogStore.append"),
+                metadata: ["conversationId": conversationId],
+                file: #fileID,
+                function: #function,
+                line: #line
+            )
         }
     }
 }

@@ -32,7 +32,13 @@ public final class QualityScoringEngine: @unchecked Sendable {
             language: language,
             score: 50,
             breakdown: breakdown,
-            issues: [QualityIssue(severity: .info, category: .maintainability, message: "No scorer registered for language: \(language.rawValue)")],
+            issues: [
+                QualityIssue(
+                    severity: .info,
+                    category: .maintainability,
+                    message: "No scorer registered for language: \(language.rawValue)"
+                )
+            ],
             children: []
         )
     }

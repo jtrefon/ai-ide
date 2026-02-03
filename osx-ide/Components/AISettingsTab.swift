@@ -10,66 +10,74 @@ import SwiftUI
 struct AISettingsTab: View {
     @ObservedObject var viewModel: OpenRouterSettingsViewModel
     @State private var showAdvanced = false
-    
+
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 SettingsCard(
-                    title: "OpenRouter Connection",
-                    subtitle: "Store your API key and connection details."
+                    title: localized("settings.ai.openrouter_connection.title"),
+                    subtitle: localized("settings.ai.openrouter_connection.subtitle")
                 ) {
                     SettingsRow(
-                        title: "API key",
-                        subtitle: "Stored locally for this device.",
+                        title: localized("settings.ai.api_key.title"),
+                        subtitle: localized("settings.ai.api_key.subtitle"),
                         systemImage: "key.fill"
                     ) {
                         HStack(spacing: 8) {
-                            SecureField("sk-or-...", text: $viewModel.apiKey)
+                            SecureField(localized("settings.ai.api_key.placeholder"), text: $viewModel.apiKey)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 240)
-                            
-                            Button("Validate") {
+
+                            Button(localized("settings.ai.api_key.validate")) {
                                 Task { await viewModel.validateKey() }
                             }
                             .buttonStyle(.borderedProminent)
                         }
                     }
-                    
+
                     HStack(spacing: 12) {
                         SettingsStatusPill(status: viewModel.keyStatus)
                         Spacer()
-                        Button(showAdvanced ? "Hide Advanced" : "Show Advanced") {
+                        Button(
+                            showAdvanced
+                                ? localized("settings.ai.advanced.hide")
+                                : localized("settings.ai.advanced.show")
+                        ) {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 showAdvanced.toggle()
                             }
                         }
                         .buttonStyle(.bordered)
                     }
-                    
+
                     if showAdvanced {
                         SettingsRow(
-                            title: "Base URL",
-                            subtitle: "Defaults to the OpenRouter API endpoint.",
+                            title: localized("settings.ai.base_url.title"),
+                            subtitle: localized("settings.ai.base_url.subtitle"),
                             systemImage: "link"
                         ) {
-                            TextField("https://openrouter.ai/api/v1", text: $viewModel.baseURL)
+                            TextField(localized("settings.ai.base_url.placeholder"), text: $viewModel.baseURL)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 260)
                         }
                     }
                 }
-                
+
                 SettingsCard(
-                    title: "Model Selection",
-                    subtitle: "Search OpenRouter models with autocomplete."
+                    title: localized("settings.ai.model_selection.title"),
+                    subtitle: localized("settings.ai.model_selection.subtitle")
                 ) {
                     SettingsRow(
-                        title: "Model",
-                        subtitle: "Type to search and select.",
+                        title: localized("settings.ai.model.title"),
+                        subtitle: localized("settings.ai.model.subtitle"),
                         systemImage: "magnifyingglass"
                     ) {
                         HStack(spacing: 8) {
-                            TextField("e.g. openai/gpt-4o-mini", text: $viewModel.modelQuery)
+                            TextField(localized("settings.ai.model.placeholder"), text: $viewModel.modelQuery)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 260)
                                 .onSubmit {
@@ -79,39 +87,39 @@ struct AISettingsTab: View {
                                 .onChange(of: viewModel.modelQuery) {
                                     Task { await viewModel.loadModels() }
                                 }
-                            
-                            Button("Test Latency") {
+
+                            Button(localized("settings.ai.model.test_latency")) {
                                 Task { await viewModel.testModel() }
                             }
                             .buttonStyle(.bordered)
                         }
                     }
-                    
+
                     if viewModel.shouldShowSuggestions() {
                         ModelSuggestionList(models: viewModel.filteredModels) { model in
                             viewModel.selectModel(model)
                             Task { await viewModel.validateModel() }
                         }
                     }
-                    
+
                     HStack(spacing: 12) {
                         SettingsStatusPill(status: viewModel.modelStatus)
                         SettingsStatusPill(status: viewModel.modelValidationStatus)
                         SettingsStatusPill(status: viewModel.testStatus)
-                        
+
                         Spacer()
                     }
                 }
-                
+
                 SettingsCard(
-                    title: "System Prompt",
-                    subtitle: "Override the default system instructions."
+                    title: localized("settings.ai.system_prompt.title"),
+                    subtitle: localized("settings.ai.system_prompt.subtitle")
                 ) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Use this to steer tone, formatting, and coding style.")
+                        Text(localized("settings.ai.system_prompt.help"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        
+
                         TextEditor(text: $viewModel.systemPrompt)
                             .font(.system(size: 13, weight: .regular, design: .monospaced))
                             .frame(minHeight: 140)
@@ -123,25 +131,25 @@ struct AISettingsTab: View {
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .stroke(Color.white.opacity(0.08), lineWidth: 0.6)
                             )
-                        
+
                         HStack(spacing: 12) {
-                            Button("Reset Prompt") {
+                            Button(localized("settings.ai.system_prompt.reset")) {
                                 viewModel.systemPrompt = ""
                             }
                             .buttonStyle(.bordered)
-                            
+
                             Spacer()
                         }
                     }
                 }
 
                 SettingsCard(
-                    title: "Reasoning",
-                    subtitle: "Show the assistant's multi-step reasoning panel in chat."
+                    title: localized("settings.ai.reasoning_card.title"),
+                    subtitle: localized("settings.ai.reasoning_card.subtitle")
                 ) {
                     SettingsRow(
-                        title: "Reasoning",
-                        subtitle: "Adds an expandable reasoning section above assistant responses.",
+                        title: localized("settings.ai.reasoning.title"),
+                        subtitle: localized("settings.ai.reasoning.subtitle"),
                         systemImage: "brain"
                     ) {
                         Toggle("", isOn: $viewModel.reasoningEnabled)
@@ -152,6 +160,7 @@ struct AISettingsTab: View {
             }
             .padding(.top, 4)
             .onAppear {
+                viewModel.loadApiKeyIfAvailable()
                 Task { await viewModel.loadModels() }
             }
         }

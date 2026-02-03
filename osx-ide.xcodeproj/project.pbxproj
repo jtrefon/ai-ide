@@ -23,10 +23,16 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXBuildFile section */
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		04C2CE092E5C8E9D007A5EF7 /* osx-ide.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "osx-ide.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		04C2CE172E5C8E9E007A5EF7 /* osx-ideTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "osx-ideTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		04C2CE212E5C8E9E007A5EF7 /* osx-ideUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "osx-ideUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6D8D2C9A2F1A000100B0A001 /* DatabaseSchemaManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DatabaseSchemaManager.swift; path = "osx-ide/Services/Index/Database/DatabaseSchemaManager.swift"; sourceTree = "<group>"; };
+		6D8D2C9B2F1A000100B0A001 /* DatabaseSymbolManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DatabaseSymbolManager.swift; path = "osx-ide/Services/Index/Database/DatabaseSymbolManager.swift"; sourceTree = "<group>"; };
+		6D8D2C9C2F1A000100B0A001 /* DatabaseMemoryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DatabaseMemoryManager.swift; path = "osx-ide/Services/Index/Database/DatabaseMemoryManager.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */

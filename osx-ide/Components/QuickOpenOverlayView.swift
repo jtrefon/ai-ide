@@ -19,32 +19,27 @@ struct QuickOpenOverlayView: View {
         self._isPresented = isPresented
     }
 
-    var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Text("Quick Open")
-                    .font(.headline)
-
-                TextField("Type a file name…", text: $query)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: AppConstants.Overlay.textFieldMinWidth)
-                    .onSubmit {
-                        openFirst(openToSide: NSEvent.modifierFlags.contains(.command))
-                    }
-
-                if isSearching {
-                    ProgressView()
-                        .scaleEffect(0.75)
-                }
-
-                Button("Close") {
-                    close()
-                }
+    private var overlayHeader: OverlayHeaderConfiguration {
+        OverlayHeaderConfiguration(
+            title: OverlayLocalizer.localized("quick_open.title"),
+            placeholder: OverlayLocalizer.localized("quick_open.placeholder"),
+            query: $query,
+            textFieldMinWidth: AppConstants.Overlay.textFieldMinWidth,
+            showsProgress: isSearching,
+            onSubmit: {
+                openFirst(openToSide: NSEvent.modifierFlags.contains(.command))
+            },
+            onClose: {
+                close()
             }
+        )
+    }
 
+    var body: some View {
+        overlayScaffold(using: overlayHeader) {
             List {
                 if !recentCandidates().isEmpty && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Section("Recent") {
+                    Section(OverlayLocalizer.localized("quick_open.recent")) {
                         ForEach(recentCandidates(), id: \.self) { path in
                             Button(action: { open(path: path, openToSide: false) }) {
                                 Text(path)
@@ -54,7 +49,7 @@ struct QuickOpenOverlayView: View {
                     }
                 }
 
-                Section("Results") {
+                Section(OverlayLocalizer.localized("quick_open.results")) {
                     ForEach(results, id: \.self) { path in
                         Button(action: { open(path: path, openToSide: NSEvent.modifierFlags.contains(.command)) }) {
                             Text(path)
@@ -65,10 +60,6 @@ struct QuickOpenOverlayView: View {
             }
             .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
-        .padding(AppConstants.Overlay.containerPadding)
-        .background(.regularMaterial)
-        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
-        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             query = ""
             results = []
@@ -82,11 +73,13 @@ struct QuickOpenOverlayView: View {
     }
 
     private func debounceSearch() {
-        searchTask?.cancel()
-        searchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds)
-            await refreshResults()
-        }
+        OverlaySearchDebouncer.reschedule(
+            searchTask: &searchTask,
+            debounceNanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds,
+            action: {
+                await refreshResults()
+            }
+        )
     }
 
     private func refreshResults() async {
@@ -118,56 +111,7 @@ struct QuickOpenOverlayView: View {
     }
 
     private func fallbackFindFiles(query: String, root: URL, limit: Int) -> [String] {
-        let fm = FileManager.default
-        let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey], options: [.skipsHiddenFiles])
-
-        let needle = query.lowercased()
-        var hits: [(path: String, score: Int)] = []
-
-        while let url = enumerator?.nextObject() as? URL {
-            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
-            if values?.isDirectory == true {
-                let name = url.lastPathComponent.lowercased()
-                if name == ".git" || name == ".ide" || name == "node_modules" {
-                    enumerator?.skipDescendants()
-                }
-                continue
-            }
-
-            guard values?.isRegularFile == true else { continue }
-
-            let rel: String
-            if url.path.hasPrefix(root.path + "/") {
-                rel = String(url.path.dropFirst(root.path.count + 1))
-            } else {
-                rel = url.lastPathComponent
-            }
-
-            let lower = rel.lowercased()
-            let base = url.lastPathComponent.lowercased()
-
-            var score = 0
-            if base == needle { score += 1000 }
-            if base.hasPrefix(needle) { score += 700 }
-            if base.contains(needle) { score += 500 }
-            if lower.hasPrefix(needle) { score += 250 }
-            if lower.contains(needle) { score += 100 }
-
-            if score > 0 {
-                hits.append((path: rel, score: score))
-            }
-
-            if hits.count > limit * 20 {
-                break
-            }
-        }
-
-        let sorted = hits.sorted { a, b in
-            if a.score != b.score { return a.score > b.score }
-            return a.path < b.path
-        }
-
-        return Array(sorted.prefix(limit)).map { $0.path }
+        QuickOpenFileFinder().findFiles(query: query, root: root, limit: limit)
     }
 
     private func recentCandidates() -> [String] {
@@ -224,9 +168,11 @@ struct QuickOpenOverlayView: View {
         let parts = trimmed.split(separator: ":", omittingEmptySubsequences: false)
         guard parts.count >= 2 else { return (trimmed, nil) }
 
-        if let last = parts.last, let line = Int(last) {
-            let file = parts.dropLast().joined(separator: ":")
-            return (String(file), max(1, line))
+        if let last = parts.last {
+            if let line = Int(last) {
+                let file = parts.dropLast().joined(separator: ":")
+                return (String(file), max(1, line))
+            }
         }
 
         return (trimmed, nil)

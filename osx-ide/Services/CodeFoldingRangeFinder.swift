@@ -32,32 +32,27 @@ public enum CodeFoldingRangeFinder {
 
     // MARK: - Internals
 
-    private struct BracePair {
-        let open: Int
-        let close: Int
-    }
-
-    private static func bracePairs(in ns: NSString) -> [BracePair] {
+    private static func bracePairs(in ns: NSString) -> [CodeFoldingBracePair] {
         var stack: [Int] = []
-        var pairs: [BracePair] = []
+        var pairs: [CodeFoldingBracePair] = []
 
-        var i = 0
-        while i < ns.length {
-            let ch = ns.substring(with: NSRange(location: i, length: 1))
+        var index = 0
+        while index < ns.length {
+            let ch = ns.substring(with: NSRange(location: index, length: 1))
             if ch == "{" {
-                stack.append(i)
+                stack.append(index)
             } else if ch == "}" {
-                if let open = stack.popLast(), open < i {
-                    pairs.append(BracePair(open: open, close: i))
+                if let open = stack.popLast(), open < index {
+                    pairs.append(CodeFoldingBracePair(open: open, close: index))
                 }
             }
-            i += 1
+            index += 1
         }
 
         return pairs
     }
 
-    private static func foldContentRange(pair: BracePair, in ns: NSString) -> NSRange? {
+    private static func foldContentRange(pair: CodeFoldingBracePair, in ns: NSString) -> NSRange? {
         // Fold the content *between* braces, excluding the braces themselves.
         let start = pair.open + 1
         let end = pair.close

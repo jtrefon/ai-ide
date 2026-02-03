@@ -18,7 +18,7 @@ public enum AppError: LocalizedError {
     case terminalError(String)
     case commandNotFound(String)
     case unknown(String)
-    
+
     public var errorDescription: String? {
         switch self {
         case .fileOperationFailed(let operation, let underlying):
@@ -41,7 +41,7 @@ public enum AppError: LocalizedError {
             return "Unknown error: \(message)"
         }
     }
-    
+
     public var recoverySuggestion: String? {
         switch self {
         case .fileOperationFailed:
@@ -64,7 +64,7 @@ public enum AppError: LocalizedError {
             return "Restart the application and try again."
         }
     }
-    
+
     public var severity: ErrorSeverity {
         switch self {
         case .fileOperationFailed, .invalidFilePath, .fileNotFound, .commandNotFound:
@@ -75,12 +75,4 @@ public enum AppError: LocalizedError {
             return .critical
         }
     }
-}
-
-/// Error severity levels for UI feedback
-public enum ErrorSeverity {
-    case info
-    case warning
-    case error
-    case critical
 }

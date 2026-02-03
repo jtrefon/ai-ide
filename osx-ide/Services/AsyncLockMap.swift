@@ -1,6 +1,6 @@
 import Foundation
 
-actor AsyncLockMap<Key: Hashable & Sendable>: Sendable {
+actor AsyncLockMap <Key: Hashable & Sendable>{
     private actor Lock {
         private var isLocked: Bool = false
         private var waiters: [CheckedContinuation<Void, Never>] = []

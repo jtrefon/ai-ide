@@ -7,24 +7,6 @@
 
 import Foundation
 
-public struct ExplorerPathArgs: Codable, Sendable {
-    public let path: String
-
-    public init(path: String) {
-        self.path = path
-    }
-}
-
-public struct ExplorerRenameArgs: Codable, Sendable {
-    public let path: String
-    public let newName: String
-
-    public init(path: String, newName: String) {
-        self.path = path
-        self.newName = newName
-    }
-}
-
 /// Defines the standard set of commands that the IDE supports.
 /// Plugins can intercept these or the UI can trigger them.
 extension CommandID {
@@ -35,13 +17,13 @@ extension CommandID {
     public static let fileOpenFolder: CommandID = "file.openFolder"
     public static let fileSave: CommandID = "file.save"
     public static let fileSaveAs: CommandID = "file.saveAs"
-    
+
     // MARK: - File Explorer
     public static let explorerOpenSelection: CommandID = "explorer.openSelection"
     public static let explorerDeleteSelection: CommandID = "explorer.deleteSelection"
     public static let explorerRenameSelection: CommandID = "explorer.renameSelection"
     public static let explorerRevealInFinder: CommandID = "explorer.revealInFinder"
-    
+
     // MARK: - Editor Operations
     public static let editorFormat: CommandID = "editor.format"
 
@@ -83,14 +65,4 @@ extension CommandID {
 
     public static let workbenchCommandPalette: CommandID = "workbench.commandPalette"
     public static let workbenchGoToSymbol: CommandID = "workbench.goToSymbol"
-}
-
-extension TypedCommand where Args == ExplorerPathArgs {
-    public static let explorerOpenSelection = TypedCommand(.explorerOpenSelection)
-    public static let explorerDeleteSelection = TypedCommand(.explorerDeleteSelection)
-    public static let explorerRevealInFinder = TypedCommand(.explorerRevealInFinder)
-}
-
-extension TypedCommand where Args == ExplorerRenameArgs {
-    public static let explorerRenameSelection = TypedCommand(.explorerRenameSelection)
 }

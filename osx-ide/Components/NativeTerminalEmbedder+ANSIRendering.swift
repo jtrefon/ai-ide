@@ -19,26 +19,26 @@ extension NativeTerminalEmbedder {
             .paragraphStyle: paragraphStyle
         ]
 
-        var i = text.startIndex
-        while i < text.endIndex {
-            if let consumed = consumeANSIIfPresent(text, at: i, currentAttributes: &currentAttributes) {
-                i = consumed
+        var index = text.startIndex
+        while index < text.endIndex {
+            if let consumed = consumeANSIIfPresent(text, at: index, currentAttributes: &currentAttributes) {
+                index = consumed
                 continue
             }
 
-            let ch = text[i]
+            let ch = text[index]
             if ch == "\r" {
-                i = text.index(after: i)
+                index = text.index(after: index)
                 continue
             }
 
             if shouldSkipPlainTextControlCharacter(ch) {
-                i = text.index(after: i)
+                index = text.index(after: index)
                 continue
             }
 
             result.append(NSAttributedString(string: String(ch), attributes: currentAttributes))
-            i = text.index(after: i)
+            index = text.index(after: index)
         }
 
         return result
@@ -68,19 +68,19 @@ extension NativeTerminalEmbedder {
     ) -> ANSIParseResult? {
         guard start < text.endIndex, text[start] == "\u{1B}" else { return nil }
 
-        var i = text.index(after: start)
-        guard i < text.endIndex else { return ANSIParseResult(newIndex: i, attributes: [:], shouldSkip: false) }
+        var index = text.index(after: start)
+        guard index < text.endIndex else { return ANSIParseResult(newIndex: index, attributes: [:], shouldSkip: false) }
 
-        if text[i] == "[" {
-            i = text.index(after: i)
-            return parseCSISequence(text, from: i)
+        if text[index] == "[" {
+            index = text.index(after: index)
+            return parseCSISequence(text, from: index)
         }
 
-        if text[i] == "]" {
-            return parseOSCSequence(text, from: i)
+        if text[index] == "]" {
+            return parseOSCSequence(text, from: index)
         }
 
-        return ANSIParseResult(newIndex: i, attributes: [:], shouldSkip: false)
+        return ANSIParseResult(newIndex: index, attributes: [:], shouldSkip: false)
     }
 
     private func appendCSIParamIfNeeded(_ currentParam: inout String, into parameters: inout [Int]) {
@@ -97,61 +97,63 @@ extension NativeTerminalEmbedder {
         _ text: String,
         from start: String.Index
     ) -> ANSIParseResult {
-        var i = start
-        while i < text.endIndex {
-            if text[i] == "\u{07}" {
-                i = text.index(after: i)
+        var index = start
+        while index < text.endIndex {
+            if text[index] == "\u{07}" {
+                index = text.index(after: index)
                 break
             }
 
-            if text[i] == "\u{1B}", i < text.index(before: text.endIndex), text[text.index(after: i)] == "\\" {
-                i = text.index(after: i)
-                i = text.index(after: i)
+            if text[index] == "\u{1B}",
+               index < text.index(before: text.endIndex),
+               text[text.index(after: index)] == "\\" {
+                index = text.index(after: index)
+                index = text.index(after: index)
                 break
             }
 
-            i = text.index(after: i)
+            index = text.index(after: index)
         }
 
-        return ANSIParseResult(newIndex: i, attributes: [:], shouldSkip: true)
+        return ANSIParseResult(newIndex: index, attributes: [:], shouldSkip: true)
     }
 
     func parseCSISequence(
         _ text: String,
         from start: String.Index
     ) -> ANSIParseResult {
-        var i = start
+        var index = start
         var parameters: [Int] = []
         var currentParam = ""
         var attributes: [NSAttributedString.Key: Any] = [:]
 
-        while i < text.endIndex {
-            let char = text[i]
+        while index < text.endIndex {
+            let char = text[index]
             if char.isNumber {
                 currentParam.append(char)
-                i = text.index(after: i)
+                index = text.index(after: index)
                 continue
             }
 
             if char == ";" {
                 appendCSIParamIfNeeded(&currentParam, into: &parameters)
-                i = text.index(after: i)
+                index = text.index(after: index)
                 continue
             }
 
             if isCSIFinalByte(char) {
                 appendCSIParamIfNeeded(&currentParam, into: &parameters)
                 let finalChar = char
-                i = text.index(after: i)
+                index = text.index(after: index)
                 let result = handleCSIFinalCharacter(finalChar, parameters: parameters)
                 attributes = result.attributes
-                return ANSIParseResult(newIndex: i, attributes: attributes, shouldSkip: result.shouldSkip)
+                return ANSIParseResult(newIndex: index, attributes: attributes, shouldSkip: result.shouldSkip)
             }
 
-            i = text.index(after: i)
+            index = text.index(after: index)
         }
 
-        return ANSIParseResult(newIndex: i, attributes: [:], shouldSkip: false)
+        return ANSIParseResult(newIndex: index, attributes: [:], shouldSkip: false)
     }
 
     func handleCSIFinalCharacter(
@@ -193,17 +195,17 @@ extension NativeTerminalEmbedder {
 
     func handleEraseInLine(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         let mode = parameters.first ?? 0
-        if let terminalView = terminalView, let storage = terminalView.textStorage {
-            eraseInLine(mode: mode, in: storage)
-        }
+        guard let terminalView = terminalView else { return ([:], true) }
+        guard let storage = terminalView.textStorage else { return ([:], true) }
+        eraseInLine(mode: mode, in: storage)
         return ([:], true)
     }
 
     func handleDeleteCharacters(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
-        let n = max(1, parameters.first ?? 1)
-        if let terminalView = terminalView, let storage = terminalView.textStorage {
-            deleteCharacters(n, in: storage)
-        }
+        let characterCount = max(1, parameters.first ?? 1)
+        guard let terminalView = terminalView else { return ([:], true) }
+        guard let storage = terminalView.textStorage else { return ([:], true) }
+        deleteCharacters(characterCount, in: storage)
         return ([:], true)
     }
 
@@ -211,44 +213,46 @@ extension NativeTerminalEmbedder {
         handleDeleteCharacters(parameters)
     }
 
-    func handleCursorHorizontalAbsolute(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
+    func handleCursorHorizontalAbsolute(
+        _ parameters: [Int]
+    ) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
         let col = max(1, parameters.first ?? 1)
         cursorColumn = max(0, col - 1)
         return ([:], true)
     }
 
     func handleCursorForward(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
-        let n = max(1, parameters.first ?? 1)
-        cursorColumn += n
+        let columnDelta = max(1, parameters.first ?? 1)
+        cursorColumn += columnDelta
         return ([:], true)
     }
 
     func handleCursorBackward(_ parameters: [Int]) -> (attributes: [NSAttributedString.Key: Any], shouldSkip: Bool) {
-        let n = max(1, parameters.first ?? 1)
-        cursorColumn = max(0, cursorColumn - n)
+        let columnDelta = max(1, parameters.first ?? 1)
+        cursorColumn = max(0, cursorColumn - columnDelta)
         return ([:], true)
     }
 
     func moveCursorToEndForUnsupportedPositioning() {
-        if let terminalView = terminalView, let storage = terminalView.textStorage {
-            currentLineStartLocation = storage.length
-            cursorColumn = 0
-            pendingEraseToEndOfLine = false
-        }
+        guard let terminalView = terminalView else { return }
+        guard let storage = terminalView.textStorage else { return }
+        currentLineStartLocation = storage.length
+        cursorColumn = 0
+        pendingEraseToEndOfLine = false
     }
 
     func eraseInDisplay(mode: Int) {
-        if let terminalView = terminalView, let storage = terminalView.textStorage {
-            if mode == 2 || mode == 3 {
-                storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: "")
-                currentLineStartLocation = 0
-                cursorColumn = 0
-                pendingEraseToEndOfLine = false
-            } else {
-                currentLineStartLocation = storage.length
-                cursorColumn = 0
-                pendingEraseToEndOfLine = false
-            }
+        guard let terminalView = terminalView else { return }
+        guard let storage = terminalView.textStorage else { return }
+        if mode == 2 || mode == 3 {
+            storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: "")
+            currentLineStartLocation = 0
+            cursorColumn = 0
+            pendingEraseToEndOfLine = false
+        } else {
+            currentLineStartLocation = storage.length
+            cursorColumn = 0
+            pendingEraseToEndOfLine = false
         }
     }
 

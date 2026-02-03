@@ -6,6 +6,10 @@ struct GlobalSearchOverlayView: View {
     @ObservedObject private var fileEditor: FileEditorStateManager
     @Binding var isPresented: Bool
 
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
     private struct SearchResultGroup: Identifiable {
         let file: String
         let matches: [WorkspaceSearchMatch]
@@ -29,27 +33,7 @@ struct GlobalSearchOverlayView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Text("Search")
-                    .font(.headline)
-                TextField("Find in workspace", text: $query)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: AppConstants.Overlay.searchFieldMinWidth)
-                    .onSubmit {
-                        triggerSearch()
-                    }
-
-                if isSearching {
-                    ProgressView()
-                        .scaleEffect(0.75)
-                }
-
-                Button("Close") {
-                    close()
-                }
-            }
-
+        overlayScaffold(using: overlayHeader) {
             List {
                 ForEach(resultsByFile) { group in
                     Section(group.file) {
@@ -76,10 +60,6 @@ struct GlobalSearchOverlayView: View {
             }
             .frame(minWidth: AppConstants.Overlay.listMinWidth, minHeight: AppConstants.Overlay.listMinHeight)
         }
-        .padding(AppConstants.Overlay.containerPadding)
-        .background(.regularMaterial)
-        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
-        .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             if query.isEmpty {
                 query = ""
@@ -93,15 +73,32 @@ struct GlobalSearchOverlayView: View {
         }
     }
 
-    private func debounceSearch() {
-        searchTask?.cancel()
-        searchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            triggerSearch()
-        }
+    private var overlayHeader: OverlayHeaderConfiguration {
+        OverlayHeaderConfiguration(
+            title: localized("global_search.title"),
+            placeholder: localized("global_search.placeholder"),
+            query: $query,
+            textFieldMinWidth: AppConstants.Overlay.searchFieldMinWidth,
+            showsProgress: isSearching,
+            onSubmit: {
+                Task { await triggerSearch() }
+            },
+            onClose: {
+                close()
+            }
+        )
     }
 
-    private func triggerSearch() {
+    private func debounceSearch() {
+        OverlaySearchDebouncer.reschedule(
+            searchTask: &searchTask,
+            debounceNanoseconds: AppConstants.Time.quickSearchDebounceNanoseconds,
+            action: { await triggerSearch() }
+        )
+    }
+
+    @MainActor
+    private func triggerSearch() async {
         guard let root = workspace.currentDirectory?.standardizedFileURL else {
             resultsByFile = []
             return
@@ -127,7 +124,9 @@ struct GlobalSearchOverlayView: View {
         guard let root = workspace.currentDirectory?.standardizedFileURL else { return }
 
         do {
-            let url = try appState.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(match.relativePath)
+            let url = try appState.workspaceService
+                .makePathValidator(projectRoot: root)
+                .validateAndResolve(match.relativePath)
             if openToSide {
                 fileEditor.openInOtherPane(from: url)
             } else {

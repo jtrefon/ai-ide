@@ -1,6 +1,6 @@
 import Foundation
 
-actor AsyncSemaphore: Sendable {
+actor AsyncSemaphore {
     private var value: Int
     private var waiters: [CheckedContinuation<Void, Never>] = []
 

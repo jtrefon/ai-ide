@@ -1,108 +1,26 @@
 import Foundation
 
-public enum LogLevel: String, Codable, Sendable {
-    case trace
-    case debug
-    case info
-    case warning
-    case error
-    case critical
-}
-
-public enum LogCategory: String, Codable, Sendable {
-    case app
-    case conversation
-    case ai
-    case tool
-    case eventBus
-    case error
-}
-
-public enum LogValue: Codable, Sendable {
-    case string(String)
-    case int(Int)
-    case double(Double)
-    case bool(Bool)
-    case object([String: LogValue])
-    case array([LogValue])
-    case null
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        if container.decodeNil() { self = .null; return }
-        if let v = try? container.decode(String.self) { self = .string(v); return }
-        if let v = try? container.decode(Int.self) { self = .int(v); return }
-        if let v = try? container.decode(Double.self) { self = .double(v); return }
-        if let v = try? container.decode(Bool.self) { self = .bool(v); return }
-        if let v = try? container.decode([String: LogValue].self) { self = .object(v); return }
-        if let v = try? container.decode([LogValue].self) { self = .array(v); return }
-        self = .null
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        switch self {
-        case .string(let v):
-            try container.encode(v)
-        case .int(let v):
-            try container.encode(v)
-        case .double(let v):
-            try container.encode(v)
-        case .bool(let v):
-            try container.encode(v)
-        case .object(let v):
-            try container.encode(v)
-        case .array(let v):
-            try container.encode(v)
-        case .null:
-            try container.encodeNil()
-        }
-    }
-
-    public static func from(_ value: Any) -> LogValue {
-        switch value {
-        case let v as String:
-            return .string(v)
-        case let v as Int:
-            return .int(v)
-        case let v as Double:
-            return .double(v)
-        case let v as Bool:
-            return .bool(v)
-        case let v as [String: Any]:
-            return .object(v.mapValues { LogValue.from($0) })
-        case let v as [Any]:
-            return .array(v.map { LogValue.from($0) })
-        default:
-            return .null
-        }
-    }
-}
-
-public struct LogRecord: Codable, Sendable {
-    public let ts: String
-    public let session: String
-    public let level: LogLevel
-    public let category: LogCategory
-    public let message: String
-    public let metadata: [String: LogValue]?
-    public let file: String
-    public let function: String
-    public let line: Int
-}
-
-public struct LoggingConfiguration: Sendable {
-    public var minimumLevel: LogLevel
-    public var enableConsole: Bool
-
-    public init(minimumLevel: LogLevel = .info, enableConsole: Bool = true) {
-        self.minimumLevel = minimumLevel
-        self.enableConsole = enableConsole
-    }
-}
-
 public actor AppLogger {
     public static let shared = AppLogger()
+
+    public struct LogCallContext: @unchecked Sendable {
+        public let metadata: [String: Any]?
+        public let file: String
+        public let function: String
+        public let line: Int
+
+        public init(
+            metadata: [String: Any]? = nil,
+            file: String = #fileID,
+            function: String = #function,
+            line: Int = #line
+        ) {
+            self.metadata = metadata
+            self.file = file
+            self.function = function
+            self.line = line
+        }
+    }
 
     private let sessionId: String
     private let encoder: JSONEncoder
@@ -155,10 +73,7 @@ public actor AppLogger {
         _ level: LogLevel,
         category: LogCategory,
         message: String,
-        metadata: [String: Any]? = nil,
-        file: String = #fileID,
-        function: String = #function,
-        line: Int = #line
+        context: LogCallContext = LogCallContext()
     ) {
         guard shouldLog(level) else { return }
 
@@ -168,10 +83,10 @@ public actor AppLogger {
             level: level,
             category: category,
             message: message,
-            metadata: metadata?.mapValues { LogValue.from($0) },
-            file: file,
-            function: function,
-            line: line
+            metadata: context.metadata?.mapValues { LogValue.from($0) },
+            file: context.file,
+            function: context.function,
+            line: context.line
         )
 
         write(record: record)
@@ -183,28 +98,77 @@ public actor AppLogger {
         }
     }
 
-    public func trace(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
-        log(.trace, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
+    public func trace(
+        category: LogCategory,
+        message: String,
+        context: LogCallContext = LogCallContext()
+    ) {
+        log(
+            .trace,
+            category: category,
+            message: message,
+            context: context
+        )
     }
 
-    public func debug(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
-        log(.debug, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
+    public func debug(
+        category: LogCategory,
+        message: String,
+        context: LogCallContext = LogCallContext()
+    ) {
+        log(
+            .debug,
+            category: category,
+            message: message,
+            context: context
+        )
     }
 
-    public func info(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
-        log(.info, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
+    public func info(
+        category: LogCategory,
+        message: String,
+        context: LogCallContext = LogCallContext()
+    ) {
+        log(.info, category: category, message: message, context: context)
     }
 
-    public func warning(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
-        log(.warning, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
+    public func warning(
+        category: LogCategory,
+        message: String,
+        context: LogCallContext = LogCallContext()
+    ) {
+        log(
+            .warning,
+            category: category,
+            message: message,
+            context: context
+        )
     }
 
-    public func error(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
-        log(.error, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
+    public func error(
+        category: LogCategory,
+        message: String,
+        context: LogCallContext = LogCallContext()
+    ) {
+        log(
+            .error,
+            category: category,
+            message: message,
+            context: context
+        )
     }
 
-    public func critical(category: LogCategory, message: String, metadata: [String: Any]? = nil, file: String = #fileID, function: String = #function, line: Int = #line) {
-        log(.critical, category: category, message: message, metadata: metadata, file: file, function: function, line: line)
+    public func critical(
+        category: LogCategory,
+        message: String,
+        context: LogCallContext = LogCallContext()
+    ) {
+        log(
+            .critical,
+            category: category,
+            message: message,
+            context: context
+        )
     }
 
     private func shouldLog(_ level: LogLevel) -> Bool {
@@ -233,6 +197,16 @@ public actor AppLogger {
                 try append(line: line, to: projectLogFileURL)
             }
         } catch {
+            Task {
+                await CrashReporter.shared.capture(
+                    error,
+                    context: CrashReportContext(operation: "AppLogger.write"),
+                    metadata: [:],
+                    file: #fileID,
+                    function: #function,
+                    line: #line
+                )
+            }
         }
     }
 
