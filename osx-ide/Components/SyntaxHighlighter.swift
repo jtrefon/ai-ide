@@ -204,19 +204,24 @@ final class SyntaxHighlighter {
         regexHelper.highlightWholeWords(words, color: color, in: attr, code: code)
     }
 
-    private func applyRegex(
-        _ pattern: String,
-        color: NSColor,
-        in attr: NSMutableAttributedString,
-        code: String,
-        captureGroup: Int? = nil
-    ) {
-        let context = RegexLanguageModule.RegexHighlightContext(attributedString: attr, code: code)
+    private struct ApplyRegexRequest {
+        let pattern: String
+        let color: NSColor
+        let attributedString: NSMutableAttributedString
+        let code: String
+        let captureGroup: Int?
+    }
+
+    private func applyRegex(_ request: ApplyRegexRequest) {
+        let context = RegexLanguageModule.RegexHighlightContext(
+            attributedString: request.attributedString,
+            code: request.code
+        )
         regexHelper.applyRegex(RegexLanguageModule.RegexHighlightRequest(
-            pattern: pattern,
-            color: color,
+            pattern: request.pattern,
+            color: request.color,
             context: context,
-            captureGroup: captureGroup
+            captureGroup: request.captureGroup
         ))
     }
 }

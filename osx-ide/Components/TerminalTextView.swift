@@ -18,14 +18,7 @@ final class NativeTerminalTextView: NSTextView {
     }
 
     override func doCommand(by selector: Selector) {
-        guard let inputDelegate else {
-            super.doCommand(by: selector)
-            return
-        }
-
-        if inputDelegate.handleTerminalCommand(selector) {
-            return
-        }
-        super.doCommand(by: selector)
+        guard let inputDelegate else { return }
+        _ = inputDelegate.handleTerminalCommand(selector)
     }
 }

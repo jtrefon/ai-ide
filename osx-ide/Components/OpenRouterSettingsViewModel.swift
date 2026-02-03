@@ -66,7 +66,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
         store: OpenRouterSettingsStore = OpenRouterSettingsStore(),
         client: OpenRouterAPIClient = OpenRouterAPIClient()
     ) {
-        let settings = store.load()
+        let settings = store.load(includeApiKey: false)
         self.store = store
         self.client = client
         self.apiKey = settings.apiKey
@@ -75,6 +75,13 @@ final class OpenRouterSettingsViewModel: ObservableObject {
         self.modelQuery = settings.model
         self.systemPrompt = settings.systemPrompt
         self.reasoningEnabled = settings.reasoningEnabled
+    }
+
+    func loadApiKeyIfAvailable() {
+        let settings = store.load(includeApiKey: true)
+        if settings.apiKey != apiKey {
+            apiKey = settings.apiKey
+        }
     }
 
     func loadModels(force: Bool = false) async {

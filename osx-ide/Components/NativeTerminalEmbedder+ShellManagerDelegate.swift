@@ -2,15 +2,15 @@ import Foundation
 
 // MARK: - ShellManagerDelegate
 extension NativeTerminalEmbedder: ShellManagerDelegate {
-    func shellManager(_ manager: ShellManager, didProduceOutput output: String) {
+    func shellManager(_ _: ShellManager, didProduceOutput output: String) {
         appendOutput(output)
     }
 
-    func shellManager(_ manager: ShellManager, didFailWithError error: String) {
+    func shellManager(_ _: ShellManager, didFailWithError error: String) {
         self.errorMessage = error
     }
 
-    func shellManagerDidTerminate(_ manager: ShellManager) {
+    func shellManagerDidTerminate(_ _: ShellManager) {
         appendOutput("\n[Process terminated]\n")
     }
 }

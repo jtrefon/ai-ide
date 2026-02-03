@@ -114,7 +114,15 @@ final class ModernLineNumberRulerView: NSRulerView {
             lineRect.origin.x += context.relativePoint.x
             lineRect.origin.y += context.relativePoint.y
 
-            drawLineNumber(lineNumber, at: lineRect, with: attrs, context: context, charIndex: charIndex)
+            drawLineNumber(
+                lineNumber,
+                at: lineRect,
+                drawContext: DrawLineNumberContext(
+                    attrs: attrs,
+                    context: context,
+                    charIndex: charIndex
+                )
+            )
 
             let nextGlyphIndex = NSMaxRange(lineGlyphRange)
             glyphIndex = nextGlyphIndex > glyphIndex ? nextGlyphIndex : (glyphIndex + 1)
@@ -129,19 +137,25 @@ final class ModernLineNumberRulerView: NSRulerView {
         return (lineStart, lineEnd)
     }
 
-    private func drawLineNumber(_ lineNumber: Int, at lineRect: NSRect, with attrs: [NSAttributedString.Key: Any], context: DrawLineNumbersContext, charIndex: Int) {
+    private struct DrawLineNumberContext {
+        let attrs: [NSAttributedString.Key: Any]
+        let context: DrawLineNumbersContext
+        let charIndex: Int
+    }
+
+    private func drawLineNumber(_ lineNumber: Int, at lineRect: NSRect, drawContext: DrawLineNumberContext) {
         let label = "\(lineNumber)" as NSString
-        let labelSize = label.size(withAttributes: attrs)
+        let labelSize = label.size(withAttributes: drawContext.attrs)
         let labelY = lineRect.minY + (lineRect.height - labelSize.height) / 2
         let labelX = ruleThickness - 6 - labelSize.width
 
-        if charIndex == context.textView.selectedRange.location {
+        if drawContext.charIndex == drawContext.context.textView.selectedRange.location {
             let highlightRect = NSRect(x: 0, y: lineRect.minY, width: ruleThickness, height: lineRect.height)
             selectionColor.setFill()
             highlightRect.fill()
         }
 
-        label.draw(at: NSPoint(x: labelX, y: labelY), withAttributes: attrs)
+        label.draw(at: NSPoint(x: labelX, y: labelY), withAttributes: drawContext.attrs)
     }
 
     // Modern macOS v26 compatibility methods

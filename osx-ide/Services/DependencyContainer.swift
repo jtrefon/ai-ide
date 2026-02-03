@@ -159,7 +159,7 @@ class DependencyContainer {
 
     func setAIEnrichmentIndexingEnabled(_ enabled: Bool) {
         if enabled {
-            let settings = OpenRouterSettingsStore().load()
+            let settings = OpenRouterSettingsStore().load(includeApiKey: false)
             let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
             if model.isEmpty {
                 settingsStore.set(false, forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey)
