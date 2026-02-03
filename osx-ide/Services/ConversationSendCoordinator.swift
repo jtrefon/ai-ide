@@ -194,6 +194,15 @@ final class ConversationSendCoordinator {
                     response = followupToolLoopResult.response
                     lastToolResults = followupToolLoopResult.lastToolResults
                 }
+
+                let retriedContent = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let retriedHasToolCalls = (response.toolCalls?.isEmpty == false)
+                if retriedContent.isEmpty, !retriedHasToolCalls {
+                    response = AIServiceResponse(
+                        content: "I wasn't able to generate a final response. Please retry or clarify the next step.",
+                        toolCalls: nil
+                    )
+                }
             }
         }
 

@@ -254,6 +254,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             guard let self = self else { return }
             let runId = UUID().uuidString
 
+            let tools = (self.currentMode == .chat) ? [] : self.availableTools
+
             do {
                 conversationLogger.logAIRequestStart(
                     mode: self.currentMode.rawValue,
@@ -268,7 +270,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                         projectRoot: self.projectRoot,
                         conversationId: self.conversationId,
                         runId: runId,
-                        availableTools: self.availableTools,
+                        availableTools: tools,
                         cancelledToolCallIds: { [cancelledIds = self.cancelledToolCallIds] in cancelledIds },
                         qaReviewEnabled: self.currentMode == .agent
                     )
