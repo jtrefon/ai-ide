@@ -160,6 +160,7 @@ struct AISettingsTab: View {
             }
             .padding(.top, 4)
             .onAppear {
+                viewModel.loadApiKeyIfAvailable()
                 Task { await viewModel.loadModels() }
             }
         }
