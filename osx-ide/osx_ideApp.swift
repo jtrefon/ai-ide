@@ -172,7 +172,7 @@ struct OSXIDEApp: App {
                 Toggle(localized("menu.tools.ai_enrichment_indexing"), isOn: $codebaseIndexAIEnrichmentEnabled)
                     .onChange(of: codebaseIndexAIEnrichmentEnabled) { _, newValue in
                         if newValue {
-                            let settings = OpenRouterSettingsStore().load()
+                            let settings = OpenRouterSettingsStore().load(includeApiKey: false)
                             let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
                             if model.isEmpty {
                                 errorManager.handle(

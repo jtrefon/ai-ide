@@ -12,6 +12,11 @@ final class OpenRouterSettingsStore {
     private let keychainStore = KeychainStore(service: "tdc.osx-ide.openrouter")
     private let keychainAccount = "apiKey"
 
+    private var shouldUseKeychain: Bool {
+        ProcessInfo.processInfo.environment["XCUI_TESTING"] != "1"
+            && ProcessInfo.processInfo.environment["OSXIDE_DISABLE_KEYCHAIN"] != "1"
+    }
+
     private func migrateApiKeyFromUserDefaultsIfNeeded() {
         if settingsStore.bool(forKey: apiKeyMigrationCompleteKey, default: false) {
             return
@@ -38,9 +43,17 @@ final class OpenRouterSettingsStore {
         }
     }
 
-    func load() -> OpenRouterSettings {
-        migrateApiKeyFromUserDefaultsIfNeeded()
-        let apiKey = (try? keychainStore.readPassword(account: keychainAccount)) ?? ""
+    func load(includeApiKey: Bool = true) -> OpenRouterSettings {
+        if includeApiKey, shouldUseKeychain {
+            migrateApiKeyFromUserDefaultsIfNeeded()
+        }
+
+        let apiKey: String
+        if includeApiKey, shouldUseKeychain {
+            apiKey = (try? keychainStore.readPassword(account: keychainAccount)) ?? ""
+        } else {
+            apiKey = ""
+        }
         return OpenRouterSettings(
             apiKey: apiKey,
             model: settingsStore.string(forKey: modelKey) ?? "",
@@ -51,6 +64,14 @@ final class OpenRouterSettingsStore {
     }
 
     func save(_ settings: OpenRouterSettings) {
+        guard shouldUseKeychain else {
+            settingsStore.set(settings.model, forKey: modelKey)
+            settingsStore.set(settings.baseURL, forKey: baseURLKey)
+            settingsStore.set(settings.systemPrompt, forKey: systemPromptKey)
+            settingsStore.set(settings.reasoningEnabled, forKey: reasoningEnabledKey)
+            return
+        }
+
         do {
             if settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 try keychainStore.deletePassword(account: keychainAccount)

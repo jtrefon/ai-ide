@@ -13,6 +13,13 @@ struct MessageUIComponents {
 
     // MARK: - Corner Radius Components
 
+    struct CornerPoints {
+        let topLeft: CGPoint
+        let topRight: CGPoint
+        let bottomRight: CGPoint
+        let bottomLeft: CGPoint
+    }
+
     struct RectCorner: OptionSet, Sendable {
         let rawValue: Int
         static let topLeft = RectCorner(rawValue: 1 << 0)
@@ -37,13 +44,6 @@ struct MessageUIComponents {
             addLeftEdge(&path, points: points)
 
             return path
-        }
-
-        private struct CornerPoints {
-            let topLeft: CGPoint
-            let topRight: CGPoint
-            let bottomRight: CGPoint
-            let bottomLeft: CGPoint
         }
 
         private func rectCornerPoints(in rect: CGRect) -> CornerPoints {
