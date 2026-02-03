@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Security
 
 final class KeychainStore {
@@ -14,12 +15,16 @@ final class KeychainStore {
     }
 
     func readPassword(account: String) throws -> String? {
+        let authenticationContext = LAContext()
+        authenticationContext.localizedReason = "Authenticate to access the stored credential"
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecReturnData as String: true
+            kSecReturnData as String: true,
+            kSecUseAuthenticationContext as String: authenticationContext
         ]
 
         var item: CFTypeRef?
@@ -57,12 +62,22 @@ final class KeychainStore {
             throw KeychainStoreError.unexpectedStatus(updateStatus)
         }
 
+        var accessControlError: Unmanaged<CFError>?
+        guard let accessControl = SecAccessControlCreateWithFlags(
+            nil,
+            kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            .userPresence,
+            &accessControlError
+        ) else {
+            throw (accessControlError?.takeRetainedValue() as Error?) ?? KeychainStoreError.invalidItemFormat
+        }
+
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessControl as String: accessControl
         ]
 
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
