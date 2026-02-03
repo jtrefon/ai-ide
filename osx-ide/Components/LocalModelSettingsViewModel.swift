@@ -24,6 +24,8 @@ final class LocalModelSettingsViewModel: ObservableObject {
     @Published var maxAnswerTokensDraft: Double
     @Published var maxReasoningTokensDraft: Double
 
+    @Published var temperatureDraft: Double
+
     @Published var selectedModelId: String {
         didSet {
             clampQuantizationToSelectedModelIfNeeded()
@@ -68,11 +70,13 @@ final class LocalModelSettingsViewModel: ObservableObject {
         self.contextBudgetTokensDraft = Double(local.contextBudgetTokens)
         self.maxAnswerTokensDraft = Double(local.maxAnswerTokens)
         self.maxReasoningTokensDraft = Double(local.maxReasoningTokens)
+        self.temperatureDraft = local.temperature
 
         clampQuantizationToSelectedModelIfNeeded()
         clampContextBudgetToSelectedModelIfNeeded()
         clampMaxAnswerTokensIfNeeded()
         clampMaxReasoningTokensIfNeeded()
+        clampTemperatureIfNeeded()
 
         Task { await refreshDownloadState() }
         Task { await loadModelSizes() }
@@ -83,6 +87,7 @@ final class LocalModelSettingsViewModel: ObservableObject {
         clampContextBudgetToSelectedModelIfNeeded()
         clampMaxAnswerTokensIfNeeded()
         clampMaxReasoningTokensIfNeeded()
+        clampTemperatureIfNeeded()
         localStore.save(LocalModelSettings(
             isEnabled: localModelEnabled,
             selectedModelId: selectedModelId,
@@ -90,7 +95,8 @@ final class LocalModelSettingsViewModel: ObservableObject {
             allowRemoteFallback: allowRemoteFallback,
             contextBudgetTokens: Int(contextBudgetTokensDraft),
             maxAnswerTokens: Int(maxAnswerTokensDraft),
-            maxReasoningTokens: Int(maxReasoningTokensDraft)
+            maxReasoningTokens: Int(maxReasoningTokensDraft),
+            temperature: temperatureDraft
         ))
 
         Task { await refreshDownloadState() }
@@ -173,6 +179,11 @@ final class LocalModelSettingsViewModel: ObservableObject {
         persistLocalSettings()
     }
 
+    func applyTemperatureDraft() {
+        clampTemperatureIfNeeded()
+        persistLocalSettings()
+    }
+
     func modelSizeDisplayString(modelId: String) -> String? {
         modelSizeDisplayById[modelId]
     }
@@ -228,6 +239,12 @@ final class LocalModelSettingsViewModel: ObservableObject {
         let maxTokens = 4096
         let clamped = min(Double(maxTokens), max(Double(minTokens), maxReasoningTokensDraft))
         maxReasoningTokensDraft = Double(Int(clamped))
+    }
+
+    private func clampTemperatureIfNeeded() {
+        let minTemp = 0.0
+        let maxTemp = 2.0
+        temperatureDraft = min(maxTemp, max(minTemp, temperatureDraft))
     }
 
     func downloadSelectedModel() {

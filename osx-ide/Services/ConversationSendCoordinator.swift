@@ -79,6 +79,13 @@ final class ConversationSendCoordinator {
             var accumulated = ""
             onAssistantChunk = { [weak self] chunk in
                 guard let self else { return }
+
+                if !accumulated.isEmpty,
+                   chunk.contains("<ide_reasoning>"),
+                   accumulated.contains("</ide_reasoning>") {
+                    accumulated = ""
+                }
+
                 accumulated += chunk
 
                 let trimmed = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)

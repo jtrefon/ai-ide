@@ -117,6 +117,32 @@ struct AISettingsTab: View {
                     }
 
                     SettingsRow(
+                        title: "Temperature",
+                        subtitle: "Controls randomness for local model generation (lower is more deterministic).",
+                        systemImage: "thermometer"
+                    ) {
+                        VStack(alignment: .trailing, spacing: 6) {
+                            let minTemp = 0.0
+                            let maxTemp = 2.0
+                            Slider(
+                                value: $localModelViewModel.temperatureDraft,
+                                in: minTemp...maxTemp,
+                                step: 0.05,
+                                onEditingChanged: { isEditing in
+                                    if !isEditing {
+                                        localModelViewModel.applyTemperatureDraft()
+                                    }
+                                }
+                            )
+                            .frame(width: 240)
+
+                            Text(String(format: "%.2f", localModelViewModel.temperatureDraft))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    SettingsRow(
                         title: "Answer token budget",
                         subtitle: "Target maximum tokens for the final answer (model is instructed to stay within this budget).",
                         systemImage: "text.bubble"

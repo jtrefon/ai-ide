@@ -23,6 +23,7 @@ enum AppConstantsStorage {
     static let localModelMaxOutputTokensKey = "AI.LocalModel.MaxOutputTokens"
     static let localModelMaxAnswerTokensKey = "AI.LocalModel.MaxAnswerTokens"
     static let localModelMaxReasoningTokensKey = "AI.LocalModel.MaxReasoningTokens"
+    static let localModelTemperatureKey = "AI.LocalModel.Temperature"
     static let localModelManifestURLKey = "AI.LocalModel.ManifestURL"
     static let codebaseIndexEnabledKey = "CodebaseIndexEnabled"
     static let codebaseIndexAIEnrichmentEnabledKey = "CodebaseIndexAIEnrichmentEnabled"

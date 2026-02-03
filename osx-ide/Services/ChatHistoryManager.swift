@@ -68,7 +68,36 @@ public class ChatHistoryManager: ObservableObject {
 
     public func upsertMessage(_ message: ChatMessage) {
         if let index = messages.lastIndex(where: { $0.id == message.id }) {
-            messages[index] = message
+            let existing = messages[index]
+            let incomingReasoning = message.reasoning?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+            let existingReasoning = existing.reasoning?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+            let resolvedReasoning = incomingReasoning.isEmpty && !existingReasoning.isEmpty
+                ? existing.reasoning
+                : message.reasoning
+
+            if resolvedReasoning != message.reasoning {
+                let merged = ChatMessage(
+                    id: message.id,
+                    role: message.role,
+                    content: message.content,
+                    context: ChatMessageContentContext(
+                        reasoning: resolvedReasoning,
+                        codeContext: message.codeContext
+                    ),
+                    tool: ChatMessageToolContext(
+                        toolName: message.toolName,
+                        toolStatus: message.toolStatus,
+                        target: ToolInvocationTarget(
+                            targetFile: message.targetFile,
+                            toolCallId: message.toolCallId
+                        ),
+                        toolCalls: message.toolCalls ?? []
+                    )
+                )
+                messages[index] = merged
+            } else {
+                messages[index] = message
+            }
             saveHistory()
             return
         }

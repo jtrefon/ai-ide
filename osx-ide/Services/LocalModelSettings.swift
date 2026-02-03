@@ -13,6 +13,7 @@ struct LocalModelSettings: Equatable {
     var contextBudgetTokens: Int
     var maxAnswerTokens: Int
     var maxReasoningTokens: Int
+    var temperature: Double
 
     static let `default` = LocalModelSettings(
         isEnabled: false,
@@ -21,6 +22,7 @@ struct LocalModelSettings: Equatable {
         allowRemoteFallback: false,
         contextBudgetTokens: 2048,
         maxAnswerTokens: 256,
-        maxReasoningTokens: 512
+        maxReasoningTokens: 512,
+        temperature: 0.2
     )
 }

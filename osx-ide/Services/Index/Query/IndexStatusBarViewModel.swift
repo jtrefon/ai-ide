@@ -134,12 +134,22 @@ final class IndexStatusBarViewModel: ObservableObject {
 
         eventBus.subscribe(to: OpenRouterUsageUpdatedEvent.self) { [weak self] event in
             guard let self else { return }
-            guard let contextLength = event.contextLength, contextLength > 0 else {
+
+            let provider = AIProviderSettingsStore().load()
+            let limit: Int?
+            if provider == .local {
+                let local = LocalModelSettingsStore().load()
+                limit = local.contextBudgetTokens
+            } else {
+                limit = event.contextLength
+            }
+
+            guard let limit, limit > 0 else {
                 self.openRouterContextUsageText = ""
                 return
             }
-            let used = min(event.usage.totalTokens, contextLength)
-            self.openRouterContextUsageText = "CTX \(used)/\(contextLength)"
+            let used = min(event.usage.totalTokens, limit)
+            self.openRouterContextUsageText = "CTX \(used)/\(limit)"
         }
         .store(in: &cancellables)
     }

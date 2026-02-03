@@ -21,6 +21,11 @@ final class LocalModelSettingsStore {
             default: LocalModelSettings.default.maxReasoningTokens
         )
 
+        let temperatureRaw = settingsStore.double(forKey: AppConstantsStorage.localModelTemperatureKey)
+        let temperature = temperatureRaw == 0
+            ? LocalModelSettings.default.temperature
+            : temperatureRaw
+
         return LocalModelSettings(
             isEnabled: settingsStore.bool(forKey: AppConstantsStorage.localModelEnabledKey, default: LocalModelSettings.default.isEnabled),
             selectedModelId: settingsStore.string(forKey: AppConstantsStorage.localModelSelectedModelIdKey)
@@ -37,7 +42,8 @@ final class LocalModelSettingsStore {
                 default: LocalModelSettings.default.contextBudgetTokens
             ),
             maxAnswerTokens: maxAnswerTokens,
-            maxReasoningTokens: maxReasoningTokens
+            maxReasoningTokens: maxReasoningTokens,
+            temperature: max(0.0, min(2.0, temperature))
         )
     }
 
@@ -49,5 +55,6 @@ final class LocalModelSettingsStore {
         settingsStore.set(settings.contextBudgetTokens, forKey: AppConstantsStorage.localModelContextBudgetTokensKey)
         settingsStore.set(settings.maxAnswerTokens, forKey: AppConstantsStorage.localModelMaxAnswerTokensKey)
         settingsStore.set(settings.maxReasoningTokens, forKey: AppConstantsStorage.localModelMaxReasoningTokensKey)
+        settingsStore.set(settings.temperature, forKey: AppConstantsStorage.localModelTemperatureKey)
     }
 }

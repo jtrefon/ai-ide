@@ -158,6 +158,7 @@ actor LocalMLXAIService: AIServiceStreaming {
             quantization: settings.quantization,
             maxAnswerTokens: settings.maxAnswerTokens,
             maxReasoningTokens: settings.maxReasoningTokens,
+            temperature: settings.temperature,
             onChunk: onChunk
         )
         await publishUsageIfPossible(
@@ -344,6 +345,7 @@ actor LocalMLXAIService: AIServiceStreaming {
         quantization: LocalModelQuantization,
         maxAnswerTokens: Int,
         maxReasoningTokens: Int,
+        temperature: Double,
         onChunk: (@MainActor @Sendable (String) -> Void)?
     ) async throws -> String {
         let modelFactory = LLMModelFactory.shared
@@ -355,7 +357,8 @@ actor LocalMLXAIService: AIServiceStreaming {
         return try await container.perform { context in
             let input = try await context.processor.prepare(input: UserInput(prompt: promptText))
 
-            let params = GenerateParameters(temperature: 0.2)
+            let safeTemperature = Float(max(0.0, min(2.0, temperature)))
+            let params = GenerateParameters(temperature: safeTemperature)
             let tokenStream = try MLXLMCommon.generate(input: input, parameters: params, context: context)
             var output = ""
             var answerTokenCount = 0
