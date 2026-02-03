@@ -56,6 +56,12 @@ class ChatPromptBuilder {
         return required.contains(where: { !lowercasedReasoning.contains($0) })
     }
 
+    static func isMissingReasonFramework(text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return !trimmed.contains("<ide_reasoning>")
+    }
+
     /// Checks if the reasoning block is present but low-quality (placeholders like "..." or no concrete content).
     /// This helps auto-retry with a stricter instruction.
     static func isLowQualityReasoning(text: String) -> Bool {

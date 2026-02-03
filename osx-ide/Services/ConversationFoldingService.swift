@@ -5,9 +5,30 @@ public enum ConversationFoldingService {
         if messages.count > thresholds.maxMessageCount { return true }
 
         let totalChars = messages.reduce(0) { partial, msg in
-            partial + msg.content.count + (msg.reasoning?.count ?? 0) + (msg.codeContext?.count ?? 0)
+            partial + msg.content.count + (msg.codeContext?.count ?? 0)
         }
         return totalChars > thresholds.maxContentCharacters
+    }
+
+    public static func foldIfOverTokenBudget(
+        messages: [ChatMessage],
+        projectRoot: URL,
+        tokenBudget: Int,
+        triggerRatio: Double,
+        preserveMostRecentMessages: Int
+    ) async throws -> ConversationFoldResult? {
+        guard tokenBudget > 0 else { return nil }
+        let ratio = max(0, min(1, triggerRatio))
+        let triggerTokens = Int(Double(tokenBudget) * ratio)
+        guard triggerTokens > 0 else { return nil }
+        guard estimateTokenCount(messages: messages) >= triggerTokens else { return nil }
+
+        let thresholds = ConversationFoldingThresholds(
+            maxMessageCount: Int.max,
+            maxContentCharacters: Int.max,
+            preserveMostRecentMessages: preserveMostRecentMessages
+        )
+        return try await fold(messages: messages, projectRoot: projectRoot, thresholds: thresholds)
     }
 
     public static func fold(messages: [ChatMessage], projectRoot: URL, thresholds: ConversationFoldingThresholds) async throws -> ConversationFoldResult? {
@@ -90,5 +111,20 @@ public enum ConversationFoldingService {
             if !msg.content.isEmpty { parts.append(msg.content) }
             return parts.joined(separator: "\n")
         }.joined(separator: "\n\n---\n\n")
+    }
+
+    private static func estimateTokenCount(messages: [ChatMessage]) -> Int {
+        let text = messages.map { msg in
+            var parts: [String] = []
+            if !msg.content.isEmpty { parts.append(msg.content) }
+            if let codeContext = msg.codeContext, !codeContext.isEmpty { parts.append(codeContext) }
+            return parts.joined(separator: "\n")
+        }.joined(separator: "\n")
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return 0 }
+        return trimmed
+            .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+            .count
     }
 }

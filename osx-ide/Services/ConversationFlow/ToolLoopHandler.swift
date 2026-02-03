@@ -25,7 +25,8 @@ final class ToolLoopHandler {
         availableTools: [AITool],
         cancelledToolCallIds: @escaping () -> Set<String>,
         runId: String,
-        userInput: String
+        userInput: String,
+        onAssistantChunk: (@MainActor @Sendable (String) -> Void)?
     ) async throws -> ToolLoopResult {
         guard mode == .agent else {
             return ToolLoopResult(response: response, lastToolCalls: [], lastToolResults: [])
@@ -123,7 +124,8 @@ final class ToolLoopHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
-                    stage: AIRequestStage.tool_loop
+                    stage: AIRequestStage.tool_loop,
+                    onAssistantChunk: onAssistantChunk
                 ))
                 .get()
 
@@ -151,7 +153,8 @@ final class ToolLoopHandler {
                         mode: mode,
                         projectRoot: projectRoot,
                         runId: runId,
-                        stage: AIRequestStage.tool_loop
+                        stage: AIRequestStage.tool_loop,
+                        onAssistantChunk: onAssistantChunk
                     ))
                     .get()
             }
@@ -179,7 +182,8 @@ final class ToolLoopHandler {
                         mode: mode,
                         projectRoot: projectRoot,
                         runId: runId,
-                        stage: AIRequestStage.tool_loop
+                        stage: AIRequestStage.tool_loop,
+                        onAssistantChunk: onAssistantChunk
                     ))
                     .get()
             }
@@ -198,7 +202,8 @@ final class ToolLoopHandler {
                     mode: mode,
                     userInput: userInput,
                     toolResults: lastToolResults,
-                    runId: runId
+                    runId: runId,
+                    onAssistantChunk: onAssistantChunk
                 )
                 break
             }
@@ -400,7 +405,8 @@ final class ToolLoopHandler {
         mode: AIMode,
         userInput: String,
         toolResults: [ChatMessage],
-        runId: String
+        runId: String,
+        onAssistantChunk: (@MainActor @Sendable (String) -> Void)?
     ) async throws -> AIServiceResponse {
         let toolSummary = toolResultsSummaryText(toolResults)
         let correctionSystem = ChatMessage(
@@ -413,24 +419,17 @@ final class ToolLoopHandler {
             role: .user,
             content: "Provide the final response now."
         )
-
-        let followupMode: AIMode = (mode == .agent) ? .agent : .chat
-        let followup = try await aiInteractionCoordinator
+        return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: [correctionSystem, correctionUser],
+                messages: historyCoordinator.messages + [correctionSystem, correctionUser],
                 explicitContext: explicitContext,
                 tools: [],
-                mode: followupMode,
+                mode: mode,
                 projectRoot: projectRoot,
                 runId: runId,
-                stage: AIRequestStage.final_response
+                stage: AIRequestStage.final_response,
+                onAssistantChunk: onAssistantChunk
             ))
             .get()
-
-        let followupContent = followup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalContent = followupContent?.isEmpty == false
-            ? followup.content
-            : "I attempted to gather context via tools but did not receive a complete response. Please retry."
-        return AIServiceResponse(content: finalContent, toolCalls: nil)
     }
 }

@@ -12,6 +12,9 @@ struct SendRequest {
     let availableTools: [AITool]
     let cancelledToolCallIds: @Sendable () -> Set<String>
     let qaReviewEnabled: Bool
+
+    let assistantStreamingMessageId: UUID?
+    let enableAssistantStreaming: Bool
 }
 
 struct ToolLoopResult {

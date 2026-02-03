@@ -9,6 +9,7 @@ import SwiftUI
 
 struct AISettingsTab: View {
     @ObservedObject var viewModel: OpenRouterSettingsViewModel
+    @StateObject private var localModelViewModel = LocalModelSettingsViewModel()
     @State private var showAdvanced = false
 
     private func localized(_ key: String) -> String {
@@ -18,6 +19,192 @@ struct AISettingsTab: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
+                SettingsCard(
+                    title: "Provider",
+                    subtitle: "Choose which AI provider the IDE uses."
+                ) {
+                    SettingsRow(
+                        title: "Provider",
+                        subtitle: "Remote uses OpenRouter. Local uses the on-device model.",
+                        systemImage: "sparkles"
+                    ) {
+                        Picker("", selection: $localModelViewModel.provider) {
+                            Text("Remote").tag(AIProvider.remote)
+                            Text("Local").tag(AIProvider.local)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 240)
+                    }
+                }
+
+                SettingsCard(
+                    title: "On-device model",
+                    subtitle: "Offline-capable model settings and download configuration."
+                ) {
+                    SettingsRow(
+                        title: "Model",
+                        subtitle: "Select the on-device model to download and run.",
+                        systemImage: "shippingbox"
+                    ) {
+                        Picker("", selection: $localModelViewModel.selectedModelId) {
+                            ForEach(LocalModelCatalog.items) { item in
+                                if let size = localModelViewModel.modelSizeDisplayString(modelId: item.id) {
+                                    Text("\(item.displayName) — \(size)").tag(item.id)
+                                } else {
+                                    Text(item.displayName).tag(item.id)
+                                }
+                            }
+                        }
+                        .frame(width: 360)
+                    }
+
+                    SettingsRow(
+                        title: "Enable",
+                        subtitle: "Enable the on-device model runtime.",
+                        systemImage: "cpu"
+                    ) {
+                        Toggle("", isOn: $localModelViewModel.localModelEnabled)
+                            .toggleStyle(.switch)
+                    }
+
+                    SettingsRow(
+                        title: "Quantization",
+                        subtitle: "4-bit is smaller and faster. 8-bit is higher quality.",
+                        systemImage: "gauge"
+                    ) {
+                        Picker("", selection: $localModelViewModel.quantization) {
+                            ForEach(localModelViewModel.supportedQuantizationsForSelectedModel(), id: \.self) { quant in
+                                Text(quant == .q4 ? "4-bit" : "8-bit").tag(quant)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 240)
+                    }
+
+                    SettingsRow(
+                        title: "Allow remote fallback",
+                        subtitle: "If local model is unavailable, allow remote provider to answer.",
+                        systemImage: "arrow.triangle.2.circlepath"
+                    ) {
+                        Toggle("", isOn: $localModelViewModel.allowRemoteFallback)
+                            .toggleStyle(.switch)
+                    }
+
+                    SettingsRow(
+                        title: "Context budget",
+                        subtitle: "Max tokens to send (clamped to the selected model's context window).",
+                        systemImage: "text.alignleft"
+                    ) {
+                        VStack(alignment: .trailing, spacing: 6) {
+                            let maxTokens = Double(localModelViewModel.maxContextBudgetTokensForSelectedModel())
+                            let minTokens = 512.0
+                            Slider(
+                                value: $localModelViewModel.contextBudgetTokensDraft,
+                                in: minTokens...maxTokens,
+                                step: 128,
+                                onEditingChanged: { isEditing in
+                                    if !isEditing {
+                                        localModelViewModel.applyContextBudgetDraft()
+                                    }
+                                }
+                            )
+                            .frame(width: 240)
+
+                            Text("\(Int(localModelViewModel.contextBudgetTokensDraft)) tokens")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    SettingsRow(
+                        title: "Answer token budget",
+                        subtitle: "Target maximum tokens for the final answer (model is instructed to stay within this budget).",
+                        systemImage: "text.bubble"
+                    ) {
+                        VStack(alignment: .trailing, spacing: 6) {
+                            let minTokens = 64.0
+                            let maxTokens = 2048.0
+                            Slider(
+                                value: $localModelViewModel.maxAnswerTokensDraft,
+                                in: minTokens...maxTokens,
+                                step: 64,
+                                onEditingChanged: { isEditing in
+                                    if !isEditing {
+                                        localModelViewModel.applyMaxAnswerTokensDraft()
+                                    }
+                                }
+                            )
+                            .frame(width: 240)
+
+                            Text("\(Int(localModelViewModel.maxAnswerTokensDraft)) tokens")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    SettingsRow(
+                        title: "Reasoning token budget",
+                        subtitle: "Target maximum tokens for <ide_reasoning>. Reasoning is not stored in history.",
+                        systemImage: "brain"
+                    ) {
+                        VStack(alignment: .trailing, spacing: 6) {
+                            let minTokens = 64.0
+                            let maxTokens = 4096.0
+                            Slider(
+                                value: $localModelViewModel.maxReasoningTokensDraft,
+                                in: minTokens...maxTokens,
+                                step: 64,
+                                onEditingChanged: { isEditing in
+                                    if !isEditing {
+                                        localModelViewModel.applyMaxReasoningTokensDraft()
+                                    }
+                                }
+                            )
+                            .frame(width: 240)
+
+                            Text("\(Int(localModelViewModel.maxReasoningTokensDraft)) tokens")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    SettingsRow(
+                        title: "Download",
+                        subtitle: localModelViewModel.isDownloaded
+                            ? "Downloaded"
+                            : "Download the selected model from Hugging Face.",
+                        systemImage: "arrow.down.circle"
+                    ) {
+                        HStack(spacing: 10) {
+                            if localModelViewModel.isDownloaded {
+                                Text("Ready")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Button("Download") {
+                                    localModelViewModel.downloadSelectedModel()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(localModelViewModel.isDownloading)
+                            }
+
+                            if localModelViewModel.isDownloading {
+                                ProgressView(value: localModelViewModel.downloadProgress)
+                                    .frame(width: 120)
+                            }
+                        }
+                    }
+
+                    if let errorMessage = localModelViewModel.downloadErrorMessage {
+                        SettingsRow(
+                            title: "Download error",
+                            subtitle: errorMessage,
+                            systemImage: "exclamationmark.triangle"
+                        ) {
+                            EmptyView()
+                        }
+                    }
+                }
+
                 SettingsCard(
                     title: localized("settings.ai.openrouter_connection.title"),
                     subtitle: localized("settings.ai.openrouter_connection.subtitle")

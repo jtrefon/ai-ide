@@ -73,6 +73,11 @@ struct MessageListView: View {
             .onChange(of: messages.last?.id) { _ in
                 scrollToBottom(proxy: proxy)
             }
+            .onChange(of: messages.last?.content) { _ in
+                if isSending {
+                    scrollToBottom(proxy: proxy)
+                }
+            }
         }
     }
 
@@ -101,18 +106,12 @@ struct MessageView: View {
     var fontFamily: String
     @Binding var isReasoningHidden: Bool
 
-    private let contentCoordinator: MessageContentCoordinator
-
-    init(message: ChatMessage, fontSize: Double, fontFamily: String, isReasoningHidden: Binding<Bool>) {
-        self.message = message
-        self.fontSize = fontSize
-        self.fontFamily = fontFamily
-        self._isReasoningHidden = isReasoningHidden
-        self.contentCoordinator = MessageContentCoordinator(
+    private var contentCoordinator: MessageContentCoordinator {
+        MessageContentCoordinator(
             message: message,
             fontSize: fontSize,
             fontFamily: fontFamily,
-            isReasoningHidden: isReasoningHidden
+            isReasoningHidden: $isReasoningHidden
         )
     }
 

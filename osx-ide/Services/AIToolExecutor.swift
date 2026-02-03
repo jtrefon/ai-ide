@@ -2,7 +2,7 @@
 //  AIToolExecutor.swift
 //  osx-ide
 //
-//  Created by Cascade on 02/01/2026.
+//  Created by Jacek Trefon on 02/01/2026.
 //
 
 import Foundation

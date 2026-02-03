@@ -10,6 +10,7 @@ final class AIInteractionCoordinator {
         let projectRoot: URL
         let runId: String?
         let stage: AIRequestStage?
+        let onAssistantChunk: (@MainActor @Sendable (String) -> Void)?
 
         init(
             messages: [ChatMessage],
@@ -18,7 +19,8 @@ final class AIInteractionCoordinator {
             mode: AIMode,
             projectRoot: URL,
             runId: String? = nil,
-            stage: AIRequestStage? = nil
+            stage: AIRequestStage? = nil,
+            onAssistantChunk: (@MainActor @Sendable (String) -> Void)? = nil
         ) {
             self.messages = messages
             self.explicitContext = explicitContext
@@ -27,6 +29,7 @@ final class AIInteractionCoordinator {
             self.projectRoot = projectRoot
             self.runId = runId
             self.stage = stage
+            self.onAssistantChunk = onAssistantChunk
         }
     }
 
@@ -81,7 +84,7 @@ final class AIInteractionCoordinator {
                 projectRoot: request.projectRoot
             )
 
-            let result = await aiService.sendMessageResult(AIServiceHistoryRequest(
+            let historyRequest = AIServiceHistoryRequest(
                 messages: sanitizedMessages,
                 context: augmentedContext,
                 tools: filteredTools,
@@ -89,7 +92,30 @@ final class AIInteractionCoordinator {
                 projectRoot: request.projectRoot,
                 runId: request.runId,
                 stage: request.stage
-            ))
+            )
+
+            let result: Result<AIServiceResponse, AppError>
+            let shouldStreamUserVisibleStage: Bool
+            if let stage = request.stage {
+                shouldStreamUserVisibleStage = stage == .initial_response
+                    || stage == .delivery_gate
+                    || stage == .tool_loop
+                    || stage == .final_response
+            } else {
+                shouldStreamUserVisibleStage = false
+            }
+            if let onAssistantChunk = request.onAssistantChunk,
+               let streamingService = aiService as? any AIServiceStreaming,
+               (filteredTools.isEmpty || shouldStreamUserVisibleStage) {
+                do {
+                    let response = try await streamingService.sendMessageStream(historyRequest, onChunk: onAssistantChunk)
+                    result = .success(response)
+                } catch {
+                    result = .failure(.aiServiceError(error.localizedDescription))
+                }
+            } else {
+                result = await aiService.sendMessageResult(historyRequest)
+            }
 
             switch result {
             case .success:

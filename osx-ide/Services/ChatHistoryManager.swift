@@ -66,6 +66,15 @@ public class ChatHistoryManager: ObservableObject {
         }
     }
 
+    public func upsertMessage(_ message: ChatMessage) {
+        if let index = messages.lastIndex(where: { $0.id == message.id }) {
+            messages[index] = message
+            saveHistory()
+            return
+        }
+        append(message)
+    }
+
     public func removeLast() {
         if !messages.isEmpty {
             messages.removeLast()

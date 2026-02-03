@@ -2,7 +2,7 @@
 //  AppState.swift
 //  osx-ide
 //
-//  Created by AI Assistant on 25/08/2025.
+//  Created by Jacek Trefon on 25/08/2025.
 //  Refactored to be a simple coordinator between specialized state managers
 //
 

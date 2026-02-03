@@ -256,6 +256,19 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
             let tools = (self.currentMode == .chat) ? [] : self.availableTools
 
+            let provider = AIProviderSettingsStore().load()
+            let enableAssistantStreaming = tools.isEmpty || (self.currentMode == .agent && provider == .local)
+            let assistantStreamingMessageId: UUID? = enableAssistantStreaming ? UUID() : nil
+            if let assistantStreamingMessageId {
+                historyCoordinator.append(
+                    ChatMessage(
+                        id: assistantStreamingMessageId,
+                        role: .assistant,
+                        content: "Generating…"
+                    )
+                )
+            }
+
             do {
                 conversationLogger.logAIRequestStart(
                     mode: self.currentMode.rawValue,
@@ -272,7 +285,9 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                         runId: runId,
                         availableTools: tools,
                         cancelledToolCallIds: { [cancelledIds = self.cancelledToolCallIds] in cancelledIds },
-                        qaReviewEnabled: self.currentMode == .agent
+                        qaReviewEnabled: self.currentMode == .agent,
+                        assistantStreamingMessageId: assistantStreamingMessageId,
+                        enableAssistantStreaming: enableAssistantStreaming
                     )
                 )
 

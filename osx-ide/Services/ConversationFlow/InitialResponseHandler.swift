@@ -18,7 +18,8 @@ final class InitialResponseHandler {
         mode: AIMode,
         projectRoot: URL,
         availableTools: [AITool],
-        runId: String
+        runId: String,
+        onAssistantChunk: (@MainActor @Sendable (String) -> Void)?
     ) async throws -> AIServiceResponse {
         var response = try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
@@ -28,7 +29,8 @@ final class InitialResponseHandler {
                 mode: mode,
                 projectRoot: projectRoot,
                 runId: runId,
-                stage: AIRequestStage.initial_response
+                stage: AIRequestStage.initial_response,
+                onAssistantChunk: onAssistantChunk
             ))
             .get()
 
@@ -57,7 +59,8 @@ final class InitialResponseHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
-                    stage: AIRequestStage.initial_response
+                    stage: AIRequestStage.initial_response,
+                    onAssistantChunk: onAssistantChunk
                 ))
                 .get()
         }
@@ -86,7 +89,8 @@ final class InitialResponseHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
-                    stage: AIRequestStage.initial_response
+                    stage: AIRequestStage.initial_response,
+                    onAssistantChunk: onAssistantChunk
                 ))
                 .get()
         }

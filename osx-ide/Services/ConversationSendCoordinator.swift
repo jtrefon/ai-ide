@@ -53,17 +53,60 @@ final class ConversationSendCoordinator {
             historyCoordinator: historyCoordinator,
             projectRoot: request.projectRoot
         )
-        let response = try await executeConversationFlow(request)
-        finalResponseHandler.appendFinalMessageAndLog(response: response, conversationId: request.conversationId)
+        let flowResult = try await executeConversationFlow(request)
+        finalResponseHandler.appendFinalMessageAndLog(
+            response: flowResult.response,
+            conversationId: request.conversationId,
+            streamingMessageId: request.assistantStreamingMessageId
+        )
+
+        try await runQAIfNeeded(
+            request: request,
+            response: flowResult.response,
+            toolResults: flowResult.lastToolResults
+        )
     }
 
-    private func executeConversationFlow(_ request: SendRequest) async throws -> AIServiceResponse {
+    private struct ConversationFlowResult {
+        let response: AIServiceResponse
+        let lastToolResults: [ChatMessage]
+    }
+
+    private func executeConversationFlow(_ request: SendRequest) async throws -> ConversationFlowResult {
+        let onAssistantChunk: (@MainActor @Sendable (String) -> Void)?
+        if request.enableAssistantStreaming,
+           let messageId = request.assistantStreamingMessageId {
+            var accumulated = ""
+            onAssistantChunk = { [weak self] chunk in
+                guard let self else { return }
+                accumulated += chunk
+
+                let trimmed = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.hasPrefix("{") || trimmed.hasPrefix("TOOL:") {
+                    return
+                }
+
+                let split = ChatPromptBuilder.splitReasoning(from: accumulated)
+                self.historyCoordinator.upsertMessage(
+                    ChatMessage(
+                        id: messageId,
+                        role: .assistant,
+                        content: split.content,
+                        context: ChatMessageContentContext(reasoning: split.reasoning)
+                    )
+                )
+            }
+        } else {
+            onAssistantChunk = nil
+        }
+
         let initialResponse = try await initialResponseHandler.sendInitialResponse(
             explicitContext: request.explicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
             availableTools: request.availableTools,
-            runId: request.runId
+            runId: request.runId,
+            onAssistantChunk: onAssistantChunk
         )
 
         await appendRunSnapshot(payload: RunSnapshotPayload(
@@ -87,7 +130,8 @@ final class ConversationSendCoordinator {
             availableTools: request.availableTools,
             cancelledToolCallIds: request.cancelledToolCallIds,
             runId: request.runId,
-            userInput: request.userInput
+            userInput: request.userInput,
+            onAssistantChunk: onAssistantChunk
         )
 
         var response = toolLoopResult.response
@@ -99,7 +143,8 @@ final class ConversationSendCoordinator {
             mode: request.mode,
             projectRoot: request.projectRoot,
             availableTools: request.availableTools,
-            runId: request.runId
+            runId: request.runId,
+            onAssistantChunk: onAssistantChunk
         )
 
         if request.mode == .agent, response.toolCalls?.isEmpty == false {
@@ -112,7 +157,8 @@ final class ConversationSendCoordinator {
                 availableTools: request.availableTools,
                 cancelledToolCallIds: request.cancelledToolCallIds,
                 runId: request.runId,
-                userInput: request.userInput
+                userInput: request.userInput,
+                onAssistantChunk: onAssistantChunk
             )
             response = followupToolLoopResult.response
             lastToolResults = followupToolLoopResult.lastToolResults
@@ -125,7 +171,8 @@ final class ConversationSendCoordinator {
             projectRoot: request.projectRoot,
             availableTools: request.availableTools,
             runId: request.runId,
-            userInput: request.userInput
+            userInput: request.userInput,
+            onAssistantChunk: onAssistantChunk
         )
 
         if request.mode == .agent, response.toolCalls?.isEmpty == false {
@@ -138,7 +185,8 @@ final class ConversationSendCoordinator {
                 availableTools: request.availableTools,
                 cancelledToolCallIds: request.cancelledToolCallIds,
                 runId: request.runId,
-                userInput: request.userInput
+                userInput: request.userInput,
+                onAssistantChunk: onAssistantChunk
             )
             response = followupToolLoopResult.response
             lastToolResults = followupToolLoopResult.lastToolResults
@@ -175,7 +223,8 @@ final class ConversationSendCoordinator {
                         mode: request.mode,
                         projectRoot: request.projectRoot,
                         runId: request.runId,
-                        stage: AIRequestStage.delivery_gate
+                        stage: AIRequestStage.delivery_gate,
+                        onAssistantChunk: onAssistantChunk
                     ))
                     .get()
 
@@ -189,7 +238,8 @@ final class ConversationSendCoordinator {
                         availableTools: request.availableTools,
                         cancelledToolCallIds: request.cancelledToolCallIds,
                         runId: request.runId,
-                        userInput: request.userInput
+                        userInput: request.userInput,
+                        onAssistantChunk: onAssistantChunk
                     )
                     response = followupToolLoopResult.response
                     lastToolResults = followupToolLoopResult.lastToolResults
@@ -214,7 +264,8 @@ final class ConversationSendCoordinator {
             projectRoot: request.projectRoot,
             availableTools: request.availableTools,
             runId: request.runId,
-            userInput: request.userInput
+            userInput: request.userInput,
+            onAssistantChunk: onAssistantChunk
         )
 
         if request.mode == .agent, response.toolCalls?.isEmpty == false {
@@ -227,7 +278,8 @@ final class ConversationSendCoordinator {
                 availableTools: request.availableTools,
                 cancelledToolCallIds: request.cancelledToolCallIds,
                 runId: request.runId,
-                userInput: request.userInput
+                userInput: request.userInput,
+                onAssistantChunk: onAssistantChunk
             )
             response = followupToolLoopResult.response
             lastToolResults = followupToolLoopResult.lastToolResults
@@ -239,7 +291,8 @@ final class ConversationSendCoordinator {
             mode: request.mode,
             projectRoot: request.projectRoot,
             toolResults: lastToolResults,
-            runId: request.runId
+            runId: request.runId,
+            onAssistantChunk: onAssistantChunk
         )
 
         // The final_response stage can still produce malformed reasoning (e.g. quoting code inside <ide_reasoning>).
@@ -250,22 +303,33 @@ final class ConversationSendCoordinator {
             mode: request.mode,
             projectRoot: request.projectRoot,
             availableTools: request.availableTools,
-            runId: request.runId
+            runId: request.runId,
+            onAssistantChunk: onAssistantChunk
         )
 
-        response = try await qaReviewHandler.performToolOutputReviewIfNeeded(
+        return ConversationFlowResult(response: response, lastToolResults: lastToolResults)
+    }
+
+    private func runQAIfNeeded(
+        request: SendRequest,
+        response: AIServiceResponse,
+        toolResults: [ChatMessage]
+    ) async throws {
+        guard shouldRunQualityReview(toolResults: toolResults) else { return }
+
+        _ = try await qaReviewHandler.performToolOutputReviewIfNeeded(
             response: response,
             explicitContext: request.explicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
             qaReviewEnabled: request.qaReviewEnabled,
             availableTools: request.availableTools,
-            toolResults: lastToolResults,
+            toolResults: toolResults,
             runId: request.runId,
             userInput: request.userInput
         )
 
-        response = try await qaReviewHandler.performQualityReviewIfNeeded(
+        _ = try await qaReviewHandler.performQualityReviewIfNeeded(
             response: response,
             explicitContext: request.explicitContext,
             mode: request.mode,
@@ -275,8 +339,21 @@ final class ConversationSendCoordinator {
             runId: request.runId,
             userInput: request.userInput
         )
+    }
 
-        return response
+    private func shouldRunQualityReview(toolResults: [ChatMessage]) -> Bool {
+        guard !toolResults.isEmpty else { return false }
+        let writeOrExecToolNames = Set([
+            "write_file",
+            "write_files",
+            "replace_in_file",
+            "create_file",
+            "delete_file",
+            "run_command"
+        ])
+        return toolResults.contains(where: { message in
+            message.isToolExecution && writeOrExecToolNames.contains(message.toolName ?? "")
+        })
     }
 
     private func appendRunSnapshot(payload: RunSnapshotPayload) async {

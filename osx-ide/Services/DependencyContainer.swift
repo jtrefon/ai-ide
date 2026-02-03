@@ -35,7 +35,8 @@ class DependencyContainer {
             fileSystemService: _fileSystemService,
             eventBus: _eventBus
         )
-        _aiService = OpenRouterAIService(eventBus: _eventBus)
+
+        _aiService = Self.buildAIService(eventBus: _eventBus)
 
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
 
@@ -67,6 +68,15 @@ class DependencyContainer {
             _conversationManager.updateProjectRoot(root)
             _projectCoordinator.configureProject(root: root)
         }
+    }
+
+    private static func buildAIService(eventBus: EventBusProtocol) -> AIService {
+        let remoteAIService = OpenRouterAIService(eventBus: eventBus)
+        let localAIService = LocalMLXAIService(eventBus: eventBus)
+        return RoutedAIService(
+            remote: remoteAIService,
+            local: localAIService
+        )
     }
 
     // MARK: - Public Accessors

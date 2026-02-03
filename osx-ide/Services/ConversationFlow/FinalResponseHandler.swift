@@ -19,7 +19,8 @@ final class FinalResponseHandler {
         mode: AIMode,
         projectRoot: URL,
         toolResults: [ChatMessage],
-        runId: String
+        runId: String,
+        onAssistantChunk: (@MainActor @Sendable (String) -> Void)?
     ) async throws -> AIServiceResponse {
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard draft.isEmpty else { return response }
@@ -50,7 +51,8 @@ final class FinalResponseHandler {
                 mode: followupMode,
                 projectRoot: projectRoot,
                 runId: runId,
-                stage: AIRequestStage.final_response
+                stage: AIRequestStage.final_response,
+                onAssistantChunk: onAssistantChunk
             ))
             .get()
 
@@ -66,7 +68,11 @@ final class FinalResponseHandler {
         return AIServiceResponse(content: resolvedContent, toolCalls: nil)
     }
 
-    func appendFinalMessageAndLog(response: AIServiceResponse, conversationId: String) {
+    func appendFinalMessageAndLog(
+        response: AIServiceResponse,
+        conversationId: String,
+        streamingMessageId: UUID?
+    ) {
         let splitFinal = ChatPromptBuilder.splitReasoning(from: response.content ?? "No response received.")
         let trimmedContent = splitFinal.content.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayContent = trimmedContent.isEmpty
@@ -98,13 +104,17 @@ final class FinalResponseHandler {
         case .none:
             deliveryStatusText = "missing"
         }
-        historyCoordinator.append(
-            ChatMessage(
-                role: .assistant,
-                content: displayContent,
-                context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
-            )
+        let finalMessage = ChatMessage(
+            id: streamingMessageId ?? UUID(),
+            role: .assistant,
+            content: displayContent,
+            context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
         )
+        if streamingMessageId != nil {
+            historyCoordinator.upsertMessage(finalMessage)
+        } else {
+            historyCoordinator.append(finalMessage)
+        }
 
         let hasReasoning = (splitFinal.reasoning?.isEmpty == false)
         let contentLength = displayContent.count

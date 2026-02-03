@@ -1,6 +1,7 @@
-runtimes:
+tools:
+    - pmd@7.16.0
+.11.11
     - java@17.0.10
-    - python@3.11.11
 tools:
     - lizard@1.17.31
     - pmd@7.16.0

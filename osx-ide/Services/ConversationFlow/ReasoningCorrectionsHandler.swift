@@ -19,9 +19,34 @@ final class ReasoningCorrectionsHandler {
         mode: AIMode,
         projectRoot: URL,
         availableTools: [AITool],
-        runId: String
+        runId: String,
+        onAssistantChunk: (@MainActor @Sendable (String) -> Void)?
     ) async throws -> AIServiceResponse {
         var currentResponse = response
+
+        if ChatPromptBuilder.isMissingReasonFramework(text: currentResponse.content ?? "") {
+            let promptText = PromptRepository.shared.prompt(
+                key: "ConversationFlow/DeliveryGate/missing_reason_framework",
+                defaultValue: "The FIRST thing you must output is a complete <ide_reasoning> block " +
+                    "with ALL six sections: Analyze, Research, Plan, Reflect, Action, Delivery. " +
+                    "If a section is not applicable, write 'N/A' (do not omit it). " +
+                    "After </ide_reasoning>, provide the user-visible response. Reply again now.",
+                projectRoot: projectRoot
+            )
+            let correctionSystem = ChatMessage(role: .system, content: promptText)
+            currentResponse = try await aiInteractionCoordinator
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                    messages: historyCoordinator.messages + [correctionSystem],
+                    explicitContext: explicitContext,
+                    tools: [],
+                    mode: mode,
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.delivery_gate,
+                    onAssistantChunk: onAssistantChunk
+                ))
+                .get()
+        }
 
         if ChatPromptBuilder.needsReasoningFormatCorrection(text: currentResponse.content ?? "") {
             let promptText = PromptRepository.shared.prompt(
@@ -42,7 +67,8 @@ final class ReasoningCorrectionsHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
-                    stage: AIRequestStage.delivery_gate
+                    stage: AIRequestStage.delivery_gate,
+                    onAssistantChunk: onAssistantChunk
                 ))
                 .get()
         }
@@ -68,7 +94,8 @@ final class ReasoningCorrectionsHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
-                    stage: AIRequestStage.delivery_gate
+                    stage: AIRequestStage.delivery_gate,
+                    onAssistantChunk: onAssistantChunk
                 ))
                 .get()
         }
@@ -95,7 +122,8 @@ final class ReasoningCorrectionsHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
-                    stage: AIRequestStage.delivery_gate
+                    stage: AIRequestStage.delivery_gate,
+                    onAssistantChunk: onAssistantChunk
                 ))
                 .get()
         }
@@ -120,7 +148,8 @@ final class ReasoningCorrectionsHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
-                    stage: AIRequestStage.delivery_gate
+                    stage: AIRequestStage.delivery_gate,
+                    onAssistantChunk: onAssistantChunk
                 ))
                 .get()
         }
@@ -135,7 +164,8 @@ final class ReasoningCorrectionsHandler {
         projectRoot: URL,
         availableTools: [AITool],
         runId: String,
-        userInput: String
+        userInput: String,
+        onAssistantChunk: (@MainActor @Sendable (String) -> Void)?
     ) async throws -> AIServiceResponse {
         guard mode == .agent else { return response }
 
@@ -189,7 +219,8 @@ final class ReasoningCorrectionsHandler {
                 mode: mode,
                 projectRoot: projectRoot,
                 runId: runId,
-                stage: AIRequestStage.tool_loop
+                stage: AIRequestStage.tool_loop,
+                onAssistantChunk: onAssistantChunk
             ))
             .get()
     }
