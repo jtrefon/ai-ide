@@ -58,6 +58,10 @@ final class UIService: UIServiceProtocol {
         settingsStore.set(enabled, forKey: AppConstantsStorage.agentMemoryEnabledKey)
     }
 
+    func setAgentQAReviewEnabled(_ enabled: Bool) {
+        settingsStore.set(enabled, forKey: AppConstantsStorage.agentQAReviewEnabledKey)
+    }
+
     // MARK: - Editor Settings
 
     /// Toggle line numbers visibility
@@ -143,6 +147,8 @@ final class UIService: UIServiceProtocol {
 
         let agentMemoryEnabled = settingsStore.bool(forKey: AppConstantsStorage.agentMemoryEnabledKey, default: true)
 
+        let agentQAReviewEnabled = settingsStore.bool(forKey: AppConstantsStorage.agentQAReviewEnabledKey, default: false)
+
         // Load terminal settings
         let terminalFontSize = settingsStore.double(forKey: "terminalFontSize")
         let terminalFontSizeValue = terminalFontSize == 0 ? 12 : terminalFontSize
@@ -158,6 +164,7 @@ final class UIService: UIServiceProtocol {
             indentationStyle: indentationStyle,
             cliTimeoutSeconds: cliTimeoutSeconds,
             agentMemoryEnabled: agentMemoryEnabled,
+            agentQAReviewEnabled: agentQAReviewEnabled,
             showLineNumbers: showLineNumbers,
             wordWrap: wordWrap,
             minimapVisible: minimapVisible,
@@ -180,6 +187,7 @@ final class UIService: UIServiceProtocol {
         setIndentationStyle(settings.indentationStyle)
         setCliTimeoutSeconds(settings.cliTimeoutSeconds)
         setAgentMemoryEnabled(settings.agentMemoryEnabled)
+        setAgentQAReviewEnabled(settings.agentQAReviewEnabled)
         setShowLineNumbers(settings.showLineNumbers)
         setWordWrap(settings.wordWrap)
         setMinimapVisible(settings.minimapVisible)
@@ -202,7 +210,8 @@ final class UIService: UIServiceProtocol {
             AppConstantsStorage.fontFamilyKey,
             AppConstantsStorage.indentationStyleKey,
             AppConstantsStorage.cliTimeoutSecondsKey,
-            AppConstantsStorage.agentMemoryEnabledKey
+            AppConstantsStorage.agentMemoryEnabledKey,
+            AppConstantsStorage.agentQAReviewEnabledKey
         ]
         keys.forEach { settingsStore.removeObject(forKey: $0) }
     }
@@ -217,6 +226,7 @@ final class UIService: UIServiceProtocol {
             "indentationStyle": settings.indentationStyle.rawValue,
             "cliTimeoutSeconds": settings.cliTimeoutSeconds,
             "agentMemoryEnabled": settings.agentMemoryEnabled,
+            "agentQAReviewEnabled": settings.agentQAReviewEnabled,
             "showLineNumbers": settings.showLineNumbers,
             "wordWrap": settings.wordWrap,
             "minimapVisible": settings.minimapVisible,
@@ -239,6 +249,7 @@ final class UIService: UIServiceProtocol {
         applyIndentationStyle(from: settings)
         applyCliTimeoutSeconds(from: settings)
         applyAgentMemoryEnabled(from: settings)
+        applyAgentQAReviewEnabled(from: settings)
         applyShowLineNumbers(from: settings)
         applyWordWrap(from: settings)
         applyMinimapVisible(from: settings)
@@ -288,6 +299,11 @@ final class UIService: UIServiceProtocol {
     private func applyAgentMemoryEnabled(from settings: [String: Any]) {
         guard let enabled = settings["agentMemoryEnabled"] as? Bool else { return }
         setAgentMemoryEnabled(enabled)
+    }
+
+    private func applyAgentQAReviewEnabled(from settings: [String: Any]) {
+        guard let enabled = settings["agentQAReviewEnabled"] as? Bool else { return }
+        setAgentQAReviewEnabled(enabled)
     }
 
     private func applyShowLineNumbers(from settings: [String: Any]) {

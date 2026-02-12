@@ -5,6 +5,7 @@
 //  Created by AI Assistant on 25/08/2025.
 //
 
+import Foundation
 import Combine
 import SwiftUI
 
@@ -56,6 +57,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var codebaseIndex: CodebaseIndexProtocol?
     private var projectRoot: URL
     private let conversationLogger: ConversationLogger
+    private let settingsStore = SettingsStore(userDefaults: .standard)
     private lazy var toolProvider = ConversationToolProvider(
         fileSystemService: fileSystemService,
         eventBus: eventBus,
@@ -64,6 +66,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         projectRootProvider: { [unowned self] in self.projectRoot }
     )
     private var cancellables = Set<AnyCancellable>()
+
+    private var activeStreamingRunId: String?
+    private var draftAssistantMessageId: UUID?
+    private var draftAssistantText: String = ""
 
     var messages: [ChatMessage] {
         historyCoordinator.messages
@@ -128,8 +134,45 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
         initializeLogging(root: root)
         setupObservation()
+        setupStreamingSubscriptions()
         startTraceLogging()
         configureLoggingStores(root: root)
+    }
+
+    private func setupStreamingSubscriptions() {
+        eventBus
+            .subscribe(to: LocalModelStreamingChunkEvent.self) { [weak self] event in
+                guard let self else { return }
+                self.handleLocalModelStreamingChunk(event)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func handleLocalModelStreamingChunk(_ event: LocalModelStreamingChunkEvent) {
+        guard let runId = activeStreamingRunId, runId == event.runId else { return }
+        guard let draftId = draftAssistantMessageId else { return }
+
+        draftAssistantText.append(event.chunk)
+        let trimmed = draftAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if let existing = historyCoordinator.messages.first(where: { $0.id == draftId }) {
+            historyCoordinator.upsertMessage(
+                ChatMessage(
+                    id: existing.id,
+                    role: .assistant,
+                    content: trimmed,
+                    timestamp: existing.timestamp,
+                    context: ChatMessageContentContext(reasoning: existing.reasoning, codeContext: existing.codeContext),
+                    tool: ChatMessageToolContext(
+                        toolName: existing.toolName,
+                        toolStatus: existing.toolStatus,
+                        target: ToolInvocationTarget(targetFile: existing.targetFile, toolCallId: existing.toolCallId),
+                        toolCalls: existing.toolCalls ?? []
+                    )
+                )
+            )
+        }
     }
 
     private func setupObservation() {
@@ -254,6 +297,12 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             guard let self = self else { return }
             let runId = UUID().uuidString
 
+            let draftMessage = ChatMessage(role: .assistant, content: "Generating...")
+            self.draftAssistantMessageId = draftMessage.id
+            self.draftAssistantText = ""
+            self.activeStreamingRunId = runId
+            self.historyCoordinator.append(draftMessage)
+
             let tools = (self.currentMode == .chat) ? [] : self.availableTools
 
             do {
@@ -272,12 +321,20 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                         runId: runId,
                         availableTools: tools,
                         cancelledToolCallIds: { [cancelledIds = self.cancelledToolCallIds] in cancelledIds },
-                        qaReviewEnabled: self.currentMode == .agent
+                        qaReviewEnabled: self.currentMode == .agent && self.settingsStore.bool(forKey: AppConstantsStorage.agentQAReviewEnabledKey, default: false),
+                        draftAssistantMessageId: self.draftAssistantMessageId
                     )
                 )
 
+                self.activeStreamingRunId = nil
+                self.draftAssistantMessageId = nil
+                self.draftAssistantText = ""
+
                 self.isSending = false
             } catch {
+                self.activeStreamingRunId = nil
+                self.draftAssistantMessageId = nil
+                self.draftAssistantText = ""
                 handleSendFailure(error)
             }
         }

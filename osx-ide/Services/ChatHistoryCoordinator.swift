@@ -36,6 +36,10 @@ final class ChatHistoryCoordinator {
         historyManager.upsertToolExecutionMessage(message)
     }
 
+    func upsertMessage(_ message: ChatMessage) {
+        historyManager.upsertMessage(message)
+    }
+
     func removeOldestMessages(count: Int) {
         historyManager.removeOldestMessages(count: count)
     }

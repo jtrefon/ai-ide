@@ -7,4 +7,5 @@ protocol ShellManaging: AnyObject {
     func sendInput(_ text: String)
     func interrupt()
     func terminate()
+    func resize(rows: Int, columns: Int)
 }

@@ -35,7 +35,12 @@ class DependencyContainer {
             fileSystemService: _fileSystemService,
             eventBus: _eventBus
         )
-        _aiService = OpenRouterAIService(eventBus: _eventBus)
+        let openRouterService = OpenRouterAIService(eventBus: _eventBus)
+        let localModelService = LocalModelProcessAIService(eventBus: _eventBus)
+        _aiService = ModelRoutingAIService(
+            openRouterService: openRouterService,
+            localService: localModelService
+        )
 
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
 

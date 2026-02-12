@@ -66,7 +66,7 @@ final class FinalResponseHandler {
         return AIServiceResponse(content: resolvedContent, toolCalls: nil)
     }
 
-    func appendFinalMessageAndLog(response: AIServiceResponse, conversationId: String) {
+    func appendFinalMessageAndLog(response: AIServiceResponse, conversationId: String, draftAssistantMessageId: UUID?) {
         let splitFinal = ChatPromptBuilder.splitReasoning(from: response.content ?? "No response received.")
         let trimmedContent = splitFinal.content.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayContent = trimmedContent.isEmpty
@@ -98,13 +98,26 @@ final class FinalResponseHandler {
         case .none:
             deliveryStatusText = "missing"
         }
-        historyCoordinator.append(
-            ChatMessage(
-                role: .assistant,
-                content: displayContent,
-                context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
+        if let draftAssistantMessageId,
+           let existingDraft = historyCoordinator.messages.first(where: { $0.id == draftAssistantMessageId }) {
+            historyCoordinator.upsertMessage(
+                ChatMessage(
+                    id: existingDraft.id,
+                    role: .assistant,
+                    content: displayContent,
+                    timestamp: existingDraft.timestamp,
+                    context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
+                )
             )
-        )
+        } else {
+            historyCoordinator.append(
+                ChatMessage(
+                    role: .assistant,
+                    content: displayContent,
+                    context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
+                )
+            )
+        }
 
         let hasReasoning = (splitFinal.reasoning?.isEmpty == false)
         let contentLength = displayContent.count

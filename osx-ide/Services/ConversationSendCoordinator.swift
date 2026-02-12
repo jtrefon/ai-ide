@@ -54,7 +54,11 @@ final class ConversationSendCoordinator {
             projectRoot: request.projectRoot
         )
         let response = try await executeConversationFlow(request)
-        finalResponseHandler.appendFinalMessageAndLog(response: response, conversationId: request.conversationId)
+        finalResponseHandler.appendFinalMessageAndLog(
+            response: response,
+            conversationId: request.conversationId,
+            draftAssistantMessageId: request.draftAssistantMessageId
+        )
     }
 
     private func executeConversationFlow(_ request: SendRequest) async throws -> AIServiceResponse {

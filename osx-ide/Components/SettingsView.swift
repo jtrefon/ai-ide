@@ -10,6 +10,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var ui: UIStateManager
     @StateObject private var openRouterViewModel = OpenRouterSettingsViewModel()
+    @StateObject private var localModelViewModel = LocalModelSettingsViewModel()
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
@@ -27,7 +28,10 @@ struct SettingsView: View {
                             Label(localized("settings.tabs.general"), systemImage: "gearshape")
                         }
 
-                    AISettingsTab(viewModel: openRouterViewModel)
+                    AISettingsTab(
+                        viewModel: openRouterViewModel,
+                        localModelViewModel: localModelViewModel
+                    )
                         .tabItem {
                             Label(localized("settings.tabs.ai"), systemImage: "sparkles")
                         }

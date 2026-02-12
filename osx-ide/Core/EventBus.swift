@@ -77,3 +77,13 @@ public final class EventBus: EventBusProtocol {
             .sink(receiveValue: handler)
     }
 }
+
+public struct LocalModelStreamingChunkEvent: Event {
+    public let runId: String
+    public let chunk: String
+
+    public init(runId: String, chunk: String) {
+        self.runId = runId
+        self.chunk = chunk
+    }
+}

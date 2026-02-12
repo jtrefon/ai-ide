@@ -43,6 +43,7 @@ class UIStateManager: ObservableObject {
 
     @Published var cliTimeoutSeconds: Double = 30
     @Published var agentMemoryEnabled: Bool = true
+    @Published var agentQAReviewEnabled: Bool = false
 
     // MARK: - Theme State
 
@@ -205,6 +206,11 @@ class UIStateManager: ObservableObject {
         uiService.setAgentMemoryEnabled(enabled)
     }
 
+    func setAgentQAReviewEnabled(_ enabled: Bool) {
+        agentQAReviewEnabled = enabled
+        uiService.setAgentQAReviewEnabled(enabled)
+    }
+
     private func updateTheme() {
         switch selectedTheme {
         case .light:
@@ -231,6 +237,7 @@ class UIStateManager: ObservableObject {
         indentationStyle = settings.indentationStyle
         cliTimeoutSeconds = settings.cliTimeoutSeconds
         agentMemoryEnabled = settings.agentMemoryEnabled
+        agentQAReviewEnabled = settings.agentQAReviewEnabled
         showLineNumbers = settings.showLineNumbers
         wordWrap = settings.wordWrap
         minimapVisible = settings.minimapVisible

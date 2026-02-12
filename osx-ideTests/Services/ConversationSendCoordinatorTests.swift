@@ -58,6 +58,27 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         }
     }
 
+    private struct FakeLocalModelFileStore: LocalModelProcessAIService.ModelFileStoring {
+        let installedModelIds: Set<String>
+        let modelDirectoryURL: URL
+
+        func isModelInstalled(_ model: LocalModelDefinition) -> Bool {
+            installedModelIds.contains(model.id)
+        }
+
+        func modelDirectory(modelId _: String) throws -> URL {
+            modelDirectoryURL
+        }
+    }
+
+    private struct FakeLocalModelGenerator: LocalModelProcessAIService.LocalModelGenerating {
+        let output: String
+
+        func generate(modelDirectory _: URL, prompt _: String, runId _: String?) async throws -> String {
+            output
+        }
+    }
+
     private struct FakeTool: AITool, @unchecked Sendable {
         let name: String
         let description: String = "fake"
@@ -143,6 +164,143 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         )
     }
 
+    func testHarnessOrchestrationLifecycleCreatesAndEditsFile() async throws {
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+
+        let writeCallId = UUID().uuidString
+        let replaceCallId = UUID().uuidString
+
+        let toolCalls = [
+            AIToolCall(id: writeCallId, name: "write_file", arguments: [
+                "path": "harness/lifecycle.txt",
+                "content": "one"
+            ]),
+            AIToolCall(id: replaceCallId, name: "replace_in_file", arguments: [
+                "path": "harness/lifecycle.txt",
+                "old_text": "one",
+                "new_text": "two"
+            ])
+        ]
+
+        let aiService = SequenceAIService(responses: [
+            AIServiceResponse(content: "Call tools", toolCalls: toolCalls),
+            AIServiceResponse(content: "Done", toolCalls: nil)
+        ])
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let sendCoordinator = makeSendCoordinator(
+            aiService: aiService,
+            historyCoordinator: historyCoordinator,
+            projectRoot: projectRoot
+        )
+
+        let tools = makeFileTools(projectRoot: projectRoot)
+        try await sendCoordinator.send(makeSendRequest(
+            conversationId: historyCoordinator.currentConversationId,
+            projectRoot: projectRoot,
+            availableTools: tools
+        ))
+
+        let expectedURL = projectRoot.appendingPathComponent("harness/lifecycle.txt")
+        let fileContent = try String(contentsOf: expectedURL, encoding: .utf8)
+        XCTAssertEqual(fileContent, "two")
+
+        assertToolMessages(historyCoordinator: historyCoordinator, toolCallId: writeCallId)
+        assertToolMessages(historyCoordinator: historyCoordinator, toolCallId: replaceCallId)
+    }
+
+    func testHarnessReactTodoAppCreatesViteScaffoldFiles() async throws {
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+
+        let writeFilesCallId = UUID().uuidString
+        let toolCalls = [makeReactTodoWriteFilesCall(id: writeFilesCallId)]
+
+        let aiService = SequenceAIService(responses: [
+            AIServiceResponse(content: "Scaffold", toolCalls: toolCalls),
+            AIServiceResponse(content: "Done", toolCalls: nil)
+        ])
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let sendCoordinator = makeSendCoordinator(
+            aiService: aiService,
+            historyCoordinator: historyCoordinator,
+            projectRoot: projectRoot
+        )
+
+        let tools = makeFileTools(projectRoot: projectRoot)
+        try await sendCoordinator.send(makeSendRequest(
+            conversationId: historyCoordinator.currentConversationId,
+            projectRoot: projectRoot,
+            availableTools: tools
+        ))
+
+        for path in reactTodoRequiredPaths() {
+            let url = projectRoot.appendingPathComponent(path)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "Expected file not created: \(url.path)")
+        }
+
+        assertToolMessages(historyCoordinator: historyCoordinator, toolCallId: writeFilesCallId)
+    }
+
+    func testHarnessAgentGreetingInOfflineModeReturnsPlainText() async throws {
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+
+        let userDefaults = UserDefaults(suiteName: UUID().uuidString)!
+        let settingsStore = SettingsStore(userDefaults: userDefaults)
+
+        let selectedModelId = "qwen/Qwen3-4B-Instruct-2507@cdbee75"
+        let setupSelectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
+        setupSelectionStore.setSelectedModelId(selectedModelId)
+        setupSelectionStore.setOfflineModeEnabled(true)
+
+        guard let selectedModel = LocalModelCatalog.model(id: selectedModelId) else {
+            throw XCTSkip("Selected local model is not present in LocalModelCatalog: \(selectedModelId)")
+        }
+        guard LocalModelFileStore.isModelInstalled(selectedModel) else {
+            throw XCTSkip("Local model not downloaded, skipping native inference harness test: \(selectedModelId)")
+        }
+
+        let localSelectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
+        let routingSelectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
+
+        let localService = LocalModelProcessAIService(selectionStore: localSelectionStore)
+
+        let openRouterService = SequenceAIService(responses: [
+            AIServiceResponse(content: "Hello from remote", toolCalls: nil)
+        ])
+
+        let routingService = ModelRoutingAIService(
+            openRouterService: openRouterService,
+            localService: localService,
+            selectionStore: routingSelectionStore
+        )
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let sendCoordinator = makeSendCoordinator(
+            aiService: routingService,
+            historyCoordinator: historyCoordinator,
+            projectRoot: projectRoot
+        )
+
+        // Provide at least one tool to match Agent mode reality.
+        let tools = makeFileTools(projectRoot: projectRoot)
+        try await sendCoordinator.send(makeSendRequest(
+            conversationId: historyCoordinator.currentConversationId,
+            projectRoot: projectRoot,
+            availableTools: tools
+        ))
+
+        let assistantMessages = historyCoordinator.messages.filter { $0.role == .assistant }
+        let assistantContent = assistantMessages.map(\.content).joined(separator: "\n")
+        XCTAssertFalse(assistantContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
     private func makeSequenceAIService(toolCalls: [AIToolCall]) -> SequenceAIService {
         let completeReasoningPrefix =
             "<ide_reasoning>Analyze: Details\nResearch: Details\nPlan: Details\n" +
@@ -179,11 +337,55 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         )
     }
 
+    private func makeFileTools(projectRoot: URL) -> [AITool] {
+        let fileSystemService = FileSystemService()
+        let eventBus = EventBus()
+        let pathValidator = PathValidator(projectRoot: projectRoot)
+        return [
+            WriteFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus),
+            WriteFilesTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus),
+            ReplaceInFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus)
+        ]
+    }
+
+    private func reactTodoRequiredPaths() -> [String] {
+        [
+            "harness/react-todo/package.json",
+            "harness/react-todo/index.html",
+            "harness/react-todo/src/main.jsx",
+            "harness/react-todo/src/App.jsx"
+        ]
+    }
+
+    private func makeReactTodoWriteFilesCall(id: String) -> AIToolCall {
+        let files: [[String: Any]] = [
+            [
+                "path": "harness/react-todo/package.json",
+                "content": "{\n  \"name\": \"react-todo\"\n}"
+            ],
+            [
+                "path": "harness/react-todo/index.html",
+                "content": "<!doctype html><html><body><div id=\"root\"></div></body></html>"
+            ],
+            [
+                "path": "harness/react-todo/src/main.jsx",
+                "content": "import React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport App from './App.jsx'\nReactDOM.createRoot(document.getElementById('root')).render(<App />)\n"
+            ],
+            [
+                "path": "harness/react-todo/src/App.jsx",
+                "content": "export default function App(){return <h1>Todo</h1>}\n"
+            ]
+        ]
+
+        return AIToolCall(id: id, name: "write_files", arguments: ["files": files])
+    }
+
     private func makeSendRequest(
         conversationId: String,
         projectRoot: URL,
         availableTools: [AITool] = [FakeTool(name: "fake_tool", response: "ok")],
-        qaReviewEnabled: Bool = false
+        qaReviewEnabled: Bool = false,
+        draftAssistantMessageId: UUID? = nil
     ) -> SendRequest {
         SendRequest(
             userInput: "Hello",
@@ -194,7 +396,8 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             runId: UUID().uuidString,
             availableTools: availableTools,
             cancelledToolCallIds: { [] },
-            qaReviewEnabled: qaReviewEnabled
+            qaReviewEnabled: qaReviewEnabled,
+            draftAssistantMessageId: draftAssistantMessageId
         )
     }
 

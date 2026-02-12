@@ -9,6 +9,7 @@ import SwiftUI
 
 struct AISettingsTab: View {
     @ObservedObject var viewModel: OpenRouterSettingsViewModel
+    @ObservedObject var localModelViewModel: LocalModelSettingsViewModel
     @State private var showAdvanced = false
 
     private func localized(_ key: String) -> String {
@@ -155,6 +156,13 @@ struct AISettingsTab: View {
                         Toggle("", isOn: $viewModel.reasoningEnabled)
                             .toggleStyle(.switch)
                     }
+                }
+
+                SettingsCard(
+                    title: "Local Models",
+                    subtitle: "Download and manage local/offline model artifacts."
+                ) {
+                    LocalModelSettingsView(viewModel: localModelViewModel)
                 }
 
             }

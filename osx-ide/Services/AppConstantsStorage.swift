@@ -14,6 +14,7 @@ enum AppConstantsStorage {
     static let chatPanelWidthKey = "ChatPanelWidth"
     static let cliTimeoutSecondsKey = "Agent.CliTimeoutSeconds"
     static let agentMemoryEnabledKey = "Agent.MemoryEnabled"
+    static let agentQAReviewEnabledKey = "Agent.QAReviewEnabled"
     static let codebaseIndexEnabledKey = "CodebaseIndexEnabled"
     static let codebaseIndexAIEnrichmentEnabledKey = "CodebaseIndexAIEnrichmentEnabled"
     static let enabledLanguageModulesKey = "EnabledLanguageModules"

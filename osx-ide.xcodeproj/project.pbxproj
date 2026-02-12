@@ -24,6 +24,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXBuildFile section */
+ 		6D2E6F7F2C2F4A7F00A1B2C3 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */; };
+ 		6D2E6F822C2F4A7F00A1B2C6 /* MLXStructured in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -58,6 +60,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6D2E6F7F2C2F4A7F00A1B2C3 /* MLXLLM in Frameworks */,
+				6D2E6F822C2F4A7F00A1B2C6 /* MLXStructured in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -126,6 +130,8 @@
 			);
 			name = "osx-ide";
 			packageProductDependencies = (
+				6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */,
+				6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */,
 			);
 			productName = "osx-ide";
 			productReference = 04C2CE092E5C8E9D007A5EF7 /* osx-ide.app */;
@@ -210,6 +216,8 @@
 			mainGroup = 04C2CE002E5C8E9D007A5EF7;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 04C2CE0A2E5C8E9D007A5EF7 /* Products */;
@@ -283,6 +291,41 @@
 			targetProxy = 04C2CE222E5C8E9E007A5EF7 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference "mlx-swift-structured" */
+		6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/petrukha-ivan/mlx-swift-structured";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference "mlx-swift-structured" */
+
+/* Begin XCSwiftPackageProductDependency section */
+		6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+		6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */;
+			productName = MLXStructured;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		04C2CE292E5C8E9E007A5EF7 /* Debug */ = {

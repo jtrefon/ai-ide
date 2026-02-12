@@ -1,15 +1,26 @@
 # Agentic Architecture Spec (osx-ide)
 
 ## 1) Mission
+
 Build the best agentic, fully independent IDE experience with:
+
 - deterministic behavior
 - user-controlled mode and reasoning
 - strong quality gates
 - minimal technical debt
 - excellent observability
 
+This spec also defines:
+
+- a multi-phase execution framework (reasoning → planning → execution)
+- a LangGraph-inspired native graph runtime abstraction
+- a RAG subsystem used for context extension and code recall
+- a dual-model strategy (local small model + optional remote large model) with an "airplane mode"
+
 ## 2) Core invariants (must never be violated)
+
 ### 2.1 User-owned Mode (Chat / Agent)
+
 - **Invariant**: `AIMode` is controlled **only** by the user/UI.
 - **Prohibited**:
   - any internal stage flipping `.agent` ↔ `.chat`
@@ -19,6 +30,7 @@ Build the best agentic, fully independent IDE experience with:
   - internal stages may change **tool permissions** (subset of tools) while keeping the same `AIMode`.
 
 ### 2.2 User-owned Reasoning (on/off)
+
 - **Invariant**: `reasoningEnabled` is controlled **only** by the user.
 - **Prohibited**:
   - internal toggling of reasoning
@@ -27,6 +39,7 @@ Build the best agentic, fully independent IDE experience with:
   - if `reasoningEnabled == true` and user mode is Agent, reasoning is **enforced** on every stage (see §4)
 
 ### 2.3 QA is advisory only
+
 - **Invariant**: QA must **not** rewrite the user-visible final answer.
 - QA emits a **QA report artifact** (structured) that can be:
   - displayed to the user (optional)
@@ -34,16 +47,19 @@ Build the best agentic, fully independent IDE experience with:
 - QA never has write/edit/delete capability.
 
 ### 2.4 Tool permissions are stage-owned, not mode-owned
+
 - `AIMode` is user intent.
 - Tool access is an internal policy decision per stage, always consistent and logged.
 
 ### 2.5 Delivery/finished state is authoritative and cannot be erased
+
 - Completion must be tracked in run state and logs.
 - It must not be removable by QA or “final response retries”.
 
 ## 3) Architecture overview
 
 ### 3.1 Components
+
 - **ConversationManager**
   - owns UI state (`currentMode`, `currentInput`, `isSending`)
   - starts a run with a `runId`
@@ -88,20 +104,42 @@ Build the best agentic, fully independent IDE experience with:
   - supports semantic retrieval
   - stores structured local memories (project context)
 
+- **Graph runtime** (new)
+  - executes a directed graph of nodes (LangGraph-inspired)
+  - each node is a deterministic step type (reasoning, planning, tool execution, QA)
+  - nodes exchange a shared run state (see §12)
+
+- **RAG subsystem** (new)
+  - maintains indexes (code, docs, memories)
+  - provides retrieval results to the agent runtime deterministically (inputs/outputs are logged)
+
+- **Model adapter layer** (new)
+  - isolates model-specific templates and tool calling behavior behind a single protocol
+  - supports:
+    - local model only (airplane mode)
+    - remote model only
+    - hybrid mode (local model used for RAG and small tasks)
+
 ### 3.2 Data flow (high level)
+
 1. User sends message in UI
 2. Run starts with `runId`, `AIMode`, `reasoningEnabled`
-3. Coordinator performs:
-   - Macro reasoning warmup (Stage: `warmup`)
-   - Tool loop execution (Stage: `act` / `tool_followup`)
-   - Delivery gate (Stage: `delivery_check`)
-   - QA advisory review (Stage: `qa_review`) (non-mutating)
+3. Coordinator/runtime performs:
+   - Deep reasoning (Stage: `deep_reasoning`)
+   - Strategic plan build (Stage: `strategic_planning`)
+   - Tactical planning (Stage: `tactical_planning`)
+   - Execution loop (Stage: `execution`) with tool loops
+   - Delivery gate (Stage: `delivery_gate`)
+   - QA advisory review (Stage: `qa_tool_output_review`, `qa_quality_review`) (non-mutating)
 4. Final message appended
 5. Run snapshot persisted
+
+Each phase must emit a short user-visible progress update (even 1–2 sentences) for traceability.
 
 ## 4) Reasoning enforcement model (macro + micro)
 
 ### 4.1 Macro warmup reasoning (once per user message)
+
 Goal: high-quality “pre-run warmup” that plans the work.
 
 - Stage: `warmup`
@@ -120,6 +158,7 @@ Goal: high-quality “pre-run warmup” that plans the work.
 - Delivery: must start with `NEEDS_WORK` until complete
 
 ### 4.2 Micro reasoning between steps (every subsequent agentic request)
+
 Goal: “small reflection” to help the model converge without rehashing full plan.
 
 - Stage: `micro_step`
@@ -134,22 +173,138 @@ Goal: “small reflection” to help the model converge without rehashing full p
 - Keep concise: 3–8 bullets total.
 
 ### 4.3 Reasoning retention policy (avoid context pollution)
+
 - The UI may display reasoning for transparency.
 - The next model request should not be polluted by old reasoning.
 
-**Rule**:
+#### Rule
+
 - Persist only a compact **ReasoningOutcome** in the conversation chain.
 - Discard the full `<ide_reasoning>` text from subsequent model history.
 
-**ReasoningOutcome content**:
+#### ReasoningOutcome content
+
 - `plan_delta`: what changed in plan
 - `next_action`: what tool call(s) will be made next
 - `known_risks`: one-line
 - `delivery_state`: `DONE` / `NEEDS_WORK`
 
 ### 4.4 QA reasoning
+
 - If `reasoningEnabled == true`, QA must also include reasoning,
   but using the **micro format** (short) and must not rewrite the answer.
+
+## 4.5 Multi-phase execution framework (authoritative)
+
+The agent execution framework is a fixed sequence of phases. The runtime may repeat phases (e.g., execution loops) but must not skip required phases silently.
+
+### Phase A: Deep reasoning
+
+- **Goal**: interpret the user request, identify risks, select approach.
+- **Output**:
+  - reasoning artifact (internal)
+  - user-visible progress update (short)
+- **Inputs**:
+  - user input
+  - retrieved context (RAG)
+
+### Phase B: Strategic planning
+
+- **Goal**: build a small set of outcome-oriented milestones.
+- **Output**:
+  - strategic plan (few steps)
+  - user-visible progress update
+
+### Phase C: Tactical planning
+
+- **Goal**: convert a selected strategic step into context-window-safe substeps that are executable even with limited history.
+- **Output**:
+  - tactical plan for the next milestone
+  - user-visible progress update
+
+### Phase D: Execution loop
+
+- **Goal**: execute one tactical substep at a time.
+- **Loop**:
+  - research/inspect (via RAG + tools)
+  - implement
+  - review
+  - update plan state
+  - user-visible progress update
+
+## 12) Graph runtime (LangGraph-inspired) mapping
+
+### 12.1 Node model
+
+- Nodes are small single-responsibility steps with:
+  - `id`
+  - `kind` (reasoning, strategic_planning, tactical_planning, tool_execution, delivery_gate, qa)
+  - `input` (run state slice)
+  - `output` (state patch)
+
+### 12.2 State model
+
+Run state must be a single struct that is serializable and loggable. It must include:
+
+- user input
+- current phase
+- strategic plan
+- tactical plan
+- last tool calls/results
+- delivery state
+- run snapshots pointers
+
+### 12.3 Edges and control
+
+- The runtime selects next node based on:
+  - current phase
+  - completion flags
+  - failure signals
+
+The runtime must enforce max-iteration limits and write snapshots for every transition.
+
+## 13) RAG + dual-model strategy
+
+### 13.1 Responsibilities
+
+#### Local small model (always available)
+
+- embeddings for indexing
+- retrieval summarization / context compression
+- code completion and small administrative tasks
+- optional airplane-mode main agent model (no remote calls)
+
+#### Remote large model (optional)
+
+- deep reasoning and complex planning
+- tool-heavy execution on large tasks
+
+### 13.2 Airplane mode
+- When enabled:
+  - remote model is disabled
+  - agent runtime continues using the local model adapter
+  - RAG remains available
+  - quality gates should adapt (e.g., simpler QA or local-only checks)
+
+### 13.3 Retrieval usage points
+- Deep reasoning should request retrieval first (project entry points, relevant files).
+- Tactical planning should request retrieval scoped to the current milestone.
+- Execution steps should request retrieval for:
+  - symbol lookup
+  - cross-file impact analysis
+  - tool selection hints
+
+## 14) Testing strategy (headless)
+
+### 14.1 Contract harness
+- A headless XCTest harness must validate orchestration contracts without launching UI.
+- Baseline scenarios:
+  - orchestration lifecycle (write_file + replace_in_file)
+  - multi-file scaffolding (write_files)
+
+The harness should be runnable via `./run.sh harness` and must only depend on orchestration + tools.
+
+CI must run `./run.sh test` only. The harness runner is intentionally separate because it may require a configured model runtime that is not available in CI.
 
 ## 5) Prompts (externalized to Markdown)
 
