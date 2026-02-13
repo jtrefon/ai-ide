@@ -124,4 +124,76 @@ final class AIToolExecutorSchedulerTests: XCTestCase {
         XCTAssertEqual(progressMessages.last?.toolStatus, .failed)
         XCTAssertEqual(progressMessages.last?.toolCallId, call.id)
     }
+
+    func testExecuteBatchEmitsInvocationPreviewForFileEditTool() async throws {
+        let tool = AIToolExecutorTrackingTool(
+            name: "replace_in_file",
+            tracker: AIToolExecutorConcurrencyTracker(),
+            delayNs: 1_000
+        )
+
+        let executor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: AIToolExecutorNoopErrorManager(),
+            projectRoot: URL(fileURLWithPath: "/tmp")
+        )
+
+        let call = AIToolCall(
+            id: UUID().uuidString,
+            name: "replace_in_file",
+            arguments: [
+                "path": "/tmp/preview.swift",
+                "old_text": "let value = 1",
+                "new_text": "let value = 2"
+            ]
+        )
+
+        var progressMessages: [ChatMessage] = []
+        _ = await executor.executeBatch([call], availableTools: [tool], conversationId: nil) { message in
+            progressMessages.append(message)
+        }
+
+        let executing = try XCTUnwrap(progressMessages.first(where: { $0.toolStatus == .executing }))
+        let executingEnvelope = try XCTUnwrap(ToolExecutionEnvelope.decode(from: executing.content))
+        XCTAssertNotNil(executingEnvelope.preview)
+        XCTAssertTrue(executingEnvelope.preview?.contains("Proposed edit") == true)
+        XCTAssertTrue(executingEnvelope.preview?.contains("--- before") == true)
+        XCTAssertTrue(executingEnvelope.preview?.contains("+++ after") == true)
+    }
+
+    func testExecuteBatchEmitsInvocationPreviewForReadFileRange() async throws {
+        let tool = AIToolExecutorTrackingTool(
+            name: "read_file",
+            tracker: AIToolExecutorConcurrencyTracker(),
+            delayNs: 1_000
+        )
+
+        let executor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: AIToolExecutorNoopErrorManager(),
+            projectRoot: URL(fileURLWithPath: "/tmp")
+        )
+
+        let call = AIToolCall(
+            id: UUID().uuidString,
+            name: "read_file",
+            arguments: [
+                "path": "/tmp/preview.swift",
+                "start_line": 10,
+                "end_line": 30
+            ]
+        )
+
+        var progressMessages: [ChatMessage] = []
+        _ = await executor.executeBatch([call], availableTools: [tool], conversationId: nil) { message in
+            progressMessages.append(message)
+        }
+
+        let executing = try XCTUnwrap(progressMessages.first(where: { $0.toolStatus == .executing }))
+        let executingEnvelope = try XCTUnwrap(ToolExecutionEnvelope.decode(from: executing.content))
+        XCTAssertNotNil(executingEnvelope.preview)
+        XCTAssertTrue(executingEnvelope.preview?.contains("Read file") == true)
+        XCTAssertTrue(executingEnvelope.preview?.contains("/tmp/preview.swift") == true)
+        XCTAssertTrue(executingEnvelope.preview?.contains("Lines: 10-30") == true)
+    }
 }

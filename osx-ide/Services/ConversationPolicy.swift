@@ -23,6 +23,8 @@ final class ConversationPolicy: ConversationPolicyProtocol {
         }
 
         switch stage {
+        case .strategic_planning, .tactical_planning:
+            return readOnlyTools(from: availableTools)
         case .qa_tool_output_review, .qa_quality_review:
             return readOnlyTools(from: availableTools)
         default:

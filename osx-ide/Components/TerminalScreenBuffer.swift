@@ -104,13 +104,8 @@ class TerminalScreenBuffer {
     }
     
     /// Newline - move cursor down, scroll if needed
-    /// NOTE: Per VT100 semantics, LF (\n) only moves cursor down, does NOT reset column.
-    /// Column reset is handled by CR (\r) separately.
     func newline() {
-        // DEBUG: Log newline processing
-        print("[DEBUG TerminalScreenBuffer] newline() called - cursorRow: \(cursorRow), cursorColumn: \(cursorColumn)")
         advanceRow()
-        print("[DEBUG TerminalScreenBuffer] newline() after advanceRow - cursorRow: \(cursorRow), cursorColumn: \(cursorColumn)")
     }
     
     /// Backspace - move cursor back one position

@@ -40,6 +40,17 @@ struct MessageContentCoordinator {
                     fontSize: fontSize,
                     fontFamily: fontFamily
                 )
+            } else if isReasoningOutcomeMessage {
+                ReasoningOutcomeMessageView(
+                    message: message,
+                    fontSize: fontSize
+                )
+            } else if isPlanMessage {
+                PlanMessageView(
+                    content: message.content,
+                    fontSize: fontSize,
+                    fontFamily: fontFamily
+                )
             } else if hasReasoning {
                 ReasoningMessageView(
                     message: message,
@@ -99,6 +110,18 @@ struct MessageContentCoordinator {
     private var hasReasoning: Bool {
         guard let reasoning = message.reasoning else { return false }
         return !reasoning.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty
+    }
+
+    private var isPlanMessage: Bool {
+        guard message.role == .assistant else { return false }
+        let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return trimmed.hasPrefix("# strategic plan") ||
+            trimmed.hasPrefix("## tactical plan") ||
+            trimmed.hasPrefix("# tactical plan")
+    }
+
+    private var isReasoningOutcomeMessage: Bool {
+        message.role == .system && ReasoningOutcomeMessageView.parse(from: message.content) != nil
     }
 
     private var copyMessageButton: some View {

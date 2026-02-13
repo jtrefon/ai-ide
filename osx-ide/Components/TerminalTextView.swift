@@ -43,11 +43,10 @@ final class NativeTerminalTextView: NSTextView {
 
     override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
         // Draw a block cursor instead of the default vertical line
+        // NOTE: We do NOT call super.drawInsertionPoint to avoid drawing the slim cursor
         guard cursorVisible else { return }
 
-        // DEBUG: Log cursor drawing
         let cursorPosition = selectedRange().location
-        print("[DEBUG TerminalTextView] drawInsertionPoint - selectedRange.location: \(cursorPosition), rect: \(rect)")
 
         // Calculate block cursor dimensions based on font
         let font = self.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -78,6 +77,11 @@ final class NativeTerminalTextView: NSTextView {
                 char.draw(in: blockRect, withAttributes: attrs)
             }
         }
+    }
+    
+    // Disable the default cursor drawing
+    override var shouldDrawInsertionPoint: Bool {
+        return cursorVisible
     }
 
     override func setNeedsDisplay(_ invalidRect: NSRect) {

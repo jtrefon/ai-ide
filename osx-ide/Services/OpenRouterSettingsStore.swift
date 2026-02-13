@@ -1,6 +1,10 @@
 import Foundation
 
-final class OpenRouterSettingsStore {
+protocol OpenRouterSettingsLoading {
+    func load(includeApiKey: Bool) -> OpenRouterSettings
+}
+
+final class OpenRouterSettingsStore: OpenRouterSettingsLoading {
     private let settingsStore = SettingsStore(userDefaults: .standard)
     private let apiKeyKey = "OpenRouterAPIKey"
     private let apiKeyMigrationCompleteKey = "OpenRouterAPIKeyKeychainMigrationComplete"

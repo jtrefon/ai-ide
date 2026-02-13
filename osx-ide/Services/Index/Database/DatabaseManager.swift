@@ -103,6 +103,19 @@ public class DatabaseManager {
         try memoryManager.deleteMemory(id: id)
     }
 
+    public func saveMemoryEmbedding(memoryId: String, modelId: String, vector: [Float]) throws {
+        try memoryManager.saveMemoryEmbedding(memoryId: memoryId, modelId: modelId, vector: vector)
+    }
+
+    public func searchSimilarMemories(
+        modelId: String,
+        queryVector: [Float],
+        limit: Int,
+        tier: MemoryTier?
+    ) throws -> [MemorySimilarityResult] {
+        try memoryManager.searchSimilarMemories(modelId: modelId, queryVector: queryVector, limit: limit, tier: tier)
+    }
+
     public func saveSymbols(_ symbols: [Symbol]) throws {
         try symbolManager.saveSymbols(symbols)
     }
@@ -243,6 +256,17 @@ public class DatabaseManager {
             sqlite3_bind_int(statement, index, int32)
         } else if let int64 = value as? Int64 {
             sqlite3_bind_int64(statement, index, int64)
+        } else if let data = value as? Data {
+            data.withUnsafeBytes { bytes in
+                let boundPointer = bytes.bindMemory(to: UInt8.self).baseAddress
+                sqlite3_bind_blob(
+                    statement,
+                    index,
+                    boundPointer,
+                    Int32(data.count),
+                    unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+                )
+            }
         } else if value is NSNull {
             sqlite3_bind_null(statement, index)
         } else {

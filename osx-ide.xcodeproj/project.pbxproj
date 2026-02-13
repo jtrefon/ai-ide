@@ -21,6 +21,13 @@
 			remoteGlobalIDString = 04C2CE082E5C8E9D007A5EF7;
 			remoteInfo = "osx-ide";
 		};
+		7A11AA012F90000100C0DE01 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 04C2CE012E5C8E9D007A5EF7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 04C2CE082E5C8E9D007A5EF7;
+			remoteInfo = "osx-ide";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXBuildFile section */
@@ -32,6 +39,7 @@
 		04C2CE092E5C8E9D007A5EF7 /* osx-ide.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "osx-ide.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		04C2CE172E5C8E9E007A5EF7 /* osx-ideTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "osx-ideTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		04C2CE212E5C8E9E007A5EF7 /* osx-ideUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "osx-ideUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A11AA032F90000100C0DE01 /* osx-ideHarnessTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "osx-ideHarnessTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6D8D2C9A2F1A000100B0A001 /* DatabaseSchemaManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DatabaseSchemaManager.swift; path = "osx-ide/Services/Index/Database/DatabaseSchemaManager.swift"; sourceTree = "<group>"; };
 		6D8D2C9B2F1A000100B0A001 /* DatabaseSymbolManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DatabaseSymbolManager.swift; path = "osx-ide/Services/Index/Database/DatabaseSymbolManager.swift"; sourceTree = "<group>"; };
 		6D8D2C9C2F1A000100B0A001 /* DatabaseMemoryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DatabaseMemoryManager.swift; path = "osx-ide/Services/Index/Database/DatabaseMemoryManager.swift"; sourceTree = "<group>"; };
@@ -51,6 +59,11 @@
 		04C2CE242E5C8E9E007A5EF7 /* osx-ideUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "osx-ideUITests";
+			sourceTree = "<group>";
+		};
+		7A11AA042F90000100C0DE01 /* osx-ideHarnessTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "osx-ideHarnessTests";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -79,6 +92,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A11AA052F90000100C0DE01 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -95,6 +115,7 @@
 				04C2CE0B2E5C8E9D007A5EF7 /* osx-ide */,
 				04C2CE1A2E5C8E9E007A5EF7 /* osx-ideTests */,
 				04C2CE242E5C8E9E007A5EF7 /* osx-ideUITests */,
+				7A11AA042F90000100C0DE01 /* osx-ideHarnessTests */,
 				047420C22EF6D5140011D000 /* Frameworks */,
 				04C2CE0A2E5C8E9D007A5EF7 /* Products */,
 			);
@@ -106,6 +127,7 @@
 				04C2CE092E5C8E9D007A5EF7 /* osx-ide.app */,
 				04C2CE172E5C8E9E007A5EF7 /* osx-ideTests.xctest */,
 				04C2CE212E5C8E9E007A5EF7 /* osx-ideUITests.xctest */,
+				7A11AA032F90000100C0DE01 /* osx-ideHarnessTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -183,6 +205,29 @@
 			productReference = 04C2CE212E5C8E9E007A5EF7 /* osx-ideUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		7A11AA082F90000100C0DE01 /* osx-ideHarnessTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A11AA0B2F90000100C0DE01 /* Build configuration list for PBXNativeTarget "osx-ideHarnessTests" */;
+			buildPhases = (
+				7A11AA072F90000100C0DE01 /* Sources */,
+				7A11AA052F90000100C0DE01 /* Frameworks */,
+				7A11AA062F90000100C0DE01 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7A11AA022F90000100C0DE01 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7A11AA042F90000100C0DE01 /* osx-ideHarnessTests */,
+			);
+			name = "osx-ideHarnessTests";
+			packageProductDependencies = (
+			);
+			productName = "osx-ideHarnessTests";
+			productReference = 7A11AA032F90000100C0DE01 /* osx-ideHarnessTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -201,6 +246,10 @@
 						TestTargetID = 04C2CE082E5C8E9D007A5EF7;
 					};
 					04C2CE202E5C8E9E007A5EF7 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 04C2CE082E5C8E9D007A5EF7;
+					};
+					7A11AA082F90000100C0DE01 = {
 						CreatedOnToolsVersion = 16.4;
 						TestTargetID = 04C2CE082E5C8E9D007A5EF7;
 					};
@@ -227,6 +276,7 @@
 				04C2CE082E5C8E9D007A5EF7 /* osx-ide */,
 				04C2CE162E5C8E9E007A5EF7 /* osx-ideTests */,
 				04C2CE202E5C8E9E007A5EF7 /* osx-ideUITests */,
+				7A11AA082F90000100C0DE01 /* osx-ideHarnessTests */,
 			);
 		};
 /* End PBXProject section */
@@ -247,6 +297,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		04C2CE1F2E5C8E9E007A5EF7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A11AA062F90000100C0DE01 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -277,6 +334,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A11AA072F90000100C0DE01 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -289,6 +353,11 @@
 			isa = PBXTargetDependency;
 			target = 04C2CE082E5C8E9D007A5EF7 /* osx-ide */;
 			targetProxy = 04C2CE222E5C8E9E007A5EF7 /* PBXContainerItemProxy */;
+		};
+		7A11AA022F90000100C0DE01 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 04C2CE082E5C8E9D007A5EF7 /* osx-ide */;
+			targetProxy = 7A11AA012F90000100C0DE01 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -578,6 +647,42 @@
 			};
 			name = Release;
 		};
+		7A11AA092F90000100C0DE01 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideHarnessTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/osx-ide.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/osx-ide";
+			};
+			name = Debug;
+		};
+		7A11AA0A2F90000100C0DE01 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideHarnessTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/osx-ide.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/osx-ide";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -613,6 +718,15 @@
 			buildConfigurations = (
 				04C2CE322E5C8E9F007A5EF7 /* Debug */,
 				04C2CE332E5C8E9F007A5EF7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A11AA0B2F90000100C0DE01 /* Build configuration list for PBXNativeTarget "osx-ideHarnessTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A11AA092F90000100C0DE01 /* Debug */,
+				7A11AA0A2F90000100C0DE01 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

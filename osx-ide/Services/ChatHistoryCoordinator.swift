@@ -39,6 +39,21 @@ final class ChatHistoryCoordinator {
     func upsertMessage(_ message: ChatMessage) {
         historyManager.upsertMessage(message)
     }
+    
+    /// Finalizes a draft message by converting it to a regular message
+    func finalizeDraftMessage(id: UUID, content: String, reasoning: String? = nil) {
+        historyManager.finalizeDraftMessage(id: id, content: content, reasoning: reasoning)
+    }
+    
+    /// Removes a draft message by ID
+    func removeDraftMessage(id: UUID) {
+        historyManager.removeDraftMessage(id: id)
+    }
+    
+    /// Gets a draft message by ID
+    func getDraftMessage(id: UUID) -> ChatMessage? {
+        historyManager.getDraftMessage(id: id)
+    }
 
     func removeOldestMessages(count: Int) {
         historyManager.removeOldestMessages(count: count)

@@ -13,15 +13,17 @@ enum LocalModelCatalog {
     }
 
     private static func qwen3_4B_Instruct_2507() -> LocalModelDefinition {
-        let base = "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/cdbee75/"
+        // MLX-optimized 4-bit quantized version from mlx-community
+        // Uses ~2GB memory instead of ~8GB for full precision
+        let base = "https://huggingface.co/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/50d4277/"
 
         func artifact(_ fileName: String) -> LocalModelArtifact {
             LocalModelArtifact(fileName: fileName, url: URL(string: base + fileName)!)
         }
 
         return LocalModelDefinition(
-            id: "qwen/Qwen3-4B-Instruct-2507@cdbee75",
-            displayName: "Qwen3-4B-Instruct-2507 (cdbee75)",
+            id: "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277",
+            displayName: "Qwen3-4B-Instruct-2507-4bit (50d4277)",
             artifacts: [
                 artifact("config.json"),
                 artifact("generation_config.json"),
@@ -29,11 +31,13 @@ enum LocalModelCatalog {
                 artifact("tokenizer_config.json"),
                 artifact("merges.txt"),
                 artifact("vocab.json"),
+                artifact("model.safetensors"),
                 artifact("model.safetensors.index.json"),
-                artifact("model-00001-of-00003.safetensors"),
-                artifact("model-00002-of-00003.safetensors"),
-                artifact("model-00003-of-00003.safetensors")
-            ]
+                artifact("chat_template.jinja"),
+                artifact("special_tokens_map.json"),
+                artifact("added_tokens.json")
+            ],
+            defaultContextLength: 32768
         )
     }
 
@@ -58,7 +62,8 @@ enum LocalModelCatalog {
                 artifact("special_tokens_map.json"),
                 artifact("merges.txt"),
                 artifact("vocab.json")
-            ]
+            ],
+            defaultContextLength: 4096
         )
     }
 }

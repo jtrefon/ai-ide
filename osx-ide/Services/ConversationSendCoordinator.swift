@@ -62,223 +62,27 @@ final class ConversationSendCoordinator {
     }
 
     private func executeConversationFlow(_ request: SendRequest) async throws -> AIServiceResponse {
-        let initialResponse = try await initialResponseHandler.sendInitialResponse(
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            availableTools: request.availableTools,
-            runId: request.runId
+        await OrchestrationRunStore.shared.setProjectRoot(request.projectRoot)
+
+        let graph = ConversationFlowGraphFactory.makeGraph(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            initialResponseHandler: initialResponseHandler,
+            toolLoopHandler: toolLoopHandler,
+            reasoningCorrectionsHandler: reasoningCorrectionsHandler,
+            finalResponseHandler: finalResponseHandler,
+            qaReviewHandler: qaReviewHandler
         )
 
-        await appendRunSnapshot(payload: RunSnapshotPayload(
-            runId: request.runId,
-            conversationId: request.conversationId,
-            phase: "initial_response",
-            iteration: nil,
-            userInput: request.userInput,
-            assistantDraft: initialResponse.content,
-            failureReason: nil,
-            toolCalls: initialResponse.toolCalls ?? [],
-            toolResults: []
+        let runner = OrchestrationGraphRunner(graph: graph)
+        let finalState = try await runner.run(initialState: OrchestrationState(
+            request: request,
+            transition: .next(graph.entryNodeId)
         ))
 
-        let toolLoopResult = try await toolLoopHandler.handleToolLoopIfNeeded(
-            response: initialResponse,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            conversationId: request.conversationId,
-            availableTools: request.availableTools,
-            cancelledToolCallIds: request.cancelledToolCallIds,
-            runId: request.runId,
-            userInput: request.userInput
-        )
-
-        var response = toolLoopResult.response
-        var lastToolResults = toolLoopResult.lastToolResults
-
-        response = try await reasoningCorrectionsHandler.applyReasoningCorrectionsIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            availableTools: request.availableTools,
-            runId: request.runId
-        )
-
-        if request.mode == .agent, response.toolCalls?.isEmpty == false {
-            let followupToolLoopResult = try await toolLoopHandler.handleToolLoopIfNeeded(
-                response: response,
-                explicitContext: request.explicitContext,
-                mode: request.mode,
-                projectRoot: request.projectRoot,
-                conversationId: request.conversationId,
-                availableTools: request.availableTools,
-                cancelledToolCallIds: request.cancelledToolCallIds,
-                runId: request.runId,
-                userInput: request.userInput
-            )
-            response = followupToolLoopResult.response
-            lastToolResults = followupToolLoopResult.lastToolResults
+        guard let response = finalState.response else {
+            throw AppError.unknown("ConversationSendCoordinator: orchestration ended without response")
         }
-
-        response = try await reasoningCorrectionsHandler.enforceDeliveryCompletionIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            availableTools: request.availableTools,
-            runId: request.runId,
-            userInput: request.userInput
-        )
-
-        if request.mode == .agent, response.toolCalls?.isEmpty == false {
-            let followupToolLoopResult = try await toolLoopHandler.handleToolLoopIfNeeded(
-                response: response,
-                explicitContext: request.explicitContext,
-                mode: request.mode,
-                projectRoot: request.projectRoot,
-                conversationId: request.conversationId,
-                availableTools: request.availableTools,
-                cancelledToolCallIds: request.cancelledToolCallIds,
-                runId: request.runId,
-                userInput: request.userInput
-            )
-            response = followupToolLoopResult.response
-            lastToolResults = followupToolLoopResult.lastToolResults
-        }
-
-        if request.mode == .agent {
-            let trimmed = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let hasToolCalls = (response.toolCalls?.isEmpty == false)
-            if trimmed.isEmpty, !hasToolCalls {
-                let promptText = PromptRepository.shared.prompt(
-                    key: "ConversationFlow/Corrections/empty_response_followup",
-                    defaultValue: "In Agent mode you returned an empty response. You must continue autonomously. " +
-                        "If tools are needed, return tool calls now. If you are done, provide the final answer. " +
-                        "Do not ask the user for more inputs as the next step.",
-                    projectRoot: request.projectRoot
-                )
-                let followupSystem = ChatMessage(
-                    role: .system,
-                    content: promptText
-                )
-                let lastUserMessage = historyCoordinator.messages.last(where: { $0.role == .user })
-
-                var followupMessages = historyCoordinator.messages
-                followupMessages.append(followupSystem)
-                if let lastUserMessage {
-                    followupMessages.append(lastUserMessage)
-                }
-
-                response = try await aiInteractionCoordinator
-                    .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                        messages: followupMessages,
-                        explicitContext: request.explicitContext,
-                        tools: request.availableTools,
-                        mode: request.mode,
-                        projectRoot: request.projectRoot,
-                        runId: request.runId,
-                        stage: AIRequestStage.delivery_gate
-                    ))
-                    .get()
-
-                if response.toolCalls?.isEmpty == false {
-                    let followupToolLoopResult = try await toolLoopHandler.handleToolLoopIfNeeded(
-                        response: response,
-                        explicitContext: request.explicitContext,
-                        mode: request.mode,
-                        projectRoot: request.projectRoot,
-                        conversationId: request.conversationId,
-                        availableTools: request.availableTools,
-                        cancelledToolCallIds: request.cancelledToolCallIds,
-                        runId: request.runId,
-                        userInput: request.userInput
-                    )
-                    response = followupToolLoopResult.response
-                    lastToolResults = followupToolLoopResult.lastToolResults
-                }
-
-                let retriedContent = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                let retriedHasToolCalls = (response.toolCalls?.isEmpty == false)
-                if retriedContent.isEmpty, !retriedHasToolCalls {
-                    response = AIServiceResponse(
-                        content: "I wasn't able to generate a final response. Please retry or clarify the next step.",
-                        toolCalls: nil
-                    )
-                }
-            }
-        }
-
-        // Final delivery enforcement must happen before QA. QA is advisory and must be the last stage.
-        response = try await reasoningCorrectionsHandler.enforceDeliveryCompletionIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            availableTools: request.availableTools,
-            runId: request.runId,
-            userInput: request.userInput
-        )
-
-        if request.mode == .agent, response.toolCalls?.isEmpty == false {
-            let followupToolLoopResult = try await toolLoopHandler.handleToolLoopIfNeeded(
-                response: response,
-                explicitContext: request.explicitContext,
-                mode: request.mode,
-                projectRoot: request.projectRoot,
-                conversationId: request.conversationId,
-                availableTools: request.availableTools,
-                cancelledToolCallIds: request.cancelledToolCallIds,
-                runId: request.runId,
-                userInput: request.userInput
-            )
-            response = followupToolLoopResult.response
-            lastToolResults = followupToolLoopResult.lastToolResults
-        }
-
-        response = try await finalResponseHandler.requestFinalResponseIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            toolResults: lastToolResults,
-            runId: request.runId
-        )
-
-        // The final_response stage can still produce malformed reasoning (e.g. quoting code inside <ide_reasoning>).
-        // Re-apply reasoning corrections here so delivery-gate fixes can run before QA and before appending.
-        response = try await reasoningCorrectionsHandler.applyReasoningCorrectionsIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            availableTools: request.availableTools,
-            runId: request.runId
-        )
-
-        response = try await qaReviewHandler.performToolOutputReviewIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            qaReviewEnabled: request.qaReviewEnabled,
-            availableTools: request.availableTools,
-            toolResults: lastToolResults,
-            runId: request.runId,
-            userInput: request.userInput
-        )
-
-        response = try await qaReviewHandler.performQualityReviewIfNeeded(
-            response: response,
-            explicitContext: request.explicitContext,
-            mode: request.mode,
-            projectRoot: request.projectRoot,
-            qaReviewEnabled: request.qaReviewEnabled,
-            availableTools: request.availableTools,
-            runId: request.runId,
-            userInput: request.userInput
-        )
 
         return response
     }

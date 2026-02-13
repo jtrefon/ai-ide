@@ -17,9 +17,29 @@ struct MessageListView: View {
     let isSending: Bool
     var fontSize: Double
     var fontFamily: String
-    @State private var hiddenReasoningMessageIds: Set<UUID> = []
+    @State private var expandedReasoningMessageIds: Set<UUID> = []
 
     private let filterCoordinator = MessageFilterCoordinator()
+
+    private var visibleMessages: [ChatMessage] {
+        messages.filter { filterCoordinator.shouldDisplayMessage($0, in: messages) }
+    }
+
+    private var visibleMessagesSignature: String {
+        visibleMessages
+            .suffix(20)
+            .map { message in
+                [
+                    message.id.uuidString,
+                    message.role.rawValue,
+                    message.toolStatus?.rawValue ?? "",
+                    message.toolCallId ?? "",
+                    String(message.content.count),
+                    String(message.reasoning?.count ?? 0)
+                ].joined(separator: "|")
+            }
+            .joined(separator: "~")
+    }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
         Task { @MainActor in
@@ -29,12 +49,12 @@ struct MessageListView: View {
 
     private func reasoningHiddenBinding(for messageId: UUID) -> Binding<Bool> {
         Binding(
-            get: { hiddenReasoningMessageIds.contains(messageId) },
+            get: { !expandedReasoningMessageIds.contains(messageId) },
             set: { isHidden in
                 if isHidden {
-                    hiddenReasoningMessageIds.insert(messageId)
+                    expandedReasoningMessageIds.remove(messageId)
                 } else {
-                    hiddenReasoningMessageIds.remove(messageId)
+                    expandedReasoningMessageIds.insert(messageId)
                 }
             }
         )
@@ -44,16 +64,14 @@ struct MessageListView: View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(messages) { message in
-                        if filterCoordinator.shouldDisplayMessage(message, in: messages) {
-                            MessageView(
-                                message: message,
-                                fontSize: fontSize,
-                                fontFamily: fontFamily,
-                                isReasoningHidden: reasoningHiddenBinding(for: message.id)
-                            )
-                            .id(message.id)
-                        }
+                    ForEach(visibleMessages) { message in
+                        MessageView(
+                            message: message,
+                            fontSize: fontSize,
+                            fontFamily: fontFamily,
+                            isReasoningHidden: reasoningHiddenBinding(for: message.id)
+                        )
+                        .id(message.id)
                     }
 
                     if isSending {
@@ -70,7 +88,10 @@ struct MessageListView: View {
             .onAppear {
                 scrollToBottom(proxy: proxy)
             }
-            .onChange(of: messages.last?.id) { _ in
+            .onChange(of: visibleMessagesSignature) { _ in
+                scrollToBottom(proxy: proxy)
+            }
+            .onChange(of: isSending) { _ in
                 scrollToBottom(proxy: proxy)
             }
         }
@@ -144,9 +165,22 @@ struct MessageView: View {
     // MARK: - Private Components
 
     private var roleLabel: some View {
-        Text(message.role == .user ? localized("chat.role.you") : localized("chat.role.assistant"))
+        Text(roleLabelText)
             .font(.caption)
             .foregroundColor(.secondary)
+    }
+
+    private var roleLabelText: String {
+        switch message.role {
+        case .user:
+            return localized("chat.role.you")
+        case .assistant:
+            return localized("chat.role.assistant")
+        case .tool:
+            return "Tool"
+        case .system:
+            return "System"
+        }
     }
 }
 

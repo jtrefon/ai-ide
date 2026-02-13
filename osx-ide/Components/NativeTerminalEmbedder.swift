@@ -24,11 +24,6 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     var fontSize: CGFloat = 12
     var fontFamily: String = "SF Mono"
 
-    var currentLineStartLocation: Int = 0
-    var cursorColumn: Int = 0
-    var currentTextAttributes: [NSAttributedString.Key: Any] = [:]
-    var pendingEraseToEndOfLine: Bool = false
-
     let eventBus: EventBusProtocol
     
     // Virtual screen buffer for proper terminal emulation
@@ -204,11 +199,6 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     }
 
     private func resetTerminalState(for terminalView: TerminalTextView) {
-        currentLineStartLocation = 0
-        cursorColumn = 0
-        currentTextAttributes = terminalView.typingAttributes
-        pendingEraseToEndOfLine = false
-        
         // Initialize screen buffer and renderer
         screenBuffer = TerminalScreenBuffer(rows: 24, columns: 80)
         screenRenderer = TerminalScreenRenderer(textView: terminalView) { [weak self] size, family in

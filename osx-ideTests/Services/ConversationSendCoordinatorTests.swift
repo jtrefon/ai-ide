@@ -58,24 +58,172 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         }
     }
 
-    private struct FakeLocalModelFileStore: LocalModelProcessAIService.ModelFileStoring {
-        let installedModelIds: Set<String>
-        let modelDirectoryURL: URL
+    private final class SpyAIService: AIService, @unchecked Sendable {
+        private let lock = AsyncLock()
+        private(set) var historyRequests: [AIServiceHistoryRequest] = []
+        private(set) var messageRequests: [AIServiceMessageWithProjectRootRequest] = []
 
-        func isModelInstalled(_ model: LocalModelDefinition) -> Bool {
-            installedModelIds.contains(model.id)
+        let response: AIServiceResponse
+
+        init(response: AIServiceResponse) {
+            self.response = response
         }
 
-        func modelDirectory(modelId _: String) throws -> URL {
-            modelDirectoryURL
+        func sendMessage(
+            _ request: AIServiceMessageWithProjectRootRequest
+        ) async throws -> AIServiceResponse {
+            await lock.lock()
+            messageRequests.append(request)
+            await lock.unlock()
+            return response
+        }
+
+        func sendMessage(
+            _ request: AIServiceHistoryRequest
+        ) async throws -> AIServiceResponse {
+            await lock.lock()
+            historyRequests.append(request)
+            await lock.unlock()
+            return response
+        }
+
+        func explainCode(_ code: String) async throws -> String {
+            _ = code
+            return "Explanation"
+        }
+
+        func refactorCode(_ code: String, instructions: String) async throws -> String {
+            _ = code
+            _ = instructions
+            return "Refactored"
+        }
+
+        func generateCode(_ prompt: String) async throws -> String {
+            _ = prompt
+            return "Generated"
+        }
+
+        func fixCode(_ code: String, error: String) async throws -> String {
+            _ = code
+            _ = error
+            return "Fixed"
         }
     }
 
-    private struct FakeLocalModelGenerator: LocalModelProcessAIService.LocalModelGenerating {
-        let output: String
+    private final class FakeCodebaseIndex: CodebaseIndexProtocol {
+        private(set) var getSummariesCallCount: Int = 0
+        private(set) var searchSymbolsWithPathsCallCount: Int = 0
+        private(set) var getMemoriesCallCount: Int = 0
 
-        func generate(modelDirectory _: URL, prompt _: String, runId _: String?) async throws -> String {
-            output
+        let summaries: [(path: String, summary: String)]
+        let symbolsByQuery: [String: [SymbolSearchResult]]
+        let longTermMemories: [MemoryEntry]
+
+        init(
+            summaries: [(path: String, summary: String)],
+            symbolsByQuery: [String: [SymbolSearchResult]],
+            longTermMemories: [MemoryEntry]
+        ) {
+            self.summaries = summaries
+            self.symbolsByQuery = symbolsByQuery
+            self.longTermMemories = longTermMemories
+        }
+
+        func start() {}
+        func stop() {}
+        func setEnabled(_ enabled: Bool) { _ = enabled }
+        func reindexProject() {}
+        func reindexProject(aiEnrichmentEnabled: Bool) { _ = aiEnrichmentEnabled }
+        func runAIEnrichment() {}
+
+        func listIndexedFiles(matching query: String?, limit: Int, offset: Int) async throws -> [String] {
+            _ = query
+            _ = limit
+            _ = offset
+            return []
+        }
+
+        func findIndexedFiles(query: String, limit: Int) async throws -> [IndexedFileMatch] {
+            _ = query
+            _ = limit
+            return []
+        }
+
+        func readIndexedFile(path: String, startLine: Int?, endLine: Int?) throws -> String {
+            _ = path
+            _ = startLine
+            _ = endLine
+            return ""
+        }
+
+        func searchIndexedText(pattern: String, limit: Int) async throws -> [String] {
+            _ = pattern
+            _ = limit
+            return []
+        }
+
+        func searchSymbols(nameLike query: String, limit: Int) async throws -> [Symbol] {
+            _ = query
+            _ = limit
+            return []
+        }
+
+        func searchSymbolsWithPaths(nameLike query: String, limit: Int) async throws -> [SymbolSearchResult] {
+            _ = limit
+            searchSymbolsWithPathsCallCount += 1
+            if let exact = symbolsByQuery[query] {
+                return exact
+            }
+
+            let normalizedQuery = query.lowercased()
+            if let normalized = symbolsByQuery.first(where: { $0.key.lowercased() == normalizedQuery })?.value {
+                return normalized
+            }
+
+            return []
+        }
+
+        func getSummaries(projectRoot: URL, limit: Int) async throws -> [(path: String, summary: String)] {
+            _ = projectRoot
+            _ = limit
+            getSummariesCallCount += 1
+            return summaries
+        }
+
+        func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry] {
+            _ = tier
+            getMemoriesCallCount += 1
+            return longTermMemories
+        }
+
+        func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
+            _ = content
+            _ = tier
+            _ = category
+            return MemoryEntry(id: UUID().uuidString, tier: tier, content: content, category: category, timestamp: Date(), protectionLevel: 0)
+        }
+
+        func getStats() async throws -> IndexStats {
+            IndexStats(
+                indexedResourceCount: 0,
+                aiEnrichedResourceCount: 0,
+                aiEnrichableProjectFileCount: 0,
+                totalProjectFileCount: 0,
+                symbolCount: 0,
+                classCount: 0,
+                structCount: 0,
+                enumCount: 0,
+                protocolCount: 0,
+                functionCount: 0,
+                variableCount: 0,
+                memoryCount: 0,
+                longTermMemoryCount: 0,
+                databaseSizeBytes: 0,
+                databasePath: "",
+                isDatabaseInWorkspace: false,
+                averageQualityScore: 0.0,
+                averageAIQualityScore: 0.0
+            )
         }
     }
 
@@ -131,6 +279,7 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         try await sendCoordinator.send(makeSendRequest(
             conversationId: historyCoordinator.currentConversationId,
             projectRoot: projectRoot,
+            userInput: "Foo Bar",
             availableTools: []
         ))
 
@@ -164,141 +313,92 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         )
     }
 
-    func testHarnessOrchestrationLifecycleCreatesAndEditsFile() async throws {
+    func testRAGContextIsInjectedDeterministicallyWhenIndexIsPresent() async throws {
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
 
-        let writeCallId = UUID().uuidString
-        let replaceCallId = UUID().uuidString
-
-        let toolCalls = [
-            AIToolCall(id: writeCallId, name: "write_file", arguments: [
-                "path": "harness/lifecycle.txt",
-                "content": "one"
-            ]),
-            AIToolCall(id: replaceCallId, name: "replace_in_file", arguments: [
-                "path": "harness/lifecycle.txt",
-                "old_text": "one",
-                "new_text": "two"
-            ])
+        let summaries: [(path: String, summary: String)] = [
+            (path: projectRoot.appendingPathComponent("b.swift").path, summary: "B summary"),
+            (path: projectRoot.appendingPathComponent("a.swift").path, summary: "A summary")
         ]
 
-        let aiService = SequenceAIService(responses: [
-            AIServiceResponse(content: "Call tools", toolCalls: toolCalls),
-            AIServiceResponse(content: "Done", toolCalls: nil)
-        ])
+        let symbol1 = Symbol(
+            id: UUID().uuidString,
+            resourceId: "res1",
+            name: "Foo",
+            kind: .function,
+            lineStart: 10,
+            lineEnd: 20,
+            description: nil
+        )
+        let symbol2 = Symbol(
+            id: UUID().uuidString,
+            resourceId: "res2",
+            name: "Bar",
+            kind: .class,
+            lineStart: 1,
+            lineEnd: 9,
+            description: nil
+        )
 
+        let symbolsByQuery: [String: [SymbolSearchResult]] = [
+            "Foo": [
+                SymbolSearchResult(symbol: symbol1, filePath: projectRoot.appendingPathComponent("b.swift").path),
+                SymbolSearchResult(symbol: symbol2, filePath: projectRoot.appendingPathComponent("a.swift").path)
+            ]
+        ]
+
+        let longTermMemories = [
+            MemoryEntry(id: "1", tier: .longTerm, content: "Z rule", category: "rules", timestamp: Date(), protectionLevel: 0),
+            MemoryEntry(id: "2", tier: .longTerm, content: "A rule", category: "rules", timestamp: Date(), protectionLevel: 0)
+        ]
+
+        let fakeIndex = FakeCodebaseIndex(
+            summaries: summaries,
+            symbolsByQuery: symbolsByQuery,
+            longTermMemories: longTermMemories
+        )
+
+        let aiService = SpyAIService(response: AIServiceResponse(content: "Done", toolCalls: nil))
         let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        historyCoordinator.append(ChatMessage(role: .user, content: "Foo"))
         let sendCoordinator = makeSendCoordinator(
             aiService: aiService,
             historyCoordinator: historyCoordinator,
-            projectRoot: projectRoot
+            projectRoot: projectRoot,
+            codebaseIndex: fakeIndex
         )
 
-        let tools = makeFileTools(projectRoot: projectRoot)
         try await sendCoordinator.send(makeSendRequest(
             conversationId: historyCoordinator.currentConversationId,
             projectRoot: projectRoot,
-            availableTools: tools
+            userInput: "Foo",
+            availableTools: []
         ))
 
-        let expectedURL = projectRoot.appendingPathComponent("harness/lifecycle.txt")
-        let fileContent = try String(contentsOf: expectedURL, encoding: .utf8)
-        XCTAssertEqual(fileContent, "two")
+        let context = aiService.historyRequests.last?.context
+        XCTAssertNotNil(context)
 
-        assertToolMessages(historyCoordinator: historyCoordinator, toolCallId: writeCallId)
-        assertToolMessages(historyCoordinator: historyCoordinator, toolCallId: replaceCallId)
-    }
+        let unwrappedContext = try XCTUnwrap(context)
+        XCTAssertTrue(unwrappedContext.contains("RAG CONTEXT:"))
+        XCTAssertTrue(unwrappedContext.contains("PROJECT OVERVIEW (Key Files):"))
+        XCTAssertTrue(unwrappedContext.contains("CODEBASE INDEX (matching symbols):"))
+        XCTAssertTrue(unwrappedContext.contains("PROJECT MEMORY (long-term rules):"))
 
-    func testHarnessReactTodoAppCreatesViteScaffoldFiles() async throws {
-        let projectRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+        XCTAssertTrue(unwrappedContext.contains("- a.swift: A summary"))
+        XCTAssertTrue(unwrappedContext.contains("- b.swift: B summary"))
 
-        let writeFilesCallId = UUID().uuidString
-        let toolCalls = [makeReactTodoWriteFilesCall(id: writeFilesCallId)]
-
-        let aiService = SequenceAIService(responses: [
-            AIServiceResponse(content: "Scaffold", toolCalls: toolCalls),
-            AIServiceResponse(content: "Done", toolCalls: nil)
-        ])
-
-        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
-        let sendCoordinator = makeSendCoordinator(
-            aiService: aiService,
-            historyCoordinator: historyCoordinator,
-            projectRoot: projectRoot
-        )
-
-        let tools = makeFileTools(projectRoot: projectRoot)
-        try await sendCoordinator.send(makeSendRequest(
-            conversationId: historyCoordinator.currentConversationId,
-            projectRoot: projectRoot,
-            availableTools: tools
-        ))
-
-        for path in reactTodoRequiredPaths() {
-            let url = projectRoot.appendingPathComponent(path)
-            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "Expected file not created: \(url.path)")
+        let overviewIndex = unwrappedContext.range(of: "PROJECT OVERVIEW")?.lowerBound
+        let memoryIndex = unwrappedContext.range(of: "PROJECT MEMORY")?.lowerBound
+        XCTAssertNotNil(overviewIndex)
+        XCTAssertNotNil(memoryIndex)
+        if let overviewIndex, let memoryIndex {
+            XCTAssertLessThan(overviewIndex, memoryIndex)
         }
 
-        assertToolMessages(historyCoordinator: historyCoordinator, toolCallId: writeFilesCallId)
-    }
-
-    func testHarnessAgentGreetingInOfflineModeReturnsPlainText() async throws {
-        let projectRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-
-        let userDefaults = UserDefaults(suiteName: UUID().uuidString)!
-        let settingsStore = SettingsStore(userDefaults: userDefaults)
-
-        let selectedModelId = "qwen/Qwen3-4B-Instruct-2507@cdbee75"
-        let setupSelectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
-        setupSelectionStore.setSelectedModelId(selectedModelId)
-        setupSelectionStore.setOfflineModeEnabled(true)
-
-        guard let selectedModel = LocalModelCatalog.model(id: selectedModelId) else {
-            throw XCTSkip("Selected local model is not present in LocalModelCatalog: \(selectedModelId)")
-        }
-        guard LocalModelFileStore.isModelInstalled(selectedModel) else {
-            throw XCTSkip("Local model not downloaded, skipping native inference harness test: \(selectedModelId)")
-        }
-
-        let localSelectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
-        let routingSelectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
-
-        let localService = LocalModelProcessAIService(selectionStore: localSelectionStore)
-
-        let openRouterService = SequenceAIService(responses: [
-            AIServiceResponse(content: "Hello from remote", toolCalls: nil)
-        ])
-
-        let routingService = ModelRoutingAIService(
-            openRouterService: openRouterService,
-            localService: localService,
-            selectionStore: routingSelectionStore
-        )
-
-        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
-        let sendCoordinator = makeSendCoordinator(
-            aiService: routingService,
-            historyCoordinator: historyCoordinator,
-            projectRoot: projectRoot
-        )
-
-        // Provide at least one tool to match Agent mode reality.
-        let tools = makeFileTools(projectRoot: projectRoot)
-        try await sendCoordinator.send(makeSendRequest(
-            conversationId: historyCoordinator.currentConversationId,
-            projectRoot: projectRoot,
-            availableTools: tools
-        ))
-
-        let assistantMessages = historyCoordinator.messages.filter { $0.role == .assistant }
-        let assistantContent = assistantMessages.map(\.content).joined(separator: "\n")
-        XCTAssertFalse(assistantContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertGreaterThan(fakeIndex.getSummariesCallCount, 0)
+        XCTAssertGreaterThan(fakeIndex.getMemoriesCallCount, 0)
+        XCTAssertGreaterThan(fakeIndex.searchSymbolsWithPathsCallCount, 0)
     }
 
     private func makeSequenceAIService(toolCalls: [AIToolCall]) -> SequenceAIService {
@@ -321,9 +421,10 @@ final class ConversationSendCoordinatorTests: XCTestCase {
     private func makeSendCoordinator(
         aiService: AIService,
         historyCoordinator: ChatHistoryCoordinator,
-        projectRoot: URL
+        projectRoot: URL,
+        codebaseIndex: CodebaseIndexProtocol? = nil
     ) -> ConversationSendCoordinator {
-        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: aiService, codebaseIndex: nil)
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: aiService, codebaseIndex: codebaseIndex)
         let toolExecutor = AIToolExecutor(
             fileSystemService: FileSystemService(),
             errorManager: AIToolExecutorNoopErrorManager(),
@@ -337,58 +438,16 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         )
     }
 
-    private func makeFileTools(projectRoot: URL) -> [AITool] {
-        let fileSystemService = FileSystemService()
-        let eventBus = EventBus()
-        let pathValidator = PathValidator(projectRoot: projectRoot)
-        return [
-            WriteFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus),
-            WriteFilesTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus),
-            ReplaceInFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus)
-        ]
-    }
-
-    private func reactTodoRequiredPaths() -> [String] {
-        [
-            "harness/react-todo/package.json",
-            "harness/react-todo/index.html",
-            "harness/react-todo/src/main.jsx",
-            "harness/react-todo/src/App.jsx"
-        ]
-    }
-
-    private func makeReactTodoWriteFilesCall(id: String) -> AIToolCall {
-        let files: [[String: Any]] = [
-            [
-                "path": "harness/react-todo/package.json",
-                "content": "{\n  \"name\": \"react-todo\"\n}"
-            ],
-            [
-                "path": "harness/react-todo/index.html",
-                "content": "<!doctype html><html><body><div id=\"root\"></div></body></html>"
-            ],
-            [
-                "path": "harness/react-todo/src/main.jsx",
-                "content": "import React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport App from './App.jsx'\nReactDOM.createRoot(document.getElementById('root')).render(<App />)\n"
-            ],
-            [
-                "path": "harness/react-todo/src/App.jsx",
-                "content": "export default function App(){return <h1>Todo</h1>}\n"
-            ]
-        ]
-
-        return AIToolCall(id: id, name: "write_files", arguments: ["files": files])
-    }
-
     private func makeSendRequest(
         conversationId: String,
         projectRoot: URL,
+        userInput: String = "Hello",
         availableTools: [AITool] = [FakeTool(name: "fake_tool", response: "ok")],
         qaReviewEnabled: Bool = false,
         draftAssistantMessageId: UUID? = nil
     ) -> SendRequest {
         SendRequest(
-            userInput: "Hello",
+            userInput: userInput,
             explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,

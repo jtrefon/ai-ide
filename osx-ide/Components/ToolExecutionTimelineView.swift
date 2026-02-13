@@ -36,12 +36,17 @@ struct ToolExecutionTimelineView: View {
         return byToolCallId
             .sorted { $0.value.timestamp < $1.value.timestamp }
             .map { (toolCallId, message) in
-                ToolEntry(
+                let envelope = ToolExecutionEnvelope.decode(from: message.content)
+                let payload = envelope?.payload?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let fallback = envelope?.message ?? message.content
+                let renderedContent = (payload?.isEmpty == false) ? payload! : fallback
+
+                return ToolEntry(
                     id: toolCallId,
-                    toolName: message.toolName ?? localized("tool.default_name"),
-                    target: message.targetFile,
-                    status: message.toolStatus,
-                    content: message.content,
+                    toolName: message.toolName ?? envelope?.toolName ?? localized("tool.default_name"),
+                    target: message.targetFile ?? envelope?.targetFile,
+                    status: message.toolStatus ?? envelope?.status,
+                    content: renderedContent,
                     timestamp: message.timestamp
                 )
             }

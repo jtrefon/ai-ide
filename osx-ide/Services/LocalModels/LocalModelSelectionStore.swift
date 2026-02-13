@@ -1,6 +1,6 @@
 import Foundation
 
-final class LocalModelSelectionStore: @unchecked Sendable {
+actor LocalModelSelectionStore {
     private let settingsStore: SettingsStore
     private let selectedModelKey = "LocalModel.SelectedId"
     private let offlineModeEnabledKey = "AI.OfflineModeEnabled"

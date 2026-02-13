@@ -19,6 +19,57 @@ struct ToolExecutionMessageView: View {
 
     @State private var isExpanded = false
 
+    private var envelope: ToolExecutionEnvelope? {
+        ToolExecutionEnvelope.decode(from: message.content)
+    }
+
+    private var displayToolName: String {
+        message.toolName ?? envelope?.toolName ?? localized("tool.default_name")
+    }
+
+    private var displayTargetFile: String? {
+        message.targetFile ?? envelope?.targetFile
+    }
+
+    private var displayStatus: ToolExecutionStatus? {
+        message.toolStatus ?? envelope?.status
+    }
+
+    private var displayPayload: String {
+        let directContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let envelope else { return directContent }
+
+        if let payload = envelope.payload?.trimmingCharacters(in: .whitespacesAndNewlines), !payload.isEmpty {
+            return payload
+        }
+        return envelope.message.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var previewContent: String? {
+        guard let preview = envelope?.preview?.trimmingCharacters(in: .whitespacesAndNewlines), !preview.isEmpty else {
+            return nil
+        }
+        return preview
+    }
+
+    private var isCommandTool: Bool {
+        displayToolName == "run_command"
+    }
+
+    private var isFileMutationTool: Bool {
+        ["write_file", "create_file", "replace_in_file", "delete_file"].contains(displayToolName)
+    }
+
+    private var isReadFileTool: Bool {
+        displayToolName == "read_file"
+    }
+
+    private var readFileRangeLabel: String? {
+        guard let previewContent else { return nil }
+        let lines = previewContent.split(separator: "\n").map(String.init)
+        return lines.first(where: { $0.hasPrefix("Lines:") || $0.hasPrefix("From line:") })
+    }
+
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }
@@ -29,7 +80,7 @@ struct ToolExecutionMessageView: View {
             toolExecutionHeader
 
             // Content (Expandable)
-            if isExpanded || message.toolStatus == .executing {
+            if isExpanded || displayStatus == .executing {
                 toolExecutionContent
             }
         }
@@ -48,11 +99,11 @@ struct ToolExecutionMessageView: View {
             statusIcon
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(message.toolName ?? localized("tool.default_name"))
+                Text(displayToolName)
                     .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .medium))
                     .foregroundColor(.primary)
 
-                if let file = message.targetFile {
+                if let file = displayTargetFile {
                     Text(file)
                         .font(.system(size: CGFloat(max(9, fontSize - 4))))
                         .foregroundColor(.secondary)
@@ -60,8 +111,14 @@ struct ToolExecutionMessageView: View {
                         .truncationMode(.middle)
                 }
 
-                if message.toolStatus == .executing {
-                    let trimmed = message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                if isReadFileTool, let readFileRangeLabel {
+                    Text(readFileRangeLabel)
+                        .font(.system(size: CGFloat(max(9, fontSize - 4))))
+                        .foregroundColor(.secondary)
+                }
+
+                if displayStatus == .executing {
+                    let trimmed = displayPayload.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         let lastLine = trimmed.split(
                             separator: "\n",
@@ -78,7 +135,7 @@ struct ToolExecutionMessageView: View {
 
             Spacer()
 
-            if message.toolStatus == .executing,
+            if displayStatus == .executing,
                let toolCallId = message.toolCallId,
                timeoutCenter.activeToolCallId == toolCallId {
                 HStack(spacing: 6) {
@@ -112,8 +169,8 @@ struct ToolExecutionMessageView: View {
             }
 
             // Expand/Collapse button
-            if message.toolStatus != .executing &&
-                !message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
+            if displayStatus != .executing &&
+                !displayPayload.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isExpanded.toggle()
@@ -132,31 +189,146 @@ struct ToolExecutionMessageView: View {
 
     private var toolExecutionContent: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if message.toolStatus == .executing {
+            if displayStatus == .executing {
                 ProgressView()
                     .scaleEffect(0.8)
                     .frame(width: 16, height: 16)
             }
 
-            let content = message.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-            if !content.isEmpty {
-                ScrollView {
-                    Text(content)
-                        .font(.system(size: CGFloat(max(10, fontSize - 2)), design: .monospaced))
-                        .foregroundColor(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
+            if let previewContent {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Preview")
+                        .font(.system(size: CGFloat(max(9, fontSize - 4)), weight: .semibold))
+                        .foregroundColor(.secondary)
+                    ScrollView {
+                        Text(previewContent)
+                            .font(.system(size: CGFloat(max(10, fontSize - 2)), design: .monospaced))
+                            .foregroundColor(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(maxHeight: 140)
                 }
-                .frame(maxHeight: 200)
+            }
+
+            let content = displayPayload.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            if !content.isEmpty {
+                if isCommandTool {
+                    commandPreview(content)
+                } else if isReadFileTool {
+                    readFilePreview(content)
+                } else if isFileMutationTool {
+                    fileMutationPreview(content)
+                } else {
+                    genericPayloadPreview(content)
+                }
             }
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }
 
+    private func genericPayloadPreview(_ content: String) -> some View {
+        ScrollView {
+            Text(content)
+                .font(.system(size: CGFloat(max(10, fontSize - 2)), design: .monospaced))
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+        }
+        .frame(maxHeight: 220)
+    }
+
+    private func fileMutationPreview(_ content: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(fileOperationLabel)
+                    .font(.system(size: CGFloat(max(9, fontSize - 4)), weight: .semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.blue.opacity(0.12))
+                    .cornerRadius(6)
+
+                if let target = displayTargetFile {
+                    Text(target)
+                        .font(.system(size: CGFloat(max(9, fontSize - 4))))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            genericPayloadPreview(content)
+        }
+    }
+
+    private func readFilePreview(_ content: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("Read")
+                    .font(.system(size: CGFloat(max(9, fontSize - 4)), weight: .semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.green.opacity(0.12))
+                    .cornerRadius(6)
+
+                if let target = displayTargetFile {
+                    Text(target)
+                        .font(.system(size: CGFloat(max(9, fontSize - 4))))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            if let readFileRangeLabel {
+                Text(readFileRangeLabel)
+                    .font(.system(size: CGFloat(max(9, fontSize - 4))))
+                    .foregroundColor(.secondary)
+            }
+
+            genericPayloadPreview(content)
+        }
+    }
+
+    private func commandPreview(_ content: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("CLI")
+                    .font(.system(size: CGFloat(max(9, fontSize - 4)), weight: .semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.orange.opacity(0.12))
+                    .cornerRadius(6)
+                if let status = displayStatus {
+                    Text(status.rawValue.capitalized)
+                        .font(.system(size: CGFloat(max(9, fontSize - 4))))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            genericPayloadPreview(content)
+        }
+    }
+
+    private var fileOperationLabel: String {
+        switch displayToolName {
+        case "write_file":
+            return "Write"
+        case "create_file":
+            return "Create"
+        case "replace_in_file":
+            return "Edit"
+        case "delete_file":
+            return "Delete"
+        default:
+            return "File"
+        }
+    }
+
     private var statusIcon: some View {
         Group {
-            switch message.toolStatus {
+            switch displayStatus {
             case .some(.executing):
                 ProgressView()
                     .scaleEffect(0.8)

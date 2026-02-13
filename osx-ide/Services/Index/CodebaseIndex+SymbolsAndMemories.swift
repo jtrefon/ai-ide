@@ -21,3 +21,32 @@ extension CodebaseIndex {
         try await memoryManager.addMemory(content: content, tier: tier, category: category)
     }
 }
+
+extension CodebaseIndex: MemoryEmbeddingSearchProviding {
+    public func getRelevantMemories(userInput: String, limit: Int) async throws -> [MemorySimilarityResult] {
+        let safeLimit = max(1, limit)
+        let queryVector = try await memoryEmbeddingGenerator.generateEmbedding(for: userInput)
+
+        guard !queryVector.isEmpty else {
+            let fallback = try await queryService.getMemories(tier: .longTerm)
+            return fallback.prefix(safeLimit).map { entry in
+                MemorySimilarityResult(entry: entry, similarityScore: 0)
+            }
+        }
+
+        let similar = try await queryService.searchSimilarMemories(
+            modelId: memoryEmbeddingGenerator.modelIdentifier,
+            queryVector: queryVector,
+            limit: safeLimit,
+            tier: .longTerm
+        )
+        if !similar.isEmpty {
+            return similar
+        }
+
+        let fallback = try await queryService.getMemories(tier: .longTerm)
+        return fallback.prefix(safeLimit).map { entry in
+            MemorySimilarityResult(entry: entry, similarityScore: 0)
+        }
+    }
+}

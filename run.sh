@@ -59,7 +59,7 @@ run_tests() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
-                   test -only-testing:osx-ideTests/"$suite" -skip-testing:osx-ideUITests
+                   test -only-testing:osx-ideTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideHarnessTests
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                    -scheme "$SCHEME" \
@@ -67,7 +67,7 @@ run_tests() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
-                   test -only-testing:osx-ideTests -skip-testing:osx-ideUITests
+                   test -only-testing:osx-ideTests -skip-testing:osx-ideUITests -skip-testing:osx-ideHarnessTests
     fi
 }
 
@@ -82,7 +82,7 @@ run_harness() {
                   -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                   -destination 'platform=macOS' \
                   ENABLE_PREVIEWS=NO \
-                  test -only-testing:osx-ideTests/"$suite" -skip-testing:osx-ideUITests
+                  test -only-testing:osx-ideHarnessTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideTests
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                   -scheme "$SCHEME" \
@@ -91,10 +91,9 @@ run_harness() {
                   -destination 'platform=macOS' \
                   ENABLE_PREVIEWS=NO \
                   test \
-                  -only-testing:osx-ideTests/ConversationSendCoordinatorTests/testHarnessOrchestrationLifecycleCreatesAndEditsFile \
-                  -only-testing:osx-ideTests/ConversationSendCoordinatorTests/testHarnessReactTodoAppCreatesViteScaffoldFiles \
-                  -only-testing:osx-ideTests/ConversationSendCoordinatorTests/testHarnessAgentGreetingInOfflineModeReturnsPlainText \
-                  -skip-testing:osx-ideUITests
+                  -only-testing:osx-ideHarnessTests \
+                  -skip-testing:osx-ideUITests \
+                  -skip-testing:osx-ideTests
     fi
 }
 

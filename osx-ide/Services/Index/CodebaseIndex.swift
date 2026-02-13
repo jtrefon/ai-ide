@@ -17,6 +17,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     let indexer: IndexerActor
     let memoryManager: MemoryManager
     let queryService: QueryService
+    let memoryEmbeddingGenerator: any MemoryEmbeddingGenerating
     let aiService: AIService
     let dbPath: String
     let projectRoot: URL
@@ -41,8 +42,13 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         self.dbPath = Self.makeDatabasePath(projectRoot: projectRoot)
 
         self.database = try DatabaseStore(path: dbPath)
+        self.memoryEmbeddingGenerator = MemoryEmbeddingGeneratorFactory.makeDefault(projectRoot: projectRoot)
         self.indexer = IndexerActor(database: database, config: resolvedConfig.configuration)
-        self.memoryManager = MemoryManager(database: database, eventBus: eventBus)
+        self.memoryManager = MemoryManager(
+            database: database,
+            eventBus: eventBus,
+            embeddingGenerator: memoryEmbeddingGenerator
+        )
         self.queryService = QueryService(database: database)
         self.coordinator = IndexCoordinator(
             eventBus: eventBus,

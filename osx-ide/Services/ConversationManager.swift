@@ -70,6 +70,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var activeStreamingRunId: String?
     private var draftAssistantMessageId: UUID?
     private var draftAssistantText: String = ""
+    private var activeSendTask: Task<Void, Never>?
 
     var messages: [ChatMessage] {
         historyCoordinator.messages
@@ -154,25 +155,18 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
         draftAssistantText.append(event.chunk)
         let trimmed = draftAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        if let existing = historyCoordinator.messages.first(where: { $0.id == draftId }) {
-            historyCoordinator.upsertMessage(
-                ChatMessage(
-                    id: existing.id,
-                    role: .assistant,
-                    content: trimmed,
-                    timestamp: existing.timestamp,
-                    context: ChatMessageContentContext(reasoning: existing.reasoning, codeContext: existing.codeContext),
-                    tool: ChatMessageToolContext(
-                        toolName: existing.toolName,
-                        toolStatus: existing.toolStatus,
-                        target: ToolInvocationTarget(targetFile: existing.targetFile, toolCallId: existing.toolCallId),
-                        toolCalls: existing.toolCalls ?? []
-                    )
-                )
+        
+        // Update the draft message with streaming content
+        // Draft messages are always visible, even with empty content
+        historyCoordinator.upsertMessage(
+            ChatMessage(
+                id: draftId,
+                role: .assistant,
+                content: trimmed.isEmpty ? "..." : trimmed,
+                timestamp: Date(),
+                isDraft: true
             )
-        }
+        )
     }
 
     private func setupObservation() {
@@ -292,12 +286,37 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         error = nil
     }
 
+    private func resetStreamingDraftState() {
+        activeStreamingRunId = nil
+        draftAssistantMessageId = nil
+        draftAssistantText = ""
+    }
+
+    private func resetConversationInteractionState() {
+        resetStreamingDraftState()
+        isSending = false
+        error = nil
+    }
+
+    private func cancelActiveSendTask() {
+        activeSendTask?.cancel()
+        activeSendTask = nil
+    }
+
     private func startSendTask(userContext: UserMessageContext, explicitContext: String?) {
-        Task { [weak self] in
+        cancelActiveSendTask()
+        activeSendTask = Task { [weak self] in
             guard let self = self else { return }
+            defer { self.activeSendTask = nil }
+
             let runId = UUID().uuidString
 
-            let draftMessage = ChatMessage(role: .assistant, content: "Generating...")
+            // Create a draft message that will be updated during streaming
+            let draftMessage = ChatMessage(
+                role: .assistant,
+                content: "Generating...",
+                isDraft: true
+            )
             self.draftAssistantMessageId = draftMessage.id
             self.draftAssistantText = ""
             self.activeStreamingRunId = runId
@@ -326,15 +345,18 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     )
                 )
 
-                self.activeStreamingRunId = nil
-                self.draftAssistantMessageId = nil
-                self.draftAssistantText = ""
-
+                self.resetStreamingDraftState()
                 self.isSending = false
             } catch {
-                self.activeStreamingRunId = nil
-                self.draftAssistantMessageId = nil
-                self.draftAssistantText = ""
+                // Clean up draft message on error
+                if let draftId = self.draftAssistantMessageId {
+                    self.historyCoordinator.removeDraftMessage(id: draftId)
+                }
+                self.resetStreamingDraftState()
+                if error is CancellationError {
+                    self.isSending = false
+                    return
+                }
                 handleSendFailure(error)
             }
         }
@@ -345,6 +367,13 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             conversationId: conversationId,
             errorDescription: error.localizedDescription
         )
+        // Add error message to chat so user knows what happened
+        let errorMessage = ChatMessage(
+            role: .assistant,
+            content: "I encountered an error: \(error.localizedDescription). Please try again."
+        )
+        historyCoordinator.append(errorMessage)
+        
         Task { @MainActor in
             errorManager.handle(.aiServiceError(error.localizedDescription))
             self.error = "Failed to get AI response: \(error.localizedDescription)"
@@ -353,11 +382,18 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     }
 
     func clearConversation() {
+        cancelActiveSendTask()
+        resetConversationInteractionState()
+        currentInput = ""
         historyCoordinator.clearConversation()
         cancelledToolCallIds.removeAll()
     }
 
     func startNewConversation() {
+        cancelActiveSendTask()
+        resetConversationInteractionState()
+        currentInput = ""
+
         let oldConversationId = conversationId
         let ids = historyCoordinator.startNewConversation(projectRoot: projectRoot)
         cancelledToolCallIds.removeAll()

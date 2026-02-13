@@ -98,16 +98,13 @@ final class FinalResponseHandler {
         case .none:
             deliveryStatusText = "missing"
         }
-        if let draftAssistantMessageId,
-           let existingDraft = historyCoordinator.messages.first(where: { $0.id == draftAssistantMessageId }) {
-            historyCoordinator.upsertMessage(
-                ChatMessage(
-                    id: existingDraft.id,
-                    role: .assistant,
-                    content: displayContent,
-                    timestamp: existingDraft.timestamp,
-                    context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
-                )
+        
+        // Finalize the draft message if it exists, otherwise append a new one
+        if let draftId = draftAssistantMessageId {
+            historyCoordinator.finalizeDraftMessage(
+                id: draftId,
+                content: displayContent,
+                reasoning: splitFinal.reasoning
             )
         } else {
             historyCoordinator.append(

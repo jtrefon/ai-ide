@@ -170,4 +170,36 @@ final class OSXIDEUITests: XCTestCase {
         )
         XCTAssertFalse(contentAfterReplace.contains("test"), "Original text should be replaced")
     }
+
+    @MainActor
+    func testAIChatPanelInputSendAndNewConversationInteraction() throws {
+        let app = makeLaunchedApp()
+
+        let chatPanel = app.otherElements["AIChatPanel"]
+        skipIfElementNotDiscoverable(chatPanel, name: "AI Chat panel", timeout: 8)
+
+        let input = app.otherElements["AIChatInputTextView"]
+        skipIfElementNotDiscoverable(input, name: "AI Chat input", timeout: 5)
+
+        let inputForInteraction = app.otherElements["AIChatInputTextView"]
+        guard inputForInteraction.exists, inputForInteraction.isHittable else {
+            throw XCTSkip("AI chat input is not reliably hittable in this XCTest session")
+        }
+
+        inputForInteraction.click()
+        app.typeText("UI regression check")
+
+        let sendButton = app.buttons["AIChatSendButton"]
+        skipIfElementNotDiscoverable(sendButton, name: "AI Chat send button", timeout: 5)
+        XCTAssertTrue(sendButton.isEnabled, "Send button should be enabled after typing")
+        sendButton.click()
+
+        XCTAssertTrue(chatPanel.exists, "Chat panel should remain interactive after sending")
+
+        let newConversationButton = app.buttons["AIChatNewConversationButton"]
+        skipIfElementNotDiscoverable(newConversationButton, name: "New conversation button", timeout: 5)
+        newConversationButton.click()
+
+        XCTAssertTrue(input.exists, "Input should remain available after starting a new conversation")
+    }
 }

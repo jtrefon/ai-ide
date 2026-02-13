@@ -52,7 +52,9 @@ actor LocalModelDownloader {
 
             onProgress(Progress(completedArtifacts: completed, totalArtifacts: model.artifacts.count, currentFileName: artifact.fileName))
 
-            let (data, response) = try await urlSession.data(from: artifact.url)
+            // Use downloadTask for streaming to disk (avoids memory spike)
+            // This downloads to a temporary file first, then we move it
+            let (localURL, response) = try await urlSession.download(from: artifact.url)
             guard let http = response as? HTTPURLResponse else {
                 throw DownloadError.invalidResponse
             }
@@ -60,7 +62,12 @@ actor LocalModelDownloader {
                 throw DownloadError.httpError(status: http.statusCode)
             }
 
-            try data.write(to: destinationURL, options: Data.WritingOptions.atomic)
+            // Move from temp location to final destination
+            // If destination exists (race condition), remove it first
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            try FileManager.default.moveItem(at: localURL, to: destinationURL)
 
             completed += 1
             onProgress(Progress(completedArtifacts: completed, totalArtifacts: model.artifacts.count, currentFileName: artifact.fileName))

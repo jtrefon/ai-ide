@@ -74,10 +74,18 @@ final class AIInteractionCoordinator {
         var lastError: AppError?
 
         for attempt in 1...maxAttempts {
-            let augmentedContext = await ContextBuilder.buildContext(
-                userInput: request.messages.last(where: { $0.role == .user })?.content ?? "",
+            let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
+            let retriever: (any RAGRetriever)?
+            if let codebaseIndex {
+                retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
+            } else {
+                retriever = nil
+            }
+
+            let augmentedContext = await RAGContextBuilder.buildContext(
+                userInput: userInput,
                 explicitContext: request.explicitContext,
-                index: codebaseIndex,
+                retriever: retriever,
                 projectRoot: request.projectRoot
             )
 

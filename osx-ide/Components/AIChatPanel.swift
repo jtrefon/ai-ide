@@ -1,20 +1,21 @@
 import SwiftUI
 import Combine
+import Foundation
 
 /// An AI chat panel that uses the user's code selection as context for AI queries and displays responses.
 struct AIChatPanel: View {
     @ObservedObject var selectionContext: CodeSelectionContext
     let conversationManager: any ConversationManagerProtocol
     @ObservedObject var ui: UIStateManager
-
-    @State private var stateTick: UInt = 0
-    @State private var conversationPlan: String?
+    @State private var renderRefreshToken: UInt = 0
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }
 
     var body: some View {
+        let _ = renderRefreshToken
+
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
@@ -37,34 +38,17 @@ struct AIChatPanel: View {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(BorderlessButtonStyle())
+                .accessibilityIdentifier("AIChatNewConversationButton")
                 .padding(.horizontal)
             }
             .frame(height: 30)
             .background(Color(NSColor.windowBackgroundColor))
 
-            if shouldShowPlanPanel {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(localized("ai_chat.plan.title"))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                    }
-
-                    MarkdownMessageView(
-                        content: conversationPlan ?? localized("ai_chat.plan.empty"),
-                        fontSize: ui.fontSize,
-                        fontFamily: ui.fontFamily
-                    )
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color.gray.opacity(0.08))
-                .cornerRadius(14)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-            }
+            ConversationPlanProgressView(
+                messages: conversationManager.messages,
+                isSending: conversationManager.isSending,
+                fontSize: ui.fontSize
+            )
 
             MessageListView(
                 messages: conversationManager.messages,
@@ -121,19 +105,11 @@ struct AIChatPanel: View {
             .padding(.vertical, 6)
             .background(Color.gray.opacity(0.1))
         }
-        .onReceive(conversationManager.statePublisher) { _ in
-            Task { @MainActor in
-                stateTick &+= 1
-            }
-        }
-        .onChange(of: stateTick) { _ in
-            Task { @MainActor in
-                await refreshConversationPlan()
-            }
-        }
-        .animation(nil, value: stateTick)
         .accessibilityIdentifier("AIChatPanel")
         .background(Color(NSColor.controlBackgroundColor))
+        .onReceive(conversationManager.statePublisher) { _ in
+            renderRefreshToken &+= 1
+        }
     }
 
     var currentSelection: String? {
@@ -159,30 +135,11 @@ struct AIChatPanel: View {
     private func sendMessage() {
         // Use selected code as context if available
         let context = currentSelection
-        conversationManager.currentInput = conversationManager.currentInput.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
+        let trimmedInput = conversationManager.currentInput.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        guard !trimmedInput.isEmpty else { return }
+
+        conversationManager.currentInput = trimmedInput
         conversationManager.sendMessage(context: context)
     }
 
-    private var shouldShowPlanPanel: Bool {
-        guard let plan = conversationPlan?.trimmingCharacters(in: .whitespacesAndNewlines), !plan.isEmpty else {
-            return false
-        }
-
-        if let latestToolMessage = conversationManager.messages.last(where: { $0.isToolExecution }) {
-            if latestToolMessage.toolStatus == .executing, latestToolMessage.toolName != "planner" {
-                return false
-            }
-        }
-
-        return true
-    }
-
-    @MainActor
-    private func refreshConversationPlan() async {
-        let conversationId = conversationManager.currentConversationId
-        let plan = await ConversationPlanStore.shared.get(conversationId: conversationId)
-        conversationPlan = plan
-    }
 }

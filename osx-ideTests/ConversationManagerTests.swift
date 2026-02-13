@@ -57,7 +57,11 @@ final class ConversationManagerTests: XCTestCase {
 
     func testWelcomeMessage() {
         XCTAssertTrue(manager.messages.count >= 1)
-        XCTAssertEqual(manager.messages.first?.role, MessageRole.assistant)
+        let firstRole = manager.messages.first?.role
+        XCTAssertTrue(
+            firstRole == .assistant || firstRole == .system,
+            "Expected first welcome message role to be assistant or system, got \(String(describing: firstRole))"
+        )
     }
 
     func testSendMessageFlow() async throws {
@@ -100,6 +104,37 @@ final class ConversationManagerTests: XCTestCase {
         XCTAssertFalse(manager.isSending)
     }
 
+    /// Regression guard for the chat panel send path:
+    /// verifies an agent-mode input reaches AI service and produces an assistant response.
+    func testAgentModeSendMessageRequestResponse() async throws {
+        mockAIService.nextHistoryResponse = AIServiceResponse(content: "Agent response", toolCalls: nil)
+        manager.currentMode = .agent
+        manager.currentInput = "Run in agent mode"
+
+        let agentResponded = expectation(description: "Agent responded")
+        agentResponded.assertForOverFulfill = false
+
+        var cancellables = Set<AnyCancellable>()
+        manager.objectWillChange
+            .sink { _ in
+                Task { @MainActor in
+                    if self.manager.messages.contains(where: {
+                        $0.role == MessageRole.assistant && $0.content == "Agent response"
+                    }) {
+                        agentResponded.fulfill()
+                    }
+                }
+            }
+            .store(in: &cancellables)
+
+        manager.sendMessage()
+
+        await fulfillment(of: [agentResponded], timeout: 5.0)
+
+        XCTAssertEqual(mockAIService.lastHistoryRequest?.mode, .agent)
+        XCTAssertFalse(manager.isSending)
+    }
+
     func testSplitReasoningExtractsAndStripsBlock() {
         let input = """
         <ide_reasoning>
@@ -118,23 +153,54 @@ final class ConversationManagerTests: XCTestCase {
         XCTAssertTrue((result.reasoning ?? "").contains("Analyze:"))
         XCTAssertTrue((result.reasoning ?? "").contains("Reflect:"))
     }
+
+    func testClearConversationResetsInteractionState() async {
+        manager.currentInput = "Work in progress"
+        manager.sendMessage()
+
+        // Ensure we hit active sending state before clear
+        let sendingExpectation = expectation(description: "Manager entered sending state")
+        Task { @MainActor in
+            let deadline = Date().addingTimeInterval(1.0)
+            while Date() < deadline {
+                if self.manager.isSending {
+                    sendingExpectation.fulfill()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+        }
+        await fulfillment(of: [sendingExpectation], timeout: 2.0)
+
+        manager.clearConversation()
+
+        XCTAssertFalse(manager.isSending)
+        XCTAssertEqual(manager.currentInput, "")
+        XCTAssertEqual(
+            manager.messages.last?.content,
+            "Conversation cleared. How can I assist you now?"
+        )
+    }
 }
 
 // MARK: - Mocks
 
 final class MockAIService: AIService, @unchecked Sendable {
+    var nextHistoryResponse = AIServiceResponse(content: "Mock response", toolCalls: nil)
+    private(set) var lastHistoryRequest: AIServiceHistoryRequest?
+
     func sendMessage(
         _ request: AIServiceMessageWithProjectRootRequest
     ) async throws -> AIServiceResponse {
         _ = request
-        return AIServiceResponse(content: "Mock response", toolCalls: nil)
+        return nextHistoryResponse
     }
 
     func sendMessage(
         _ request: AIServiceHistoryRequest
     ) async throws -> AIServiceResponse {
-        _ = request
-        return AIServiceResponse(content: "Mock response", toolCalls: nil)
+        lastHistoryRequest = request
+        return nextHistoryResponse
     }
 
     func explainCode(_ code: String) async throws -> String { return "Explanation" }

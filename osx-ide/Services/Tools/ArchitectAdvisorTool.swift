@@ -35,10 +35,13 @@ struct ArchitectAdvisorTool: AITool {
     func execute(arguments: ToolArguments) async throws -> String {
         let task = try extractTask(from: arguments)
         let explicit = extractExplicitConstraints(from: arguments)
-        let context = await ContextBuilder.buildContext(
+        let retriever: (any RAGRetriever)? = await MainActor.run {
+            index.map { CodebaseIndexRAGRetriever(index: $0) }
+        }
+        let context = await RAGContextBuilder.buildContext(
             userInput: task,
             explicitContext: explicit,
-            index: index,
+            retriever: retriever,
             projectRoot: projectRoot
         )
 

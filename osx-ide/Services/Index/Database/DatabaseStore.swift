@@ -126,6 +126,19 @@ public actor DatabaseStore {
         try database.getMemories(tier: tier)
     }
 
+    public func saveMemoryEmbedding(memoryId: String, modelId: String, vector: [Float]) throws {
+        try database.saveMemoryEmbedding(memoryId: memoryId, modelId: modelId, vector: vector)
+    }
+
+    public func searchSimilarMemories(
+        modelId: String,
+        queryVector: [Float],
+        limit: Int,
+        tier: MemoryTier?
+    ) throws -> [MemorySimilarityResult] {
+        try database.searchSimilarMemories(modelId: modelId, queryVector: queryVector, limit: limit, tier: tier)
+    }
+
     public func isResourceAIEnriched(resourceId: String) throws -> Bool {
         try database.isResourceAIEnriched(resourceId: resourceId)
     }

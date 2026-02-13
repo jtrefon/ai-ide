@@ -1,5 +1,2 @@
-runtimes:
-    - java@17.0.10
 tools:
-    - pmd@7.16.0
     - trivy@0.66.0
