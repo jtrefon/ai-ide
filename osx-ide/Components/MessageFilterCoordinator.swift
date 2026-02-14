@@ -28,6 +28,10 @@ struct MessageFilterCoordinator {
             return false
         }
 
+        if message.role == .system {
+            return false
+        }
+
         if message.isToolExecution {
             return shouldDisplayToolExecutionMessage(message, in: messages)
         }

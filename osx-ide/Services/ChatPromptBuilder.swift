@@ -221,6 +221,16 @@ class ChatPromptBuilder {
         return triggers.contains(where: { text.contains($0) })
     }
 
+    static func shouldForceExecutionFollowup(userInput: String, content: String, hasToolCalls: Bool) -> Bool {
+        guard !hasToolCalls else { return false }
+        guard userRequestRequiresExecution(userInput: userInput) else { return false }
+
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        return true
+    }
+
     static func indicatesWorkWasPerformed(content: String) -> Bool {
         let text = content.lowercased()
         if text.isEmpty { return false }

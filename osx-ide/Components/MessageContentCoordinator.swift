@@ -115,9 +115,7 @@ struct MessageContentCoordinator {
     private var isPlanMessage: Bool {
         guard message.role == .assistant else { return false }
         let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return trimmed.hasPrefix("# strategic plan") ||
-            trimmed.hasPrefix("## tactical plan") ||
-            trimmed.hasPrefix("# tactical plan")
+        return trimmed.hasPrefix("# implementation plan")
     }
 
     private var isReasoningOutcomeMessage: Bool {

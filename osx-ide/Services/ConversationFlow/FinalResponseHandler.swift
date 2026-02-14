@@ -106,7 +106,7 @@ final class FinalResponseHandler {
                 content: displayContent,
                 reasoning: splitFinal.reasoning
             )
-        } else {
+        } else if !isDuplicateOfLastAssistantMessage(content: displayContent) {
             historyCoordinator.append(
                 ChatMessage(
                     role: .assistant,
@@ -163,6 +163,14 @@ final class FinalResponseHandler {
             return envelope.message
         }
         return message.content
+    }
+
+    private func isDuplicateOfLastAssistantMessage(content: String) -> Bool {
+        guard let lastAssistant = historyCoordinator.messages.last(where: { $0.role == .assistant }) else {
+            return false
+        }
+        return lastAssistant.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            == content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func truncate(_ text: String, limit: Int) -> String {

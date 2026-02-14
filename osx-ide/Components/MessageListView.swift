@@ -26,7 +26,7 @@ struct MessageListView: View {
     }
 
     private var visibleMessagesSignature: String {
-        visibleMessages
+        "\(visibleMessages.count):" + visibleMessages
             .suffix(20)
             .map { message in
                 [
@@ -43,7 +43,10 @@ struct MessageListView: View {
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
         Task { @MainActor in
-            proxy.scrollTo("__bottom__", anchor: .bottom)
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            withAnimation(.easeOut(duration: 0.15)) {
+                proxy.scrollTo("__bottom__", anchor: .bottom)
+            }
         }
     }
 

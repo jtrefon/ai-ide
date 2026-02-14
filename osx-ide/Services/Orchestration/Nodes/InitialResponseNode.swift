@@ -23,8 +23,20 @@ struct InitialResponseNode: OrchestrationNode {
             mode: request.mode,
             projectRoot: request.projectRoot,
             availableTools: request.availableTools,
-            runId: request.runId
+            runId: request.runId,
+            userInput: request.userInput
         )
+
+        let hasToolCalls = !(response.toolCalls?.isEmpty ?? true)
+        if !hasToolCalls, let content = response.content,
+           !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let split = ChatPromptBuilder.splitReasoning(from: content)
+            historyCoordinator.append(ChatMessage(
+                role: .assistant,
+                content: split.content,
+                context: ChatMessageContentContext(reasoning: split.reasoning)
+            ))
+        }
 
         return OrchestrationState(
             request: request,

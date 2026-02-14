@@ -24,11 +24,6 @@ struct StrategicPlanningNode: OrchestrationNode {
 
         historyCoordinator.append(ChatMessage(
             role: .assistant,
-            content: "Progress update: strategic plan prepared."
-        ))
-
-        historyCoordinator.append(ChatMessage(
-            role: .assistant,
             content: plan
         ))
 
@@ -44,21 +39,21 @@ struct StrategicPlanningNode: OrchestrationNode {
 private enum StrategicPlanSynthesizer {
     static func build(userInput: String, toolCalls: [AIToolCall]) -> String {
         let toolNames = Array(Set(toolCalls.map(\.name))).sorted()
-        let toolLine: String
-        if toolNames.isEmpty {
-            toolLine = "4. Execute with the minimal safe toolset needed by findings."
-        } else {
-            toolLine = "4. Execute using these tools first: \(toolNames.joined(separator: ", "))."
-        }
+        let toolLine = toolNames.isEmpty
+            ? "- Execute changes using the appropriate tools"
+            : "- Execute using: \(toolNames.joined(separator: ", "))"
 
         return """
-        # Strategic Plan
+        # Implementation Plan
 
-        1. Clarify the requested outcome: \(userInput)
-        2. Identify relevant files, symbols, and constraints.
-        3. Design the smallest safe change set that satisfies the request.
+        **Goal:** \(userInput)
+
+        ## Strategy
+        1. Identify target files and understand current structure
+        2. Design minimal change set to satisfy the request
+        3. Implement changes
         \(toolLine)
-        5. Validate behavior and summarize delivery status.
+        4. Verify correctness and report completion
         """
     }
 }

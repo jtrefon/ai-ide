@@ -101,6 +101,12 @@ public class ChatHistoryManager: ObservableObject {
         messages.first { $0.id == id && $0.isDraft }
     }
 
+    public func replaceMessage(at index: Int, with message: ChatMessage) {
+        guard messages.indices.contains(index) else { return }
+        messages[index] = message
+        saveHistoryAsync()
+    }
+
     public func removeLast() {
         if !messages.isEmpty {
             messages.removeLast()

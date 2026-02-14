@@ -23,6 +23,8 @@ final class ConversationPolicy: ConversationPolicyProtocol {
         }
 
         switch stage {
+        case .initial_response:
+            return []
         case .strategic_planning, .tactical_planning:
             return readOnlyTools(from: availableTools)
         case .qa_tool_output_review, .qa_quality_review:
@@ -38,7 +40,10 @@ final class ConversationPolicy: ConversationPolicyProtocol {
             "index_list_files",
             "index_search_text",
             "index_read_file",
-            "index_search_symbols"
+            "index_search_symbols",
+            "read_file",
+            "list_files",
+            "conversation_fold"
         ])
         return tools.filter { allowed.contains($0.name) }
     }

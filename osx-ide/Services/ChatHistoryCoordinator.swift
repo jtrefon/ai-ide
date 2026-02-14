@@ -55,6 +55,10 @@ final class ChatHistoryCoordinator {
         historyManager.getDraftMessage(id: id)
     }
 
+    func replaceMessage(at index: Int, with message: ChatMessage) {
+        historyManager.replaceMessage(at: index, with: message)
+    }
+
     func removeOldestMessages(count: Int) {
         historyManager.removeOldestMessages(count: count)
     }

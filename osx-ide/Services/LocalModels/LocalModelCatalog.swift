@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import MLXLMCommon
 
 enum LocalModelCatalog {
     static func allModels() -> [LocalModelDefinition] {
@@ -37,7 +38,8 @@ enum LocalModelCatalog {
                 artifact("special_tokens_map.json"),
                 artifact("added_tokens.json")
             ],
-            defaultContextLength: 32768
+            defaultContextLength: 32768,
+            toolCallFormat: .json
         )
     }
 
@@ -63,7 +65,8 @@ enum LocalModelCatalog {
                 artifact("merges.txt"),
                 artifact("vocab.json")
             ],
-            defaultContextLength: 4096
+            defaultContextLength: 4096,
+            toolCallFormat: .json
         )
     }
 }

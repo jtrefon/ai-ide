@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import MLXLMCommon
 
 struct LocalModelArtifact: Hashable, Sendable {
     let fileName: String
@@ -10,11 +11,13 @@ struct LocalModelDefinition: Identifiable, Hashable, Sendable {
     let displayName: String
     let artifacts: [LocalModelArtifact]
     let defaultContextLength: Int
+    let toolCallFormat: ToolCallFormat?
 
-    init(id: String, displayName: String, artifacts: [LocalModelArtifact], defaultContextLength: Int = 4096) {
+    init(id: String, displayName: String, artifacts: [LocalModelArtifact], defaultContextLength: Int = 4096, toolCallFormat: ToolCallFormat? = nil) {
         self.id = id
         self.displayName = displayName
         self.artifacts = artifacts
         self.defaultContextLength = defaultContextLength
+        self.toolCallFormat = toolCallFormat
     }
 }

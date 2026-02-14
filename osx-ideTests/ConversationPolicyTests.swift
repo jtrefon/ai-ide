@@ -17,11 +17,25 @@ final class ConversationPolicyTests: XCTestCase {
             makeTool(name: "index_search_text"),
             makeTool(name: "index_read_file"),
             makeTool(name: "index_search_symbols"),
+            makeTool(name: "read_file"),
+            makeTool(name: "list_files"),
+            makeTool(name: "conversation_fold"),
             makeTool(name: "write_file"),
             makeTool(name: "replace_in_file"),
             makeTool(name: "run_command")
         ]
     }
+
+    private let expectedReadOnly: Set<String> = [
+        "index_find_files",
+        "index_list_files",
+        "index_search_text",
+        "index_read_file",
+        "index_search_symbols",
+        "read_file",
+        "list_files",
+        "conversation_fold"
+    ]
 
     // MARK: - Chat mode
 
@@ -40,9 +54,9 @@ final class ConversationPolicyTests: XCTestCase {
         XCTAssertEqual(result.count, allTools.count)
     }
 
-    func testAgentModeInitialResponseReturnsAllTools() {
+    func testAgentModeInitialResponseReturnsNoTools() {
         let result = policy.allowedTools(for: .initial_response, mode: .agent, from: allTools)
-        XCTAssertEqual(result.count, allTools.count)
+        XCTAssertTrue(result.isEmpty, "initial_response should return no tools to save context")
     }
 
     func testAgentModeToolLoopReturnsAllTools() {
@@ -62,33 +76,33 @@ final class ConversationPolicyTests: XCTestCase {
 
     // MARK: - Agent mode: QA stages (read-only)
 
+    // MARK: - Agent mode: planning stages (read-only)
+
+    func testAgentModeStrategicPlanningReturnsReadOnlyTools() {
+        let result = policy.allowedTools(for: .strategic_planning, mode: .agent, from: allTools)
+        let names = Set(result.map(\.name))
+        XCTAssertEqual(names, expectedReadOnly)
+    }
+
+    func testAgentModeTacticalPlanningReturnsReadOnlyTools() {
+        let result = policy.allowedTools(for: .tactical_planning, mode: .agent, from: allTools)
+        let names = Set(result.map(\.name))
+        XCTAssertEqual(names, expectedReadOnly)
+    }
+
     func testAgentModeQAToolOutputReviewReturnsReadOnlyTools() {
         let result = policy.allowedTools(for: .qa_tool_output_review, mode: .agent, from: allTools)
         let names = Set(result.map(\.name))
-        let expectedReadOnly: Set<String> = [
-            "index_find_files",
-            "index_list_files",
-            "index_search_text",
-            "index_read_file",
-            "index_search_symbols"
-        ]
         XCTAssertEqual(names, expectedReadOnly)
     }
 
     func testAgentModeQAQualityReviewReturnsReadOnlyTools() {
         let result = policy.allowedTools(for: .qa_quality_review, mode: .agent, from: allTools)
         let names = Set(result.map(\.name))
-        let expectedReadOnly: Set<String> = [
-            "index_find_files",
-            "index_list_files",
-            "index_search_text",
-            "index_read_file",
-            "index_search_symbols"
-        ]
         XCTAssertEqual(names, expectedReadOnly)
     }
 
-    func testAgentModeQAStageExcludesWriteTools() {
+    func testAgentModeReadOnlyStageExcludesWriteTools() {
         let result = policy.allowedTools(for: .qa_tool_output_review, mode: .agent, from: allTools)
         let names = result.map(\.name)
         XCTAssertFalse(names.contains("write_file"))

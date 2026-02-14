@@ -1,7 +1,9 @@
 import Foundation
 import Combine
+import MLX
 @preconcurrency import MLXLMCommon
 import MLXLLM
+import Tokenizers
 
 protocol MemoryPressureObserving: Sendable {}
 
@@ -59,7 +61,7 @@ actor LocalModelProcessAIService: AIService {
     }
 
     protocol LocalModelGenerating: Sendable {
-        func generate(modelDirectory: URL, prompt: String, runId: String?, contextLength: Int, conversationId: String?) async throws -> String
+        func generate(modelDirectory: URL, messages: sending [Chat.Message], tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, contextLength: Int, conversationId: String?) async throws -> AIServiceResponse
     }
 
     actor NativeMLXGenerator: LocalModelGenerating {
@@ -67,27 +69,33 @@ actor LocalModelProcessAIService: AIService {
         private var containersByModelDirectory: [URL: ModelContainer] = [:]
         private var accessOrder: [URL] = []
         private let maxCachedModels = 1  // Conservative - one model at a time given memory constraints
+        private var generationCount: Int = 0
+        private static let mlxCacheLimitBytes = 256 * 1024 * 1024  // 256 MB Metal buffer pool cap
 
         init(eventBus: EventBusProtocol) {
             self.eventBus = eventBus
+            Memory.cacheLimit = Self.mlxCacheLimitBytes
         }
 
-        func generate(modelDirectory: URL, prompt: String, runId: String?, contextLength: Int, conversationId: String? = nil) async throws -> String {
-            let container = try await loadContainerCached(modelDirectory: modelDirectory)
-            let chat: [Chat.Message] = [.user(prompt)]
-            let userInput = UserInput(chat: chat)
+        func generate(modelDirectory: URL, messages: sending [Chat.Message], tools: [ToolSpec]?, toolCallFormat: ToolCallFormat? = nil, runId: String?, contextLength: Int, conversationId: String? = nil) async throws -> AIServiceResponse {
+            let container = try await loadContainerCached(modelDirectory: modelDirectory, toolCallFormat: toolCallFormat)
+            let userInput = UserInput(chat: messages, tools: tools)
 
             // Calculate max output tokens - reserve ~40% of context for input, rest for output
             // Minimum 2048 for output to ensure tool calls aren't truncated
             let maxOutputTokens = max(2048, Int(Double(contextLength) * 0.6))
 
-            // Only set maxTokens - let model use its default temperature/topP for peak performance
+            // Cap KV cache size to prevent unbounded memory growth during long conversations.
+            // Uses RotatingKVCache which overwrites old entries beyond this limit.
+            let maxKVSize = contextLength
+
             let parameters = GenerateParameters(
-                maxTokens: maxOutputTokens
+                maxTokens: maxOutputTokens,
+                maxKVSize: maxKVSize
             )
             let eventBus = self.eventBus
 
-            return try await container.perform { context in
+            let response = try await container.perform { context in
                 let input = try await context.processor.prepare(input: userInput)
                 let stream = try MLXLMCommon.generate(
                     input: input,
@@ -96,6 +104,7 @@ actor LocalModelProcessAIService: AIService {
                 )
 
                 var output = ""
+                var collectedToolCalls: [AIToolCall] = []
                 var bufferedChunk = ""
                 var lastFlushInstant = ContinuousClock.now
                 let flushInterval = Duration.milliseconds(50)
@@ -127,13 +136,39 @@ actor LocalModelProcessAIService: AIService {
                         }
                     case .info:
                         break
-                    case .toolCall:
-                        break
+                    case .toolCall(let toolCall):
+                        collectedToolCalls.append(Self.makeAIToolCall(from: toolCall))
                     }
                 }
                 await flushBufferedChunkIfNeeded(force: true)
-                return output.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                return AIServiceResponse(
+                    content: trimmedOutput.isEmpty ? nil : trimmedOutput,
+                    toolCalls: collectedToolCalls.isEmpty ? nil : collectedToolCalls
+                )
             }
+
+            generationCount += 1
+            clearMLXCacheAfterGeneration()
+
+            return response
+        }
+
+        private func clearMLXCacheAfterGeneration() {
+            Memory.clearCache()
+            if generationCount % 5 == 0 {
+                let snapshot = Memory.snapshot()
+                print("[MLXMemory] gen=\(generationCount) active=\(snapshot.activeMemory / (1024*1024))MB cache=\(snapshot.cacheMemory / (1024*1024))MB peak=\(snapshot.peakMemory / (1024*1024))MB")
+            }
+        }
+
+        nonisolated private static func makeAIToolCall(from toolCall: ToolCall) -> AIToolCall {
+            let arguments = toolCall.function.arguments.mapValues { $0.anyValue }
+            return AIToolCall(
+                id: UUID().uuidString,
+                name: toolCall.function.name,
+                arguments: arguments
+            )
         }
 
         /// Unload all cached models to free memory
@@ -149,7 +184,7 @@ actor LocalModelProcessAIService: AIService {
             accessOrder.removeAll { $0 == cacheKey }
         }
 
-        private func loadContainerCached(modelDirectory: URL) async throws -> ModelContainer {
+        private func loadContainerCached(modelDirectory: URL, toolCallFormat: ToolCallFormat? = nil) async throws -> ModelContainer {
             let cacheKey = modelDirectory.resolvingSymlinksInPath().standardizedFileURL
 
             // Cache hit - update LRU order
@@ -165,7 +200,11 @@ actor LocalModelProcessAIService: AIService {
                 accessOrder.removeFirst()
             }
 
-            let container = try await MLXLMCommon.loadModelContainer(directory: cacheKey)
+            let configuration = ModelConfiguration(
+                directory: cacheKey,
+                toolCallFormat: toolCallFormat
+            )
+            let container = try await MLXLMCommon.loadModelContainer(configuration: configuration)
             containersByModelDirectory[cacheKey] = container
             accessOrder.append(cacheKey)
             return container
@@ -236,7 +275,7 @@ actor LocalModelProcessAIService: AIService {
         let contextLength = LocalModelFileStore.contextLength(for: model)
         
         // Build system content for caching
-        let systemContent = buildSystemContent(tools: request.tools, mode: request.mode)
+        let systemContent = buildSystemContent(tools: request.tools, mode: request.mode, stage: request.stage)
         
         // Check prefix cache for this conversation
         let conversationId = request.conversationId
@@ -257,17 +296,20 @@ actor LocalModelProcessAIService: AIService {
             }
         }
         
-        let prompt = buildPrompt(
+        let chatMessages = buildChatMessages(
             messages: request.messages,
             explicitContext: request.context,
-            tools: request.tools,
-            mode: request.mode,
-            precomputedSystemContent: systemContent
+            systemContent: systemContent
         )
         
-        let output = try await generator.generate(
+        // Convert AITool to ToolSpec for MLXLLM
+        let toolSpecs = convertToToolSpec(request.tools)
+        
+        let response = try await generator.generate(
             modelDirectory: modelDirectory,
-            prompt: prompt,
+            messages: chatMessages,
+            tools: toolSpecs,
+            toolCallFormat: model.toolCallFormat,
             runId: request.runId,
             contextLength: contextLength,
             conversationId: conversationId
@@ -284,7 +326,7 @@ actor LocalModelProcessAIService: AIService {
             )
         }
         
-        return AIServiceResponse(content: output, toolCalls: nil)
+        return response
     }
 
     func explainCode(_ code: String) async throws -> String {
@@ -335,39 +377,35 @@ actor LocalModelProcessAIService: AIService {
         return response.content ?? ""
     }
 
-    private func buildPrompt(messages: [ChatMessage], explicitContext: String?, tools: [AITool]?, mode: AIMode?, precomputedSystemContent: String? = nil) -> String {
-        var sections: [String] = []
+    nonisolated private func buildChatMessages(messages: [ChatMessage], explicitContext: String?, systemContent: String) -> [Chat.Message] {
+        var chatMessages: [Chat.Message] = []
 
-        // 1. Build system content (use precomputed if available for cache consistency)
-        let systemContent = precomputedSystemContent ?? buildSystemContent(tools: tools, mode: mode)
-        sections.append("System: \(systemContent)\n")
+        // 1. System message with mode-specific instructions (NOT tool prose)
+        chatMessages.append(.system(systemContent))
 
-        // 2. Add explicit context if provided
+        // 2. Inject explicit context as a system message if provided
         if let explicitContext, !explicitContext.isEmpty {
-            sections.append("Context:\n\(explicitContext)\n")
+            chatMessages.append(.system("Project context:\n\(explicitContext)"))
         }
 
-        // 3. Add conversation transcript
-        let transcript = messages.map { message in
-            let role: String
+        // 3. Map conversation history preserving roles
+        for message in messages {
             switch message.role {
             case .user:
-                role = "User"
+                chatMessages.append(.user(message.content))
             case .assistant:
-                role = "Assistant"
+                chatMessages.append(.assistant(message.content))
             case .system:
-                role = "System"
+                chatMessages.append(.system(message.content))
             case .tool:
-                role = "Tool"
+                chatMessages.append(.tool(message.content))
             }
-            return "\(role): \(message.content)"
-        }.joined(separator: "\n")
-        sections.append(transcript)
-        sections.append("Assistant:")
-        return sections.joined(separator: "\n")
+        }
+
+        return chatMessages
     }
 
-    private func buildSystemContent(tools: [AITool]?, mode: AIMode?) -> String {
+    private func buildSystemContent(tools: [AITool]?, mode: AIMode?, stage: AIRequestStage? = nil) -> String {
         var parts: [String] = []
 
         // Load custom system prompt from settings
@@ -376,8 +414,8 @@ actor LocalModelProcessAIService: AIService {
         if !settings.systemPrompt.isEmpty {
             parts.append(settings.systemPrompt)
         } else if let tools, !tools.isEmpty {
-            // Use tool-awareness prompt when tools are available
-            parts.append(ToolAwarenessPrompt.systemPrompt)
+            // Concise system prompt - tool definitions are injected by the chat template
+            parts.append(ToolAwarenessPrompt.structuredToolCallingSystemPrompt)
         } else {
             parts.append("You are a helpful, concise coding assistant.")
         }
@@ -387,16 +425,17 @@ actor LocalModelProcessAIService: AIService {
             parts.append("\n\n\(mode.systemPromptAddition)")
         }
 
-        if let reasoningPrompt = buildReasoningPromptIfNeeded(reasoningEnabled: settings.reasoningEnabled, mode: mode) {
+        if let reasoningPrompt = buildReasoningPromptIfNeeded(reasoningEnabled: settings.reasoningEnabled, mode: mode, stage: stage) {
             parts.append(reasoningPrompt)
         }
 
         return parts.joined(separator: "\n")
     }
 
-    private func buildReasoningPromptIfNeeded(reasoningEnabled: Bool, mode: AIMode?) -> String? {
+    private func buildReasoningPromptIfNeeded(reasoningEnabled: Bool, mode: AIMode?, stage: AIRequestStage? = nil) -> String? {
         guard let mode else { return nil }
         guard mode == .agent, reasoningEnabled else { return nil }
+        if stage == .tool_loop { return nil }
 
         return """
 
@@ -424,5 +463,53 @@ actor LocalModelProcessAIService: AIService {
         Delivery: DONE - ... (write real bullets)
         </ide_reasoning>
         """
+    }
+    
+    /// Convert AITool array to ToolSpec array for MLXLLM
+    private func convertToToolSpec(_ tools: [AITool]?) -> [ToolSpec]? {
+        guard let tools, !tools.isEmpty else { return nil }
+        
+        return tools.map { tool in
+            // Convert parameters to Sendable format using JSON serialization
+            let sendableParams = convertToSendable(tool.parameters)
+            
+            return [
+                "type": "function",
+                "function": [
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": sendableParams
+                ] as [String: any Sendable]
+            ] as [String: any Sendable]
+        }
+    }
+    
+    /// Recursively convert [String: Any] to [String: any Sendable]
+    private func convertToSendable(_ dict: [String: Any]) -> [String: any Sendable] {
+        var result: [String: any Sendable] = [:]
+        for (key, value) in dict {
+            result[key] = convertValueToSsendable(value)
+        }
+        return result
+    }
+    
+    /// Convert Any to Sendable
+    private func convertValueToSsendable(_ value: Any) -> any Sendable {
+        switch value {
+        case let s as String:
+            return s
+        case let i as Int:
+            return i
+        case let d as Double:
+            return d
+        case let b as Bool:
+            return b
+        case let dict as [String: Any]:
+            return convertToSendable(dict)
+        case let array as [Any]:
+            return array.map { convertValueToSsendable($0) }
+        default:
+            return String(describing: value)
+        }
     }
 }

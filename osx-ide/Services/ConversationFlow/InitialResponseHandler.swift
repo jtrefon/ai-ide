@@ -18,7 +18,8 @@ final class InitialResponseHandler {
         mode: AIMode,
         projectRoot: URL,
         availableTools: [AITool],
-        runId: String
+        runId: String,
+        userInput: String
     ) async throws -> AIServiceResponse {
         var response = try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
@@ -35,8 +36,20 @@ final class InitialResponseHandler {
         if mode == .agent,
            response.toolCalls?.isEmpty ?? true,
            let content = response.content,
-           ChatPromptBuilder.shouldForceToolFollowup(content: content),
+           (
+                ChatPromptBuilder.shouldForceToolFollowup(content: content)
+                || ChatPromptBuilder.shouldForceExecutionFollowup(
+                    userInput: userInput,
+                    content: content,
+                    hasToolCalls: false
+                )
+           ),
            let lastUserMessage = historyCoordinator.messages.last(where: { $0.role == .user }) {
+            await AIToolTraceLogger.shared.log(type: "chat.force_execution_followup.initial", data: [
+                "runId": runId,
+                "hasToolCalls": false,
+                "contentLength": content.count
+            ])
             let promptText = PromptRepository.shared.prompt(
                 key: "ConversationFlow/Corrections/force_tool_followup",
                 defaultValue: "You indicated you will implement changes, but you returned no tool calls. " +

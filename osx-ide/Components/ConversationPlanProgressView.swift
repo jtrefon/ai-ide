@@ -18,33 +18,61 @@ struct ConversationPlanProgressView: View {
         latestPlanMessage != nil || isSending
     }
 
+    private var progress: PlanProgress {
+        guard let plan = latestPlanMessage else { return PlanProgress(completed: 0, total: 0) }
+        let stepCount = plan.content.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { line in
+                guard let first = line.first else { return false }
+                return first.isNumber && line.contains(".")
+            }
+            .count
+        let toolCompletions = messages.filter { $0.isToolExecution && $0.toolStatus == .completed }.count
+        let completed = min(toolCompletions, stepCount)
+        return PlanProgress(completed: completed, total: max(stepCount, 1))
+    }
+
     var body: some View {
         if hasContent {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Image(systemName: "list.bullet.clipboard")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.accentColor)
 
-                    Text("Plan & Progress")
+                    Text("Implementation Plan")
                         .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .semibold))
                         .foregroundColor(.primary)
+
+                    if progress.total > 0 {
+                        Text("\(progress.completed)/\(progress.total)")
+                            .font(.system(size: CGFloat(max(9, fontSize - 3)), weight: .medium).monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
 
                     Spacer()
 
                     if isSending {
                         ProgressView()
-                            .scaleEffect(0.7)
+                            .scaleEffect(0.6)
                     }
 
-                    Button(isExpanded ? "Hide" : "Show") {
+                    Button {
                         withAnimation(.easeInOut(duration: 0.15)) {
                             isExpanded.toggle()
                         }
+                    } label: {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                    .foregroundColor(.secondary)
+                }
+
+                if progress.total > 0 {
+                    ProgressView(value: Double(progress.completed), total: Double(progress.total))
+                        .tint(progress.isComplete ? .green : .accentColor)
+                        .scaleEffect(y: 0.6)
                 }
 
                 if isExpanded {
@@ -71,8 +99,12 @@ struct ConversationPlanProgressView: View {
 
     private func isPlanContent(_ content: String) -> Bool {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return trimmed.hasPrefix("# strategic plan") ||
-            trimmed.hasPrefix("## tactical plan") ||
-            trimmed.hasPrefix("# tactical plan")
+        return trimmed.hasPrefix("# implementation plan")
     }
+}
+
+private struct PlanProgress {
+    let completed: Int
+    let total: Int
+    var isComplete: Bool { completed >= total && total > 0 }
 }

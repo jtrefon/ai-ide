@@ -41,9 +41,7 @@ struct PlanMessageView: View {
 
     private var title: String {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if trimmed.hasPrefix("# strategic plan") { return "Strategic Plan" }
-        if trimmed.hasPrefix("## tactical plan") { return "Tactical Plan" }
-        if trimmed.hasPrefix("# tactical plan") { return "Tactical Plan" }
+        if trimmed.hasPrefix("# implementation plan") { return "Implementation Plan" }
         return "Plan"
     }
 }

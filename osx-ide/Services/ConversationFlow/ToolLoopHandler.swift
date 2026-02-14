@@ -38,6 +38,34 @@ final class ToolLoopHandler {
         var consecutiveEmptyToolCallResponses = 0
         let maxIterations = (mode == .agent) ? 12 : 5
 
+        if mode == .agent,
+           currentResponse.toolCalls?.isEmpty ?? true,
+           !availableTools.isEmpty {
+            await AIToolTraceLogger.shared.log(type: "chat.force_execution_followup.pre_loop", data: [
+                "runId": runId,
+                "hasToolCalls": false,
+                "contentLength": currentResponse.content?.count ?? 0
+            ])
+
+            let focusedMessages = await buildFocusedExecutionMessages(
+                userInput: userInput,
+                conversationId: conversationId,
+                projectRoot: projectRoot
+            )
+
+            currentResponse = try await aiInteractionCoordinator
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                    messages: focusedMessages,
+                    explicitContext: explicitContext,
+                    tools: availableTools,
+                    mode: mode,
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.tool_loop
+                ))
+                .get()
+        }
+
         while let toolCalls = currentResponse.toolCalls,
               !toolCalls.isEmpty,
               toolIteration < maxIterations {
@@ -66,6 +94,18 @@ final class ToolLoopHandler {
             )
 
             markCancelledToolCalls(toolCalls: toolCalls, cancelledToolCallIds: cancelledToolCallIds())
+
+            let statusSummary = buildToolExecutionStatusSummary(
+                toolCalls: toolCalls,
+                assistantContent: split.content,
+                iteration: toolIteration
+            )
+            if !statusSummary.isEmpty {
+                historyCoordinator.append(ChatMessage(
+                    role: .assistant,
+                    content: statusSummary
+                ))
+            }
 
             let toolResults = await toolExecutionCoordinator.executeToolCalls(
                 toolCalls,
@@ -114,6 +154,7 @@ final class ToolLoopHandler {
             if let failureRecoveryMessage {
                 followupMessages.append(failureRecoveryMessage)
             }
+            followupMessages = MessageTruncationPolicy.truncateForModel(followupMessages)
 
             currentResponse = try await aiInteractionCoordinator
                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
@@ -130,8 +171,21 @@ final class ToolLoopHandler {
             if mode == .agent,
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
-               ChatPromptBuilder.shouldForceToolFollowup(content: content),
+               (
+                    ChatPromptBuilder.shouldForceToolFollowup(content: content)
+                    || ChatPromptBuilder.shouldForceExecutionFollowup(
+                        userInput: userInput,
+                        content: content,
+                        hasToolCalls: false
+                    )
+               ),
                let lastUserMessage = historyCoordinator.messages.last(where: { $0.role == .user }) {
+                await AIToolTraceLogger.shared.log(type: "chat.force_execution_followup.tool_loop", data: [
+                    "runId": runId,
+                    "iteration": toolIteration,
+                    "hasToolCalls": false,
+                    "contentLength": content.count
+                ])
                 let promptText = PromptRepository.shared.prompt(
                     key: "ConversationFlow/Corrections/force_tool_followup",
                     defaultValue: "You indicated you will implement changes, but you returned no tool calls. " +
@@ -392,6 +446,69 @@ final class ToolLoopHandler {
                 "They are not user-visible. Use them to decide next tool calls or provide a final response. " +
                 "Do not echo raw tool envelopes."
         )
+    }
+
+    private func buildToolExecutionStatusSummary(
+        toolCalls: [AIToolCall],
+        assistantContent: String,
+        iteration: Int
+    ) -> String {
+        guard !toolCalls.isEmpty else { return "" }
+
+        let descriptions = toolCalls.prefix(5).compactMap { call -> String? in
+            let name = call.name
+            let args = call.arguments
+            switch name {
+            case "write_file", "create_file":
+                let path = args["path"] as? String ?? "file"
+                return "Writing `\(path)`"
+            case "write_files":
+                let files = args["files"] as? [[String: Any]] ?? []
+                let paths = files.prefix(3).compactMap { $0["path"] as? String }
+                return paths.isEmpty ? "Writing files" : "Writing \(paths.joined(separator: ", "))"
+            case "replace_in_file":
+                let path = args["path"] as? String ?? "file"
+                return "Editing `\(path)`"
+            case "read_file":
+                let path = args["path"] as? String ?? "file"
+                return "Reading `\(path)`"
+            case "list_files":
+                let path = args["path"] as? String ?? "directory"
+                return "Listing `\(path)`"
+            case "run_command":
+                let cmd = args["command"] as? String ?? "command"
+                let preview = String(cmd.prefix(40))
+                return "Running `\(preview)`"
+            default:
+                return "Executing \(name)"
+            }
+        }
+
+        if descriptions.count == 1 {
+            return descriptions[0]
+        }
+        return descriptions.joined(separator: " → ")
+    }
+
+    private func buildFocusedExecutionMessages(
+        userInput: String,
+        conversationId: String,
+        projectRoot: URL
+    ) async -> [ChatMessage] {
+        let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+
+        var parts: [String] = []
+        parts.append("You are a coding assistant. Your ONLY job right now is to call tools.")
+        parts.append("CRITICAL: Do NOT include <ide_reasoning> blocks. Do NOT write prose. ONLY return tool calls.")
+
+        if !plan.isEmpty {
+            parts.append("Plan:\n\(plan)")
+        }
+
+        return [
+            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
+            ChatMessage(role: .user, content: userInput)
+        ]
     }
 
     private func requestFinalResponseForStalledToolLoop(

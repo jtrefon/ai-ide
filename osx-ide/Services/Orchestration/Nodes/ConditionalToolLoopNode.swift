@@ -17,7 +17,7 @@ struct ConditionalToolLoopNode: OrchestrationNode {
         let request = state.request
         let response = try requireResponse(from: state)
 
-        if request.mode == .agent, response.toolCalls?.isEmpty == false {
+        if request.mode == .agent {
             let followupToolLoopResult = try await handler.handleToolLoopIfNeeded(
                 response: response,
                 explicitContext: request.explicitContext,
