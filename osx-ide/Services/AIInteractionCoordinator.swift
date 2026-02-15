@@ -33,15 +33,18 @@ final class AIInteractionCoordinator {
     private var aiService: AIService
     private var codebaseIndex: CodebaseIndexProtocol?
     private let conversationPolicy: ConversationPolicyProtocol
+    private let settingsStore: any OpenRouterSettingsLoading
 
     init(
         aiService: AIService,
         codebaseIndex: CodebaseIndexProtocol?,
-        conversationPolicy: ConversationPolicyProtocol = ConversationPolicy()
+        conversationPolicy: ConversationPolicyProtocol = ConversationPolicy(),
+        settingsStore: any OpenRouterSettingsLoading = OpenRouterSettingsStore()
     ) {
         self.aiService = aiService
         self.codebaseIndex = codebaseIndex
         self.conversationPolicy = conversationPolicy
+        self.settingsStore = settingsStore
     }
 
     func updateAIService(_ newService: AIService) {
@@ -72,11 +75,13 @@ final class AIInteractionCoordinator {
         )
         let maxAttempts = 3
         var lastError: AppError?
+        let settings = settingsStore.load(includeApiKey: false)
 
         for attempt in 1...maxAttempts {
             let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
             let retriever: (any RAGRetriever)?
-            if let codebaseIndex {
+            if let codebaseIndex,
+               shouldUseRAGRetrieval(for: request.stage, settings: settings) {
                 retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
             } else {
                 retriever = nil
@@ -111,6 +116,13 @@ final class AIInteractionCoordinator {
         }
 
         return .failure(lastError ?? .unknown("ConversationManager: sendMessageWithRetry failed"))
+    }
+
+    private func shouldUseRAGRetrieval(for stage: AIRequestStage?, settings: OpenRouterSettings) -> Bool {
+        if stage == .tool_loop {
+            return settings.ragEnabledDuringToolLoop
+        }
+        return true
     }
 
     private func sanitizeMessagesForModel(_ messages: [ChatMessage]) -> [ChatMessage] {

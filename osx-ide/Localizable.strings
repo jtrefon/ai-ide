@@ -28,6 +28,7 @@
 "ai_chat.plan.title" = "Plan";
 "ai_chat.plan.empty" = "No plan set.";
 "ai_chat.mode" = "Mode";
+"ai_chat.new_conversation_help" = "Start a new conversation";
 
 "settings.ai.openrouter_connection.title" = "OpenRouter Connection";
 "settings.ai.openrouter_connection.subtitle" = "Store your API key and connection details.";

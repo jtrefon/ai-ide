@@ -4,6 +4,7 @@ import Foundation
 struct ConversationPlanProgressView: View {
     let messages: [ChatMessage]
     let isSending: Bool
+    let onStopGenerating: (() -> Void)?
     var fontSize: Double
 
     @State private var isExpanded: Bool = true
@@ -20,6 +21,12 @@ struct ConversationPlanProgressView: View {
 
     private var progress: PlanProgress {
         guard let plan = latestPlanMessage else { return PlanProgress(completed: 0, total: 0) }
+
+        let checklistProgress = PlanChecklistTracker.progress(in: plan.content)
+        if checklistProgress.total > 0 {
+            return PlanProgress(completed: checklistProgress.completed, total: checklistProgress.total)
+        }
+
         let stepCount = plan.content.split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { line in
@@ -27,9 +34,7 @@ struct ConversationPlanProgressView: View {
                 return first.isNumber && line.contains(".")
             }
             .count
-        let toolCompletions = messages.filter { $0.isToolExecution && $0.toolStatus == .completed }.count
-        let completed = min(toolCompletions, stepCount)
-        return PlanProgress(completed: completed, total: max(stepCount, 1))
+        return PlanProgress(completed: 0, total: stepCount)
     }
 
     var body: some View {
@@ -48,6 +53,10 @@ struct ConversationPlanProgressView: View {
                         Text("\(progress.completed)/\(progress.total)")
                             .font(.system(size: CGFloat(max(9, fontSize - 3)), weight: .medium).monospacedDigit())
                             .foregroundColor(.secondary)
+
+                        Text("\(progress.percentage)%")
+                            .font(.system(size: CGFloat(max(9, fontSize - 3)), weight: .semibold).monospacedDigit())
+                            .foregroundColor(progress.isComplete ? .green : .accentColor)
                     }
 
                     Spacer()
@@ -55,6 +64,17 @@ struct ConversationPlanProgressView: View {
                     if isSending {
                         ProgressView()
                             .scaleEffect(0.6)
+
+                        if let onStopGenerating {
+                            Button(action: onStopGenerating) {
+                                Image(systemName: "stop.circle.fill")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Stop model generation")
+                            .accessibilityIdentifier("ConversationStopGenerationButton")
+                        }
                     }
 
                     Button {
@@ -106,5 +126,9 @@ struct ConversationPlanProgressView: View {
 private struct PlanProgress {
     let completed: Int
     let total: Int
+    var percentage: Int {
+        guard total > 0 else { return 0 }
+        return Int((Double(completed) / Double(total) * 100).rounded())
+    }
     var isComplete: Bool { completed >= total && total > 0 }
 }

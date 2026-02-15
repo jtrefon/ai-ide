@@ -48,7 +48,9 @@ struct CreateFileTool: AITool {
             "path": pathValidator.relativePath(for: url)
         ])
         if fileManager.fileExists(atPath: url.path) {
-            return "Error: File already exists at \(pathValidator.relativePath(for: url))"
+            throw AppError.aiServiceError(
+                "create_file failed: file already exists at \(pathValidator.relativePath(for: url))"
+            )
         }
 
         let parent = url.deletingLastPathComponent()

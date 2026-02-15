@@ -39,7 +39,10 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         self.excludePatterns = resolvedConfig.excludePatterns
         self.isEnabled = resolvedConfig.configuration.enabled
 
-        self.dbPath = Self.makeDatabasePath(projectRoot: projectRoot)
+        self.dbPath = Self.makeDatabasePath(
+            projectRoot: projectRoot,
+            storageDirectoryPath: resolvedConfig.configuration.storageDirectoryPath
+        )
 
         self.database = try DatabaseStore(path: dbPath)
         self.memoryEmbeddingGenerator = MemoryEmbeddingGeneratorFactory.makeDefault(projectRoot: projectRoot)
@@ -74,13 +77,14 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         let resolvedConfig = IndexConfiguration(
             enabled: config.enabled,
             debounceMs: config.debounceMs,
-            excludePatterns: resolvedExcludePatterns
+            excludePatterns: resolvedExcludePatterns,
+            storageDirectoryPath: config.storageDirectoryPath
         )
         return ResolvedIndexConfiguration(configuration: resolvedConfig, excludePatterns: resolvedExcludePatterns)
     }
 
-    private static func makeDatabasePath(projectRoot: URL) -> String {
-        resolveIndexDirectory(projectRoot: projectRoot)
+    private static func makeDatabasePath(projectRoot: URL, storageDirectoryPath: String?) -> String {
+        resolveIndexDirectory(projectRoot: projectRoot, storageDirectoryPath: storageDirectoryPath)
             .appendingPathComponent("codebase.sqlite")
             .path
     }

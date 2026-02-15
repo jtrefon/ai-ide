@@ -12,6 +12,7 @@ public class IndexCoordinator {
     private var reindexTask: Task<Void, Never>?
     private var singleFileTasks: [UUID: Task<Void, Never>] = [:]
     private var generation: UInt64 = 0
+    private let projectRoot: URL?
 
     public init(
         eventBus: EventBusProtocol,
@@ -23,6 +24,7 @@ public class IndexCoordinator {
         self.indexer = indexer
         self.config = config
         self.isEnabled = config.enabled
+        self.projectRoot = projectRoot?.standardizedFileURL
 
         if let projectRoot = projectRoot {
             Task {
@@ -138,6 +140,7 @@ public class IndexCoordinator {
         eventBus.subscribe(to: FileCreatedEvent.self) { [weak self] event in
             guard let self else { return }
             guard self.isEnabled else { return }
+            guard self.isPathWithinProjectRoot(event.url) else { return }
             self.debounceSubject.send(event.url)
         }
         .store(in: &cancellables)
@@ -147,6 +150,7 @@ public class IndexCoordinator {
         eventBus.subscribe(to: FileModifiedEvent.self) { [weak self] event in
             guard let self else { return }
             guard self.isEnabled else { return }
+            guard self.isPathWithinProjectRoot(event.url) else { return }
             self.debounceSubject.send(event.url)
         }
         .store(in: &cancellables)
@@ -156,6 +160,7 @@ public class IndexCoordinator {
         eventBus.subscribe(to: FileRenamedEvent.self) { [weak self] event in
             guard let self else { return }
             guard self.isEnabled else { return }
+            guard self.isPathWithinProjectRoot(event.oldUrl), self.isPathWithinProjectRoot(event.newUrl) else { return }
             Task {
                 try? await self.indexer.removeFile(at: event.oldUrl)
                 self.debounceSubject.send(event.newUrl)
@@ -168,6 +173,7 @@ public class IndexCoordinator {
         eventBus.subscribe(to: FileDeletedEvent.self) { [weak self] event in
             guard let self else { return }
             guard self.isEnabled else { return }
+            guard self.isPathWithinProjectRoot(event.url) else { return }
             Task {
                 try? await self.indexer.removeFile(at: event.url)
             }
@@ -186,6 +192,7 @@ public class IndexCoordinator {
     }
 
     private func indexFile(_ url: URL) {
+        guard isPathWithinProjectRoot(url) else { return }
         let localGeneration = generation
 
         let id = UUID()
@@ -212,5 +219,12 @@ public class IndexCoordinator {
         }
 
         singleFileTasks[id] = task
+    }
+
+    private func isPathWithinProjectRoot(_ url: URL) -> Bool {
+        guard let projectRoot else { return true }
+        let candidate = url.standardizedFileURL.path
+        let rootPath = projectRoot.path
+        return candidate == rootPath || candidate.hasPrefix(rootPath + "/")
     }
 }

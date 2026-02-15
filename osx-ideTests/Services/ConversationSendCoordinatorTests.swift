@@ -405,10 +405,13 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         let completeReasoningPrefix =
             "<ide_reasoning>Analyze: Details\nResearch: Details\nPlan: Details\n" +
             "Reflect: Details\nAction: Call fake_tool\nDelivery: DONE</ide_reasoning>"
+        let terminalResponses = Array(repeating: AIServiceResponse(
+            content: completeReasoningPrefix + "Final answer",
+            toolCalls: nil
+        ), count: 12)
         return SequenceAIService(responses: [
             AIServiceResponse(content: completeReasoningPrefix + "Call tool", toolCalls: toolCalls),
-            AIServiceResponse(content: completeReasoningPrefix + "Final answer", toolCalls: nil)
-        ])
+        ] + terminalResponses)
     }
 
     private func makeHistoryCoordinator(projectRoot: URL) -> ChatHistoryCoordinator {

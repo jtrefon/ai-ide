@@ -3,19 +3,13 @@ import Foundation
 extension CodebaseIndex {
     public func findIndexedFiles(query: String, limit: Int = 50) async throws -> [IndexedFileMatch] {
         let raw = try await database.findResourceMatches(query: query, limit: max(1, min(500, limit)))
+            .filter { isPathWithinProjectRoot($0.path) }
         if raw.isEmpty { return [] }
-
-        func relPath(_ absPath: String) -> String {
-            if absPath.hasPrefix(projectRoot.path + "/") {
-                return String(absPath.dropFirst(projectRoot.path.count + 1))
-            }
-            return absPath
-        }
 
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         func score(for absPath: String, aiEnriched: Bool, qualityScore: Double?) -> Double {
-            let rel = relPath(absPath)
+            let rel = scopedRelativePath(from: absPath) ?? absPath
             return calculateMatchScore(relPath: rel, needle: needle, aiEnriched: aiEnriched, qualityScore: qualityScore)
         }
 
@@ -23,11 +17,12 @@ extension CodebaseIndex {
             let sa = score(for: left.path, aiEnriched: left.aiEnriched, qualityScore: left.qualityScore)
             let sb = score(for: right.path, aiEnriched: right.aiEnriched, qualityScore: right.qualityScore)
             if sa != sb { return sa > sb }
-            return relPath(left.path) < relPath(right.path)
+            return (scopedRelativePath(from: left.path) ?? left.path) < (scopedRelativePath(from: right.path) ?? right.path)
         }
 
-        return sorted.map { match in
-            IndexedFileMatch(path: relPath(match.path), aiEnriched: match.aiEnriched, qualityScore: match.qualityScore)
+        return sorted.compactMap { match in
+            guard let relativePath = scopedRelativePath(from: match.path) else { return nil }
+            return IndexedFileMatch(path: relativePath, aiEnriched: match.aiEnriched, qualityScore: match.qualityScore)
         }
     }
 

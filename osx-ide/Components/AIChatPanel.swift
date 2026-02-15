@@ -8,6 +8,7 @@ struct AIChatPanel: View {
     let conversationManager: any ConversationManagerProtocol
     @ObservedObject var ui: UIStateManager
     @State private var renderRefreshToken: UInt = 0
+    @State private var isModelPreviewExpanded: Bool = true
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
@@ -38,6 +39,7 @@ struct AIChatPanel: View {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(BorderlessButtonStyle())
+                .help(localized("ai_chat.new_conversation_help"))
                 .accessibilityIdentifier("AIChatNewConversationButton")
                 .padding(.horizontal)
             }
@@ -47,8 +49,72 @@ struct AIChatPanel: View {
             ConversationPlanProgressView(
                 messages: conversationManager.messages,
                 isSending: conversationManager.isSending,
+                onStopGenerating: {
+                    conversationManager.stopGeneration()
+                },
                 fontSize: ui.fontSize
             )
+
+            if conversationManager.isLiveModelOutputPreviewVisible {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "waveform.and.magnifyingglass")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("Model Output Preview")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                isModelPreviewExpanded.toggle()
+                            }
+                        } label: {
+                            Image(systemName: isModelPreviewExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if isModelPreviewExpanded {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Raw Stream")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+
+                            ScrollView {
+                                Text(conversationManager.liveModelOutputPreview.isEmpty ? "No model output yet." : conversationManager.liveModelOutputPreview)
+                                    .font(.system(size: max(ui.fontSize - 1, 10), design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 110)
+
+                            Text("Tool Parsing / Loop Status")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+
+                            ScrollView {
+                                Text(conversationManager.liveModelOutputStatusPreview.isEmpty
+                                     ? "No tool parsing status yet."
+                                     : conversationManager.liveModelOutputStatusPreview)
+                                    .font(.system(size: max(ui.fontSize - 2, 9), design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 92)
+                        }
+                        .padding(8)
+                        .background(Color(NSColor.textBackgroundColor).opacity(0.75))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+                .padding(.bottom, 2)
+            }
 
             MessageListView(
                 messages: conversationManager.messages,

@@ -12,6 +12,7 @@ extension OpenRouterAIService {
             input: BuildSystemContentInput(
                 systemPrompt: settings.systemPrompt,
                 hasTools: request.tools != nil,
+                toolPromptMode: settings.toolPromptMode,
                 mode: request.mode,
                 projectRoot: request.projectRoot,
                 reasoningEnabled: settings.reasoningEnabled
@@ -78,7 +79,8 @@ extension OpenRouterAIService {
             model: settings.model.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
             systemPrompt: settings.systemPrompt.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
             baseURL: settings.baseURL,
-            reasoningEnabled: settings.reasoningEnabled
+            reasoningEnabled: settings.reasoningEnabled,
+            toolPromptMode: settings.toolPromptMode
         )
     }
 
@@ -93,7 +95,13 @@ extension OpenRouterAIService {
 
     internal func buildSystemContent(input: BuildSystemContentInput) -> String {
         var components: [String] = []
-        components.append(buildBaseSystemContent(systemPrompt: input.systemPrompt, hasTools: input.hasTools))
+        components.append(
+            buildBaseSystemContent(
+                systemPrompt: input.systemPrompt,
+                hasTools: input.hasTools,
+                toolPromptMode: input.toolPromptMode
+            )
+        )
 
         if let modeSystemAddition = buildModeSystemAddition(mode: input.mode) {
             components.append(modeSystemAddition)
@@ -113,13 +121,18 @@ extension OpenRouterAIService {
         return components.joined()
     }
 
-    internal func buildBaseSystemContent(systemPrompt: String, hasTools: Bool) -> String {
+    internal func buildBaseSystemContent(systemPrompt: String, hasTools: Bool, toolPromptMode: ToolPromptMode) -> String {
         if !systemPrompt.isEmpty {
             return systemPrompt
         }
 
         if hasTools {
-            return ToolAwarenessPrompt.systemPrompt
+            switch toolPromptMode {
+            case .fullStatic:
+                return ToolAwarenessPrompt.systemPrompt
+            case .concise:
+                return ToolAwarenessPrompt.structuredToolCallingSystemPrompt
+            }
         }
 
         return "You are a helpful, concise coding assistant."

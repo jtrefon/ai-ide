@@ -157,4 +157,18 @@ final class DatabaseQueryExecutor {
             return results
         }
     }
+
+    func pruneResourcesOutside(projectRoot: URL) throws -> Int {
+        let rootPath = projectRoot.standardizedFileURL.path
+        let allowedPrefix = rootPath + "/%"
+        let deleteSQL = "DELETE FROM resources WHERE path != ? AND path NOT LIKE ?;"
+
+        return try database.syncOnQueue {
+            try database.transaction {
+                try database.execute(sql: deleteSQL, parameters: [rootPath, allowedPrefix])
+            }
+
+            return Int(sqlite3_changes(database.db))
+        }
+    }
 }

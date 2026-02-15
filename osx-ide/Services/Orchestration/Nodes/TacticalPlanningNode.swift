@@ -16,9 +16,13 @@ struct TacticalPlanningNode: OrchestrationNode {
 
     func run(state: OrchestrationState) async throws -> OrchestrationState {
         let existingPlan = await ConversationPlanStore.shared.get(conversationId: state.request.conversationId) ?? ""
+        let progress = PlanChecklistTracker.progress(in: existingPlan)
+        let shouldPreserveCurrentPlan = !existingPlan.isEmpty && progress.total > 0 && !progress.isComplete
+
         let unifiedPlan = TacticalPlanSynthesizer.mergeIntoStrategicPlan(
             strategicPlan: existingPlan,
-            userInput: state.request.userInput
+            userInput: state.request.userInput,
+            preserveCurrentPlan: shouldPreserveCurrentPlan
         )
 
         await ConversationPlanStore.shared.set(
@@ -55,7 +59,11 @@ struct TacticalPlanningNode: OrchestrationNode {
 }
 
 private enum TacticalPlanSynthesizer {
-    static func mergeIntoStrategicPlan(strategicPlan: String, userInput: String) -> String {
+    static func mergeIntoStrategicPlan(strategicPlan: String, userInput: String, preserveCurrentPlan: Bool) -> String {
+        if preserveCurrentPlan && containsTacticalChecklistSubsteps(plan: strategicPlan) {
+            return strategicPlan
+        }
+
         let strategicSteps = extractNumberedSteps(from: strategicPlan)
 
         if strategicSteps.isEmpty {
@@ -65,15 +73,15 @@ private enum TacticalPlanSynthesizer {
             **Goal:** \(userInput)
 
             ## Strategy
-            1. Analyze requirements and identify target files
-               - Read relevant source files to understand structure
-               - Identify dependencies and constraints
-            2. Implement changes with minimal footprint
-               - Apply focused edits to each target file
-               - Ensure consistency across changes
-            3. Verify and deliver
-               - Confirm all changes are correct
-               - Report completion status
+            1. [ ] Analyze requirements and identify target files
+               - [ ] Read relevant source files to understand structure
+               - [ ] Identify dependencies and constraints
+            2. [ ] Implement changes with minimal footprint
+               - [ ] Apply focused edits to each target file
+               - [ ] Ensure consistency across changes
+            3. [ ] Verify and deliver
+               - [ ] Confirm all changes are correct
+               - [ ] Report completion status
             """
         }
 
@@ -85,12 +93,19 @@ private enum TacticalPlanSynthesizer {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if let step = strategicSteps.first(where: { trimmed == $0.raw }) {
                 for substep in step.tacticalSteps {
-                    lines.append("   - \(substep)")
+                    lines.append("   - [ ] \(substep)")
                 }
             }
         }
 
         return lines.joined(separator: "\n")
+    }
+
+    private static func containsTacticalChecklistSubsteps(plan: String) -> Bool {
+        plan.split(separator: "\n").contains { line in
+            let text = String(line)
+            return text.hasPrefix("   - [ ]") || text.hasPrefix("   - [x]") || text.hasPrefix("   - [X]")
+        }
     }
 
     private struct StrategicStep {

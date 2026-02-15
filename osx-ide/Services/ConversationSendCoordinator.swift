@@ -49,16 +49,31 @@ final class ConversationSendCoordinator {
     func send(
         _ request: SendRequest
     ) async throws {
+        let sendStartTime = ContinuousClock.now
+        print("[SendDiagnostic] === Starting send for conversation \(request.conversationId.prefix(8)) ===")
+        print("[SendDiagnostic] Mode: \(request.mode.rawValue), Messages in history: \(historyCoordinator.messages.count)")
+        
+        let foldStartTime = ContinuousClock.now
         try await foldingHandler.foldIfNeeded(
             historyCoordinator: historyCoordinator,
             projectRoot: request.projectRoot
         )
+        let foldDuration = foldStartTime.duration(to: ContinuousClock.now)
+        print("[SendDiagnostic] Folding took \(foldDuration), messages after fold: \(historyCoordinator.messages.count)")
+        
+        let flowStartTime = ContinuousClock.now
         let response = try await executeConversationFlow(request)
+        let flowDuration = flowStartTime.duration(to: ContinuousClock.now)
+        print("[SendDiagnostic] Conversation flow took \(flowDuration)")
+        
         finalResponseHandler.appendFinalMessageAndLog(
             response: response,
             conversationId: request.conversationId,
             draftAssistantMessageId: request.draftAssistantMessageId
         )
+        
+        let totalDuration = sendStartTime.duration(to: ContinuousClock.now)
+        print("[SendDiagnostic] === Send completed in \(totalDuration) ===")
     }
 
     private func executeConversationFlow(_ request: SendRequest) async throws -> AIServiceResponse {

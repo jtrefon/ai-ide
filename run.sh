@@ -74,6 +74,19 @@ run_tests() {
 run_harness() {
     local suite=$1
     echo "Running headless harness tests..."
+    
+    # Build environment variables to pass to test runner
+    # Using TEST_RUNNER_ENV_ prefix to pass env vars through xcodebuild to the test process
+    local env_args=()
+    if [ -n "$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS" ]; then
+        env_args+=("TEST_RUNNER_ENV_OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS=$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS")
+        echo "Production parity harness enabled"
+    fi
+    if [ -n "$HARNESS_MODEL_ID" ]; then
+        env_args+=("TEST_RUNNER_ENV_HARNESS_MODEL_ID=$HARNESS_MODEL_ID")
+        echo "Using model: $HARNESS_MODEL_ID"
+    fi
+    
     if [ -n "$suite" ]; then
         echo "Filtering by suite: $suite"
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
@@ -82,6 +95,7 @@ run_harness() {
                   -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                   -destination 'platform=macOS' \
                   ENABLE_PREVIEWS=NO \
+                  "${env_args[@]}" \
                   test -only-testing:osx-ideHarnessTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideTests
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
@@ -90,6 +104,7 @@ run_harness() {
                   -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                   -destination 'platform=macOS' \
                   ENABLE_PREVIEWS=NO \
+                  "${env_args[@]}" \
                   test \
                   -only-testing:osx-ideHarnessTests \
                   -skip-testing:osx-ideUITests \

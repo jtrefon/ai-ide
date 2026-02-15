@@ -23,11 +23,17 @@ public enum RAGContextBuilder {
         let retrieval = await retriever.retrieve(RAGRetrievalRequest(userInput: userInput, projectRoot: projectRoot))
         let ragBlock = formatRAGBlock(retrieval)
 
+        // DIAGNOSTIC: Log RAG context size
         if let ragBlock {
+            print("[RAGContext] Added \(ragBlock.count) chars from RAG: symbols=\(retrieval.symbolLines.count), overview=\(retrieval.projectOverviewLines.count), memory=\(retrieval.memoryLines.count)")
             parts.append(ragBlock)
         }
 
-        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+        let result = parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+        if let result {
+            print("[RAGContext] Total context size: \(result.count) chars")
+        }
+        return result
     }
 
     private static func formatRAGBlock(_ retrieval: RAGRetrievalResult) -> String? {

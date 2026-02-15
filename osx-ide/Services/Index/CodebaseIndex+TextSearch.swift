@@ -49,10 +49,12 @@ extension CodebaseIndex {
     private func findCandidatePaths(needle: String, maxCandidateFiles: Int) async throws -> [String] {
         let ftsQuery = makeFTSQuery(from: needle)
         if !ftsQuery.isEmpty {
-            return (try? await database.candidatePathsForFTS(query: ftsQuery, limit: maxCandidateFiles)) ?? []
+            let fromFTS = (try? await database.candidatePathsForFTS(query: ftsQuery, limit: maxCandidateFiles)) ?? []
+            return fromFTS.filter { isPathWithinProjectRoot($0) }
         }
 
-        return (try? await database.listResourcePaths(matching: nil, limit: maxCandidateFiles, offset: 0)) ?? []
+        let listed = (try? await database.listResourcePaths(matching: nil, limit: maxCandidateFiles, offset: 0)) ?? []
+        return listed.filter { isPathWithinProjectRoot($0) }
     }
 
     private func makeFTSQuery(from needle: String) -> String {
@@ -66,9 +68,6 @@ extension CodebaseIndex {
     }
 
     private func relativePath(_ absPath: String) -> String {
-        if absPath.hasPrefix(projectRoot.path + "/") {
-            return String(absPath.dropFirst(projectRoot.path.count + 1))
-        }
-        return absPath
+        scopedRelativePath(from: absPath) ?? absPath
     }
 }

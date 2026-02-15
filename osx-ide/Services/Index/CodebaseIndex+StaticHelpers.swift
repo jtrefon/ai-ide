@@ -51,8 +51,20 @@ extension CodebaseIndex {
         return AppConstantsIndexing.aiEnrichableExtensions.contains(ext)
     }
 
-    static func resolveIndexDirectory(projectRoot: URL) -> URL {
+    static func resolveIndexDirectory(projectRoot: URL, storageDirectoryPath: String? = nil) -> URL {
         let fileManager = FileManager.default
+
+        if let storageDirectoryPath,
+           !storageDirectoryPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let explicitDirectoryURL = URL(fileURLWithPath: storageDirectoryPath, isDirectory: true)
+            do {
+                try fileManager.createDirectory(at: explicitDirectoryURL, withIntermediateDirectories: true)
+                return explicitDirectoryURL
+            } catch {
+                // fall through to default/fallback resolution
+            }
+        }
+
         let ideDir = projectRoot.appendingPathComponent(".ide")
         let indexDir = ideDir.appendingPathComponent("index")
 

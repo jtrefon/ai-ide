@@ -93,6 +93,9 @@ final class FinalResponseHandler {
         switch deliveryStatus {
         case .done:
             deliveryStatusText = "done"
+            Task {
+                await completeRemainingPlanItems(conversationId: conversationId)
+            }
         case .needsWork:
             deliveryStatusText = "needs_work"
         case .none:
@@ -171,6 +174,25 @@ final class FinalResponseHandler {
         }
         return lastAssistant.content.trimmingCharacters(in: .whitespacesAndNewlines)
             == content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func completeRemainingPlanItems(conversationId: String) async {
+        guard let plan = await ConversationPlanStore.shared.get(conversationId: conversationId),
+              !plan.isEmpty,
+              let completedPlan = PlanChecklistTracker.markAllPendingItemsCompleted(in: plan) else {
+            return
+        }
+
+        await ConversationPlanStore.shared.set(conversationId: conversationId, plan: completedPlan)
+
+        if let lastPlanIndex = historyCoordinator.messages.lastIndex(where: {
+            $0.role == .assistant && $0.content.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("# Implementation Plan")
+        }) {
+            historyCoordinator.replaceMessage(at: lastPlanIndex, with: ChatMessage(
+                role: .assistant,
+                content: completedPlan
+            ))
+        }
     }
 
     private func truncate(_ text: String, limit: Int) -> String {

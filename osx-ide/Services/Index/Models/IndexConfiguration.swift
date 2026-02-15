@@ -4,6 +4,19 @@ public struct IndexConfiguration: Codable, Sendable {
     public var enabled: Bool
     public var debounceMs: Int
     public var excludePatterns: [String]
+    public var storageDirectoryPath: String?
+
+    public init(
+        enabled: Bool,
+        debounceMs: Int,
+        excludePatterns: [String],
+        storageDirectoryPath: String? = nil
+    ) {
+        self.enabled = enabled
+        self.debounceMs = debounceMs
+        self.excludePatterns = excludePatterns
+        self.storageDirectoryPath = storageDirectoryPath
+    }
 
     public static let `default` = IndexConfiguration(
         enabled: true,
@@ -59,6 +72,7 @@ public struct IndexConfiguration: Codable, Sendable {
             ".idea",
             ".vscode",
             ".DS_Store"
-        ]
+        ],
+        storageDirectoryPath: nil
     )
 }

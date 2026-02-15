@@ -12,6 +12,8 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading {
     private let baseURLKey = "OpenRouterBaseURL"
     private let systemPromptKey = "OpenRouterSystemPrompt"
     private let reasoningEnabledKey = "OpenRouterReasoningEnabled"
+    private let toolPromptModeKey = "OpenRouterToolPromptMode"
+    private let ragEnabledDuringToolLoopKey = "OpenRouterRAGEnabledDuringToolLoop"
 
     private let keychainStore = KeychainStore(service: "tdc.osx-ide.openrouter")
     private let keychainAccount = "apiKey"
@@ -63,7 +65,14 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading {
             model: settingsStore.string(forKey: modelKey) ?? "",
             baseURL: settingsStore.string(forKey: baseURLKey) ?? OpenRouterSettings.empty.baseURL,
             systemPrompt: settingsStore.string(forKey: systemPromptKey) ?? "",
-            reasoningEnabled: settingsStore.bool(forKey: reasoningEnabledKey, default: true)
+            reasoningEnabled: settingsStore.bool(forKey: reasoningEnabledKey, default: true),
+            toolPromptMode: ToolPromptMode(
+                rawValue: settingsStore.string(forKey: toolPromptModeKey) ?? ""
+            ) ?? .fullStatic,
+            ragEnabledDuringToolLoop: settingsStore.bool(
+                forKey: ragEnabledDuringToolLoopKey,
+                default: OpenRouterSettings.empty.ragEnabledDuringToolLoop
+            )
         )
     }
 
@@ -73,6 +82,8 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading {
             settingsStore.set(settings.baseURL, forKey: baseURLKey)
             settingsStore.set(settings.systemPrompt, forKey: systemPromptKey)
             settingsStore.set(settings.reasoningEnabled, forKey: reasoningEnabledKey)
+            settingsStore.set(settings.toolPromptMode.rawValue, forKey: toolPromptModeKey)
+            settingsStore.set(settings.ragEnabledDuringToolLoop, forKey: ragEnabledDuringToolLoopKey)
             return
         }
 
@@ -88,5 +99,7 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading {
         settingsStore.set(settings.baseURL, forKey: baseURLKey)
         settingsStore.set(settings.systemPrompt, forKey: systemPromptKey)
         settingsStore.set(settings.reasoningEnabled, forKey: reasoningEnabledKey)
+        settingsStore.set(settings.toolPromptMode.rawValue, forKey: toolPromptModeKey)
+        settingsStore.set(settings.ragEnabledDuringToolLoop, forKey: ragEnabledDuringToolLoopKey)
     }
 }

@@ -144,6 +144,10 @@ public class DatabaseManager {
         try queryExecutor.findResourceMatches(query: query, limit: limit)
     }
 
+    public func pruneResourcesOutside(projectRoot: URL) throws -> Int {
+        try queryExecutor.pruneResourcesOutside(projectRoot: projectRoot)
+    }
+
     public func getResourceLastModified(resourceId: String) throws -> Double? {
         try queryExecutor.getResourceLastModified(resourceId: resourceId)
     }

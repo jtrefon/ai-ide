@@ -135,6 +135,37 @@ final class ConversationManagerTests: XCTestCase {
         XCTAssertFalse(manager.isSending)
     }
 
+    func testLiveModelOutputPreviewVisibleByDefault() {
+        XCTAssertTrue(manager.isLiveModelOutputPreviewVisible)
+    }
+
+    func testSendMessageUpdatesLiveModelOutputPreviewWithFinalAssistantResponse() async throws {
+        mockAIService.nextHistoryResponse = AIServiceResponse(content: "Preview-ready assistant response", toolCalls: nil)
+        manager.currentInput = "Show me output"
+
+        manager.sendMessage()
+
+        let responseExpectation = expectation(description: "Preview updated")
+        Task { @MainActor in
+            let deadline = Date().addingTimeInterval(2.0)
+            while Date() < deadline {
+                let finalAssistantMessage = self.manager.messages.last(where: { $0.role == .assistant && !$0.isDraft })
+                if self.manager.isSending == false,
+                   let finalAssistantMessage,
+                   !finalAssistantMessage.content.isEmpty,
+                   self.manager.liveModelOutputPreview == finalAssistantMessage.content {
+                    responseExpectation.fulfill()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+
+        await fulfillment(of: [responseExpectation], timeout: 3.0)
+        let finalAssistantMessage = manager.messages.last(where: { $0.role == .assistant && !$0.isDraft })
+        XCTAssertEqual(manager.liveModelOutputPreview, finalAssistantMessage?.content)
+    }
+
     func testSplitReasoningExtractsAndStripsBlock() {
         let input = """
         <ide_reasoning>
@@ -181,18 +212,46 @@ final class ConversationManagerTests: XCTestCase {
             "Conversation cleared. How can I assist you now?"
         )
     }
+
+    func testStopGenerationCancelsInFlightResponse() async {
+        mockAIService.responseDelayNanoseconds = 800_000_000
+        manager.currentInput = "Long running task"
+        manager.sendMessage()
+
+        let sendingExpectation = expectation(description: "Manager entered sending state")
+        Task { @MainActor in
+            let deadline = Date().addingTimeInterval(1.0)
+            while Date() < deadline {
+                if self.manager.isSending {
+                    sendingExpectation.fulfill()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+        }
+        await fulfillment(of: [sendingExpectation], timeout: 2.0)
+
+        manager.stopGeneration()
+
+        XCTAssertFalse(manager.isSending)
+        XCTAssertEqual(manager.liveModelOutputPreview, "Generation stopped by user.")
+    }
 }
 
 // MARK: - Mocks
 
 final class MockAIService: AIService, @unchecked Sendable {
     var nextHistoryResponse = AIServiceResponse(content: "Mock response", toolCalls: nil)
+    var responseDelayNanoseconds: UInt64 = 0
     private(set) var lastHistoryRequest: AIServiceHistoryRequest?
 
     func sendMessage(
         _ request: AIServiceMessageWithProjectRootRequest
     ) async throws -> AIServiceResponse {
         _ = request
+        if responseDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: responseDelayNanoseconds)
+        }
         return nextHistoryResponse
     }
 
@@ -200,6 +259,9 @@ final class MockAIService: AIService, @unchecked Sendable {
         _ request: AIServiceHistoryRequest
     ) async throws -> AIServiceResponse {
         lastHistoryRequest = request
+        if responseDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: responseDelayNanoseconds)
+        }
         return nextHistoryResponse
     }
 

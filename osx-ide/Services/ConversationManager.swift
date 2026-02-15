@@ -41,6 +41,9 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published var error: String?
     @Published var currentMode: AIMode = .chat
     @Published var cancelledToolCallIds: Set<String> = []
+    @Published private(set) var liveModelOutputPreview: String = ""
+    @Published private(set) var liveModelOutputStatusPreview: String = ""
+    @Published private(set) var isLiveModelOutputPreviewVisible: Bool = true
 
     private let historyManager: ChatHistoryManager
     private let historyCoordinator: ChatHistoryCoordinator
@@ -71,6 +74,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var draftAssistantMessageId: UUID?
     private var draftAssistantText: String = ""
     private var activeSendTask: Task<Void, Never>?
+    private let maxPreviewCharacters = 12_000
+    private let maxStatusPreviewCharacters = 4_000
 
     var messages: [ChatMessage] {
         historyCoordinator.messages
@@ -147,6 +152,13 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 self.handleLocalModelStreamingChunk(event)
             }
             .store(in: &cancellables)
+
+        eventBus
+            .subscribe(to: LocalModelStreamingStatusEvent.self) { [weak self] event in
+                guard let self else { return }
+                self.handleLocalModelStreamingStatus(event)
+            }
+            .store(in: &cancellables)
     }
 
     private func handleLocalModelStreamingChunk(_ event: LocalModelStreamingChunkEvent) {
@@ -154,6 +166,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         guard let draftId = draftAssistantMessageId else { return }
 
         draftAssistantText.append(event.chunk)
+        appendToLiveModelPreview(event.chunk)
         let trimmed = draftAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
         
         // Update the draft message with streaming content
@@ -167,6 +180,11 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 isDraft: true
             )
         )
+    }
+
+    private func handleLocalModelStreamingStatus(_ event: LocalModelStreamingStatusEvent) {
+        guard let runId = activeStreamingRunId, runId == event.runId else { return }
+        appendToLiveModelStatusPreview(event.message)
     }
 
     private func setupObservation() {
@@ -286,6 +304,45 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         error = nil
     }
 
+    private func appendToLiveModelPreview(_ chunk: String) {
+        guard !chunk.isEmpty else { return }
+        liveModelOutputPreview.append(chunk)
+        if liveModelOutputPreview.count > maxPreviewCharacters {
+            liveModelOutputPreview = String(liveModelOutputPreview.suffix(maxPreviewCharacters))
+        }
+    }
+
+    private func setLiveModelPreview(_ text: String) {
+        if text.count > maxPreviewCharacters {
+            liveModelOutputPreview = String(text.suffix(maxPreviewCharacters))
+        } else {
+            liveModelOutputPreview = text
+        }
+    }
+
+    private func appendToLiveModelStatusPreview(_ message: String) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if liveModelOutputStatusPreview.isEmpty {
+            liveModelOutputStatusPreview = trimmed
+        } else {
+            liveModelOutputStatusPreview += "\n" + trimmed
+        }
+
+        if liveModelOutputStatusPreview.count > maxStatusPreviewCharacters {
+            liveModelOutputStatusPreview = String(liveModelOutputStatusPreview.suffix(maxStatusPreviewCharacters))
+        }
+    }
+
+    private func setLiveModelStatusPreview(_ text: String) {
+        if text.count > maxStatusPreviewCharacters {
+            liveModelOutputStatusPreview = String(text.suffix(maxStatusPreviewCharacters))
+        } else {
+            liveModelOutputStatusPreview = text
+        }
+    }
+
     private func resetStreamingDraftState() {
         activeStreamingRunId = nil
         draftAssistantMessageId = nil
@@ -320,6 +377,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             self.draftAssistantMessageId = draftMessage.id
             self.draftAssistantText = ""
             self.activeStreamingRunId = runId
+            self.setLiveModelPreview("Waiting for model output…")
+            self.setLiveModelStatusPreview("Run started: awaiting streamed output and tool calls…")
             self.historyCoordinator.append(draftMessage)
 
             let tools = (self.currentMode == .chat) ? [] : self.availableTools
@@ -345,6 +404,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     )
                 )
 
+                if let finalAssistantMessage = self.messages.last(where: { $0.role == .assistant && !$0.isDraft }) {
+                    self.setLiveModelPreview(finalAssistantMessage.content)
+                }
+                self.appendToLiveModelStatusPreview("Run completed.")
                 self.resetStreamingDraftState()
                 self.isSending = false
             } catch {
@@ -354,6 +417,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 }
                 self.resetStreamingDraftState()
                 if error is CancellationError {
+                    self.setLiveModelPreview("Generation cancelled.")
+                    self.appendToLiveModelStatusPreview("Run cancelled.")
                     self.isSending = false
                     return
                 }
@@ -373,6 +438,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             content: "I encountered an error: \(error.localizedDescription). Please try again."
         )
         historyCoordinator.append(errorMessage)
+        setLiveModelPreview("Error: \(error.localizedDescription)")
+        appendToLiveModelStatusPreview("Run failed: \(error.localizedDescription)")
         
         Task { @MainActor in
             errorManager.handle(.aiServiceError(error.localizedDescription))
@@ -385,6 +452,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         cancelActiveSendTask()
         resetConversationInteractionState()
         currentInput = ""
+        setLiveModelPreview("")
+        setLiveModelStatusPreview("")
         historyCoordinator.clearConversation()
         cancelledToolCallIds.removeAll()
     }
@@ -393,6 +462,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         cancelActiveSendTask()
         resetConversationInteractionState()
         currentInput = ""
+        setLiveModelPreview("")
+        setLiveModelStatusPreview("")
 
         let oldConversationId = conversationId
         let ids = historyCoordinator.startNewConversation(projectRoot: projectRoot)
@@ -406,6 +477,15 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         )
     }
 
+    func stopGeneration() {
+        guard isSending else { return }
+        cancelActiveSendTask()
+        resetStreamingDraftState()
+        isSending = false
+        setLiveModelPreview("Generation stopped by user.")
+        appendToLiveModelStatusPreview("Run stopped by user.")
+    }
+
     func cancelToolCall(id: String) {
         cancelledToolCallIds.insert(id)
         // Find the specific tool execution message and mark it as failed/cancelled
@@ -414,10 +494,14 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     func explainCode(_ code: String) {
         isSending = true
+        setLiveModelPreview("")
+        setLiveModelStatusPreview("")
         Task { [weak self] in
             guard let self = self else { return }
             do {
                 let response = try await aiService.explainCode(code)
+                self.setLiveModelPreview(response)
+                self.appendToLiveModelStatusPreview("Explain code completed.")
                 self.historyManager.append(
                     ChatMessage(
                         role: .user,
@@ -429,6 +513,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 self.isSending = false
             } catch {
                 self.error = "Failed to explain code: \(error.localizedDescription)"
+                self.setLiveModelPreview("Error: \(error.localizedDescription)")
+                self.appendToLiveModelStatusPreview("Explain code failed: \(error.localizedDescription)")
                 self.isSending = false
             }
         }
@@ -436,10 +522,14 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     func refactorCode(_ code: String, instructions: String) {
         isSending = true
+        setLiveModelPreview("")
+        setLiveModelStatusPreview("")
         Task { [weak self] in
             guard let self = self else { return }
             do {
                 let response = try await aiService.refactorCode(code, instructions: instructions)
+                self.setLiveModelPreview(response)
+                self.appendToLiveModelStatusPreview("Refactor code completed.")
                 self.historyManager.append(
                     ChatMessage(
                         role: .user,
@@ -457,6 +547,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 self.isSending = false
             } catch {
                 self.error = "Failed to refactor code: \(error.localizedDescription)"
+                self.setLiveModelPreview("Error: \(error.localizedDescription)")
+                self.appendToLiveModelStatusPreview("Refactor code failed: \(error.localizedDescription)")
                 self.isSending = false
             }
         }

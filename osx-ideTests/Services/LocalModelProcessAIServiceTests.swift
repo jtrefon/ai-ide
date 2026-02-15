@@ -160,7 +160,9 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             model: "",
             baseURL: OpenRouterSettings.empty.baseURL,
             systemPrompt: "CUSTOM_SYSTEM_PROMPT",
-            reasoningEnabled: true
+            reasoningEnabled: true,
+            toolPromptMode: .fullStatic,
+            ragEnabledDuringToolLoop: true
         ))
 
         let service = LocalModelProcessAIService(
@@ -216,5 +218,40 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
         XCTAssertNil(response.content)
         XCTAssertEqual(response.toolCalls?.count, 1)
         XCTAssertEqual(response.toolCalls?.first?.name, "write_file")
+    }
+
+    func testRecoverTextualToolCallsParsesToolCallsEnvelope() {
+        let content = """
+        ```json
+        {
+          "tool_calls": [
+            {
+              "id": "call_1",
+              "type": "function",
+              "function": {
+                "name": "write_file",
+                "arguments": {
+                  "path": "Sources/App.swift",
+                  "content": "print(1)"
+                }
+              }
+            }
+          ]
+        }
+        ```
+        """
+
+        let calls = LocalModelProcessAIService.NativeMLXGenerator.recoverTextualToolCalls(from: content)
+
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(calls.first?.id, "call_1")
+        XCTAssertEqual(calls.first?.name, "write_file")
+        XCTAssertEqual(calls.first?.arguments["path"] as? String, "Sources/App.swift")
+    }
+
+    func testRecoverTextualToolCallsReturnsEmptyForNonJsonText() {
+        let content = "I'll update files now using tools."
+        let calls = LocalModelProcessAIService.NativeMLXGenerator.recoverTextualToolCalls(from: content)
+        XCTAssertTrue(calls.isEmpty)
     }
 }

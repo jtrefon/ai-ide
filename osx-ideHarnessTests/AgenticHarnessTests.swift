@@ -5,7 +5,7 @@ import XCTest
 // MARK: - Real MLX Model Harness Tests
 
 /// Harness tests using real MLX local model inference.
-/// Tests validate the complete pipeline: model → orchestration → tool execution.
+/// Tests validate the complete pipeline: model -> orchestration -> tool execution.
 /// Tests are skipped if the model is not installed.
 @MainActor
 final class AgenticHarnessTests: XCTestCase {
@@ -73,6 +73,7 @@ final class AgenticHarnessTests: XCTestCase {
     
     /// Test that the model can create a single file with specified content.
     /// This is the most basic tool execution test.
+    /// IMPORTANT: This test MUST fail if the model does not generate tool calls.
     func testHarnessCreatesSingleFile() async throws {
         let _ = try skipIfModelNotInstalled()
         let projectRoot = FileManager.default.temporaryDirectory
@@ -104,23 +105,52 @@ final class AgenticHarnessTests: XCTestCase {
         // Log conversation
         logConversation(historyCoordinator.messages)
         
+        // CRITICAL: Check for tool calls - this is the primary success criteria
+        let assistantMessagesWithToolCalls = historyCoordinator.messages.filter { 
+            $0.role == .assistant && !($0.toolCalls?.isEmpty ?? true)
+        }
+        let toolExecutionMessages = historyCoordinator.messages.filter { $0.isToolExecution }
+        
         // Check result
         let expectedFile = projectRoot.appendingPathComponent("hello.txt")
         let fileExists = FileManager.default.fileExists(atPath: expectedFile.path)
         
+        // Log diagnostic information
+        print("\n=== Test Results ===")
+        print("Tool calls generated: \(assistantMessagesWithToolCalls.count)")
+        print("Tool executions: \(toolExecutionMessages.count)")
+        print("File created: \(fileExists)")
+        
+        // Log telemetry for debugging model behavior
+        logToolCallingTelemetry(historyCoordinator.messages, tools: tools)
+        
+        // PRIMARY ASSERTION: Model must generate tool calls in agent mode
+        XCTAssertFalse(assistantMessagesWithToolCalls.isEmpty, 
+            "CRITICAL: Model must generate tool calls in agent mode. " +
+            "If this fails, the model is not calling tools properly. " +
+            "Check telemetry output above for diagnostic information.")
+        
+        // SECONDARY ASSERTION: Tool executions should occur
+        XCTAssertFalse(toolExecutionMessages.isEmpty,
+            "Tool execution messages should be present when tool calls are generated")
+        
+        // TERTIARY CHECK: File should be created
         if fileExists {
             let content = try String(contentsOf: expectedFile)
-            print("✅ File created with content: \(content)")
-            XCTAssertTrue(true, "File was created successfully")
+            print("File content: \(content)")
         } else {
-            print("❌ File was not created")
-            // Check if model at least responded
-            let assistantMessages = historyCoordinator.messages.filter { $0.role == .assistant }
-            XCTAssertFalse(assistantMessages.isEmpty, "Should have assistant response")
-            
-            // Log what the model said
-            for msg in assistantMessages {
-                print("Assistant said: \(msg.content.prefix(500))...")
+            print("WARNING: File was not created despite tool calls being generated.")
+            print("This indicates tool execution may have failed or used wrong parameters.")
+        }
+        
+        // Log what the model said for debugging
+        let assistantMessages = historyCoordinator.messages.filter { $0.role == .assistant }
+        for msg in assistantMessages {
+            print("Assistant content preview: \(msg.content.prefix(200))...")
+            if let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
+                for call in toolCalls {
+                    print("  Tool call: \(call.name) with args: \(call.arguments)")
+                }
             }
         }
     }
@@ -155,6 +185,12 @@ final class AgenticHarnessTests: XCTestCase {
         )
         
         logConversation(historyCoordinator.messages)
+        logToolCallingTelemetry(historyCoordinator.messages, tools: tools)
+        
+        // CRITICAL: Check for tool calls
+        let assistantMessagesWithToolCalls = historyCoordinator.messages.filter { 
+            $0.role == .assistant && !($0.toolCalls?.isEmpty ?? true)
+        }
         
         let fileA = projectRoot.appendingPathComponent("a.txt")
         let fileB = projectRoot.appendingPathComponent("b.txt")
@@ -164,15 +200,19 @@ final class AgenticHarnessTests: XCTestCase {
         
         print("File a.txt created: \(createdA)")
         print("File b.txt created: \(createdB)")
+        print("Tool calls generated: \(assistantMessagesWithToolCalls.count)")
         
-        // At least one file should be created for the test to be meaningful
+        // PRIMARY ASSERTION: Model must generate tool calls
+        XCTAssertFalse(assistantMessagesWithToolCalls.isEmpty,
+            "Model must generate tool calls for multi-file creation task")
+        
+        // SECONDARY ASSERTION: At least one file should be created
         XCTAssertTrue(createdA || createdB, "At least one file should be created")
     }
     
     // MARK: - Test: React Todo App Scaffold
     
     /// Test that the model can scaffold a basic React Todo application.
-    /// This tests the model's ability to understand project structure and create multiple related files.
     func testHarnessScaffoldsReactTodoApp() async throws {
         let _ = try skipIfModelNotInstalled()
         let projectRoot = FileManager.default.temporaryDirectory
@@ -200,8 +240,12 @@ final class AgenticHarnessTests: XCTestCase {
         )
         
         logConversation(historyCoordinator.messages)
+        logToolCallingTelemetry(historyCoordinator.messages, tools: tools)
         
-        // Check that tool execution occurred
+        // CRITICAL: Check for tool calls
+        let assistantMessagesWithToolCalls = historyCoordinator.messages.filter { 
+            $0.role == .assistant && !($0.toolCalls?.isEmpty ?? true)
+        }
         let toolMessages = historyCoordinator.messages.filter { $0.isToolExecution }
         print("Tool execution messages: \(toolMessages.count)")
         
@@ -209,11 +253,59 @@ final class AgenticHarnessTests: XCTestCase {
         let createdFiles = listAllFiles(under: projectRoot)
         print("Files created (\(createdFiles.count)):")
         for file in createdFiles {
-            print("  ✅ \(file)")
+            print("  \(file)")
         }
         
-        // The model should have created at least 2 files for a meaningful scaffold
+        // PRIMARY ASSERTION: Model must generate tool calls
+        XCTAssertFalse(assistantMessagesWithToolCalls.isEmpty,
+            "Model must generate tool calls for scaffold task")
+        
+        // SECONDARY ASSERTION: At least 2 files should be created
         XCTAssertGreaterThanOrEqual(createdFiles.count, 2, "At least 2 scaffold files should be created")
+    }
+
+    /// Production parity test: uses ConversationManager + ModelRoutingAIService + index-backed tools.
+    /// This test validates that the production code path works with a simpler single-turn scenario
+    /// to avoid MLX threading issues that occur with extended multi-turn tests.
+    func testProductionParitySingleTurn() async throws {
+        let _ = try skipIfModelNotInstalled()
+
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+
+        // Pre-create a basic project structure so the index has content
+        let srcDir = projectRoot.appendingPathComponent("src", isDirectory: true)
+        try FileManager.default.createDirectory(at: srcDir, withIntermediateDirectories: true)
+        
+        let existingFile = projectRoot.appendingPathComponent("README.md")
+        try "# Test Project".write(to: existingFile, atomically: true, encoding: .utf8)
+
+        let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
+        let manager = runtime.manager
+        manager.currentMode = .agent
+
+        print("\n=== Production Parity Single Turn ===")
+        print("Project root: \(projectRoot.path)")
+        print("Model: \(modelId)")
+
+        // Single turn: create a simple file
+        try await sendProductionMessage(
+            "Use write_file tool to create a file named test.txt with content 'Hello World'",
+            manager: manager,
+            timeoutSeconds: 180
+        )
+
+        let toolMessages = manager.messages.filter { $0.isToolExecution }
+        XCTAssertFalse(toolMessages.isEmpty, "Should execute tools in production-parity path")
+
+        // Check that file was created
+        let createdFiles = listAllFiles(under: projectRoot)
+        print("Files created: \(createdFiles)")
+        
+        XCTAssertTrue(createdFiles.contains("test.txt"), "Should create test.txt file")
+
+        logToolTrail(messages: manager.messages)
     }
     
     // MARK: - Test: File Edit Chain
@@ -250,11 +342,23 @@ final class AgenticHarnessTests: XCTestCase {
         )
         
         logConversation(historyCoordinator.messages)
+        logToolCallingTelemetry(historyCoordinator.messages, tools: tools)
+        
+        // CRITICAL: Check for tool calls
+        let assistantMessagesWithToolCalls = historyCoordinator.messages.filter { 
+            $0.role == .assistant && !($0.toolCalls?.isEmpty ?? true)
+        }
         
         // Check if file was edited
         let content = try String(contentsOf: existingFile)
         print("File content after edit: \(content)")
+        print("Tool calls generated: \(assistantMessagesWithToolCalls.count)")
         
+        // PRIMARY ASSERTION: Model must generate tool calls
+        XCTAssertFalse(assistantMessagesWithToolCalls.isEmpty,
+            "Model must generate tool calls for edit task")
+        
+        // SECONDARY ASSERTION: File should be edited
         XCTAssertTrue(content.contains("name=new"), "File should be edited with new value")
     }
     
@@ -307,7 +411,7 @@ final class AgenticHarnessTests: XCTestCase {
             if let strategicIndex = phases.firstIndex(of: StrategicPlanningNode.idValue),
                let tacticalIndex = phases.firstIndex(of: TacticalPlanningNode.idValue) {
                 XCTAssertLessThan(strategicIndex, tacticalIndex, "Strategic should come before tactical")
-                print("✅ Phase order correct: strategic before tactical")
+                print("Phase order correct: strategic before tactical")
             }
         } else {
             print("No orchestration snapshots found")
@@ -352,6 +456,15 @@ final class AgenticHarnessTests: XCTestCase {
                 print("  Tool: \(envelope.toolName), Status: \(envelope.status.rawValue)")
             }
         }
+        
+        // CRITICAL: Check for tool calls
+        let assistantMessagesWithToolCalls = historyCoordinator.messages.filter { 
+            $0.role == .assistant && !($0.toolCalls?.isEmpty ?? true)
+        }
+        
+        // PRIMARY ASSERTION: Model must generate tool calls
+        XCTAssertFalse(assistantMessagesWithToolCalls.isEmpty,
+            "Model must generate tool calls for file creation task")
         
         // If file was created, we should have tool execution messages
         let fileExists = FileManager.default.fileExists(atPath: projectRoot.appendingPathComponent("test.txt").path)
@@ -444,21 +557,92 @@ final class AgenticHarnessTests: XCTestCase {
         
         print("Turn 2 complete. Messages: \(historyCoordinator.messages.count)")
         
+        // CRITICAL: Check for tool calls across both turns
+        let assistantMessagesWithToolCalls = historyCoordinator.messages.filter { 
+            $0.role == .assistant && !($0.toolCalls?.isEmpty ?? true)
+        }
+        
         // Check both files
         let file1Exists = FileManager.default.fileExists(atPath: projectRoot.appendingPathComponent("turn1.txt").path)
         let file2Exists = FileManager.default.fileExists(atPath: projectRoot.appendingPathComponent("turn2.txt").path)
         
         print("turn1.txt exists: \(file1Exists)")
         print("turn2.txt exists: \(file2Exists)")
+        print("Tool calls generated: \(assistantMessagesWithToolCalls.count)")
         
-        // At least one file should be created
+        // PRIMARY ASSERTION: Model must generate tool calls
+        XCTAssertFalse(assistantMessagesWithToolCalls.isEmpty,
+            "Model must generate tool calls in multi-turn conversation")
+        
+        // SECONDARY ASSERTION: At least one file should be created
         XCTAssertTrue(file1Exists || file2Exists, "At least one file should be created in multi-turn")
+    }
+    
+    // MARK: - Test: Tool Execution Telemetry
+    
+    /// Test that tool execution telemetry is tracked and healthy.
+    func testHarnessToolExecutionTelemetry() async throws {
+        let _ = try skipIfModelNotInstalled()
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+        
+        // Reset telemetry for clean test
+        ToolExecutionTelemetry.shared.reset()
+        
+        let localService = await makeLocalService()
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let sendCoordinator = makeSendCoordinator(
+            aiService: localService,
+            historyCoordinator: historyCoordinator,
+            projectRoot: projectRoot
+        )
+        
+        let tools = makeFileTools(projectRoot: projectRoot)
+        
+        print("\n=== Test: Tool Execution Telemetry ===")
+        
+        try await sendUserMessage(
+            "Create a file named telemetry-test.txt with content 'testing telemetry'",
+            historyCoordinator: historyCoordinator,
+            sendCoordinator: sendCoordinator,
+            projectRoot: projectRoot,
+            availableTools: tools
+        )
+        
+        // Get telemetry summary
+        let summary = ToolExecutionTelemetry.shared.summary
+        
+        print("\n=== Telemetry Summary ===")
+        print(summary.healthReport)
+        print("Total iterations: \(summary.totalIterations)")
+        print("Successful executions: \(summary.successfulExecutions)")
+        
+        // PRIMARY ASSERTION: Model must generate tool calls
+        let assistantMessagesWithToolCalls = historyCoordinator.messages.filter { 
+            $0.role == .assistant && !($0.toolCalls?.isEmpty ?? true)
+        }
+        XCTAssertFalse(assistantMessagesWithToolCalls.isEmpty,
+            "Model must generate tool calls for telemetry test")
+        
+        // SECONDARY ASSERTION: Telemetry should show iterations
+        XCTAssertGreaterThan(summary.totalIterations, 0, "Should have at least one iteration")
+        
+        // TERTIARY ASSERTION: Quality metrics should be healthy (target: 0)
+        // Note: In production, these should all be 0. In tests, we log but don't fail.
+        if !summary.isHealthy {
+            print("WARNING: Telemetry shows quality issues:")
+            print("  - Responses without tool calls: \(summary.responsesWithoutToolCalls)")
+            print("  - Textual tool call patterns: \(summary.textualToolCallPatterns)")
+            print("  - Deduplicated tool calls: \(summary.deduplicatedToolCalls)")
+            print("  - Repeated batches: \(summary.repeatedBatches)")
+            print("  - Repeated content: \(summary.repeatedContent)")
+        }
     }
     
     // MARK: - Test: Memory Stability Across Turns
     
     /// Test that MLX memory does not grow unboundedly across multiple turns.
-    /// Validates the memory management fixes: maxKVSize, GPU cache clearing, message truncation.
     func testHarnessMemoryStabilityAcrossTurns() async throws {
         let _ = try skipIfModelNotInstalled()
         let projectRoot = FileManager.default.temporaryDirectory
@@ -514,7 +698,8 @@ final class AgenticHarnessTests: XCTestCase {
     
     // MARK: - Test: Model Tool Calling Capability
     
-    /// Informational test to check if the model supports native tool calling.
+    /// Diagnostic test to check if the model supports native tool calling.
+    /// This test provides detailed telemetry about how the model calls tools.
     func testHarnessModelToolCallingCapability() async throws {
         let _ = try skipIfModelNotInstalled()
         let projectRoot = FileManager.default.temporaryDirectory
@@ -523,10 +708,16 @@ final class AgenticHarnessTests: XCTestCase {
         
         let localService = await makeLocalService()
         
-        print("\n=== Test: Model Tool Calling Capability ===")
+        print("\n=== Test: Model Tool Calling Capability (Diagnostic) ===")
         print("Model: \(modelId)")
         
         let tools = makeFileTools(projectRoot: projectRoot)
+        
+        // Log available tools
+        print("\nAvailable tools:")
+        for tool in tools {
+            print("  - \(tool.name): \(tool.description.prefix(50))...")
+        }
         
         let response = try await localService.sendMessage(AIServiceHistoryRequest(
             messages: [ChatMessage(role: .user, content: "Create a file called capability-test.txt with content 'test'")],
@@ -536,20 +727,27 @@ final class AgenticHarnessTests: XCTestCase {
             projectRoot: projectRoot
         ))
         
-        print("Response content: \(response.content ?? "(nil)")")
+        print("\n=== Model Response ===")
+        print("Content length: \(response.content?.count ?? 0)")
+        print("Content preview: \(response.content?.prefix(300) ?? "(nil)")")
         print("Tool calls: \(response.toolCalls?.count ?? 0)")
         
         if let toolCalls = response.toolCalls {
             for call in toolCalls {
-                print("  Tool: \(call.name), args: \(call.arguments)")
+                print("  Tool: \(call.name)")
+                print("    ID: \(call.id)")
+                print("    Args: \(call.arguments)")
             }
         }
         
         let hasToolCalls = response.toolCalls?.isEmpty == false
         print("\nModel \(modelId) native tool calling: \(hasToolCalls ? "YES" : "NO")")
         
-        // This test is informational
-        XCTAssertTrue(true, "Capability test completed")
+        // CRITICAL: This assertion now fails if model doesn't call tools
+        XCTAssertTrue(hasToolCalls, 
+            "Model must support native tool calling for agent mode to work. " +
+            "If this fails, check: 1) toolCallFormat configuration, " +
+            "2) chat template tool support, 3) message building in LocalModelProcessAIService")
     }
     
     // MARK: - Helper Methods
@@ -557,6 +755,175 @@ final class AgenticHarnessTests: XCTestCase {
     private func makeHistoryCoordinator(projectRoot: URL) -> ChatHistoryCoordinator {
         let historyManager = ChatHistoryManager()
         return ChatHistoryCoordinator(historyManager: historyManager, projectRoot: projectRoot)
+    }
+
+    private struct ProductionRuntime {
+        let manager: ConversationManager
+    }
+
+    private func makeProductionRuntime(projectRoot: URL) async throws -> ProductionRuntime {
+        let eventBus = EventBus()
+        let errorManager = HarnessErrorManager()
+        let fileSystemService = FileSystemService()
+        let workspaceService = WorkspaceService(
+            errorManager: errorManager,
+            eventBus: eventBus,
+            fileSystemService: fileSystemService
+        )
+
+        let selectionStore = await makeSelectionStore()
+        let localService = LocalModelProcessAIService(
+            selectionStore: selectionStore,
+            eventBus: eventBus
+        )
+        let openRouterService = OpenRouterAIService(eventBus: eventBus)
+        let routingService = ModelRoutingAIService(
+            openRouterService: openRouterService,
+            localService: localService,
+            selectionStore: selectionStore
+        )
+
+        let codebaseIndex = try CodebaseIndex(
+            eventBus: eventBus,
+            projectRoot: projectRoot,
+            aiService: routingService
+        )
+        codebaseIndex.start()
+        codebaseIndex.setEnabled(true)
+
+        let manager = ConversationManager(
+            dependencies: ConversationManager.Dependencies(
+                services: ConversationManager.ServiceDependencies(
+                    aiService: routingService,
+                    errorManager: errorManager,
+                    fileSystemService: fileSystemService,
+                    fileEditorService: nil
+                ),
+                environment: ConversationManager.EnvironmentDependencies(
+                    workspaceService: workspaceService,
+                    eventBus: eventBus,
+                    projectRoot: projectRoot,
+                    codebaseIndex: codebaseIndex
+                )
+            )
+        )
+
+        await ConversationPlanStore.shared.setProjectRoot(projectRoot)
+        return ProductionRuntime(manager: manager)
+    }
+
+    private func sendProductionMessage(_ text: String, manager: ConversationManager, timeoutSeconds: TimeInterval = 180) async throws {
+        manager.currentInput = text
+        manager.sendMessage()
+        try await waitForConversationToFinish(manager, timeoutSeconds: timeoutSeconds)
+        if let error = manager.error {
+            XCTFail("Conversation manager reported error: \(error)")
+        }
+    }
+
+    private func waitForConversationToFinish(_ manager: ConversationManager, timeoutSeconds: TimeInterval = 180) async throws {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if !manager.isSending {
+                return
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        XCTFail("Timed out waiting for conversation manager to finish send task")
+    }
+
+    private func readLatestRunSnapshots(projectRoot: URL, conversationId: String) throws -> [OrchestrationRunSnapshot] {
+        let runDirectory = projectRoot
+            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent("orchestration", isDirectory: true)
+            .appendingPathComponent("runs", isDirectory: true)
+            .appendingPathComponent(conversationId, isDirectory: true)
+
+        let files = try FileManager.default.contentsOfDirectory(
+            at: runDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+        let latest = try files
+            .filter { $0.pathExtension == "jsonl" }
+            .max { lhs, rhs in
+                let leftDate = try lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate ?? .distantPast
+                let rightDate = try rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate ?? .distantPast
+                return leftDate < rightDate
+            }
+
+        guard let latest else {
+            return []
+        }
+
+        let data = try Data(contentsOf: latest)
+        let lines = String(data: data, encoding: .utf8)?
+            .split(separator: "\n", omittingEmptySubsequences: true) ?? []
+
+        let decoder = JSONDecoder()
+        return try lines.map { line in
+            try decoder.decode(OrchestrationRunSnapshot.self, from: Data(line.utf8))
+        }
+    }
+
+    private func logToolTrail(messages: [ChatMessage]) {
+        let toolMessages = messages.filter { $0.isToolExecution }
+        print("\n--- Tool Trail (\(toolMessages.count) tool messages) ---")
+        for message in toolMessages {
+            if let envelope = ToolExecutionEnvelope.decode(from: message.content) {
+                print("[\(envelope.status.rawValue)] \(envelope.toolName) -> \(envelope.targetFile ?? "(none)")")
+            } else {
+                print("[tool] \(message.toolName ?? "unknown") :: \(message.content.prefix(160))")
+            }
+        }
+        print("--- End Tool Trail ---\n")
+    }
+    
+    /// Log telemetry about tool calling behavior for debugging
+    private func logToolCallingTelemetry(_ messages: [ChatMessage], tools: [AITool]) {
+        print("\n=== Tool Calling Telemetry ===")
+        print("Available tools: \(tools.map { $0.name }.joined(separator: ", "))")
+        
+        let assistantMessages = messages.filter { $0.role == .assistant }
+        print("Assistant messages: \(assistantMessages.count)")
+        
+        var totalToolCalls = 0
+        var toolCallNames: [String] = []
+        
+        for msg in assistantMessages {
+            if let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
+                totalToolCalls += toolCalls.count
+                for call in toolCalls {
+                    toolCallNames.append(call.name)
+                }
+            }
+        }
+        
+        print("Total tool calls generated: \(totalToolCalls)")
+        print("Tool call names: \(toolCallNames)")
+        
+        let toolExecutionMessages = messages.filter { $0.isToolExecution }
+        print("Tool execution messages: \(toolExecutionMessages.count)")
+        
+        // Check for textual tool call patterns (model trying to call tools in text)
+        let textualPatterns = assistantMessages.filter { msg in
+            let content = msg.content.lowercased()
+            return content.contains("tool_calls:") || 
+                   content.contains("tool call:") ||
+                   content.contains("```json") ||
+                   content.contains("write_file(") ||
+                   content.contains("create_file(")
+        }
+        
+        if !textualPatterns.isEmpty {
+            print("WARNING: Found \(textualPatterns.count) messages with textual tool call patterns")
+            print("This suggests the model is trying to call tools but not in the expected format")
+            for msg in textualPatterns {
+                print("  Textual pattern preview: \(msg.content.prefix(100))...")
+            }
+        }
+        
+        print("=== End Telemetry ===\n")
     }
 
     /// Mirrors ConversationManager.sendMessage: append user message to history, then send.
@@ -677,7 +1044,7 @@ final class AgenticHarnessTests: XCTestCase {
             print("[\(msg.role.rawValue)] \(preview)...")
             if let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
                 for call in toolCalls {
-                    print("  → Tool: \(call.name)")
+                    print("  -> Tool: \(call.name)")
                 }
             }
         }

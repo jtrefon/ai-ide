@@ -87,3 +87,13 @@ public struct LocalModelStreamingChunkEvent: Event {
         self.chunk = chunk
     }
 }
+
+public struct LocalModelStreamingStatusEvent: Event {
+    public let runId: String
+    public let message: String
+
+    public init(runId: String, message: String) {
+        self.runId = runId
+        self.message = message
+    }
+}

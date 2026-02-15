@@ -68,6 +68,10 @@ public actor DatabaseStore {
         try database.findResourceMatches(query: query, limit: limit)
     }
 
+    public func pruneResourcesOutside(projectRoot: URL) throws -> Int {
+        try database.pruneResourcesOutside(projectRoot: projectRoot)
+    }
+
     public func candidatePathsForFTS(query: String, limit: Int) throws -> [String] {
         try database.candidatePathsForFTS(query: query, limit: limit)
     }

@@ -6,7 +6,22 @@ extension CodebaseIndex {
     }
 
     public func searchSymbolsWithPaths(nameLike query: String, limit: Int = 50) async throws -> [SymbolSearchResult] {
-        try await queryService.searchSymbolsWithPaths(nameLike: query, limit: limit)
+        let rawResults = try await queryService.searchSymbolsWithPaths(nameLike: query, limit: limit)
+        return rawResults.compactMap { result in
+            if let absolutePath = result.filePath {
+                guard let relativePath = scopedRelativePath(from: absolutePath) else {
+                    return nil
+                }
+                return SymbolSearchResult(symbol: result.symbol, filePath: relativePath)
+            }
+
+            guard let resourcePath = pathFromResourceId(result.symbol.resourceId),
+                  let relativePath = scopedRelativePath(from: resourcePath) else {
+                return nil
+            }
+
+            return SymbolSearchResult(symbol: result.symbol, filePath: relativePath)
+        }
     }
 
     public func getSummaries(projectRoot: URL, limit: Int = 20) async throws -> [(path: String, summary: String)] {
