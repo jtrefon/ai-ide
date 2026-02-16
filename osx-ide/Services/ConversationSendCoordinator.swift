@@ -50,8 +50,15 @@ final class ConversationSendCoordinator {
         _ request: SendRequest
     ) async throws {
         let sendStartTime = ContinuousClock.now
-        print("[SendDiagnostic] === Starting send for conversation \(request.conversationId.prefix(8)) ===")
-        print("[SendDiagnostic] Mode: \(request.mode.rawValue), Messages in history: \(historyCoordinator.messages.count)")
+        await AppLogger.shared.debug(
+            category: .conversation,
+            message: "send.start",
+            context: AppLogger.LogCallContext(metadata: [
+                "conversationId": String(request.conversationId.prefix(8)),
+                "mode": request.mode.rawValue,
+                "messageCount": historyCoordinator.messages.count
+            ])
+        )
         
         let foldStartTime = ContinuousClock.now
         try await foldingHandler.foldIfNeeded(
@@ -59,12 +66,25 @@ final class ConversationSendCoordinator {
             projectRoot: request.projectRoot
         )
         let foldDuration = foldStartTime.duration(to: ContinuousClock.now)
-        print("[SendDiagnostic] Folding took \(foldDuration), messages after fold: \(historyCoordinator.messages.count)")
+        await AppLogger.shared.debug(
+            category: .conversation,
+            message: "send.fold_complete",
+            context: AppLogger.LogCallContext(metadata: [
+                "foldDuration": foldDuration.description,
+                "messageCount": historyCoordinator.messages.count
+            ])
+        )
         
         let flowStartTime = ContinuousClock.now
         let response = try await executeConversationFlow(request)
         let flowDuration = flowStartTime.duration(to: ContinuousClock.now)
-        print("[SendDiagnostic] Conversation flow took \(flowDuration)")
+        await AppLogger.shared.debug(
+            category: .conversation,
+            message: "send.flow_complete",
+            context: AppLogger.LogCallContext(metadata: [
+                "flowDuration": flowDuration.description
+            ])
+        )
         
         finalResponseHandler.appendFinalMessageAndLog(
             response: response,
@@ -73,7 +93,13 @@ final class ConversationSendCoordinator {
         )
         
         let totalDuration = sendStartTime.duration(to: ContinuousClock.now)
-        print("[SendDiagnostic] === Send completed in \(totalDuration) ===")
+        await AppLogger.shared.debug(
+            category: .conversation,
+            message: "send.complete",
+            context: AppLogger.LogCallContext(metadata: [
+                "totalDuration": totalDuration.description
+            ])
+        )
     }
 
     private func executeConversationFlow(_ request: SendRequest) async throws -> AIServiceResponse {
@@ -103,60 +129,6 @@ final class ConversationSendCoordinator {
     }
 
     private func appendRunSnapshot(payload: RunSnapshotPayload) async {
-        let snapshot = OrchestrationRunSnapshot(
-            runId: payload.runId,
-            conversationId: payload.conversationId,
-            phase: payload.phase,
-            iteration: payload.iteration,
-            timestamp: Date(),
-            userInput: payload.userInput,
-            assistantDraft: payload.assistantDraft,
-            failureReason: payload.failureReason,
-            toolCalls: toolCallSummaries(payload.toolCalls),
-            toolResults: toolResultSummaries(payload.toolResults)
-        )
-        try? await OrchestrationRunStore.shared.appendSnapshot(snapshot)
-    }
-
-    private func toolCallSummaries(_ toolCalls: [AIToolCall]) -> [OrchestrationRunSnapshot.ToolCallSummary] {
-        toolCalls.map {
-            OrchestrationRunSnapshot.ToolCallSummary(
-                id: $0.id,
-                name: $0.name,
-                argumentKeys: Array($0.arguments.keys).sorted()
-            )
-        }
-    }
-
-    private func toolResultSummaries(_ toolResults: [ChatMessage]) -> [OrchestrationRunSnapshot.ToolResultSummary] {
-        toolResults.compactMap { message in
-            guard let toolCallId = message.toolCallId else { return nil }
-            let output = toolOutputText(from: message)
-            return OrchestrationRunSnapshot.ToolResultSummary(
-                toolCallId: toolCallId,
-                toolName: message.toolName ?? "unknown_tool",
-                status: message.toolStatus?.rawValue ?? "unknown",
-                targetFile: message.targetFile,
-                outputPreview: truncate(output, limit: 1200)
-            )
-        }
-    }
-
-    private func toolOutputText(from message: ChatMessage) -> String {
-        guard message.isToolExecution else { return message.content }
-        if let envelope = ToolExecutionEnvelope.decode(from: message.content) {
-            if let payload = envelope.payload?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !payload.isEmpty {
-                return payload
-            }
-            return envelope.message
-        }
-        return message.content
-    }
-
-    private func truncate(_ text: String, limit: Int) -> String {
-        if text.count <= limit { return text }
-        let head = text.prefix(limit)
-        return String(head) + "\n\n[TRUNCATED]"
+        await ToolLoopUtilities.appendRunSnapshot(payload: payload)
     }
 }

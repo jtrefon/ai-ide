@@ -24,7 +24,7 @@ final class FinalResponseHandler {
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard draft.isEmpty else { return response }
 
-        let toolSummary = toolResultsSummaryText(toolResults)
+        let toolSummary = ToolLoopUtilities.toolResultsSummaryText(toolResults)
         let correctionContent: String
         if toolResults.isEmpty {
             correctionContent = "You returned no user-visible response. Provide a final response in plain text now. " +
@@ -146,28 +146,6 @@ final class FinalResponseHandler {
         }
     }
 
-    private func toolResultsSummaryText(_ toolResults: [ChatMessage]) -> String {
-        let lines = toolResults.compactMap { message -> String? in
-            guard let toolCallId = message.toolCallId else { return nil }
-            let status = message.toolStatus?.rawValue ?? "unknown"
-            let preview = truncate(toolOutputText(from: message), limit: 400)
-            return "- \(message.toolName ?? "unknown_tool") (\(toolCallId)) [\(status)]: \(preview)"
-        }
-        return lines.isEmpty ? "No tool outputs." : lines.joined(separator: "\n")
-    }
-
-    private func toolOutputText(from message: ChatMessage) -> String {
-        guard message.isToolExecution else { return message.content }
-        if let envelope = ToolExecutionEnvelope.decode(from: message.content) {
-            if let payload = envelope.payload?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !payload.isEmpty {
-                return payload
-            }
-            return envelope.message
-        }
-        return message.content
-    }
-
     private func isDuplicateOfLastAssistantMessage(content: String) -> Bool {
         guard let lastAssistant = historyCoordinator.messages.last(where: { $0.role == .assistant }) else {
             return false
@@ -193,11 +171,5 @@ final class FinalResponseHandler {
                 content: completedPlan
             ))
         }
-    }
-
-    private func truncate(_ text: String, limit: Int) -> String {
-        if text.count <= limit { return text }
-        let head = text.prefix(limit)
-        return String(head) + "\n\n[TRUNCATED]"
     }
 }

@@ -20,15 +20,3 @@ struct ToolLoopResult {
     let lastToolCalls: [AIToolCall]
     let lastToolResults: [ChatMessage]
 }
-
-struct RunSnapshotPayload {
-    let runId: String
-    let conversationId: String
-    let phase: String
-    let iteration: Int?
-    let userInput: String
-    let assistantDraft: String?
-    let failureReason: String?
-    let toolCalls: [AIToolCall]
-    let toolResults: [ChatMessage]
-}

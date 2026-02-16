@@ -1,8 +1,8 @@
 import Foundation
 
 enum MessageTruncationPolicy {
-    static let maxToolResultCharacters = 2000
-    static let maxTotalMessageCharacters = 12_000
+    static let maxToolResultCharacters = ToolLoopConstants.maxToolResultCharacters
+    static let maxTotalMessageCharacters = ToolLoopConstants.maxTotalMessageCharacters
     private static let truncationSuffix = "\n... [truncated]"
 
     static func truncateForModel(_ messages: [ChatMessage]) -> [ChatMessage] {
@@ -42,9 +42,9 @@ enum MessageTruncationPolicy {
         for index in result.indices where currentTotal > maxTotalMessageCharacters {
             let msg = result[index]
             guard msg.role == .tool || msg.isToolExecution else { continue }
-            guard msg.content.count > 500 else { continue }
+            guard msg.content.count > ToolLoopConstants.toolResultContentLimit else { continue }
 
-            let allowance = 500
+            let allowance = ToolLoopConstants.toolResultBudgetAllowance
             let trimmed = String(msg.content.prefix(allowance)) + truncationSuffix
             currentTotal -= (msg.content.count - trimmed.count)
             result[index] = ChatMessage(

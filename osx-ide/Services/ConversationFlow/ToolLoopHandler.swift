@@ -43,7 +43,7 @@ final class ToolLoopHandler {
         var consecutiveReadOnlyToolIterations = 0
         var previousReadOnlyToolBatchSignature: String?
         var repeatedReadOnlyToolBatchCount = 0
-        let maxIterations = (mode == .agent) ? 12 : 5
+        let maxIterations = (mode == .agent) ? ToolLoopConstants.maxAgentIterations : ToolLoopConstants.maxNonAgentIterations
 
         if mode == .agent,
            currentResponse.toolCalls?.isEmpty ?? true,
@@ -114,7 +114,7 @@ final class ToolLoopHandler {
                 break
             }
 
-            if repeatedToolBatchCount >= 2 {
+            if repeatedToolBatchCount >= ToolLoopConstants.repeatedBatchStallThreshold {
                 await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_batch_stall", data: [
                     "runId": runId,
                     "iteration": toolIteration,
@@ -208,17 +208,17 @@ final class ToolLoopHandler {
                 toolResults: toolResults
             )
 
-            await appendRunSnapshot(payload: RunSnapshotPayload(
+            await ToolLoopUtilities.appendRunSnapshot(
                 runId: runId,
                 conversationId: conversationId,
                 phase: "tool_loop",
                 iteration: toolIteration,
                 userInput: userInput,
                 assistantDraft: currentResponse.content,
-                failureReason: failureReason(from: toolResults),
+                failureReason: ToolLoopUtilities.failureReason(from: toolResults),
                 toolCalls: uniqueToolCalls,
                 toolResults: toolResults
-            ))
+            )
 
             let failureRecoveryMessage = toolFailureRecoveryMessage(
                 toolCalls: uniqueToolCalls,
@@ -399,7 +399,7 @@ final class ToolLoopHandler {
                 consecutiveEmptyToolCallResponses = 0
             }
 
-            if consecutiveEmptyToolCallResponses >= 2 {
+            if consecutiveEmptyToolCallResponses >= ToolLoopConstants.emptyResponseStallThreshold {
                 // For empty response stall, skip execution transition
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     explicitContext: explicitContext,
@@ -473,85 +473,6 @@ final class ToolLoopHandler {
         }
     }
 
-    private func appendRunSnapshot(payload: RunSnapshotPayload) async {
-        let snapshot = OrchestrationRunSnapshot(
-            runId: payload.runId,
-            conversationId: payload.conversationId,
-            phase: payload.phase,
-            iteration: payload.iteration,
-            timestamp: Date(),
-            userInput: payload.userInput,
-            assistantDraft: payload.assistantDraft,
-            failureReason: payload.failureReason,
-            toolCalls: toolCallSummaries(payload.toolCalls),
-            toolResults: toolResultSummaries(payload.toolResults)
-        )
-        try? await OrchestrationRunStore.shared.appendSnapshot(snapshot)
-    }
-
-    private func toolCallSummaries(_ toolCalls: [AIToolCall]) -> [OrchestrationRunSnapshot.ToolCallSummary] {
-        toolCalls.map {
-            OrchestrationRunSnapshot.ToolCallSummary(
-                id: $0.id,
-                name: $0.name,
-                argumentKeys: Array($0.arguments.keys).sorted()
-            )
-        }
-    }
-
-    private func toolResultSummaries(_ toolResults: [ChatMessage]) -> [OrchestrationRunSnapshot.ToolResultSummary] {
-        toolResults.compactMap { message in
-            guard let toolCallId = message.toolCallId else { return nil }
-            let output = toolOutputText(from: message)
-            return OrchestrationRunSnapshot.ToolResultSummary(
-                toolCallId: toolCallId,
-                toolName: message.toolName ?? "unknown_tool",
-                status: message.toolStatus?.rawValue ?? "unknown",
-                targetFile: message.targetFile,
-                outputPreview: truncate(output, limit: 1200)
-            )
-        }
-    }
-
-    private func toolResultsSummaryText(_ toolResults: [ChatMessage]) -> String {
-        let lines = toolResults.compactMap { message -> String? in
-            guard let toolCallId = message.toolCallId else { return nil }
-            let status = message.toolStatus?.rawValue ?? "unknown"
-            let preview = truncate(toolOutputText(from: message), limit: 400)
-            return "- \(message.toolName ?? "unknown_tool") (\(toolCallId)) [\(status)]: \(preview)"
-        }
-        return lines.isEmpty ? "No tool outputs." : lines.joined(separator: "\n")
-    }
-
-    private func failureReason(from toolResults: [ChatMessage]) -> String? {
-        let failures = toolResults.filter { $0.isToolExecution && $0.toolStatus == .failed }
-        guard !failures.isEmpty else { return nil }
-        let summary = failures.compactMap { message -> String? in
-            guard let toolCallId = message.toolCallId else { return nil }
-            let preview = truncate(toolOutputText(from: message), limit: 300)
-            return "\(message.toolName ?? "unknown_tool") (\(toolCallId)): \(preview)"
-        }
-        return summary.joined(separator: "\n")
-    }
-
-    private func toolOutputText(from message: ChatMessage) -> String {
-        guard message.isToolExecution else { return message.content }
-        if let envelope = ToolExecutionEnvelope.decode(from: message.content) {
-            if let payload = envelope.payload?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !payload.isEmpty {
-                return payload
-            }
-            return envelope.message
-        }
-        return message.content
-    }
-
-    private func truncate(_ text: String, limit: Int) -> String {
-        if text.count <= limit { return text }
-        let head = text.prefix(limit)
-        return String(head) + "\n\n[TRUNCATED]"
-    }
-
     private func toolFailureRecoveryMessage(
         toolCalls: [AIToolCall],
         toolResults: [ChatMessage]
@@ -561,7 +482,7 @@ final class ToolLoopHandler {
         }
         guard !failedToolResults.isEmpty else { return nil }
 
-        let failedOutputs = failedToolResults.map { toolOutputText(from: $0) }
+        let failedOutputs = failedToolResults.map { ToolLoopUtilities.toolOutputText(from: $0) }
         let hasTimeoutFailure = failedOutputs.contains { $0.localizedCaseInsensitiveContains("timed out") }
         let hasCancelledFailure = failedOutputs.contains { $0.localizedCaseInsensitiveContains("cancelled") }
 
@@ -575,7 +496,7 @@ final class ToolLoopHandler {
             let argumentSummary = argumentKeys.isEmpty
                 ? "arguments: none"
                 : "argument keys: \(argumentKeys.joined(separator: ", "))"
-            let output = toolOutputText(from: result)
+            let output = ToolLoopUtilities.toolOutputText(from: result)
             return "- \(toolName) (\(toolCallId)): \(output) [\(argumentSummary)]"
         }
 
@@ -624,8 +545,8 @@ final class ToolLoopHandler {
     private func toolLoopStepUpdateInstructionMessage(consecutiveReadOnlyIterations: Int = 0) -> ChatMessage {
         var content = "Before returning tool calls, include either (a) a short <ide_reasoning> block with Analyze/Plan/Action bullets or (b) at minimum one short user-facing update sentence explaining what you will do next and why. Then return tool calls. Do not ask the user for additional input."
         
-        // Add nudge after 2 consecutive read-only tool iterations
-        if consecutiveReadOnlyIterations >= 2 {
+        // Add nudge after consecutive read-only tool iterations
+        if consecutiveReadOnlyIterations >= ToolLoopConstants.readOnlyIterationNudgeThreshold {
             content += "\n\nIMPORTANT: You have made \(consecutiveReadOnlyIterations) consecutive read-only tool calls. " +
                 "If the task requires changes to files, transition to execution now using write_file, replace_in_file, or run_command. " +
                 "Do not continue gathering context if you have enough information to proceed."
@@ -676,10 +597,10 @@ final class ToolLoopHandler {
         }
 
         if isTextualToolCallPattern(response.content) {
-            return repeatedCount >= 1
+            return repeatedCount >= ToolLoopConstants.textualPatternRepeatedThreshold
         }
 
-        return repeatedCount >= 2
+        return repeatedCount >= ToolLoopConstants.normalPatternRepeatedThreshold
     }
 
     private func normalizedNoToolCallContentSignature(_ content: String?) -> String? {
@@ -730,7 +651,8 @@ final class ToolLoopHandler {
             repeatedReadOnlyToolBatchCount = 0
         }
 
-        return consecutiveReadOnlyToolIterations >= 3 || repeatedReadOnlyToolBatchCount >= 2
+        return consecutiveReadOnlyToolIterations >= ToolLoopConstants.readOnlyIterationStallThreshold
+            || repeatedReadOnlyToolBatchCount >= ToolLoopConstants.repeatedReadOnlyBatchStallThreshold
     }
 
     private var readOnlyLoopToolNames: Set<String> {
@@ -834,7 +756,7 @@ final class ToolLoopHandler {
         runId: String,
         availableTools: [AITool]? = nil
     ) async throws -> AIServiceResponse {
-        let toolSummary = toolResultsSummaryText(toolResults)
+        let toolSummary = ToolLoopUtilities.toolResultsSummaryText(toolResults)
         
         // If we have execution tools available, try to force execution transition first
         if let availableTools, mode == .agent {
