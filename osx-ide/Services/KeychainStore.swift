@@ -1,5 +1,11 @@
+//
+//  KeychainStore.swift
+//  osx-ide
+//
+//  Stores credentials securely in the macOS Keychain without requiring authentication on every read.
+//
+
 import Foundation
-import LocalAuthentication
 import Security
 
 final class KeychainStore {
@@ -14,17 +20,16 @@ final class KeychainStore {
         self.service = service
     }
 
+    /// Reads a password from the keychain without requiring authentication.
+    /// Uses kSecAttrAccessibleWhenUnlockedThisDeviceOnly for automatic access when unlocked.
     func readPassword(account: String) throws -> String? {
-        let authenticationContext = LAContext()
-        authenticationContext.localizedReason = "Authenticate to access the stored credential"
-
+        // Simple query without LAContext - no authentication required
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecReturnData as String: true,
-            kSecUseAuthenticationContext as String: authenticationContext
+            kSecReturnData as String: true
         ]
 
         var item: CFTypeRef?
@@ -41,9 +46,12 @@ final class KeychainStore {
         return String(data: data, encoding: .utf8)
     }
 
+    /// Saves a password to the keychain without requiring authentication on future reads.
+    /// Uses kSecAttrAccessibleWhenUnlockedThisDeviceOnly - accessible when Mac is unlocked.
     func savePassword(_ password: String, account: String) throws {
         let data = Data(password.utf8)
 
+        // First try to update existing item
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -58,32 +66,27 @@ final class KeychainStore {
         if updateStatus == errSecSuccess {
             return
         }
-        if updateStatus != errSecItemNotFound {
-            throw KeychainStoreError.unexpectedStatus(updateStatus)
-        }
+        
+        // If item doesn't exist, create new one
+        if updateStatus == errSecItemNotFound {
+            // Use kSecAttrAccessibleWhenUnlockedThisDeviceOnly - no authentication required
+            // when the Mac is unlocked. This is appropriate for API keys.
+            let addQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            ]
 
-        var accessControlError: Unmanaged<CFError>?
-        guard let accessControl = SecAccessControlCreateWithFlags(
-            nil,
-            kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-            .userPresence,
-            &accessControlError
-        ) else {
-            throw (accessControlError?.takeRetainedValue() as Error?) ?? KeychainStoreError.invalidItemFormat
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            guard addStatus == errSecSuccess else {
+                throw KeychainStoreError.unexpectedStatus(addStatus)
+            }
+            return
         }
-
-        let addQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecValueData as String: data,
-            kSecAttrAccessControl as String: accessControl
-        ]
-
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        guard addStatus == errSecSuccess else {
-            throw KeychainStoreError.unexpectedStatus(addStatus)
-        }
+        
+        throw KeychainStoreError.unexpectedStatus(updateStatus)
     }
 
     func deletePassword(account: String) throws {

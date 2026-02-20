@@ -22,7 +22,66 @@ final class FinalResponseHandler {
         runId: String
     ) async throws -> AIServiceResponse {
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        
+        // In Agent mode, always request a final response to ensure proper completion message
+        // The model may return generic status text but we want a summary
+        if mode == .agent && !draft.isEmpty {
+            // Check if content is too generic (short or contains generic patterns)
+            let isGenericContent = isGenericStatusMessage(draft)
+            if isGenericContent {
+                // Force final response generation for generic content
+                return try await requestFinalResponse(
+                    response: response,
+                    explicitContext: explicitContext,
+                    mode: mode,
+                    projectRoot: projectRoot,
+                    toolResults: toolResults,
+                    runId: runId
+                )
+            }
+        }
+        
         guard draft.isEmpty else { return response }
+        
+        return try await requestFinalResponse(
+            response: response,
+            explicitContext: explicitContext,
+            mode: mode,
+            projectRoot: projectRoot,
+            toolResults: toolResults,
+            runId: runId
+        )
+    }
+    
+    private func isGenericStatusMessage(_ content: String) -> Bool {
+        let lowercased = content.lowercased()
+        let genericPatterns = [
+            "continuing",
+            "next step",
+            "execution step",
+            "agent update",
+            "processing",
+            "working on",
+            "analyzing",
+            "gathering context"
+        ]
+        
+        // If content is short or matches generic patterns
+        if content.count < 50 {
+            return true
+        }
+        
+        return genericPatterns.contains { lowercased.contains($0) }
+    }
+    
+    private func requestFinalResponse(
+        response: AIServiceResponse,
+        explicitContext: String?,
+        mode: AIMode,
+        projectRoot: URL,
+        toolResults: [ChatMessage],
+        runId: String
+    ) async throws -> AIServiceResponse {
 
         let toolSummary = ToolLoopUtilities.toolResultsSummaryText(toolResults)
         let correctionContent: String
@@ -35,9 +94,15 @@ final class FinalResponseHandler {
                 "Do not ask the user for more inputs (diffs, files, confirmations). " +
                 "Make reasonable assumptions and state them briefly.\n\nTool outputs:\n\(toolSummary)"
         }
+        // Improve the prompt to get a better completion message
+        let improvedCorrection = correctionContent + "\n\nIMPORTANT: Your final response should include:\n" +
+            "1. Brief summary of what was accomplished\n" +
+            "2. Files that were modified (if any)\n" +
+            "3. Any errors or issues encountered\n" +
+            "4. Next steps if task is incomplete"
         let correctionSystem = ChatMessage(
             role: .system,
-            content: correctionContent
+            content: improvedCorrection
         )
 
         let followupMode: AIMode = (mode == .agent) ? .agent : .chat
@@ -66,7 +131,11 @@ final class FinalResponseHandler {
         return AIServiceResponse(content: resolvedContent, toolCalls: nil)
     }
 
-    func appendFinalMessageAndLog(response: AIServiceResponse, conversationId: String, draftAssistantMessageId: UUID?) {
+    func appendFinalMessageAndLog(
+        response: AIServiceResponse,
+        conversationId: String,
+        draftAssistantMessageId: String?
+    ) {
         let splitFinal = ChatPromptBuilder.splitReasoning(from: response.content ?? "No response received.")
         let trimmedContent = splitFinal.content.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayContent = trimmedContent.isEmpty
@@ -103,7 +172,7 @@ final class FinalResponseHandler {
         }
         
         // Finalize the draft message if it exists, otherwise append a new one
-        if let draftId = draftAssistantMessageId {
+        if let draftIdString = draftAssistantMessageId, let draftId = UUID(uuidString: draftIdString) {
             historyCoordinator.finalizeDraftMessage(
                 id: draftId,
                 content: displayContent,

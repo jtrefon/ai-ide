@@ -18,6 +18,128 @@ actor OpenRouterAIService: AIService {
         self.eventBus = eventBus
     }
 
+    /// Send a message with streaming support
+    func sendMessageStreaming(
+        _ request: AIServiceHistoryRequest,
+        runId: String
+    ) async throws -> AIServiceResponse {
+        let openRouterMessages = buildOpenRouterMessages(from: request.messages)
+        let historyInput = buildHistoryInput(messages: openRouterMessages, from: request)
+        return try await performChatStreamingWithHistory(historyInput, runId: runId)
+    }
+
+    private func performChatStreamingWithHistory(
+        _ request: OpenRouterChatHistoryInput,
+        runId: String
+    ) async throws -> AIServiceResponse {
+        let preparation = try buildChatPreparation(request: request)
+
+        await logRequestStart(RequestStartContext(
+            requestId: preparation.requestId,
+            model: preparation.settings.model,
+            messageCount: preparation.finalMessages.count,
+            toolCount: preparation.toolDefinitions?.count ?? 0,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            runId: request.runId,
+            stage: request.stage
+        ))
+
+        let requestBody = OpenRouterChatRequest(
+            model: preparation.settings.model,
+            messages: preparation.finalMessages,
+            maxTokens: 2048,
+            temperature: 0.2,
+            tools: preparation.toolDefinitions,
+            toolChoice: preparation.toolChoice,
+            stream: true  // Enable streaming
+        )
+
+        let body = try JSONEncoder().encode(requestBody)
+        await logRequestBody(requestId: preparation.requestId, bytes: body.count)
+
+        // Collect streaming chunks using a thread-safe wrapper
+        final class ChunkCollector: @unchecked Sendable {
+            var chunks: [String] = []
+            var toolCalls: [AIToolCall] = []
+            let lock = NSLock()
+            
+            func appendChunk(_ content: String) {
+                lock.lock()
+                defer { lock.unlock() }
+                chunks.append(content)
+            }
+            
+            func appendToolCalls(_ calls: [AIToolCall]) {
+                lock.lock()
+                defer { lock.unlock() }
+                toolCalls.append(contentsOf: calls)
+            }
+            
+            func getResults() -> (content: String, toolCalls: [AIToolCall]?) {
+                lock.lock()
+                defer { lock.unlock() }
+                let content = chunks.joined()
+                let tc = toolCalls.isEmpty ? nil : toolCalls
+                return (content, tc)
+            }
+        }
+        
+        let collector = ChunkCollector()
+
+        let requestContext = OpenRouterAPIClient.RequestContext(
+            baseURL: preparation.settings.baseURL,
+            appName: "OSX IDE",
+            referer: ""
+        )
+
+        try await client.chatCompletionStreaming(
+            apiKey: preparation.settings.apiKey,
+            context: requestContext,
+            body: body
+        ) { [weak self] chunkJson in
+            guard let self = self else { return }
+
+            // Parse the chunk
+            if let chunkData = chunkJson.data(using: .utf8),
+               let chunk = try? JSONDecoder().decode(OpenRouterChatResponseChunk.self, from: chunkData) {
+                if let delta = chunk.choices.first?.delta {
+                    if let content = delta.content {
+                        collector.appendChunk(content)
+                        // Publish streaming chunk event
+                        Task { @MainActor in
+                            self.eventBus.publish(LocalModelStreamingChunkEvent(
+                                runId: runId,
+                                chunk: content
+                            ))
+                        }
+                    }
+                    if let newToolCalls = delta.toolCalls, !newToolCalls.isEmpty {
+                        collector.appendToolCalls(newToolCalls)
+                    }
+                }
+            }
+        }
+
+        // Get collected results
+        let results = collector.getResults()
+        let fullContent = results.content
+        let toolCalls = results.toolCalls
+
+        // Log success
+        await logRequestSuccess(
+            requestId: preparation.requestId,
+            contentLength: fullContent.count,
+            toolCalls: toolCalls?.count ?? 0,
+            responseBytes: 0
+        )
+
+        return AIServiceResponse(
+            content: fullContent,
+            toolCalls: toolCalls
+        )
+    }
+
     func sendMessage(
         _ request: AIServiceMessageWithProjectRootRequest
     ) async throws -> AIServiceResponse {
@@ -86,7 +208,8 @@ actor OpenRouterAIService: AIService {
             maxTokens: 2048,
             temperature: 0.2,
             tools: preparation.toolDefinitions,
-            toolChoice: preparation.toolChoice
+            toolChoice: preparation.toolChoice,
+            stream: false
         )
 
         let body = try JSONEncoder().encode(requestBody)

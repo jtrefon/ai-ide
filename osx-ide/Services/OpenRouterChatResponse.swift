@@ -5,6 +5,21 @@ internal struct OpenRouterChatResponse: Decodable {
     let usage: OpenRouterChatUsage?
 }
 
+/// Streaming chunk response from OpenRouter
+internal struct OpenRouterChatResponseChunk: Decodable {
+    let choices: [OpenRouterChatResponseChunkChoice]
+}
+
+internal struct OpenRouterChatResponseChunkChoice: Decodable {
+    let delta: OpenRouterChatResponseMessage?
+    let finishReason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case delta
+        case finishReason = "finish_reason"
+    }
+}
+
 internal struct OpenRouterChatUsage: Decodable {
     let promptTokens: Int?
     let completionTokens: Int?

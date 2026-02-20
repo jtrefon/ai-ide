@@ -94,7 +94,7 @@ final class AIInteractionCoordinator {
                 projectRoot: request.projectRoot
             )
 
-            let result = await aiService.sendMessageResult(AIServiceHistoryRequest(
+            let historyRequest = AIServiceHistoryRequest(
                 messages: sanitizedMessages,
                 context: augmentedContext,
                 tools: filteredTools,
@@ -102,20 +102,42 @@ final class AIInteractionCoordinator {
                 projectRoot: request.projectRoot,
                 runId: request.runId,
                 stage: request.stage
-            ))
+            )
 
-            switch result {
-            case .success:
-                return result
-            case .failure(let error):
-                lastError = error
-                if attempt < maxAttempts {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+            // Use streaming if runId is provided (for real-time UI updates)
+            if let runId = request.runId {
+                do {
+                    let response = try await aiService.sendMessageStreaming(historyRequest, runId: runId)
+                    return .success(response)
+                } catch {
+                    lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
+                    if attempt < maxAttempts {
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    }
+                }
+            } else {
+                let result = await aiService.sendMessageResult(historyRequest)
+
+                switch result {
+                case .success:
+                    return result
+                case .failure(let error):
+                    lastError = error
+                    if attempt < maxAttempts {
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    }
                 }
             }
         }
 
         return .failure(lastError ?? .unknown("ConversationManager: sendMessageWithRetry failed"))
+    }
+
+    private static func mapToAppError(_ error: Error, operation: String) -> AppError {
+        if let appError = error as? AppError {
+            return appError
+        }
+        return .aiServiceError("AIService.\(operation) failed: \(error.localizedDescription)")
     }
 
     private func shouldUseRAGRetrieval(for stage: AIRequestStage?, settings: OpenRouterSettings) -> Bool {

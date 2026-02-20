@@ -210,6 +210,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     private func configureLoggingStores(root: URL) {
         Task.detached(priority: .utility) {
+            // CRITICAL: Set project root for all loggers including AI trace
+            await AIToolTraceLogger.shared.setProjectRoot(root)
             await AppLogger.shared.setProjectRoot(root)
             await ConversationLogStore.shared.setProjectRoot(root)
             await ExecutionLogStore.shared.setProjectRoot(root)

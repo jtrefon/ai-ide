@@ -11,18 +11,6 @@ public actor ConversationIndexStore {
         self.projectRoot = root
     }
 
-    private func appSupportIndexFileURL() -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-
-        let base = appSupport.appendingPathComponent("osx-ide/Logs", isDirectory: true)
-        let date = iso.string(from: Date()).prefix(10)
-        let conversationsDir = base
-            .appendingPathComponent(String(date), isDirectory: true)
-            .appendingPathComponent("conversations", isDirectory: true)
-        return conversationsDir.appendingPathComponent("index.ndjson")
-    }
-
     private func projectIndexFileURL() -> URL? {
         guard let projectRoot else { return nil }
         return projectRoot
@@ -48,10 +36,7 @@ public actor ConversationIndexStore {
             line.append(json)
             line.append(Data("\n".utf8))
 
-            let appIndexURL = appSupportIndexFileURL()
-            try NDJSONLogFileWriter.ensureDirectoryExists(for: appIndexURL)
-            try NDJSONLogFileWriter.append(line: line, to: appIndexURL)
-
+            // Write ONLY to project directory (no Application Support)
             if let projectIndexURL = projectIndexFileURL() {
                 try NDJSONLogFileWriter.ensureDirectoryExists(for: projectIndexURL)
                 try NDJSONLogFileWriter.append(line: line, to: projectIndexURL)

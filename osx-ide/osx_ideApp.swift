@@ -164,6 +164,18 @@ struct OSXIDEApp: App {
             }
 
             CommandMenu(localized("menu.tools")) {
+                // AI Mode Toggle
+                Menu("AI Mode") {
+                    Button("Chat (Read-Only)") {
+                        appState.conversationManager.currentMode = .chat
+                    }
+                    Button("Agent (Full Access)") {
+                        appState.conversationManager.currentMode = .agent
+                    }
+                }
+                
+                Divider()
+                
                 Toggle(localized("menu.tools.codebase_index_enabled"), isOn: $codebaseIndexEnabled)
                     .onChange(of: codebaseIndexEnabled) { _, newValue in
                         appState.setCodebaseIndexEnabled(newValue)

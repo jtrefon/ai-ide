@@ -539,7 +539,9 @@ final class ToolLoopHandler {
     }
 
     private func buildGenericToolExecutionStatusSummary() -> String {
-        "Agent update: continuing with the next execution step."
+        // This is shown when model doesn't provide a user-facing update
+        // Keep it brief and informative
+        return "Continuing with next step..."
     }
 
     private func toolLoopStepUpdateInstructionMessage(consecutiveReadOnlyIterations: Int = 0) -> ChatMessage {

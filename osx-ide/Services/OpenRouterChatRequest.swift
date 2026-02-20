@@ -7,6 +7,7 @@ internal struct OpenRouterChatRequest: Encodable {
     let temperature: Double
     let tools: [[String: Any]]?
     let toolChoice: String?
+    let stream: Bool
 
     enum CodingKeys: String, CodingKey {
         case model
@@ -15,6 +16,7 @@ internal struct OpenRouterChatRequest: Encodable {
         case temperature
         case tools
         case toolChoice = "tool_choice"
+        case stream
     }
 
     func encode(to encoder: Encoder) throws {
@@ -32,6 +34,11 @@ internal struct OpenRouterChatRequest: Encodable {
 
         if let toolChoice, !toolChoice.isEmpty {
             try container.encode(toolChoice, forKey: .toolChoice)
+        }
+
+        // Only encode stream if it's true (to avoid unnecessary bytes in request)
+        if stream {
+            try container.encode(true, forKey: .stream)
         }
     }
 }

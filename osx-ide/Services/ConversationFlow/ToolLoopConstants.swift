@@ -5,11 +5,27 @@ import Foundation
 enum ToolLoopConstants {
     // MARK: - Iteration Limits
     
-    /// Maximum tool loop iterations for agent mode
+    /// Maximum tool loop iterations for agent mode (OpenRouter/large models)
     static let maxAgentIterations = 12
     
     /// Maximum tool loop iterations for non-agent modes
     static let maxNonAgentIterations = 5
+    
+    /// Maximum tool loop iterations for MLX/local models (reduced to prevent loops)
+    static let maxMLXIterations = 3
+    
+    /// Returns the appropriate max iterations based on mode and model capability
+    static func maxIterations(for mode: AIMode?, isMLX: Bool = false) -> Int {
+        if isMLX {
+            return maxMLXIterations
+        }
+        switch mode {
+        case .agent:
+            return maxAgentIterations
+        case .chat, .none:
+            return maxNonAgentIterations
+        }
+    }
     
     // MARK: - Stall Detection Thresholds
     

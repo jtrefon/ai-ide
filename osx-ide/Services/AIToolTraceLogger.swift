@@ -4,26 +4,40 @@ public actor AIToolTraceLogger {
     public static let shared = AIToolTraceLogger()
 
     private let sessionId: String
-    private let logFileURL: URL
+    private let encoder: JSONEncoder
+    
+    // Project-local log file
+    private var projectLogFileURL: URL?
 
     public init(sessionId: String = UUID().uuidString, logDirectory: URL? = nil) {
         self.sessionId = sessionId
 
-        let dir: URL
+        let enc = JSONEncoder()
+        enc.outputFormatting = []
+        self.encoder = enc
+        
+        // Note: We now write ONLY to project root (no Application Support)
+        // This ensures proper project isolation for debugging
         if let logDirectory {
-            dir = logDirectory
-        } else {
-            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-                ?? FileManager.default.temporaryDirectory
-            dir = appSupport.appendingPathComponent("osx-ide/Logs", isDirectory: true)
+            self.projectLogFileURL = logDirectory.appendingPathComponent("ai-trace.ndjson")
         }
-
-        self.logFileURL = dir.appendingPathComponent("ai-trace.ndjson")
+    }
+    
+    /// Set the project root for project-isolated logging
+    public func setProjectRoot(_ projectRoot: URL) {
+        let ideDir = projectRoot.appendingPathComponent(".ide", isDirectory: true)
+        let logsDir = ideDir.appendingPathComponent("logs", isDirectory: true)
+        self.projectLogFileURL = logsDir.appendingPathComponent("ai-trace.ndjson")
     }
 
     public func log(type: String, data: [String: Any] = [:], file: String = #fileID, line: Int = #line) {
         do {
-            try ensureDirectoryExists()
+            guard let logFileURL = projectLogFileURL else {
+                // Silently skip logging if no project root set (app-wide logging not available)
+                return
+            }
+            
+            try ensureDirectoryExists(for: logFileURL)
 
             let payload: [String: Any] = [
                 "ts": ISO8601DateFormatter().string(from: Date()),
@@ -48,27 +62,16 @@ public actor AIToolTraceLogger {
                 try data.write(to: logFileURL, options: [.atomic])
             }
         } catch {
-            // Intentionally swallow logging errors to avoid impacting app behavior.
-            // However, capture them centrally for quality improvement.
-            Task {
-                await CrashReporter.shared.capture(
-                    error,
-                    context: CrashReportContext(operation: "AIToolTraceLogger.log"),
-                    metadata: ["type": type],
-                    file: file,
-                    function: #function,
-                    line: line
-                )
-            }
+            // Intentionally swallow logging errors to avoid impacting app behavior
         }
     }
 
     public func currentLogFilePath() -> String {
-        return logFileURL.path
+        return projectLogFileURL?.path ?? "no log file configured"
     }
 
-    private func ensureDirectoryExists() throws {
-        let dir = logFileURL.deletingLastPathComponent()
+    private func ensureDirectoryExists(for fileURL: URL) throws {
+        let dir = fileURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
     }
 }

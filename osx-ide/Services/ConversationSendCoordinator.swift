@@ -89,7 +89,7 @@ final class ConversationSendCoordinator {
         finalResponseHandler.appendFinalMessageAndLog(
             response: response,
             conversationId: request.conversationId,
-            draftAssistantMessageId: request.draftAssistantMessageId
+            draftAssistantMessageId: request.draftAssistantMessageId?.uuidString
         )
         
         let totalDuration = sendStartTime.duration(to: ContinuousClock.now)
