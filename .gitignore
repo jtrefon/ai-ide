@@ -53,3 +53,6 @@ Podfile.lock
 # Carthage
 Carthage/Build/
 Carthage/Checkouts/
+
+# Local sandbox for IDE testing/telemetry
+sandbox/
