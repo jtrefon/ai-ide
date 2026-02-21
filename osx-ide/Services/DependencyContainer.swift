@@ -15,7 +15,9 @@ class DependencyContainer {
     private let settingsStore: SettingsStore
 
     init(isTesting: Bool = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil) {
-        settingsStore = SettingsStore(userDefaults: .standard)
+        // If testing, try to load the actual app's UserDefaults so harness has access to API keys and models
+        let defaults = isTesting ? (UserDefaults(suiteName: "tdc.osx-ide") ?? .standard) : .standard
+        settingsStore = SettingsStore(userDefaults: defaults)
         let errorManager = ErrorManager()
         _errorManager = errorManager
         _eventBus = EventBus()
@@ -35,11 +37,19 @@ class DependencyContainer {
             fileSystemService: _fileSystemService,
             eventBus: _eventBus
         )
-        let openRouterService = OpenRouterAIService(eventBus: _eventBus)
-        let localModelService = LocalModelProcessAIService(eventBus: _eventBus)
+        let openRouterService = OpenRouterAIService(
+            settingsStore: OpenRouterSettingsStore(settingsStore: settingsStore),
+            eventBus: _eventBus
+        )
+        let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
+        let localModelService = LocalModelProcessAIService(
+            selectionStore: selectionStore,
+            eventBus: _eventBus
+        )
         _aiService = ModelRoutingAIService(
             openRouterService: openRouterService,
-            localService: localModelService
+            localService: localModelService,
+            selectionStore: selectionStore
         )
 
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)

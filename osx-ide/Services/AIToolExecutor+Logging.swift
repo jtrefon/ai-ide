@@ -112,6 +112,7 @@ extension AIToolExecutor {
     }
 
     func logToolExecuteError(conversationId: String?, toolCall: AIToolCall, error: Error) async {
+        print(">>> TOOL EXECUTE ERROR: \(error)")
         await AppLogger.shared.error(
             category: .tool,
             message: "tool.execute_error",

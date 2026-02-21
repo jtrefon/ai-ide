@@ -11,13 +11,35 @@ internal struct OpenRouterChatResponseChunk: Decodable {
 }
 
 internal struct OpenRouterChatResponseChunkChoice: Decodable {
-    let delta: OpenRouterChatResponseMessage?
+    let delta: OpenRouterChatResponseChunkDelta?
     let finishReason: String?
 
     enum CodingKeys: String, CodingKey {
         case delta
         case finishReason = "finish_reason"
     }
+}
+
+internal struct OpenRouterChatResponseChunkDelta: Decodable {
+    let content: String?
+    let toolCalls: [OpenRouterChatResponseChunkToolCall]?
+
+    enum CodingKeys: String, CodingKey {
+        case content
+        case toolCalls = "tool_calls"
+    }
+}
+
+internal struct OpenRouterChatResponseChunkToolCall: Decodable {
+    let index: Int
+    let id: String?
+    let type: String?
+    let function: OpenRouterChatResponseChunkFunction?
+}
+
+internal struct OpenRouterChatResponseChunkFunction: Decodable {
+    let name: String?
+    let arguments: String?
 }
 
 internal struct OpenRouterChatUsage: Decodable {

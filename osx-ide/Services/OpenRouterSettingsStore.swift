@@ -4,8 +4,8 @@ protocol OpenRouterSettingsLoading {
     func load(includeApiKey: Bool) -> OpenRouterSettings
 }
 
-final class OpenRouterSettingsStore: OpenRouterSettingsLoading {
-    private let settingsStore = SettingsStore(userDefaults: .standard)
+final class OpenRouterSettingsStore: OpenRouterSettingsLoading, @unchecked Sendable {
+    private let settingsStore: SettingsStore
     private let apiKeyKey = "OpenRouterAPIKey"
     private let modelKey = "OpenRouterModel"
     private let baseURLKey = "OpenRouterBaseURL"
@@ -13,6 +13,10 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading {
     private let reasoningEnabledKey = "OpenRouterReasoningEnabled"
     private let toolPromptModeKey = "OpenRouterToolPromptMode"
     private let ragEnabledDuringToolLoopKey = "OpenRouterRAGEnabledDuringToolLoop"
+
+    init(settingsStore: SettingsStore = SettingsStore(userDefaults: .standard)) {
+        self.settingsStore = settingsStore
+    }
 
     // NOTE: Keychain removed due to UX issues (constant password prompts)
     // Using UserDefaults for API key storage - macOS provides sufficient security

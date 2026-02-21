@@ -61,7 +61,15 @@ actor OpenRouterAIService: AIService {
         // Collect streaming chunks using a thread-safe wrapper
         final class ChunkCollector: @unchecked Sendable {
             var chunks: [String] = []
-            var toolCalls: [AIToolCall] = []
+            
+            struct ToolCallDraft {
+                var id: String
+                var type: String
+                var name: String
+                var arguments: String
+            }
+            var toolCallsDrafts: [Int: ToolCallDraft] = [:]
+            
             let lock = NSLock()
             
             func appendChunk(_ content: String) {
@@ -70,16 +78,39 @@ actor OpenRouterAIService: AIService {
                 chunks.append(content)
             }
             
-            func appendToolCalls(_ calls: [AIToolCall]) {
+            func appendToolCalls(_ calls: [OpenRouterChatResponseChunkToolCall]) {
                 lock.lock()
                 defer { lock.unlock() }
-                toolCalls.append(contentsOf: calls)
+                
+                for call in calls {
+                    var draft = toolCallsDrafts[call.index] ?? ToolCallDraft(id: "", type: "function", name: "", arguments: "")
+                    
+                    if let id = call.id { draft.id = id }
+                    if let type = call.type { draft.type = type }
+                    if let name = call.function?.name { draft.name = name }
+                    if let args = call.function?.arguments { draft.arguments += args }
+                    
+                    toolCallsDrafts[call.index] = draft
+                }
             }
             
             func getResults() -> (content: String, toolCalls: [AIToolCall]?) {
                 lock.lock()
                 defer { lock.unlock() }
                 let content = chunks.joined()
+                
+                let toolCalls = toolCallsDrafts.sorted(by: { $0.key < $1.key }).compactMap { (_, draft) -> AIToolCall? in
+                    var argsDict: [String: Any] = [:]
+                    if let data = draft.arguments.data(using: .utf8),
+                       let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        argsDict = dict
+                    } else if !draft.arguments.isEmpty {
+                        // If JSON is malformed but we have text, store raw so tools can try to handle or fail gracefully
+                        argsDict = ["_raw_args_chunk": draft.arguments]
+                    }
+                    return AIToolCall(id: draft.id, name: draft.name, arguments: argsDict)
+                }
+                
                 let tc = toolCalls.isEmpty ? nil : toolCalls
                 return (content, tc)
             }

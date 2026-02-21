@@ -92,6 +92,7 @@ struct WriteFilesTool: AITool {
 
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
+        print(">>> WRITE FILES ARGUMENTS: \(arguments)")
         
         // Support both "files" array (preferred) and direct "path"/"content" (for compatibility with write_file)
         let files: [[String: Any]]

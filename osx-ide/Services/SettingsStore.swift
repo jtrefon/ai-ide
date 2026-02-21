@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-final class SettingsStore {
+final class SettingsStore: @unchecked Sendable {
     private let userDefaults: UserDefaults
     private let changesSubject = PassthroughSubject<String, Never>()
 
