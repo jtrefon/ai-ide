@@ -24,7 +24,8 @@ struct DeliveryCompletionNode: OrchestrationNode {
             projectRoot: request.projectRoot,
             availableTools: request.availableTools,
             runId: request.runId,
-            userInput: request.userInput
+            userInput: request.userInput,
+            conversationId: request.conversationId
         )
 
         return OrchestrationState(

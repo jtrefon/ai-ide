@@ -86,6 +86,10 @@ run_harness() {
         env_args+=("TEST_RUNNER_ENV_HARNESS_MODEL_ID=$HARNESS_MODEL_ID")
         echo "Using model: $HARNESS_MODEL_ID"
     fi
+    if [ -n "$HARNESS_USE_OPENROUTER" ]; then
+        env_args+=("TEST_RUNNER_ENV_HARNESS_USE_OPENROUTER=$HARNESS_USE_OPENROUTER")
+        echo "Using OpenRouter: $HARNESS_USE_OPENROUTER"
+    fi
     
     if [ -n "$suite" ]; then
         echo "Filtering by suite: $suite"

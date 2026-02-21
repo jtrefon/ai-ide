@@ -401,6 +401,20 @@ final class ToolLoopHandler {
     ) -> ChatMessage? {
         let failedToolResults = toolResults.filter {
             $0.isToolExecution && $0.toolStatus == .failed
+        }
+        guard !failedToolResults.isEmpty else { return nil }
+
+        let failedOutputs = failedToolResults.map { ToolLoopUtilities.toolOutputText(from: $0) }
+        let hasTimeoutFailure = failedOutputs.contains { $0.localizedCaseInsensitiveContains("timed out") }
+        let hasCancelledFailure = failedOutputs.contains { $0.localizedCaseInsensitiveContains("cancelled") }
+
+        let toolCallIndex = Dictionary(
+            uniqueKeysWithValues: toolCalls.map { ($0.id, $0) }
+        )
+        
+        let failureDetails = failedToolResults.map { result in
+            let toolName = result.toolName ?? "unknown_tool"
+            let toolCallId = result.toolCallId ?? "unknown_call"
             let argumentKeys = toolCallIndex[toolCallId]?.arguments.keys.sorted() ?? []
             let argumentSummary = argumentKeys.isEmpty
                 ? "arguments: none"

@@ -18,9 +18,16 @@ final class AgenticHarnessTests: XCTestCase {
         ProcessInfo.processInfo.environment["HARNESS_MODEL_ID"] ?? Self.defaultModelId
     }
     
+    private var useOpenRouter: Bool {
+        ProcessInfo.processInfo.environment["HARNESS_USE_OPENROUTER"] == "1"
+    }
+    
     // MARK: - Setup
     
-    private func skipIfModelNotInstalled() throws -> LocalModelDefinition {
+    private func skipIfModelNotInstalled() throws -> LocalModelDefinition? {
+        if useOpenRouter {
+            return nil // Skip installation check for OpenRouter
+        }
         guard let model = LocalModelCatalog.model(id: modelId) else {
             throw XCTSkip("Model not in catalog: \(modelId)")
         }
@@ -33,7 +40,7 @@ final class AgenticHarnessTests: XCTestCase {
     private func makeSelectionStore() async -> LocalModelSelectionStore {
         let store = LocalModelSelectionStore()
         await store.setSelectedModelId(modelId)
-        await store.setOfflineModeEnabled(true)
+        await store.setOfflineModeEnabled(!useOpenRouter)
         return store
     }
     
@@ -748,6 +755,90 @@ final class AgenticHarnessTests: XCTestCase {
             "Model must support native tool calling for agent mode to work. " +
             "If this fails, check: 1) toolCallFormat configuration, " +
             "2) chat template tool support, 3) message building in LocalModelProcessAIService")
+    }
+    
+    // MARK: - Test: Create React App Scenario
+    
+    func testHarnessCreateReactApp() async throws {
+        let _ = try skipIfModelNotInstalled()
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+        
+        let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
+        let manager = runtime.manager
+        manager.currentMode = .agent
+        
+        print("\n=== Test: Create React App ===")
+        print("Project root: \(projectRoot.path)")
+        print("Model: \(modelId) (OpenRouter: \(useOpenRouter))")
+        
+        let prompt = """
+        Create a simple React application structure using vite.
+        1. Create package.json with react and react-dom dependencies
+        2. Create index.html
+        3. Create src/main.jsx
+        4. Create src/App.jsx with a simple counter component
+        Do not actually run npm install, just create the files.
+        """
+        
+        try await sendProductionMessage(prompt, manager: manager, timeoutSeconds: 300)
+        
+        let files = listAllFiles(under: projectRoot)
+        print("\nFiles created: \(files.count)")
+        for file in files { print("  - \(file)") }
+        
+        XCTAssertTrue(files.contains("package.json"))
+        XCTAssertTrue(files.contains("index.html"))
+        XCTAssertTrue(files.contains("src/main.jsx") || files.contains("src/main.tsx") || files.contains("src/index.js"))
+        XCTAssertTrue(files.contains("src/App.jsx") || files.contains("src/App.tsx") || files.contains("src/App.js"))
+    }
+    
+    // MARK: - Test: Refactor Scenario
+    
+    func testHarnessRefactorScenario() async throws {
+        let _ = try skipIfModelNotInstalled()
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+        
+        // Setup initial messy code
+        let messyCode = """
+        function calculateTotal(items) {
+            var total = 0;
+            for(var i=0; i<items.length; i++) {
+                if(items[i].active == true) {
+                    if(items[i].price > 0) {
+                        total = total + items[i].price;
+                    }
+                }
+            }
+            return total;
+        }
+        """
+        try messyCode.write(to: projectRoot.appendingPathComponent("calculator.js"), atomically: true, encoding: .utf8)
+        
+        let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
+        let manager = runtime.manager
+        manager.currentMode = .agent
+        
+        print("\n=== Test: Refactor Scenario ===")
+        print("Project root: \(projectRoot.path)")
+        print("Model: \(modelId) (OpenRouter: \(useOpenRouter))")
+        
+        let prompt = """
+        Refactor the calculator.js file in this directory to use modern ES6+ syntax (const/let, array methods like reduce/filter).
+        """
+        
+        try await sendProductionMessage(prompt, manager: manager, timeoutSeconds: 300)
+        
+        let refactoredCode = try String(contentsOf: projectRoot.appendingPathComponent("calculator.js"))
+        print("\nRefactored Code:\n\(refactoredCode)")
+        
+        XCTAssertFalse(refactoredCode.contains("var total = 0"))
+        XCTAssertFalse(refactoredCode.contains("for(var i=0"))
+        XCTAssertTrue(refactoredCode.contains("const") || refactoredCode.contains("let"))
+        XCTAssertTrue(refactoredCode.contains("reduce") || refactoredCode.contains("filter") || refactoredCode.contains("=>"))
     }
     
     // MARK: - Helper Methods
