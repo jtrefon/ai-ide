@@ -70,19 +70,9 @@ struct ConditionalToolLoopNode: OrchestrationNode {
         // Only route back to tool loop if:
         // 1. Response has no tool calls (model stopped making tool calls)
         // 2. There is an incomplete plan
-        guard response.toolCalls?.isEmpty ?? true else {
-            return false
-        }
-
-        guard let plan = await ConversationPlanStore.shared.get(conversationId: conversationId),
-              !plan.isEmpty else {
-            return false
-        }
-
-        let progress = PlanChecklistTracker.progress(in: plan)
-        
-        // Route back to tool loop if plan is NOT complete
-        return !progress.isComplete
+        // We no longer route back to tool loop here, instead we proceed to delivery gate
+        // to properly handle the incomplete plan using the standard orchestration flow.
+        return false
     }
 
     private func requireResponse(from state: OrchestrationState) throws -> AIServiceResponse {

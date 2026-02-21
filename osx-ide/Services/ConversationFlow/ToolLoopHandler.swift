@@ -279,71 +279,6 @@ final class ToolLoopHandler {
             if mode == .agent,
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
-               (
-                    ChatPromptBuilder.shouldForceToolFollowup(content: content)
-                    || ChatPromptBuilder.shouldForceExecutionFollowup(
-                        userInput: userInput,
-                        content: content,
-                        hasToolCalls: false
-                    )
-               ),
-               let lastUserMessage = historyCoordinator.messages.last(where: { $0.role == .user }) {
-                await AIToolTraceLogger.shared.log(type: "chat.force_execution_followup.tool_loop", data: [
-                    "runId": runId,
-                    "iteration": toolIteration,
-                    "hasToolCalls": false,
-                    "contentLength": content.count
-                ])
-                let promptText = PromptRepository.shared.prompt(
-                    key: "ConversationFlow/Corrections/force_tool_followup",
-                    defaultValue: "You indicated you will implement changes, but you returned no tool calls. " +
-                        "In Agent mode, you MUST now proceed by calling the appropriate tools. " +
-                        "Return tool calls now.",
-                    projectRoot: projectRoot
-                )
-                let followupSystem = ChatMessage(
-                    role: .system,
-                    content: promptText
-                )
-                currentResponse = try await aiInteractionCoordinator
-                    .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                        messages: historyCoordinator.messages + [followupSystem, lastUserMessage],
-                        explicitContext: explicitContext,
-                        tools: availableTools,
-                        mode: mode,
-                        projectRoot: projectRoot,
-                        runId: runId,
-                        stage: AIRequestStage.tool_loop
-                    ))
-                    .get()
-
-                if updateRepeatedNoToolCallContentState(
-                    response: currentResponse,
-                    previousSignature: &previousNoToolCallContentSignature,
-                    repeatedCount: &repeatedNoToolCallContentCount
-                ) {
-                    await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_no_tool_call_content_stall", data: [
-                        "runId": runId,
-                        "iteration": toolIteration,
-                        "repeatedCount": repeatedNoToolCallContentCount + 1,
-                        "contentLength": currentResponse.content?.count ?? 0
-                    ])
-                    currentResponse = try await requestFinalResponseForStalledToolLoop(
-                        explicitContext: explicitContext,
-                        projectRoot: projectRoot,
-                        mode: mode,
-                        userInput: userInput,
-                        toolResults: lastToolResults,
-                        runId: runId,
-                        availableTools: availableTools
-                    )
-                    break
-                }
-            }
-
-            if mode == .agent,
-               currentResponse.toolCalls?.isEmpty ?? true,
-               let content = currentResponse.content,
                ChatPromptBuilder.isRequestingUserInputForNextStep(content: content) {
                 let promptText = PromptRepository.shared.prompt(
                     key: "ConversationFlow/Corrections/no_user_input_next_step",
@@ -414,19 +349,6 @@ final class ToolLoopHandler {
             }
         }
 
-        if mode == .agent,
-           currentResponse.toolCalls?.isEmpty ?? true,
-           !availableTools.isEmpty,
-           await shouldForceContinuationForIncompletePlan(conversationId: conversationId, content: currentResponse.content) {
-            currentResponse = try await requestContinuationForIncompletePlan(
-                explicitContext: explicitContext,
-                projectRoot: projectRoot,
-                mode: mode,
-                availableTools: availableTools,
-                runId: runId
-            )
-        }
-
         return ToolLoopResult(
             response: currentResponse,
             lastToolCalls: lastToolCalls,
@@ -479,19 +401,6 @@ final class ToolLoopHandler {
     ) -> ChatMessage? {
         let failedToolResults = toolResults.filter {
             $0.isToolExecution && $0.toolStatus == .failed
-        }
-        guard !failedToolResults.isEmpty else { return nil }
-
-        let failedOutputs = failedToolResults.map { ToolLoopUtilities.toolOutputText(from: $0) }
-        let hasTimeoutFailure = failedOutputs.contains { $0.localizedCaseInsensitiveContains("timed out") }
-        let hasCancelledFailure = failedOutputs.contains { $0.localizedCaseInsensitiveContains("cancelled") }
-
-        let toolCallIndex = Dictionary(
-            uniqueKeysWithValues: toolCalls.map { ($0.id, $0) }
-        )
-        let failureDetails = failedToolResults.map { result in
-            let toolName = result.toolName ?? "unknown_tool"
-            let toolCallId = result.toolCallId ?? "unknown_call"
             let argumentKeys = toolCallIndex[toolCallId]?.arguments.keys.sorted() ?? []
             let argumentSummary = argumentKeys.isEmpty
                 ? "arguments: none"

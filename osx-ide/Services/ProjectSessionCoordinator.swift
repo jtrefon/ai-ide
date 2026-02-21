@@ -147,7 +147,16 @@ final class ProjectSessionCoordinator {
 
         if let frame = session.windowFrame?.rect {
             if let window {
-                window.setFrame(frame, display: true)
+                var targetFrame = frame
+                if let screen = window.screen {
+                    let visible = screen.visibleFrame
+                    if targetFrame.height > visible.height { targetFrame.size.height = visible.height }
+                    if targetFrame.minY < visible.minY { targetFrame.origin.y = visible.minY }
+                    if targetFrame.minX < visible.minX { targetFrame.origin.x = visible.minX }
+                    else if targetFrame.maxX > visible.maxX { targetFrame.origin.x = visible.maxX - targetFrame.width }
+                    if targetFrame.maxY > visible.maxY { targetFrame.origin.y = visible.maxY - targetFrame.height }
+                }
+                window.setFrame(targetFrame, display: true)
             }
         }
 

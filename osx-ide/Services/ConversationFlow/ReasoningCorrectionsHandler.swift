@@ -135,7 +135,8 @@ final class ReasoningCorrectionsHandler {
         projectRoot: URL,
         availableTools: [AITool],
         runId: String,
-        userInput: String
+        userInput: String,
+        conversationId: String
     ) async throws -> AIServiceResponse {
         guard mode == .agent else { return response }
 
@@ -156,6 +157,12 @@ final class ReasoningCorrectionsHandler {
                 // Delivery claims completion, but execution was expected or the assistant implies it performed work.
                 // Force an immediate followup instead of accepting DONE.
             } else {
+                // Auto-mark plan as complete if the agent successfully delivered
+                if let plan = await ConversationPlanStore.shared.get(conversationId: conversationId),
+                   !plan.isEmpty,
+                   let completedPlan = PlanChecklistTracker.markAllPendingItemsCompleted(in: plan) {
+                    await ConversationPlanStore.shared.set(conversationId: conversationId, plan: completedPlan)
+                }
                 return response
             }
         }
