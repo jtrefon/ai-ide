@@ -6,13 +6,13 @@ enum ToolLoopConstants {
     // MARK: - Iteration Limits
     
     /// Maximum tool loop iterations for agent mode (OpenRouter/large models)
-    static let maxAgentIterations = 12
+    static let maxAgentIterations = 8
     
     /// Maximum tool loop iterations for non-agent modes
-    static let maxNonAgentIterations = 5
+    static let maxNonAgentIterations = 3
     
     /// Maximum tool loop iterations for MLX/local models (reduced to prevent loops)
-    static let maxMLXIterations = 3
+    static let maxMLXIterations = 2
     
     /// Returns the appropriate max iterations based on mode and model capability
     static func maxIterations(for mode: AIMode?, isMLX: Bool = false) -> Int {
@@ -30,19 +30,19 @@ enum ToolLoopConstants {
     // MARK: - Stall Detection Thresholds
     
     /// Number of repeated tool batches before stall detection triggers
-    static let repeatedBatchStallThreshold = 2
+    static let repeatedBatchStallThreshold = 1
     
     /// Number of consecutive empty responses before stall detection triggers
-    static let emptyResponseStallThreshold = 2
+    static let emptyResponseStallThreshold = 1
     
     /// Number of consecutive read-only iterations before nudge is added
-    static let readOnlyIterationNudgeThreshold = 2
+    static let readOnlyIterationNudgeThreshold = 1
     
     /// Number of consecutive read-only iterations before stall detection triggers
-    static let readOnlyIterationStallThreshold = 3
+    static let readOnlyIterationStallThreshold = 2
     
     /// Number of repeated read-only batches before stall detection triggers
-    static let repeatedReadOnlyBatchStallThreshold = 2
+    static let repeatedReadOnlyBatchStallThreshold = 1
     
     /// Number of repeated content occurrences for textual tool call patterns
     static let textualPatternRepeatedThreshold = 1

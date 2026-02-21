@@ -240,6 +240,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
         projectRoot = newRoot
 
+        // Clear conversation history when switching to a new project
+        // This ensures the chat is fresh for the new project
+        clearConversation()
+
         historyCoordinator.updateProjectRoot(
             newRoot,
             shouldStartConversationLog: true,

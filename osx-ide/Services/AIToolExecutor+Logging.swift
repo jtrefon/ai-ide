@@ -193,8 +193,9 @@ extension AIToolExecutor {
                 "- Use a different approach that completes quickly or produces incremental output.",
                 "- Avoid non-terminating commands (dev servers/watchers, \"tail -f\", interactive prompts).",
                 "- Prefer non-interactive flags (e.g. --yes, --no-prompt, --non-interactive) and bounded output (e.g. head, sed, grep with limits).",
-                "- If you must run something potentially slow, run a safer diagnostic first (e.g. list files, check version, run a narrower query).",
-                "- If re-running a shell command, make it explicitly finite (e.g. add a max count, filter scope, or only run the build/test target you need)."
+                "- For npm operations (install, build, create vite), you MUST add \"timeout_seconds\": 600 or higher.",
+                "- If re-running a shell command, make it explicitly finite (e.g. add a max count, filter scope, or only run the build/test target you need).",
+                "- Example: {\"command\": \"npm install\", \"timeout_seconds\": 600}"
             ].joined(separator: "\n")
         }
 
@@ -210,6 +211,12 @@ extension AIToolExecutor {
                 "- If the task requires execution, prefer short commands that terminate (build/test/format), not long-running servers/watchers."
             ].joined(separator: "\n")
         }
+        
+        // Check for missing argument errors
+        let errorMessage = error.localizedDescription.lowercased()
+        if errorMessage.contains("missing") || errorMessage.contains("required") || errorMessage.contains("argument") {
+            return formatMissingArgumentError(error: error, toolName: toolName)
+        }
 
         if toolName == "index_read_file" {
             let msg = error.localizedDescription
@@ -220,5 +227,83 @@ extension AIToolExecutor {
             }
         }
         return "Error: \(error.localizedDescription)"
+    }
+    
+    nonisolated private static func formatMissingArgumentError(error: Error, toolName: String) -> String {
+        let errorMsg = error.localizedDescription
+        
+        // Provide specific guidance based on the tool and missing argument
+        switch toolName {
+        case "write_files":
+            return [
+                "Error: \(errorMsg)",
+                "",
+                "The write_files tool requires a 'files' argument containing an array of file objects.",
+                "Each file object should have:",
+                "  - 'path': The relative path of the file (e.g., 'src/App.js')",
+                "  - 'content': The file content as a string",
+                "",
+                "Example correct call:",
+                "{\"files\": [{\"path\": \"src/App.js\", \"content\": \"...\"}]}",
+                "",
+                "Common mistakes:",
+                "- Passing 'content' instead of 'files'",
+                "- Passing a single file object instead of an array",
+                "- Missing the 'path' or 'content' fields in each file object"
+            ].joined(separator: "\n")
+            
+        case "write_file", "create_file":
+            return [
+                "Error: \(errorMsg)",
+                "",
+                "The \(toolName) tool requires:",
+                "  - 'path': The relative path of the file to write",
+                "  - 'content': The file content as a string",
+                "",
+                "Example correct call:",
+                "{\"path\": \"src/App.js\", \"content\": \"...\"}"
+            ].joined(separator: "\n")
+            
+        case "run_command":
+            return [
+                "Error: \(errorMsg)",
+                "",
+                "The run_command tool requires:",
+                "  - 'command': The shell command to execute (required)",
+                "",
+                "Optional arguments:",
+                "  - 'working_directory': The directory to run the command in",
+                "  - 'timeout_seconds': Timeout in seconds (1-600, default 120)",
+                "",
+                "IMPORTANT: For npm install, npm create vite, npm build, or any long-running command,",
+                "you MUST set timeout_seconds to at least 300 (5 minutes) or 600 (10 minutes).",
+                "",
+                "Example for npm install:",
+                "{\"command\": \"npm install\", \"timeout_seconds\": 600, \"working_directory\": \"./my-project\"}"
+            ].joined(separator: "\n")
+            
+        case "replace_in_file":
+            return [
+                "Error: \(errorMsg)",
+                "",
+                "The replace_in_file tool requires:",
+                "  - 'path': The file path to modify",
+                "  - 'old_text': The exact text to find and replace",
+                "  - 'new_text': The replacement text",
+                "",
+                "Example correct call:",
+                "{\"path\": \"src/App.js\", \"old_text\": \"const a = 1\", \"new_text\": \"const a = 2\"}"
+            ].joined(separator: "\n")
+            
+        default:
+            return [
+                "Error: \(errorMsg)",
+                "",
+                "The tool call is missing required arguments. Please check the tool schema",
+                "and ensure all required fields are provided with correct types.",
+                "",
+                "Review the tool definition to see required vs optional arguments."
+            ].joined(separator: "\n")
+        }
     }
 }

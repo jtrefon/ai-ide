@@ -50,6 +50,12 @@ final class ConversationToolProvider {
         }
 
         tools.append(
+            ReadFileTool(
+                fileSystemService: fileSystemService,
+                pathValidator: pathValidator
+            )
+        )
+        tools.append(
             WriteFileTool(
                 fileSystemService: fileSystemService,
                 pathValidator: pathValidator,

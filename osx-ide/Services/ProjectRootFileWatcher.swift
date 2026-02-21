@@ -17,7 +17,7 @@ final class ProjectRootFileWatcher {
         rootURL: URL,
         eventBus: EventBusProtocol,
         excludePatterns: [String],
-        debounceMs: Int = 400
+        debounceMs: Int = 1000
     ) {
         self.rootURL = rootURL.standardizedFileURL
         self.eventBus = eventBus

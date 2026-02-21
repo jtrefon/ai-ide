@@ -13,6 +13,11 @@ public class IndexCoordinator {
     private var singleFileTasks: [UUID: Task<Void, Never>] = [:]
     private var generation: UInt64 = 0
     private let projectRoot: URL?
+    
+    // Bulk operation tracking
+    private var recentFileChanges: [Date] = []
+    private let maxRecentChanges = 50
+    private var bulkIndexTask: Task<Void, Never>?
 
     public init(
         eventBus: EventBusProtocol,
@@ -182,6 +187,7 @@ public class IndexCoordinator {
     }
 
     private func setupDebounceSubscription() {
+        // Regular debounce for single file changes
         debounceSubject
             .debounce(for: .milliseconds(config.debounceMs), scheduler: DispatchQueue.main)
             .removeDuplicates()
@@ -189,6 +195,43 @@ public class IndexCoordinator {
                 self?.indexFile(url)
             }
             .store(in: &cancellables)
+        
+        // Bulk operation debounce - longer delay for batch operations like npm install
+        debounceSubject
+            .sink { [weak self] _ in
+                self?.trackFileChange()
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func trackFileChange() {
+        let now = Date()
+        recentFileChanges.append(now)
+        
+        // Clean up old entries (older than bulk operation debounce time)
+        let cutoff = now.addingTimeInterval(-Double(config.bulkOperationDebounceMs) / 1000.0)
+        recentFileChanges = recentFileChanges.filter { $0 > cutoff }
+        
+        // If we have too many changes, trigger bulk reindex
+        if recentFileChanges.count >= config.bulkOperationThreshold {
+            triggerBulkReindex()
+        }
+    }
+    
+    private func triggerBulkReindex() {
+        guard let root = projectRoot else { return }
+        
+        bulkIndexTask?.cancel()
+        bulkIndexTask = Task { [weak self] in
+            guard let self else { return }
+            // Wait for the debounce period to ensure all files are created
+            try? await Task.sleep(nanoseconds: UInt64(config.bulkOperationDebounceMs) * 1_000_000)
+            guard !Task.isCancelled else { return }
+            
+            await IndexLogger.shared.log("Bulk file operation detected (\(self.recentFileChanges.count) changes), triggering full reindex")
+            self.reindexProject(rootURL: root)
+            self.recentFileChanges.removeAll()
+        }
     }
 
     private func indexFile(_ url: URL) {

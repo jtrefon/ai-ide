@@ -571,11 +571,14 @@ final class ToolLoopHandler {
             return false
         }
 
-        if isTextualToolCallPattern(content) {
-            return false
-        }
+        // BUG FIX: Previously this returned false for textual tool call patterns even when plan was incomplete.
+        // Now we prioritize plan completion - if plan is incomplete, we MUST force continuation regardless of content pattern.
+        // The textual pattern check was preventing continuation in cases where model was describing tool calls but not executing them.
 
         let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: content ?? "")
+        
+        // Force continuation if plan is incomplete AND delivery is not done
+        // Do NOT skip based on textual pattern - that was allowing premature completion
         return deliveryStatus != .done
     }
 

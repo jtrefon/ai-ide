@@ -37,7 +37,9 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
             return """
 
             **CURRENT MODE: CHAT (Read-Only)**
-            You are in Chat mode. You can help users understand their code but CANNOT modify files.
+            You are in Chat mode with READ-ONLY access. You can help users understand their code, search through files, and answer questions.
+            
+            IMPORTANT: If a user asks you to perform any work (create files, modify code, run commands, build projects, etc.), you MUST immediately tell the user that you cannot perform that action because you are in read-only Chat mode. Do NOT attempt to use tools that modify files or run commands - you do not have write access. Instead, clearly state: "I'm in read-only Chat mode and cannot perform that action. Please switch to Agent mode if you want me to make changes to your project."
             """
         case .agent:
             return """
@@ -61,7 +63,8 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
                     "index_search_text",
                     "index_read_file",
                     "index_search_symbols",
-                    "run_command"
+                    "run_command",
+                    "read_file"
                 ].contains(tool.name)
             }
         case .agent:

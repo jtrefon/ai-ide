@@ -416,8 +416,9 @@ extension AIToolExecutor {
 
     private func resolveToolTimeoutSeconds() -> TimeInterval {
         let stored = UserDefaults.standard.double(forKey: AppConstantsStorage.cliTimeoutSecondsKey)
-        let normalized = stored == 0 ? 30 : stored
-        return max(1, min(300, normalized))
+        // Default to 120s for npm operations, up to 600s max
+        let normalized = stored == 0 ? 120 : stored
+        return max(1, min(600, normalized))
     }
 
     private func executeToolAndCaptureResultWithWatchdog(
@@ -449,11 +450,13 @@ extension AIToolExecutor {
 
             group.addTask {
                 let timeoutSecondsInt = Int(timeoutSeconds)
+                
                 while true {
-                    let (isCancelled, remaining) = await MainActor.run {
+                    let (isCancelled, remaining, lastProgressAt) = await MainActor.run {
                         (
                             ToolTimeoutCenter.shared.isCancelled(toolCallId: toolCall.id),
-                            ToolTimeoutCenter.shared.remainingSeconds(toolCallId: toolCall.id)
+                            ToolTimeoutCenter.shared.remainingSeconds(toolCallId: toolCall.id),
+                            ToolTimeoutCenter.shared.lastProgressAt
                         )
                     }
                     if isCancelled {
@@ -462,11 +465,32 @@ extension AIToolExecutor {
                     }
 
                     if let remaining, remaining <= 0 {
-                        await MainActor.run {
-                            ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
+                        // Intelligent timeout: check if there's been recent progress via ToolTimeoutCenter
+                        if let lastProgress = lastProgressAt {
+                            let timeSinceLastProgress = Date().timeIntervalSince(lastProgress)
+                            
+                            if timeSinceLastProgress > Double(timeoutSecondsInt) {
+                                // No progress for the entire timeout period - likely hung
+                                await MainActor.run {
+                                    ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
+                                }
+                                toolTask.cancel()
+                                throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
+                            } else {
+                                // There was progress, extend the timeout
+                                await MainActor.run {
+                                    ToolTimeoutCenter.shared.extendTimeout(toolCallId: toolCall.id, bySeconds: Double(timeoutSecondsInt))
+                                }
+                                continue
+                            }
+                        } else {
+                            // No progress ever recorded, just timeout
+                            await MainActor.run {
+                                ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
+                            }
+                            toolTask.cancel()
+                            throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
                         }
-                        toolTask.cancel()
-                        throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
                     }
 
                     try await Task.sleep(nanoseconds: 200_000_000)

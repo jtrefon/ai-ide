@@ -47,7 +47,8 @@ enum ConversationFlowGraphFactory {
                 ConditionalToolLoopNode(
                     id: toolLoopAfterReasoningNodeId,
                     handler: toolLoopHandler,
-                    nextNodeId: DeliveryGateNode.idValue
+                    nextNodeId: DeliveryGateNode.idValue,
+                    toolLoopNodeId: ToolLoopNode.idValue
                 ),
                 DeliveryGateNode(
                     historyCoordinator: historyCoordinator,
@@ -57,7 +58,8 @@ enum ConversationFlowGraphFactory {
                 ConditionalToolLoopNode(
                     id: toolLoopAfterDeliveryGateNodeId,
                     handler: toolLoopHandler,
-                    nextNodeId: emptyResponseRecoveryNodeId
+                    nextNodeId: emptyResponseRecoveryNodeId,
+                    toolLoopNodeId: ToolLoopNode.idValue
                 ),
                 EmptyResponseRecoveryNode(
                     id: emptyResponseRecoveryNodeId,
@@ -74,7 +76,8 @@ enum ConversationFlowGraphFactory {
                 ConditionalToolLoopNode(
                     id: toolLoopAfterFinalDeliveryNodeId,
                     handler: toolLoopHandler,
-                    nextNodeId: FinalResponseNode.idValue
+                    nextNodeId: FinalResponseNode.idValue,
+                    toolLoopNodeId: ToolLoopNode.idValue
                 ),
                 FinalResponseNode(
                     handler: finalResponseHandler,

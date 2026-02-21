@@ -225,20 +225,32 @@ final class FinalResponseHandler {
 
     private func completeRemainingPlanItems(conversationId: String) async {
         guard let plan = await ConversationPlanStore.shared.get(conversationId: conversationId),
-              !plan.isEmpty,
-              let completedPlan = PlanChecklistTracker.markAllPendingItemsCompleted(in: plan) else {
+              !plan.isEmpty else {
             return
         }
-
-        await ConversationPlanStore.shared.set(conversationId: conversationId, plan: completedPlan)
-
-        if let lastPlanIndex = historyCoordinator.messages.lastIndex(where: {
-            $0.role == .assistant && $0.content.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("# Implementation Plan")
-        }) {
-            historyCoordinator.replaceMessage(at: lastPlanIndex, with: ChatMessage(
-                role: .assistant,
-                content: completedPlan
-            ))
+        
+        let progress = PlanChecklistTracker.progress(in: plan)
+        
+        // Only mark plan as complete if all items are actually done
+        // Do NOT automatically mark remaining items as complete - this was causing false completion
+        if progress.isComplete {
+            // Plan is truly complete - this is fine
+            if let completedPlan = PlanChecklistTracker.markAllPendingItemsCompleted(in: plan) {
+                await ConversationPlanStore.shared.set(conversationId: conversationId, plan: completedPlan)
+            }
+        } else {
+            // Plan NOT complete - log warning and do NOT mark items as done
+            // Don't call markAllPendingItemsCompleted - that was the bug!
+            await AppLogger.shared.warning(
+                category: .conversation,
+                message: "plan.marked_complete_despite_incomplete",
+                context: AppLogger.LogCallContext(metadata: [
+                    "conversationId": conversationId,
+                    "completedItems": String(progress.completed),
+                    "totalItems": String(progress.total),
+                    "completionPercentage": String(progress.percentage)
+                ])
+            )
         }
     }
 }
