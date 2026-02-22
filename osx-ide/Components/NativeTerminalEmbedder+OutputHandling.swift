@@ -68,10 +68,9 @@ extension NativeTerminalEmbedder {
             // Handle control characters
             switch ch {
             case "\n":
-                buffer.carriageReturn()
                 buffer.newline()
             case "\r":
-                break
+                buffer.carriageReturn()
             case "\t":
                 buffer.putCharacter("\t")
             case "\u{08}", "\u{7F}":  // Backspace or DEL

@@ -571,6 +571,10 @@ final class ToolLoopHandler {
             return false
         }
 
+        if isTextualToolCallPattern(content) {
+            return false
+        }
+
         let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: content ?? "")
         return deliveryStatus != .done
     }

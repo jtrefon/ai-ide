@@ -199,7 +199,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
         .onAppear {
             syncSelectionFromAppState()
         }
-        .onChange(of: context.workspace.currentDirectory) {
+        .onReceive(context.workspace.$currentDirectory) { _ in
             refreshToken += 1
             syncSelectionFromAppState()
         }

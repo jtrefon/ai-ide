@@ -50,25 +50,37 @@ struct ContentView: View {
         VStack(spacing: 0) {
             WindowSetupView(appState: appState)
             workspaceLayout
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             IndexStatusBarView(
                 appState: appState,
                 codebaseIndexProvider: { appState.codebaseIndex },
                 eventBus: appState.eventBus
             )
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var workspaceLayout: some View {
         HSplitView {
             if uiState.isSidebarVisible, let pluginView = registry.views(for: .sidebarLeft).first {
-                pluginView.makeView().frame(minWidth: 200, maxWidth: 300)
+                pluginView.makeView()
+                    .frame(
+                        minWidth: AppConstants.Layout.minSidebarWidth,
+                        idealWidth: uiState.sidebarWidth,
+                        maxWidth: AppConstants.Layout.maxSidebarWidth
+                    )
             }
 
             HSplitView {
                 editorAndTerminal
 
                 if uiState.isAIChatVisible, let pluginView = registry.views(for: .panelRight).first {
-                    pluginView.makeView().frame(minWidth: 240, idealWidth: 340, maxWidth: 480)
+                    pluginView.makeView()
+                        .frame(
+                            minWidth: AppConstants.Layout.minChatPanelWidth,
+                            idealWidth: uiState.chatPanelWidth,
+                            maxWidth: AppConstants.Layout.maxChatPanelWidth
+                        )
                 }
             }
         }
@@ -322,6 +334,26 @@ private struct WindowSetupView: View {
             window.backgroundColor = NSColor.windowBackgroundColor
             window.hasShadow = true
             window.styleMask.insert(.unifiedTitleAndToolbar)
+            
+            // Constrain window to screen size
+            if let screen = window.screen {
+                window.maxSize = screen.visibleFrame.size
+                
+                // If currently larger than screen, shrink it
+                var frame = window.frame
+                var changed = false
+                if frame.width > screen.visibleFrame.width {
+                    frame.size.width = screen.visibleFrame.width
+                    changed = true
+                }
+                if frame.height > screen.visibleFrame.height {
+                    frame.size.height = screen.visibleFrame.height
+                    changed = true
+                }
+                if changed {
+                    window.setFrame(frame, display: true)
+                }
+            }
         }
         .frame(width: 0, height: 0)
     }

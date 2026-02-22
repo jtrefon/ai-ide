@@ -56,6 +56,9 @@ class WorkspaceStateManager: ObservableObject {
         // Explicitly trigger objectWillChange to ensure all observers are notified
         // This ensures SwiftUI views that observe this manager get updated
         objectWillChange.send()
+        
+        // Notify the app state to refresh the file tree for the new directory
+        NotificationCenter.default.post(name: NSNotification.Name("WorkspaceDirectoryDidChange"), object: nil)
     }
 
     /// Navigate to parent directory
@@ -64,6 +67,7 @@ class WorkspaceStateManager: ObservableObject {
         currentDirectory = workspaceService.currentDirectory
         // Explicitly trigger objectWillChange to ensure all observers are notified
         objectWillChange.send()
+        NotificationCenter.default.post(name: NSNotification.Name("WorkspaceDirectoryDidChange"), object: nil)
     }
 
     /// Navigate to subdirectory
@@ -72,6 +76,7 @@ class WorkspaceStateManager: ObservableObject {
         currentDirectory = workspaceService.currentDirectory
         // Explicitly trigger objectWillChange to ensure all observers are notified
         objectWillChange.send()
+        NotificationCenter.default.post(name: NSNotification.Name("WorkspaceDirectoryDidChange"), object: nil)
     }
 
     // MARK: - File Management

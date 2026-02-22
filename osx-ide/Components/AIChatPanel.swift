@@ -122,7 +122,7 @@ struct AIChatPanel: View {
                 fontSize: ui.fontSize,
                 fontFamily: ui.fontFamily
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             .layoutPriority(1)
             .clipped()
 
@@ -133,6 +133,7 @@ struct AIChatPanel: View {
                     .font(.caption)
                     .padding(.horizontal)
                     .padding(.vertical, 4)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // Input area
@@ -171,6 +172,7 @@ struct AIChatPanel: View {
             .padding(.vertical, 6)
             .background(Color.gray.opacity(0.1))
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityIdentifier("AIChatPanel")
         .background(Color(NSColor.controlBackgroundColor))
         .onReceive(conversationManager.statePublisher) { _ in
