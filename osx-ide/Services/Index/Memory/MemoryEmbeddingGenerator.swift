@@ -7,8 +7,18 @@ public protocol MemoryEmbeddingGenerating: Sendable {
 }
 
 public enum MemoryEmbeddingGeneratorFactory {
+    /// Synchronous factory method (legacy, may block during model loading)
     public static func makeDefault(projectRoot: URL?) -> any MemoryEmbeddingGenerating {
         if let coreML = CoreMLTextEmbeddingGenerator.makeDefault(projectRoot: projectRoot) {
+            return coreML
+        }
+        return HashingMemoryEmbeddingGenerator()
+    }
+    
+    /// Async factory method - loads models off the main thread
+    public static func makeDefaultAsync(projectRoot: URL?) async -> any MemoryEmbeddingGenerating {
+        // Load model off main thread to avoid blocking UI
+        if let coreML = await CoreMLTextEmbeddingGenerator.makeDefaultAsync(projectRoot: projectRoot) {
             return coreML
         }
         return HashingMemoryEmbeddingGenerator()
@@ -70,6 +80,7 @@ public final class CoreMLTextEmbeddingGenerator: MemoryEmbeddingGenerating, @unc
         self.outputFeatureName = outputFeatureName
     }
 
+    /// Synchronous factory method (legacy, may block during model loading)
     public static func makeDefault(projectRoot: URL?) -> CoreMLTextEmbeddingGenerator? {
         let defaultCandidates = candidateModelURLs(projectRoot: projectRoot)
 
@@ -94,6 +105,13 @@ public final class CoreMLTextEmbeddingGenerator: MemoryEmbeddingGenerating, @unc
         }
 
         return nil
+    }
+    
+    /// Async factory method - loads models off the calling thread
+    public static func makeDefaultAsync(projectRoot: URL?) async -> CoreMLTextEmbeddingGenerator? {
+        await Task.detached(priority: .userInitiated) {
+            Self.makeDefault(projectRoot: projectRoot)
+        }.value
     }
 
     public func generateEmbedding(for text: String) async throws -> [Float] {

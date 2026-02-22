@@ -13,7 +13,6 @@ import Combine
 public protocol Event { }
 
 /// Protocol for the system-wide Event Bus.
-@MainActor
 public protocol EventBusProtocol: Sendable {
     /// Publishes an event to all subscribers.
     func publish<E: Event>(_ event: E)
@@ -25,17 +24,19 @@ public protocol EventBusProtocol: Sendable {
 
 /// The concrete implementation of the Event Bus using Combine.
 /// This acts as the central nervous system of the IDE.
-@MainActor
-public final class EventBus: EventBusProtocol {
+/// Thread-safe but NOT isolated to @MainActor to avoid blocking background publishers.
+public final class EventBus: EventBusProtocol, @unchecked Sendable {
     // We store PassthroughSubjects for each Event type name.
     // Using String keys (type name) allows decoupled storage.
     private var subjects: [String: Any] = [:]
+    private let lock = NSLock()
 
     public init() {}
 
     public func publish<E: Event>(_ event: E) {
         let key = String(describing: E.self)
 
+        // Log asynchronously (non-blocking)
         Task {
             await AppLogger.shared.debug(
                 category: .eventBus,
@@ -45,6 +46,10 @@ public final class EventBus: EventBusProtocol {
                 ])
             )
         }
+        
+        lock.lock()
+        defer { lock.unlock() }
+        
         if let subject = subjects[key] as? PassthroughSubject<E, Never> {
             subject.send(event)
         }
@@ -53,6 +58,7 @@ public final class EventBus: EventBusProtocol {
     public func subscribe<E: Event>(to eventType: E.Type, handler: @escaping (E) -> Void) -> AnyCancellable {
         let key = String(describing: E.self)
 
+        // Log asynchronously (non-blocking)
         Task {
             await AppLogger.shared.debug(
                 category: .eventBus,
@@ -62,6 +68,10 @@ public final class EventBus: EventBusProtocol {
                 ])
             )
         }
+        
+        lock.lock()
+        defer { lock.unlock() }
+        
         let subject: PassthroughSubject<E, Never>
 
         if let existing = subjects[key] as? PassthroughSubject<E, Never> {
@@ -71,9 +81,9 @@ public final class EventBus: EventBusProtocol {
             subjects[key] = subject
         }
 
-        // EventBus is @MainActor; publish() is expected to be called from the main actor.
-        // Delivering synchronously here avoids races/flakiness in tests and keeps UI updates deterministic.
+        // Deliver events on main thread for UI updates
         return subject
+            .receive(on: DispatchQueue.main)
             .sink(receiveValue: handler)
     }
 }

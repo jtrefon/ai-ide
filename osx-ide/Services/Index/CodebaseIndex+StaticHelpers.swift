@@ -1,12 +1,12 @@
 import Foundation
 
 extension CodebaseIndex {
-    static func makeEnrichmentPrompt(path: String, content: String) -> String {
+    nonisolated static func makeEnrichmentPrompt(path: String, content: String) -> String {
         return """
         Analyze the following source file and provide a quality score and a concise summary.
 
         The summary should be 1-2 sentences describing the main purpose of the file " +
-                "or the primary class/struct it contains. Focus on \"what\" and \"why\", not just \"how\"."
+                "or the primary class/struct it contains. Focus on \"what\" and \"why\", not just \"how\".
 
         Return ONLY a single line JSON object like:
         {"score": 85, "summary": "Manages the SQLite database for the " +
@@ -21,7 +21,7 @@ extension CodebaseIndex {
         """
     }
 
-    static func parseEnrichmentResponse(from content: String?) -> (score: Int, summary: String?)? {
+    nonisolated static func parseEnrichmentResponse(from content: String?) -> (score: Int, summary: String?)? {
         guard let content else { return nil }
         guard let data = content.data(using: .utf8) else { return nil }
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
@@ -39,19 +39,19 @@ extension CodebaseIndex {
         return (score, summary)
     }
 
-    static func isIndexableFile(_ url: URL) -> Bool {
+    nonisolated static func isIndexableFile(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
         if ext.isEmpty { return false }
         return AppConstantsIndexing.allowedExtensions.contains(ext)
     }
 
-    static func isAIEnrichableFile(_ url: URL) -> Bool {
+    nonisolated static func isAIEnrichableFile(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
         if ext.isEmpty { return false }
         return AppConstantsIndexing.aiEnrichableExtensions.contains(ext)
     }
 
-    static func resolveIndexDirectory(projectRoot: URL, storageDirectoryPath: String? = nil) -> URL {
+    nonisolated static func resolveIndexDirectory(projectRoot: URL, storageDirectoryPath: String? = nil) -> URL {
         let fileManager = FileManager.default
 
         if let storageDirectoryPath,
@@ -83,7 +83,7 @@ extension CodebaseIndex {
         }
     }
 
-    static func indexDatabaseURL(projectRoot: URL) -> URL {
+    nonisolated static func indexDatabaseURL(projectRoot: URL) -> URL {
         let dir = resolveIndexDirectory(projectRoot: projectRoot)
         return dir.appendingPathComponent("codebase.sqlite")
     }

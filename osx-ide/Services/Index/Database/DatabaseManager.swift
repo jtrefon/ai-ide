@@ -323,10 +323,28 @@ public class DatabaseManager {
         }
     }
 
+    /// Execute work on the database queue asynchronously.
+    /// Since DatabaseStore is an actor, it already provides isolation, so we use async to avoid blocking.
+    internal func asyncOnQueue<T: Sendable>(_ work: @escaping () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async {
+                do {
+                    let result = try work()
+                    continuation.resume(returning: result)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    /// Synchronous version for internal use when already on the queue.
+    /// WARNING: This should only be called from within asyncOnQueue or when already on the queue.
     internal func syncOnQueue<T>(_ work: () throws -> T) throws -> T {
         if DispatchQueue.getSpecific(key: queueKey) == queueID {
             return try work()
         }
+        // For legacy compatibility - but prefer asyncOnQueue
         return try queue.sync {
             try work()
         }

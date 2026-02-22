@@ -13,7 +13,7 @@ struct OSXIDEApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     private let isUnitTesting: Bool
-    private let container: DependencyContainer
+    @ObservedObject private var container: DependencyContainer
     @StateObject private var appState: AppState
     @StateObject private var errorManager: ErrorManager
     @AppStorage(AppConstants.Storage.codebaseIndexEnabledKey) private var codebaseIndexEnabled: Bool = true
@@ -63,40 +63,47 @@ struct OSXIDEApp: App {
             if isUnitTesting {
                 Color.clear.frame(width: 0, height: 0)
             } else {
-                ContentView(appState: appState)
-                    .environmentObject(errorManager)
-                    .onAppear {
-                        NSApp.activate(ignoringOtherApps: true)
-                    }
-                    .task {
-                        if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
-                            return
+                ZStack {
+                    ContentView(appState: appState)
+                        .environmentObject(errorManager)
+                        .onAppear {
+                            NSApp.activate(ignoringOtherApps: true)
                         }
-                        if didInitializeCorePlugin {
-                            return
-                        }
+                        .task {
+                            if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
+                                return
+                            }
+                            if didInitializeCorePlugin {
+                                return
+                            }
 
-                        CorePlugin.initialize(registry: appState.uiRegistry, context: appState)
-                        didInitializeCorePlugin = true
-                    }
-                    .alert(localized("alert.error.title"), isPresented: $errorManager.showErrorAlert) {
-                        Button(localized("common.ok")) {
-                            errorManager.dismissError()
+                            CorePlugin.initialize(registry: appState.uiRegistry, context: appState)
+                            didInitializeCorePlugin = true
                         }
-                    } message: {
-                        if let error = errorManager.currentError {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(error.localizedDescription)
-                                    .font(.headline)
+                        .alert(localized("alert.error.title"), isPresented: $errorManager.showErrorAlert) {
+                            Button(localized("common.ok")) {
+                                errorManager.dismissError()
+                            }
+                        } message: {
+                            if let error = errorManager.currentError {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(error.localizedDescription)
+                                        .font(.headline)
 
-                                if let suggestion = error.recoverySuggestion {
-                                    Text(String(format: localized("alert.suggestion_format"), suggestion))
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                    if let suggestion = error.recoverySuggestion {
+                                        Text(String(format: localized("alert.suggestion_format"), suggestion))
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                             }
                         }
+                    
+                    // Loading overlay while services initialize
+                    if !container.isInitialized {
+                        LoadingOverlayView(status: container.initializationStatus)
                     }
+                }
             }
         }
         .windowToolbarStyle(.unifiedCompact)
@@ -389,6 +396,29 @@ struct OSXIDEApp: App {
                 SettingsView(ui: appState.ui)
             }
         }
+    }
+}
+
+/// Loading overlay shown while services initialize
+private struct LoadingOverlayView: View {
+    let status: String
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.5)
+            
+            Text("Initializing...")
+                .font(.headline)
+            
+            Text(status)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(32)
+        .background(Color(NSColor.windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(radius: 10)
     }
 }
 

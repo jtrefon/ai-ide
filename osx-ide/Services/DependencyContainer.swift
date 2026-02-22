@@ -10,14 +10,20 @@ import Combine
 
 /// Dependency injection container for managing service instances
 @MainActor
-class DependencyContainer {
+class DependencyContainer: ObservableObject {
 
     private let settingsStore: SettingsStore
+    
+    /// Tracks whether heavy initialization is complete
+    @Published private(set) var isInitialized: Bool = false
+    @Published private(set) var initializationStatus: String = "Starting..."
 
     init(isTesting: Bool = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil) {
         // If testing, try to load the actual app's UserDefaults so harness has access to API keys and models
         let defaults = isTesting ? (UserDefaults(suiteName: "tdc.osx-ide") ?? .standard) : .standard
         settingsStore = SettingsStore(userDefaults: defaults)
+        
+        // Create lightweight services immediately
         let errorManager = ErrorManager()
         _errorManager = errorManager
         _eventBus = EventBus()
@@ -37,6 +43,9 @@ class DependencyContainer {
             fileSystemService: _fileSystemService,
             eventBus: _eventBus
         )
+        _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
+        
+        // Create AI services (these are lightweight)
         let openRouterService = OpenRouterAIService(
             settingsStore: OpenRouterSettingsStore(settingsStore: settingsStore),
             eventBus: _eventBus
@@ -52,8 +61,7 @@ class DependencyContainer {
             selectionStore: selectionStore
         )
 
-        _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
-
+        // Create conversation manager
         _conversationManager = ConversationManager(
             dependencies: ConversationManager.Dependencies(
                 services: ConversationManager.ServiceDependencies(
@@ -71,17 +79,44 @@ class DependencyContainer {
             )
         )
 
+        // Create project coordinator
         _projectCoordinator = ProjectCoordinator(
             aiService: _aiService,
             errorManager: errorManager,
             eventBus: _eventBus,
             conversationManager: _conversationManager
         )
-
-        if !isTesting, let root = _workspaceService.currentDirectory {
-            _conversationManager.updateProjectRoot(root)
-            _projectCoordinator.configureProject(root: root)
+        
+        // Defer heavy initialization to background
+        Task { [weak self] in
+            await self?.initializeHeavyServices(isTesting: isTesting)
         }
+    }
+    
+    /// Initialize heavy services asynchronously (database, embedding models, etc.)
+    private func initializeHeavyServices(isTesting: Bool) async {
+        initializationStatus = "Initializing services..."
+        
+        // Small delay to let UI render first
+        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        
+        if !isTesting, let root = _workspaceService.currentDirectory {
+            initializationStatus = "Loading project: \(root.lastPathComponent)"
+            
+            // Update conversation manager with project root (lightweight)
+            _conversationManager.updateProjectRoot(root)
+            
+            // Configure project asynchronously (this is the heavy part)
+            _projectCoordinator.configureProject(root: root)
+            
+            // Wait for project coordinator to finish initializing
+            while await _projectCoordinator.isInitializing {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
+        }
+        
+        initializationStatus = "Ready"
+        isInitialized = true
     }
 
     // MARK: - Public Accessors

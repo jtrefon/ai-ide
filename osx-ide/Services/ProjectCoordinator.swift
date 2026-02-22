@@ -10,7 +10,7 @@ import Combine
 
 /// Manages the lifecycle of a project, including indexing coordination and project-specific services.
 @MainActor
-class ProjectCoordinator {
+class ProjectCoordinator: ObservableObject {
     private let aiService: AIService
     private let errorManager: ErrorManagerProtocol
     private let eventBus: EventBusProtocol
@@ -19,8 +19,12 @@ class ProjectCoordinator {
     private var currentProjectRoot: URL?
     private var rootWatcher: ProjectRootFileWatcher?
 
-    private(set) var codebaseIndex: CodebaseIndexProtocol?
+    @Published private(set) var codebaseIndex: CodebaseIndexProtocol?
+    @Published private(set) var isInitializing: Bool = false
+    @Published private(set) var initializationError: Error?
+    
     private var pendingAutoReindexTask: Task<Void, Never>?
+    private var initializationTask: Task<Void, Never>?
 
     init(
         aiService: AIService,
@@ -35,45 +39,76 @@ class ProjectCoordinator {
         self.settingsStore = SettingsStore(userDefaults: .standard)
     }
 
+    /// Configure project asynchronously - does NOT block the main thread
     func configureProject(root: URL) {
         currentProjectRoot = root
         pendingAutoReindexTask?.cancel()
         pendingAutoReindexTask = nil
+        initializationTask?.cancel()
+        initializationTask = nil
 
         rootWatcher?.stop()
         rootWatcher = nil
 
         codebaseIndex?.stop()
         codebaseIndex = nil
-
-        // Initialize logger early
-        Task {
-            await IndexLogger.shared.setup(projectRoot: root)
-            await IndexLogger.shared.log("ProjectCoordinator: Configuring project at \(root.path)")
-        }
-
-        do {
-            let index = try CodebaseIndex(eventBus: eventBus, projectRoot: root, aiService: aiService)
-            self.codebaseIndex = index
-            index.start()
-
-            startRootWatcher(projectRoot: root)
-
-            let isIndexEnabled = settingsStore.bool(forKey: AppConstantsStorage.codebaseIndexEnabledKey, default: true)
-            index.setEnabled(isIndexEnabled)
-
-            if isIndexEnabled {
-                scheduleAutoReindex(root: root)
+        initializationError = nil
+        
+        // Start async initialization
+        isInitializing = true
+        
+        initializationTask = Task { [weak self] in
+            guard let self = self else { return }
+            
+            // Initialize logger early (non-blocking)
+            async let loggerSetup: Void = IndexLogger.shared.setup(projectRoot: root)
+            async let loggerLog: Void = IndexLogger.shared.log("ProjectCoordinator: Configuring project at \(root.path)")
+            
+            // Wait for logger to be ready
+            _ = await (loggerSetup, loggerLog)
+            
+            do {
+                // Create index asynchronously - this is the heavy operation
+                let index = try await CodebaseIndex.create(
+                    eventBus: self.eventBus,
+                    projectRoot: root,
+                    aiService: self.aiService
+                )
+                
+                // Check if cancelled
+                if Task.isCancelled { return }
+                
+                // Update state on main actor
+                await MainActor.run {
+                    self.codebaseIndex = index
+                    self.isInitializing = false
+                    index.start()
+                }
+                
+                // Start file watcher
+                self.startRootWatcher(projectRoot: root)
+                
+                // Configure index settings
+                let isIndexEnabled = self.settingsStore.bool(forKey: AppConstantsStorage.codebaseIndexEnabledKey, default: true)
+                index.setEnabled(isIndexEnabled)
+                
+                if isIndexEnabled {
+                    self.scheduleAutoReindex(root: root)
+                }
+                
+                // Update conversation manager with new project context
+                if let cm = self.conversationManager as? ConversationManager {
+                    cm.updateCodebaseIndex(index)
+                    cm.updateProjectRoot(root)
+                }
+            } catch {
+                await MainActor.run {
+                    self.codebaseIndex = nil
+                    self.isInitializing = false
+                    self.initializationError = error
+                    self.errorManager.handle(.unknown("Failed to initialize CodebaseIndex: \(error.localizedDescription)"))
+                }
             }
-
-            // Update conversation manager with new project context
-            if let cm = conversationManager as? ConversationManager {
-                cm.updateCodebaseIndex(index)
-                cm.updateProjectRoot(root)
-            }
-        } catch {
-            self.codebaseIndex = nil
-            errorManager.handle(.unknown("Failed to initialize CodebaseIndex: \(error.localizedDescription)"))
         }
     }
 
@@ -89,8 +124,12 @@ class ProjectCoordinator {
 
         pendingAutoReindexTask?.cancel()
         pendingAutoReindexTask = nil
+        initializationTask?.cancel()
+        initializationTask = nil
+        
         codebaseIndex?.stop()
         codebaseIndex = nil
+        isInitializing = true
 
         if overwriteDB {
             cleanupIndexDatabase(projectRoot: root)
@@ -125,31 +164,47 @@ class ProjectCoordinator {
     }
 
     private func initializeAndStartIndex(projectRoot: URL, aiEnrichment: Bool) {
-        do {
-            let index = try CodebaseIndex(eventBus: eventBus, projectRoot: projectRoot, aiService: aiService)
-            self.codebaseIndex = index
-            index.start()
-
-            startRootWatcher(projectRoot: projectRoot)
-
-            let isIndexEnabled = settingsStore.bool(forKey: AppConstantsStorage.codebaseIndexEnabledKey, default: true)
-            index.setEnabled(isIndexEnabled)
-
-            if let cm = conversationManager as? ConversationManager {
-                cm.updateCodebaseIndex(index)
-                cm.updateProjectRoot(projectRoot)
-            }
-
-            if isIndexEnabled {
-                index.reindexProject(aiEnrichmentEnabled: aiEnrichment)
-            } else {
-                Task {
+        initializationTask = Task { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                let index = try await CodebaseIndex.create(
+                    eventBus: self.eventBus,
+                    projectRoot: projectRoot,
+                    aiService: self.aiService
+                )
+                
+                if Task.isCancelled { return }
+                
+                await MainActor.run {
+                    self.codebaseIndex = index
+                    self.isInitializing = false
+                    index.start()
+                }
+                
+                self.startRootWatcher(projectRoot: projectRoot)
+                
+                let isIndexEnabled = self.settingsStore.bool(forKey: AppConstantsStorage.codebaseIndexEnabledKey, default: true)
+                index.setEnabled(isIndexEnabled)
+                
+                if let cm = self.conversationManager as? ConversationManager {
+                    cm.updateCodebaseIndex(index)
+                    cm.updateProjectRoot(projectRoot)
+                }
+                
+                if isIndexEnabled {
+                    index.reindexProject(aiEnrichmentEnabled: aiEnrichment)
+                } else {
                     await IndexLogger.shared.log("ProjectCoordinator: Reindex requested but Codebase Index is disabled")
                 }
+            } catch {
+                await MainActor.run {
+                    self.codebaseIndex = nil
+                    self.isInitializing = false
+                    self.initializationError = error
+                    self.errorManager.handle(.unknown("Failed to rebuild CodebaseIndex: \(error.localizedDescription)"))
+                }
             }
-        } catch {
-            self.codebaseIndex = nil
-            errorManager.handle(.unknown("Failed to rebuild CodebaseIndex: \(error.localizedDescription)"))
         }
     }
 

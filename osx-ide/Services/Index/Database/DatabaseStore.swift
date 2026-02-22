@@ -41,16 +41,25 @@ public struct UpsertResourceAndFTSRequest: Sendable {
     public let content: String
 }
 
+/// Actor-based database store providing thread-safe access to the index database.
+/// Since this is an actor, all methods are implicitly async and provide isolation.
 public actor DatabaseStore {
     private let database: DatabaseManager
 
     public init(path: String) throws {
         self.database = try DatabaseManager(path: path)
     }
+    
+    /// Async factory method for non-blocking initialization
+    public static func create(path: String) async throws -> DatabaseStore {
+        try await DatabaseStore(path: path)
+    }
 
     public func shutdown() {
         database.shutdown()
     }
+
+    // MARK: - Resource Operations
 
     public func getResourceLastModified(resourceId: String) throws -> Double? {
         try database.getResourceLastModified(resourceId: resourceId)
@@ -79,6 +88,8 @@ public actor DatabaseStore {
     public func searchFTS(query: String, limit: Int) throws -> [(path: String, snippet: String)] {
         try database.searchFTS(query: query, limit: limit)
     }
+
+    // MARK: - Symbol Operations
 
     public func saveSymbols(_ symbols: [Symbol]) throws {
         try database.saveSymbols(symbols)
@@ -118,6 +129,8 @@ public actor DatabaseStore {
         try database.searchSymbolsWithPaths(nameLike: query, limit: limit)
     }
 
+    // MARK: - Memory Operations
+
     public func saveMemory(_ entry: MemoryEntry) throws {
         try database.saveMemory(entry)
     }
@@ -143,6 +156,8 @@ public actor DatabaseStore {
         try database.searchSimilarMemories(modelId: modelId, queryVector: queryVector, limit: limit, tier: tier)
     }
 
+    // MARK: - AI Enrichment Operations
+
     public func isResourceAIEnriched(resourceId: String) throws -> Bool {
         try database.isResourceAIEnriched(resourceId: resourceId)
     }
@@ -162,6 +177,8 @@ public actor DatabaseStore {
     public func getAIEnrichedSummaries(projectRoot: URL, limit: Int) throws -> [(path: String, summary: String)] {
         try database.getAIEnrichedSummaries(projectRoot: projectRoot, limit: limit)
     }
+
+    // MARK: - Stats Operations
 
     public func getIndexStatsCounts() throws -> IndexStatsCounts {
         try database.getIndexStatsCounts()
@@ -186,6 +203,8 @@ public actor DatabaseStore {
     public func getAverageQualityScore() throws -> Double {
         try database.getAverageQualityScore()
     }
+
+    // MARK: - Raw Operations
 
     public func execute(sql: String, parameters: [DatabaseValue]) throws {
         try database.execute(sql: sql, parameters: parameters.map { $0.anyValue })

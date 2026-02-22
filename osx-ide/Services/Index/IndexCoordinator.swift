@@ -19,7 +19,7 @@ public class IndexCoordinator {
     private let maxRecentChanges = 50
     private var bulkIndexTask: Task<Void, Never>?
 
-    public init(
+    public nonisolated init(
         eventBus: EventBusProtocol,
         indexer: IndexerActor,
         config: IndexConfiguration = .default,
@@ -38,7 +38,10 @@ public class IndexCoordinator {
             }
         }
 
-        setupSubscriptions()
+        // Note: setupSubscriptions() needs MainActor, so we defer it
+        Task { @MainActor in
+            self.setupSubscriptions()
+        }
     }
 
     public func setEnabled(_ enabled: Bool) {
