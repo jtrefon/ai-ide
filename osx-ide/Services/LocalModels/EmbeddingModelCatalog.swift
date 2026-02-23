@@ -61,26 +61,8 @@ public enum EmbeddingModelCatalog {
         ),
     ]
     
-    /// Models available for download (ONNX format, require conversion)
-    public static let downloadableModels: [EmbeddingModelDefinition] = [
-        // All-MiniLM-L6-v2 - Lightweight option (conversion failed, available as ONNX only)
-        EmbeddingModelDefinition(
-            id: "all-minilm-l6-v2",
-            name: "Sentence Transformers all-MiniLM-L6-v2 (ONNX)",
-            dimensions: 384,
-            huggingFaceRepo: "sentence-transformers/all-MiniLM-L6-v2",
-            fileName: "model.onnx",
-            downloadURL: URL(
-                string: "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx"
-            )!,
-            sizeBytes: 90 * 1024 * 1024,  // ~90 MB
-            modelFormat: .onnx,
-            conversionInstructions: "Run: python scripts/convert_embedding_to_coreml.py sentence-transformers/all-MiniLM-L6-v2"
-        ),
-    ]
-    
-    /// All available models (bundled first, then downloadable)
-    public static let availableModels: [EmbeddingModelDefinition] = bundledModels + downloadableModels
+    /// All available models (all bundled, no downloadable models)
+    public static let availableModels: [EmbeddingModelDefinition] = bundledModels
 
     /// Default model - BGE Small for fast startup, good quality
     public static var defaultModel: EmbeddingModelDefinition {

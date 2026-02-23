@@ -17,8 +17,18 @@ public enum MemoryEmbeddingGeneratorFactory {
     }
 
     /// Async factory method - loads models off the main thread
-    /// Priority order: BERT models (bundled) > Legacy CoreML > Hashing fallback
+    /// Priority order: User-selected model > BERT models (bundled) > Legacy CoreML > Hashing fallback
     public static func makeDefaultAsync(projectRoot: URL?) async -> any MemoryEmbeddingGenerating {
+        // 0. Check for user-selected model first
+        let selectedModelId = UserDefaults.standard.string(forKey: "EmbeddingModel.SelectedId") ?? ""
+        if !selectedModelId.isEmpty {
+            if let selectedModel = await BERTEmbeddingGeneratorFactory.load(modelName: selectedModelId) {
+                print("[MemoryEmbeddingGenerator] Loaded user-selected model: \(selectedModelId)")
+                return selectedModel
+            }
+            print("[MemoryEmbeddingGenerator] Failed to load user-selected model: \(selectedModelId), falling back to first available")
+        }
+        
         // 1. Try bundled BERT embedding models (BGE, Nomic, etc.)
         if let bert = await BERTEmbeddingGeneratorFactory.loadFirstAvailable() {
             return bert

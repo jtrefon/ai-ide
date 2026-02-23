@@ -81,7 +81,7 @@ final class EmbeddingModelSettingsViewModel: ObservableObject {
 
     func selectModel(_ model: EmbeddingModelDefinition) {
         selectedModelId = model.id
-        status = Status(kind: .success, message: "Selected \(model.name). Restart project to use new embedding model.")
+        status = Status(kind: .success, message: "Selected \(model.name). Rebuild index to use new embedding model.")
     }
 
     func downloadModel(_ model: EmbeddingModelDefinition) async {

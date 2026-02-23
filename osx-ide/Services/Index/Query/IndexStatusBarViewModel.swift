@@ -211,11 +211,28 @@ final class IndexStatusBarViewModel: ObservableObject {
         Task { @MainActor in
             if let index = codebaseIndex as? CodebaseIndex {
                 let modelId = index.currentEmbeddingModelIdentifier
-                // Shorten the identifier for display
-                if modelId.contains("coreml") {
-                    self.embeddingModelIdentifier = "coreml"
-                } else if modelId.contains("hashing") {
+                // Convert model identifier to display-friendly name
+                // Model IDs are like "bert_bge-small-en-v1.5" or "bert_nomic-embed-text-v1.5"
+                if modelId.contains("hashing") {
                     self.embeddingModelIdentifier = "hashing"
+                } else if modelId.hasPrefix("bert_") {
+                    // Extract the model name after "bert_" prefix
+                    let modelName = String(modelId.dropFirst(5))
+                    // Create short display names
+                    if modelName.contains("nomic") {
+                        self.embeddingModelIdentifier = "nomic"
+                    } else if modelName.contains("bge-small") {
+                        self.embeddingModelIdentifier = "bge-s"
+                    } else if modelName.contains("bge-base") {
+                        self.embeddingModelIdentifier = "bge-b"
+                    } else if modelName.contains("bge-large") {
+                        self.embeddingModelIdentifier = "bge-l"
+                    } else {
+                        // Fallback: use first 8 chars of model name
+                        self.embeddingModelIdentifier = String(modelName.prefix(8))
+                    }
+                } else if modelId.contains("coreml") {
+                    self.embeddingModelIdentifier = "coreml"
                 } else {
                     self.embeddingModelIdentifier = String(modelId.prefix(8))
                 }
