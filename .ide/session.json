@@ -1,6 +1,6 @@
 {
   "aiModeRawValue" : "Agent",
-  "chatPanelWidth" : 300,
+  "chatPanelWidth" : 200,
   "fileTreeExpandedRelativePaths" : [
     ".ide",
     ".ide\/chat",
@@ -16,7 +16,7 @@
   "selectedThemeRawValue" : "system",
   "showHiddenFilesInFileTree" : true,
   "showLineNumbers" : true,
-  "sidebarWidth" : 250,
+  "sidebarWidth" : 300,
   "terminalHeight" : 200,
   "windowFrame" : {
     "height" : 948,

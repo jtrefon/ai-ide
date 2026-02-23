@@ -2,7 +2,7 @@ import Foundation
 import AppKit
 
 enum AppConstantsLayout {
-    static let defaultSidebarWidth: Double = 250
+    static let defaultSidebarWidth: Double = 200
     static let defaultTerminalHeight: Double = 200
     static let defaultChatPanelWidth: Double = 300
     static let minSidebarWidth: Double = 150

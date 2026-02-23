@@ -14,9 +14,9 @@ public struct UIConfiguration: Codable, Sendable {
         isSidebarVisible: Bool = true,
         isTerminalVisible: Bool = true,
         isAIChatVisible: Bool = true,
-        sidebarWidth: Double = 250,
+        sidebarWidth: Double = 300,
         terminalHeight: Double = 200,
-        chatPanelWidth: Double = 300
+        chatPanelWidth: Double = 200
     ) {
         self.windowFrame = windowFrame
         self.isSidebarVisible = isSidebarVisible
