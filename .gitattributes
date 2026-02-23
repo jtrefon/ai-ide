@@ -1,3 +1,4 @@
-*.mlmodelc filter=lfs diff=lfs merge=lfs -text
-osx-ide/Resources/EmbeddingModels/*.mlmodelc filter=lfs diff=lfs merge=lfs -text
+# Track weight.bin files in embedding models with Git LFS
+*.mlmodelc/weights/weight.bin filter=lfs diff=lfs merge=lfs -text
+# Also track all .bin files in EmbeddingModels directory
 osx-ide/Resources/EmbeddingModels/**/*.bin filter=lfs diff=lfs merge=lfs -text
