@@ -34,7 +34,8 @@ public struct MemorySimilarityResult: Sendable {
     }
 }
 
-@MainActor
+/// Protocol for services that can search memories by semantic similarity.
+/// NOT isolated to @MainActor to avoid blocking UI during embedding generation.
 public protocol MemoryEmbeddingSearchProviding: Sendable {
     func getRelevantMemories(userInput: String, limit: Int) async throws -> [MemorySimilarityResult]
 }

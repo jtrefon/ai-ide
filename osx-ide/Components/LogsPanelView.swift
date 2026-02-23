@@ -1,6 +1,6 @@
-import SwiftUI
 import AppKit
 import Combine
+import SwiftUI
 
 struct LogsPanelView: View {
     @ObservedObject var ui: UIStateManager
@@ -13,6 +13,7 @@ struct LogsPanelView: View {
     @State private var followSubscription: AnyCancellable?
     @State private var sourceSubscription: AnyCancellable?
     @State private var clearSubscription: AnyCancellable?
+    @State private var scrollTask: Task<Void, Never>?
 
     init(ui: UIStateManager, projectRoot: URL?, eventBus: EventBusProtocol) {
         self.ui = ui
@@ -27,23 +28,32 @@ struct LogsPanelView: View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 6) {
-                        ForEach(Array(tailer.lines.enumerated()), id: \.offset) { idx, line in
-                            Text(line)
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(tailer.lines) { line in
+                            Text(line.text)
                                 .font(.system(size: max(10, ui.fontSize - 2), design: .monospaced))
                                 .foregroundColor(.primary)
                                 .textSelection(.enabled)
+                                .lineLimit(20)  // Prevent insanely tall items
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .id(idx)
+                                .id(line.id)
                         }
                     }
                     .padding(8)
                 }
                 .background(Color(NSColor.textBackgroundColor))
-                .onChange(of: tailer.lines.count) { _, _ in
-                    guard follow else { return }
-                    if let last = tailer.lines.indices.last {
-                        proxy.scrollTo(last, anchor: .bottom)
+                .onChange(of: tailer.lines.count) { _, count in
+                    guard follow, count > 0 else { return }
+
+                    // Debounce scrollTo to avoid layout cycles
+                    scrollTask?.cancel()
+                    scrollTask = Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
+                        if !Task.isCancelled {
+                            if let last = tailer.lines.last?.id {
+                                proxy.scrollTo(last, anchor: .bottom)
+                            }
+                        }
                     }
                 }
             }
@@ -75,19 +85,24 @@ struct LogsPanelView: View {
         }
     }
 
-    private static func resolveURL(source: LogSource, projectRoot _: URL?) -> URL {
+    private static func resolveURL(source: LogSource, projectRoot: URL?) -> URL {
         switch source {
         case .app:
-            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            let base =
+                FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+                .first
                 ?? FileManager.default.temporaryDirectory
             let day = ISO8601DateFormatter().string(from: Date()).prefix(10)
-            return base
+            return
+                base
                 .appendingPathComponent("osx-ide/Logs", isDirectory: true)
                 .appendingPathComponent(String(day), isDirectory: true)
                 .appendingPathComponent("app.ndjson")
 
         case .aiTrace:
-            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            let base =
+                FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+                .first
                 ?? FileManager.default.temporaryDirectory
             let logsDir = base.appendingPathComponent("osx-ide/Logs", isDirectory: true)
             if let url = mostRecentNDJSON(in: logsDir, namePrefix: "ai-trace-") {
@@ -96,10 +111,13 @@ struct LogsPanelView: View {
             return logsDir.appendingPathComponent("empty.ndjson")
 
         case .conversation:
-            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            let base =
+                FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+                .first
                 ?? FileManager.default.temporaryDirectory
             let day = ISO8601DateFormatter().string(from: Date()).prefix(10)
-            let dir = base
+            let dir =
+                base
                 .appendingPathComponent("osx-ide/Logs", isDirectory: true)
                 .appendingPathComponent(String(day), isDirectory: true)
                 .appendingPathComponent("conversations", isDirectory: true)
@@ -110,16 +128,25 @@ struct LogsPanelView: View {
             return dir.appendingPathComponent("empty.ndjson")
 
         case .projectIndex:
+            if let projectRoot {
+                return
+                    projectRoot
+                    .appendingPathComponent(".ide", isDirectory: true)
+                    .appendingPathComponent("logs", isDirectory: true)
+                    .appendingPathComponent("indexing.log")
+            }
             return FileManager.default.temporaryDirectory.appendingPathComponent("missing.log")
         }
     }
 
     private static func mostRecentNDJSON(in directory: URL, namePrefix _: String?) -> URL? {
-        guard let items = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else {
+        guard
+            let items = try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            )
+        else {
             return nil
         }
         let ndjson = items.filter {
@@ -127,10 +154,12 @@ struct LogsPanelView: View {
             return true
         }
         return ndjson.max(by: { left, right in
-            let da = (try? left.resourceValues(forKeys: [.contentModificationDateKey])
-                        .contentModificationDate) ?? .distantPast
-            let db = (try? right.resourceValues(forKeys: [.contentModificationDateKey])
-                        .contentModificationDate) ?? .distantPast
+            let da =
+                (try? left.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate) ?? .distantPast
+            let db =
+                (try? right.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate) ?? .distantPast
             return da < db
         })
     }

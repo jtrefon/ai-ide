@@ -8,6 +8,26 @@
 import SwiftUI
 import AppKit
 
+fileprivate func earlyDiag(_ msg: String) {
+    let ts = ISO8601DateFormatter().string(from: Date())
+    let line = "[\(ts)] \(msg)\n"
+    let fm = FileManager.default
+    let tmpLog = URL(fileURLWithPath: "/tmp/osx-ide-startup.log")
+    if let data = line.data(using: .utf8) {
+        if fm.fileExists(atPath: tmpLog.path) {
+            if let handle = try? FileHandle(forWritingTo: tmpLog) {
+                try? handle.seekToEnd()
+                try? handle.write(contentsOf: data)
+                try? handle.close()
+            }
+        } else {
+            try? data.write(to: tmpLog)
+        }
+    }
+    Swift.print("[EARLY-DIAG] \(msg)")
+    fflush(stdout)
+}
+
 @main
 struct OSXIDEApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -22,17 +42,34 @@ struct OSXIDEApp: App {
     @State private var didInitializeCorePlugin: Bool = false
 
     init() {
+        let _initStart = Date()
+        earlyDiag("OSXIDEApp.init START")
+        
+        Task { await DiagnosticsLogger.shared.logEvent(.appInitStart, name: "OSXIDEApp.init") }
+        
         let isUnitTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             && ProcessInfo.processInfo.environment["XCUI_TESTING"] != "1"
         self.isUnitTesting = isUnitTesting
+        earlyDiag("isUnitTesting=\(isUnitTesting)")
 
+        Task { await DiagnosticsLogger.shared.logEvent(.dependencyContainerInitStart, name: "DependencyContainer") }
+        earlyDiag("About to create DependencyContainer...")
+        
         let container = DependencyContainer(isTesting: isUnitTesting)
+        
+        earlyDiag("DependencyContainer created")
+        
+        Task { await DiagnosticsLogger.shared.logEvent(.dependencyContainerInitEnd, name: "DependencyContainer", metadata: ["durationMs": String(format: "%.2f", Date().timeIntervalSince(_initStart) * 1000)]) }
+        
         self.container = container
 
+        earlyDiag("Getting errorManager...")
         guard let errorMgr = container.errorManager as? ErrorManager else {
             fatalError("DependencyContainer.errorManager must be an ErrorManager")
         }
+        earlyDiag("Creating AppState...")
         let appSt = container.makeAppState()
+        earlyDiag("AppState created")
 
         if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1",
            ProcessInfo.processInfo.environment["UI_TEST_SCENARIO"] == "json_highlighting" {
@@ -52,6 +89,10 @@ struct OSXIDEApp: App {
 
         self._errorManager = StateObject(wrappedValue: errorMgr)
         self._appState = StateObject(wrappedValue: appSt)
+        
+        earlyDiag("OSXIDEApp.init END")
+        
+        Task { await DiagnosticsLogger.shared.logEvent(.appInitEnd, name: "OSXIDEApp.init", metadata: ["totalDurationMs": String(format: "%.2f", Date().timeIntervalSince(_initStart) * 1000)]) }
     }
 
     private func localized(_ key: String) -> String {

@@ -40,7 +40,13 @@ extension CodebaseIndex {
 extension CodebaseIndex: MemoryEmbeddingSearchProviding {
     public func getRelevantMemories(userInput: String, limit: Int) async throws -> [MemorySimilarityResult] {
         let safeLimit = max(1, limit)
-        let queryVector = try await memoryEmbeddingGenerator.generateEmbedding(for: userInput)
+        
+        // CRITICAL: Run embedding generation off the main thread to avoid blocking UI.
+        // Embedding generation can take 100ms-1s+ on NPU/CPU, which would freeze the app.
+        let generator = memoryEmbeddingGenerator
+        let queryVector = try await Task.detached(priority: .userInitiated) {
+            try await generator.generateEmbedding(for: userInput)
+        }.value
 
         guard !queryVector.isEmpty else {
             let fallback = try await queryService.getMemories(tier: .longTerm)

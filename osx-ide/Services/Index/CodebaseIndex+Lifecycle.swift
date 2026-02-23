@@ -21,13 +21,13 @@ extension CodebaseIndex {
         aiEnrichmentAfterIndexCancellable = nil
         aiEnrichmentTask?.cancel()
         aiEnrichmentTask = nil
-        coordinator.stop()
+        Task { await coordinator.stop() }
         Task { await database.shutdown() }
     }
 
     public func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
-        coordinator.setEnabled(enabled)
+        Task { await coordinator.setEnabled(enabled) }
     }
 
     public func reindexProject() {
@@ -38,7 +38,7 @@ extension CodebaseIndex {
         guard isEnabled else { return }
         Task {
             await pruneOutOfScopeResourcesIfNeeded()
-            coordinator.reindexProject(rootURL: projectRoot)
+            await coordinator.reindexProject(rootURL: projectRoot)
         }
 
         if aiEnrichmentEnabled {

@@ -5,25 +5,52 @@
 //  Created by AI Assistant on 20/12/2025.
 //
 
-import SwiftUI
 import Combine
+import SwiftUI
+
+private func earlyDiag(_ msg: String) {
+    let ts = ISO8601DateFormatter().string(from: Date())
+    let line = "[\(ts)] \(msg)\n"
+    let fm = FileManager.default
+    let tmpLog = URL(fileURLWithPath: "/tmp/osx-ide-startup.log")
+    if let data = line.data(using: .utf8) {
+        if fm.fileExists(atPath: tmpLog.path) {
+            if let handle = try? FileHandle(forWritingTo: tmpLog) {
+                try? handle.seekToEnd()
+                try? handle.write(contentsOf: data)
+                try? handle.close()
+            }
+        } else {
+            try? data.write(to: tmpLog)
+        }
+    }
+    Swift.print("[EARLY-DIAG] \(msg)")
+    fflush(stdout)
+}
 
 /// Dependency injection container for managing service instances
 @MainActor
 class DependencyContainer: ObservableObject {
 
     private let settingsStore: SettingsStore
-    
+
     /// Tracks whether heavy initialization is complete
     @Published private(set) var isInitialized: Bool = false
     @Published private(set) var initializationStatus: String = "Starting..."
 
-    init(isTesting: Bool = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil) {
+    init(
+        isTesting: Bool = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    ) {
+        let _initStart = Date()
+        earlyDiag("DependencyContainer.init START")
+
         // If testing, try to load the actual app's UserDefaults so harness has access to API keys and models
         let defaults = isTesting ? (UserDefaults(suiteName: "tdc.osx-ide") ?? .standard) : .standard
         settingsStore = SettingsStore(userDefaults: defaults)
-        
+
         // Create lightweight services immediately
+        earlyDiag("Creating lightweight services...")
+
         let errorManager = ErrorManager()
         _errorManager = errorManager
         _eventBus = EventBus()
@@ -44,8 +71,13 @@ class DependencyContainer: ObservableObject {
             eventBus: _eventBus
         )
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
-        
+        earlyDiag(
+            "Lightweight services done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
+        )
+
         // Create AI services (these are lightweight)
+        earlyDiag("Creating AI services...")
+
         let openRouterService = OpenRouterAIService(
             settingsStore: OpenRouterSettingsStore(settingsStore: settingsStore),
             eventBus: _eventBus
@@ -60,8 +92,13 @@ class DependencyContainer: ObservableObject {
             localService: localModelService,
             selectionStore: selectionStore
         )
+        earlyDiag(
+            "AI services done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
+        )
 
         // Create conversation manager
+        earlyDiag("Creating conversation manager...")
+
         _conversationManager = ConversationManager(
             dependencies: ConversationManager.Dependencies(
                 services: ConversationManager.ServiceDependencies(
@@ -78,45 +115,110 @@ class DependencyContainer: ObservableObject {
                 )
             )
         )
+        earlyDiag(
+            "Conversation manager done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
+        )
 
         // Create project coordinator
+        earlyDiag("Creating project coordinator...")
+
         _projectCoordinator = ProjectCoordinator(
             aiService: _aiService,
             errorManager: errorManager,
             eventBus: _eventBus,
             conversationManager: _conversationManager
         )
-        
-        // Defer heavy initialization to background
-        Task { [weak self] in
+        earlyDiag(
+            "Project coordinator done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
+        )
+
+        earlyDiag(
+            "DependencyContainer.init END total: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
+        )
+
+        // DO NOT set isInitialized here. Wait for heavy services background task to reach a stable "Medium" point.
+        self.initializationStatus = "Starting heavy services..."
+
+        // Defer truly heavy initialization to background - MUST use detached to escape @MainActor
+        Task.detached(priority: .userInitiated) { [weak self] in
             await self?.initializeHeavyServices(isTesting: isTesting)
         }
     }
-    
+
     /// Initialize heavy services asynchronously (database, embedding models, etc.)
-    private func initializeHeavyServices(isTesting: Bool) async {
-        initializationStatus = "Initializing services..."
-        
+    nonisolated private func initializeHeavyServices(isTesting: Bool) async {
+        let heavyStart = Date()
+        Swift.print("[DIAG] initializeHeavyServices START (Background)")
+
         // Small delay to let UI render first
-        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-        
-        if !isTesting, let root = _workspaceService.currentDirectory {
-            initializationStatus = "Loading project: \(root.lastPathComponent)"
-            
-            // Update conversation manager with project root (lightweight)
-            _conversationManager.updateProjectRoot(root)
-            
-            // Configure project asynchronously (this is the heavy part)
-            _projectCoordinator.configureProject(root: root)
-            
-            // Wait for project coordinator to finish initializing
-            while await _projectCoordinator.isInitializing {
-                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
+
+        // Safely access currentDirectory from Main Actor
+        let projectRoot = await MainActor.run { _workspaceService.currentDirectory }
+
+        if !isTesting, let root = projectRoot {
+            Swift.print("[DIAG] Setting up diagnostics logger for project: \(root.path)")
+
+            // Setup diagnostics logger with project root
+            await DiagnosticsLogger.shared.setup(projectRoot: root)
+            await UIRenderDiagnostics.shared.setup(projectRoot: root)
+
+            await DiagnosticsLogger.shared.logEvent(
+                .serviceInitStart, name: "project-configure", metadata: ["projectRoot": root.path])
+
+            // Update conversation manager with project root - safe via MainActor hop
+            await MainActor.run {
+                _conversationManager.updateProjectRoot(root)
+            }
+
+            // Configure project asynchronously
+            let isInitialized = await MainActor.run {
+                _projectCoordinator.currentProjectRoot == root
+                    && _projectCoordinator.codebaseIndex != nil
+            }
+
+            if !isInitialized {
+                let configStart = Date()
+                Swift.print("[DIAG] Calling ProjectCoordinator.configureProject...")
+                await MainActor.run {
+                    self.initializationStatus = "Configuring project..."
+                    _projectCoordinator.configureProject(root: root)
+                }
+
+                // Wait for the FIRST project configure to finish (CORE DONE)
+                // This brings back the splash screen control
+                while true {
+                    let done = await MainActor.run { !_projectCoordinator.isInitializing }
+                    if done { break }
+                    try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
+                }
+
+                // NO WAIT LOOP HERE. We let it initialize in background.
+                // The UI will update via @Published codebaseIndex in ProjectCoordinator if needed.
+
+                let configDuration = Date().timeIntervalSince(configStart) * 1000
+                Swift.print(
+                    "[DIAG] Project configure started/completed: \(String(format: "%.2f", configDuration))ms"
+                )
+            } else {
+                Swift.print("[DIAG] Project already configured, skipping redundant initialization")
             }
         }
-        
-        initializationStatus = "Ready"
-        isInitialized = true
+
+        await MainActor.run {
+            self.isInitialized = true
+            self.initializationStatus = "Ready"
+        }
+
+        let heavyDuration = Date().timeIntervalSince(heavyStart) * 1000
+        Swift.print(
+            "[DIAG] initializeHeavyServices END total: \(String(format: "%.2f", heavyDuration))ms")
+
+        await DiagnosticsLogger.shared.logEvent(
+            .serviceInitEnd, name: "heavy-services",
+            metadata: [
+                "totalDurationMs": String(format: "%.2f", heavyDuration)
+            ])
     }
 
     // MARK: - Public Accessors
@@ -192,7 +294,8 @@ class DependencyContainer: ObservableObject {
     }
 
     var isCodebaseIndexEnabled: Bool {
-        return settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true)
+        return settingsStore.bool(
+            forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true)
     }
 
     func setCodebaseIndexEnabled(_ enabled: Bool) {
@@ -200,11 +303,13 @@ class DependencyContainer: ObservableObject {
     }
 
     func reindexProjectNow() {
-        _projectCoordinator.rebuildIndex(overwriteDB: true, aiEnrichment: isAIEnrichmentIndexingEnabled)
+        _projectCoordinator.rebuildIndex(
+            overwriteDB: true, aiEnrichment: isAIEnrichmentIndexingEnabled)
     }
 
     var isAIEnrichmentIndexingEnabled: Bool {
-        return settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, default: false)
+        return settingsStore.bool(
+            forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, default: false)
     }
 
     func setAIEnrichmentIndexingEnabled(_ enabled: Bool) {
@@ -212,7 +317,8 @@ class DependencyContainer: ObservableObject {
             let settings = OpenRouterSettingsStore().load(includeApiKey: false)
             let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
             if model.isEmpty {
-                settingsStore.set(false, forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey)
+                settingsStore.set(
+                    false, forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey)
                 _errorManager.handle(.aiServiceError("OpenRouter model is not set."))
                 return
             }
@@ -294,10 +400,10 @@ class DependencyContainer: ObservableObject {
 // MARK: - Testing Support
 
 #if DEBUG
-extension DependencyContainer {
-    /// Create a container with mock services for testing
-    static func makeTestContainer() -> DependencyContainer {
-        return DependencyContainer()
+    extension DependencyContainer {
+        /// Create a container with mock services for testing
+        static func makeTestContainer() -> DependencyContainer {
+            return DependencyContainer()
+        }
     }
-}
 #endif

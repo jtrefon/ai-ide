@@ -16,7 +16,7 @@ public enum MemoryError: Error {
 public actor MemoryManager {
     private let database: DatabaseStore
     private let eventBus: EventBusProtocol
-    private let embeddingGenerator: any MemoryEmbeddingGenerating
+    private var embeddingGenerator: any MemoryEmbeddingGenerating
 
     public init(
         database: DatabaseStore,
@@ -28,7 +28,13 @@ public actor MemoryManager {
         self.embeddingGenerator = embeddingGenerator
     }
 
-    public func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
+    public func updateEmbeddingGenerator(_ generator: any MemoryEmbeddingGenerating) {
+        self.embeddingGenerator = generator
+    }
+
+    public func addMemory(content: String, tier: MemoryTier, category: String) async throws
+        -> MemoryEntry
+    {
         let entry = MemoryEntry(
             tier: tier,
             content: content,
@@ -56,7 +62,9 @@ public actor MemoryManager {
         return protectedEntry
     }
 
-    public func updateMemory(id: String, newContent: String, force: Bool = false) async throws -> MemoryEntry {
+    public func updateMemory(id: String, newContent: String, force: Bool = false) async throws
+        -> MemoryEntry
+    {
         // First retrieve existing
         let memories = try await database.getMemories()
         guard let entry = memories.first(where: { $0.id == id }) else {

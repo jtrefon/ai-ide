@@ -1,6 +1,6 @@
 import Foundation
 
-enum LocalModelFileStore {
+public enum LocalModelFileStore {
     struct ModelConfig: Codable {
         let maxPositionEmbeddings: Int?
         let maxSequenceLength: Int?
@@ -17,7 +17,7 @@ enum LocalModelFileStore {
         }
     }
 
-    static func modelsRootDirectory() throws -> URL {
+    public static func modelsRootDirectory() throws -> URL {
         let appSupport = try FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -25,7 +25,8 @@ enum LocalModelFileStore {
             create: true
         )
 
-        let root = appSupport
+        let root =
+            appSupport
             .appendingPathComponent("osx-ide", isDirectory: true)
             .appendingPathComponent("local-models", isDirectory: true)
 
@@ -44,7 +45,9 @@ enum LocalModelFileStore {
 
     static func isModelInstalled(_ model: LocalModelDefinition) -> Bool {
         for artifact in model.artifacts {
-            guard let url = try? artifactURL(modelId: model.id, fileName: artifact.fileName) else { return false }
+            guard let url = try? artifactURL(modelId: model.id, fileName: artifact.fileName) else {
+                return false
+            }
             if !FileManager.default.fileExists(atPath: url.path) {
                 return false
             }
@@ -61,9 +64,10 @@ enum LocalModelFileStore {
 
     static func loadModelConfig(modelId: String) -> ModelConfig? {
         guard let configURL = try? artifactURL(modelId: modelId, fileName: "config.json"),
-              FileManager.default.fileExists(atPath: configURL.path),
-              let data = try? Data(contentsOf: configURL),
-              let config = try? JSONDecoder().decode(ModelConfig.self, from: data) else {
+            FileManager.default.fileExists(atPath: configURL.path),
+            let data = try? Data(contentsOf: configURL),
+            let config = try? JSONDecoder().decode(ModelConfig.self, from: data)
+        else {
             return nil
         }
         return config
@@ -72,7 +76,8 @@ enum LocalModelFileStore {
     static func contextLength(for model: LocalModelDefinition) -> Int {
         // Try to load from config.json first
         if let config = loadModelConfig(modelId: model.id),
-           let contextLength = config.contextLength {
+            let contextLength = config.contextLength
+        {
             return contextLength
         }
         // Fall back to definition default

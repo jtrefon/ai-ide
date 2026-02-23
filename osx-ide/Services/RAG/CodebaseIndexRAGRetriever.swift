@@ -1,7 +1,9 @@
 import Foundation
 
-@MainActor
-public final class CodebaseIndexRAGRetriever: RAGRetriever {
+/// RAG retriever that performs context retrieval from the codebase index.
+/// NOT isolated to @MainActor to avoid blocking UI during embedding generation.
+/// All operations run asynchronously off the main thread.
+public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable {
     private let index: CodebaseIndexProtocol
 
     public init(index: CodebaseIndexProtocol) {

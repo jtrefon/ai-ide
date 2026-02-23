@@ -9,6 +9,7 @@ public protocol CodebaseIndexProtocol: Sendable {
     func reindexProject()
     func reindexProject(aiEnrichmentEnabled: Bool)
     func runAIEnrichment()
+    func upgradeEmbeddingGenerator(_ generator: any MemoryEmbeddingGenerating)
 
     func listIndexedFiles(matching query: String?, limit: Int, offset: Int) async throws -> [String]
     func findIndexedFiles(query: String, limit: Int) async throws -> [IndexedFileMatch]
@@ -16,24 +17,32 @@ public protocol CodebaseIndexProtocol: Sendable {
     func searchIndexedText(pattern: String, limit: Int) async throws -> [String]
 
     func searchSymbols(nameLike query: String, limit: Int) async throws -> [Symbol]
-    func searchSymbolsWithPaths(nameLike query: String, limit: Int) async throws -> [SymbolSearchResult]
-    func getSummaries(projectRoot: URL, limit: Int) async throws -> [(path: String, summary: String)]
+    func searchSymbolsWithPaths(nameLike query: String, limit: Int) async throws
+        -> [SymbolSearchResult]
+    func getSummaries(projectRoot: URL, limit: Int) async throws -> [(
+        path: String, summary: String
+    )]
     func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry]
     func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry
     func getStats() async throws -> IndexStats
 }
 
 @MainActor
-public extension CodebaseIndexProtocol {
-    func listIndexedFilesResult(matching query: String?, limit: Int, offset: Int) async -> Result<[String], AppError> {
+extension CodebaseIndexProtocol {
+    public func listIndexedFilesResult(matching query: String?, limit: Int, offset: Int) async
+        -> Result<[String], AppError>
+    {
         do {
-            return .success(try await listIndexedFiles(matching: query, limit: limit, offset: offset))
+            return .success(
+                try await listIndexedFiles(matching: query, limit: limit, offset: offset))
         } catch {
             return .failure(mapToAppError(error, context: "listIndexedFiles"))
         }
     }
 
-    func findIndexedFilesResult(query: String, limit: Int) async -> Result<[IndexedFileMatch], AppError> {
+    public func findIndexedFilesResult(query: String, limit: Int) async -> Result<
+        [IndexedFileMatch], AppError
+    > {
         do {
             return .success(try await findIndexedFiles(query: query, limit: limit))
         } catch {
@@ -41,7 +50,9 @@ public extension CodebaseIndexProtocol {
         }
     }
 
-    func readIndexedFileResult(path: String, startLine: Int?, endLine: Int?) -> Result<String, AppError> {
+    public func readIndexedFileResult(path: String, startLine: Int?, endLine: Int?) -> Result<
+        String, AppError
+    > {
         do {
             return .success(try readIndexedFile(path: path, startLine: startLine, endLine: endLine))
         } catch {
@@ -49,7 +60,9 @@ public extension CodebaseIndexProtocol {
         }
     }
 
-    func searchIndexedTextResult(pattern: String, limit: Int) async -> Result<[String], AppError> {
+    public func searchIndexedTextResult(pattern: String, limit: Int) async -> Result<
+        [String], AppError
+    > {
         do {
             return .success(try await searchIndexedText(pattern: pattern, limit: limit))
         } catch {
@@ -57,7 +70,9 @@ public extension CodebaseIndexProtocol {
         }
     }
 
-    func searchSymbolsResult(nameLike query: String, limit: Int) async -> Result<[Symbol], AppError> {
+    public func searchSymbolsResult(nameLike query: String, limit: Int) async -> Result<
+        [Symbol], AppError
+    > {
         do {
             return .success(try await searchSymbols(nameLike: query, limit: limit))
         } catch {
@@ -65,7 +80,7 @@ public extension CodebaseIndexProtocol {
         }
     }
 
-    func searchSymbolsWithPathsResult(
+    public func searchSymbolsWithPathsResult(
         nameLike query: String,
         limit: Int
     ) async -> Result<[SymbolSearchResult], AppError> {
@@ -76,7 +91,9 @@ public extension CodebaseIndexProtocol {
         }
     }
 
-    func getSummariesResult(projectRoot: URL, limit: Int) async -> Result<[(path: String, summary: String)], AppError> {
+    public func getSummariesResult(projectRoot: URL, limit: Int) async -> Result<
+        [(path: String, summary: String)], AppError
+    > {
         do {
             return .success(try await getSummaries(projectRoot: projectRoot, limit: limit))
         } catch {
@@ -84,7 +101,7 @@ public extension CodebaseIndexProtocol {
         }
     }
 
-    func getMemoriesResult(tier: MemoryTier?) async -> Result<[MemoryEntry], AppError> {
+    public func getMemoriesResult(tier: MemoryTier?) async -> Result<[MemoryEntry], AppError> {
         do {
             return .success(try await getMemories(tier: tier))
         } catch {
@@ -92,7 +109,7 @@ public extension CodebaseIndexProtocol {
         }
     }
 
-    func getStatsResult() async -> Result<IndexStats, AppError> {
+    public func getStatsResult() async -> Result<IndexStats, AppError> {
         do {
             return .success(try await getStats())
         } catch {

@@ -5,8 +5,8 @@
 //  Created by AI Assistant on 25/08/2025.
 //
 
-import SwiftUI
 import Foundation
+import SwiftUI
 
 private func localized(_ key: String) -> String {
     NSLocalizedString(key, comment: "")
@@ -26,7 +26,8 @@ struct MessageListView: View {
     }
 
     private var visibleMessagesSignature: String {
-        "\(visibleMessages.count):" + visibleMessages
+        "\(visibleMessages.count):"
+            + visibleMessages
             .suffix(20)
             .map { message in
                 [
@@ -35,7 +36,7 @@ struct MessageListView: View {
                     message.toolStatus?.rawValue ?? "",
                     message.toolCallId ?? "",
                     String(message.content.count),
-                    String(message.reasoning?.count ?? 0)
+                    String(message.reasoning?.count ?? 0),
                 ].joined(separator: "|")
             }
             .joined(separator: "~")
@@ -66,7 +67,7 @@ struct MessageListView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(visibleMessages) { message in
                         MessageView(
                             message: message,
@@ -127,7 +128,9 @@ struct MessageView: View {
 
     private let contentCoordinator: MessageContentCoordinator
 
-    init(message: ChatMessage, fontSize: Double, fontFamily: String, isReasoningHidden: Binding<Bool>) {
+    init(
+        message: ChatMessage, fontSize: Double, fontFamily: String, isReasoningHidden: Binding<Bool>
+    ) {
         self.message = message
         self.fontSize = fontSize
         self.fontFamily = fontFamily
@@ -193,7 +196,8 @@ struct MessageListView_Previews: PreviewProvider {
             messages: [
                 ChatMessage(role: .assistant, content: "Hello! How can I help you today?"),
                 ChatMessage(role: .user, content: "Can you explain this code?"),
-                ChatMessage(role: .assistant, content: "Sure! This code implements a chat interface.")
+                ChatMessage(
+                    role: .assistant, content: "Sure! This code implements a chat interface."),
             ],
             isSending: true,
             fontSize: 12,

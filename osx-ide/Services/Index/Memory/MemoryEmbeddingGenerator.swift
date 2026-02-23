@@ -1,5 +1,5 @@
-import Foundation
 import CoreML
+import Foundation
 
 public protocol MemoryEmbeddingGenerating: Sendable {
     var modelIdentifier: String { get }
@@ -7,18 +7,21 @@ public protocol MemoryEmbeddingGenerating: Sendable {
 }
 
 public enum MemoryEmbeddingGeneratorFactory {
-    /// Synchronous factory method (legacy, may block during model loading)
+    /// Synchronous factory method - returns HashingMemoryEmbeddingGenerator for fast startup
+    /// CoreML loading is intentionally skipped here to avoid blocking during app startup.
+    /// Use makeDefaultAsync() if you need CoreML embeddings and can handle async loading.
     public static func makeDefault(projectRoot: URL?) -> any MemoryEmbeddingGenerating {
-        if let coreML = CoreMLTextEmbeddingGenerator.makeDefault(projectRoot: projectRoot) {
-            return coreML
-        }
+        // Always use fast hashing embeddings for synchronous initialization
+        // CoreML model loading can take MINUTES on first run due to NPU compilation
         return HashingMemoryEmbeddingGenerator()
     }
-    
+
     /// Async factory method - loads models off the main thread
     public static func makeDefaultAsync(projectRoot: URL?) async -> any MemoryEmbeddingGenerating {
         // Load model off main thread to avoid blocking UI
-        if let coreML = await CoreMLTextEmbeddingGenerator.makeDefaultAsync(projectRoot: projectRoot) {
+        if let coreML = await CoreMLTextEmbeddingGenerator.makeDefaultAsync(
+            projectRoot: projectRoot)
+        {
             return coreML
         }
         return HashingMemoryEmbeddingGenerator()
@@ -73,7 +76,9 @@ public final class CoreMLTextEmbeddingGenerator: MemoryEmbeddingGenerating, @unc
     private let inputFeatureName: String
     private let outputFeatureName: String
 
-    private init(model: MLModel, modelIdentifier: String, inputFeatureName: String, outputFeatureName: String) {
+    private init(
+        model: MLModel, modelIdentifier: String, inputFeatureName: String, outputFeatureName: String
+    ) {
         self.model = model
         self.modelIdentifier = modelIdentifier
         self.inputFeatureName = inputFeatureName
@@ -84,14 +89,17 @@ public final class CoreMLTextEmbeddingGenerator: MemoryEmbeddingGenerating, @unc
     public static func makeDefault(projectRoot: URL?) -> CoreMLTextEmbeddingGenerator? {
         let defaultCandidates = candidateModelURLs(projectRoot: projectRoot)
 
-        for modelURL in defaultCandidates where FileManager.default.fileExists(atPath: modelURL.path) {
+        for modelURL in defaultCandidates
+        where FileManager.default.fileExists(atPath: modelURL.path) {
             do {
                 let configuration = MLModelConfiguration()
                 configuration.computeUnits = .cpuAndNeuralEngine
 
                 let model = try MLModel(contentsOf: modelURL, configuration: configuration)
                 guard let inputFeatureName = findStringInputFeatureName(model) else { continue }
-                guard let outputFeatureName = findMultiArrayOutputFeatureName(model) else { continue }
+                guard let outputFeatureName = findMultiArrayOutputFeatureName(model) else {
+                    continue
+                }
 
                 return CoreMLTextEmbeddingGenerator(
                     model: model,
@@ -106,7 +114,7 @@ public final class CoreMLTextEmbeddingGenerator: MemoryEmbeddingGenerating, @unc
 
         return nil
     }
-    
+
     /// Async factory method - loads models off the calling thread
     public static func makeDefaultAsync(projectRoot: URL?) async -> CoreMLTextEmbeddingGenerator? {
         await Task.detached(priority: .userInitiated) {
@@ -118,13 +126,18 @@ public final class CoreMLTextEmbeddingGenerator: MemoryEmbeddingGenerating, @unc
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
 
-        let provider = DictionaryFeatureProvider(values: [inputFeatureName: MLFeatureValue(string: trimmed)])
+        let provider = DictionaryFeatureProvider(values: [
+            inputFeatureName: MLFeatureValue(string: trimmed)
+        ])
         let output = try await model.prediction(from: provider)
 
         guard let array = output.featureValue(for: outputFeatureName)?.multiArrayValue else {
-            throw NSError(domain: "CoreMLTextEmbeddingGenerator", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "Expected multi-array output for embedding generation"
-            ])
+            throw NSError(
+                domain: "CoreMLTextEmbeddingGenerator", code: 2,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Expected multi-array output for embedding generation"
+                ])
         }
 
         return Self.makeFloatVector(from: array)
@@ -132,17 +145,33 @@ public final class CoreMLTextEmbeddingGenerator: MemoryEmbeddingGenerating, @unc
 
     private static func candidateModelURLs(projectRoot: URL?) -> [URL] {
         var urls: [URL] = []
+
+        // 1. Check Project specific overrides in .ide/models/
         if let projectRoot {
-            urls.append(projectRoot
-                .appendingPathComponent(".ide", isDirectory: true)
+            let modelDir = projectRoot.appendingPathComponent(".ide", isDirectory: true)
                 .appendingPathComponent("models", isDirectory: true)
-                .appendingPathComponent("text-embedding.mlmodelc"))
-            urls.append(projectRoot
-                .appendingPathComponent(".ide", isDirectory: true)
-                .appendingPathComponent("models", isDirectory: true)
-                .appendingPathComponent("embedding.mlmodelc"))
+
+            for model in EmbeddingModelCatalog.availableModels {
+                urls.append(modelDir.appendingPathComponent(model.fileName))
+            }
+
+            // Legacy fallbacks
+            urls.append(modelDir.appendingPathComponent("text-embedding.mlmodelc"))
+            urls.append(modelDir.appendingPathComponent("embedding.mlmodelc"))
         }
 
+        // 2. Check Global App Support Store via LocalModelFileStore
+        for model in EmbeddingModelCatalog.availableModels {
+            if let url = try? LocalModelFileStore.modelsRootDirectory()
+                .appendingPathComponent("embeddings", isDirectory: true)
+                .appendingPathComponent(model.id, isDirectory: true)
+                .appendingPathComponent(model.fileName)
+            {
+                urls.append(url)
+            }
+        }
+
+        // 3. Check Bundle Fallbacks
         if let bundled = Bundle.main.url(forResource: "text-embedding", withExtension: "mlmodelc") {
             urls.append(bundled)
         }

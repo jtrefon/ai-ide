@@ -31,11 +31,13 @@ struct ContentView: View {
     }
 
     var body: some View {
-        rootView
+        let _ = trackViewRender("ContentView.body")
+        return rootView
     }
 
     private var rootView: some View {
-        ZStack {
+        let _ = trackViewRender("ContentView.rootView")
+        return ZStack {
             mainLayout
             OverlayHostView(appState: appState)
         }
@@ -47,7 +49,8 @@ struct ContentView: View {
     }
 
     private var mainLayout: some View {
-        VStack(spacing: 0) {
+        let _ = trackViewRender("ContentView.mainLayout")
+        return VStack(spacing: 0) {
             WindowSetupView(appState: appState)
             workspaceLayout
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -61,7 +64,8 @@ struct ContentView: View {
     }
 
     private var workspaceLayout: some View {
-        HSplitView {
+        let _ = trackViewRender("ContentView.workspaceLayout")
+        return HSplitView {
             if uiState.isSidebarVisible, let pluginView = registry.views(for: .sidebarLeft).first {
                 pluginView.makeView()
                     .frame(
