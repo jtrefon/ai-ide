@@ -133,6 +133,7 @@ extension OpenRouterAIService {
             During tool loop execution, prioritize actionable tool calls.
             Keep reasoning brief and optional.
             Do not output code blocks or pseudo-tool JSON when tools are available.
+            Keep user-facing updates extremely concise (1 short sentence) unless the user explicitly asks for detailed explanation.
             """
         }
 
@@ -148,9 +149,11 @@ extension OpenRouterAIService {
         - If no action is needed, write 'None' in Action.
         - Delivery MUST start with either 'DONE' or 'NEEDS_WORK'. Use DONE only when the task is fully complete.
         - Keep it concise and actionable; use short bullets or short sentences.
+        - Prefer depth over verbosity: keep reasoning information-dense and avoid repetitive prose.
         - Do NOT include code blocks in <ide_reasoning>.
         - Do NOT use placeholders like '...' or copy the format example text verbatim.
-        - After </ide_reasoning>, provide the normal user-facing answer as usual (markdown allowed).
+        - After </ide_reasoning>, provide a condensed user-facing update (1-3 short bullets max).
+        - Expand user-facing detail only when the user explicitly asks for it.
 
         Format example:
         <ide_reasoning>

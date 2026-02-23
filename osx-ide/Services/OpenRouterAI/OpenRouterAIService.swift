@@ -58,8 +58,8 @@ actor OpenRouterAIService: AIService {
         let requestBody = OpenRouterChatRequest(
             model: preparation.settings.model,
             messages: preparation.finalMessages,
-            maxTokens: 2048,
-            temperature: 0.2,
+            maxTokens: nil,
+            temperature: nil,
             tools: preparation.toolDefinitions,
             toolChoice: preparation.toolChoice,
             stream: true  // Enable streaming
@@ -249,8 +249,8 @@ actor OpenRouterAIService: AIService {
         let requestBody = OpenRouterChatRequest(
             model: preparation.settings.model,
             messages: preparation.finalMessages,
-            maxTokens: 2048,
-            temperature: 0.2,
+            maxTokens: nil,
+            temperature: nil,
             tools: preparation.toolDefinitions,
             toolChoice: preparation.toolChoice,
             stream: false

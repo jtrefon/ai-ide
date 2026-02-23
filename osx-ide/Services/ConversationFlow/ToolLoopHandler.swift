@@ -206,7 +206,7 @@ final class ToolLoopHandler {
             markCancelledToolCalls(toolCalls: uniqueToolCalls, cancelledToolCallIds: cancelledToolCallIds())
 
             let statusSummary = buildGenericToolExecutionStatusSummary()
-            if !hasModelStepUpdate {
+            if !hasModelStepUpdate && !hasReasoning {
                 historyCoordinator.append(ChatMessage(
                     role: .assistant,
                     content: statusSummary
@@ -524,6 +524,13 @@ final class ToolLoopHandler {
         let toolCallIndex = Dictionary(
             uniqueKeysWithValues: toolCalls.map { ($0.id, $0) }
         )
+        let failedToolCallSignatures: [String] = failedToolResults.compactMap { result in
+            guard let toolCallId = result.toolCallId,
+                  let toolCall = toolCallIndex[toolCallId] else {
+                return nil
+            }
+            return toolCallSignature(toolCall)
+        }
         let failureDetails = failedToolResults.map { result in
             let toolName = result.toolName ?? "unknown_tool"
             let toolCallId = result.toolCallId ?? "unknown_call"
@@ -541,6 +548,14 @@ final class ToolLoopHandler {
             "If a failure is environmental, network, or resource-related, propose a fallback plan or use different parameters.",
             "Do not repeat the same failing call without changes."
         ]
+
+        if !failedToolCallSignatures.isEmpty {
+            recoveryLines.append(contentsOf: [
+                "",
+                "Avoid retrying these exact failed call signatures:",
+                failedToolCallSignatures.map { "- \($0)" }.joined(separator: "\n")
+            ])
+        }
 
         if hasTimeoutFailure || hasCancelledFailure {
             recoveryLines.append(contentsOf: [
