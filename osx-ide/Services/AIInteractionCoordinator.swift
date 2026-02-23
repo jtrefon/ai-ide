@@ -34,17 +34,20 @@ final class AIInteractionCoordinator {
     private var codebaseIndex: CodebaseIndexProtocol?
     private let conversationPolicy: ConversationPolicyProtocol
     private let settingsStore: any OpenRouterSettingsLoading
+    private let eventBus: any EventBusProtocol
 
     init(
         aiService: AIService,
         codebaseIndex: CodebaseIndexProtocol?,
         conversationPolicy: ConversationPolicyProtocol = ConversationPolicy(),
-        settingsStore: any OpenRouterSettingsLoading = OpenRouterSettingsStore()
+        settingsStore: any OpenRouterSettingsLoading = OpenRouterSettingsStore(),
+        eventBus: any EventBusProtocol
     ) {
         self.aiService = aiService
         self.codebaseIndex = codebaseIndex
         self.conversationPolicy = conversationPolicy
         self.settingsStore = settingsStore
+        self.eventBus = eventBus
     }
 
     func updateAIService(_ newService: AIService) {
@@ -94,7 +97,8 @@ final class AIInteractionCoordinator {
                 userInput: userInput,
                 explicitContext: request.explicitContext,
                 retriever: retriever,
-                projectRoot: request.projectRoot
+                projectRoot: request.projectRoot,
+                eventBus: eventBus
             )
 
             let historyRequest = AIServiceHistoryRequest(

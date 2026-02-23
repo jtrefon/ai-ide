@@ -17,13 +17,31 @@ public enum MemoryEmbeddingGeneratorFactory {
     }
 
     /// Async factory method - loads models off the main thread
+    /// Priority order: BERT models (bundled) > Legacy CoreML > Hashing fallback
     public static func makeDefaultAsync(projectRoot: URL?) async -> any MemoryEmbeddingGenerating {
-        // Load model off main thread to avoid blocking UI
+        // 1. Try bundled BERT embedding models (BGE, Nomic, etc.)
+        if let bert = await BERTEmbeddingGeneratorFactory.loadFirstAvailable() {
+            return bert
+        }
+        
+        // 2. Try legacy CoreML models (string input)
         if let coreML = await CoreMLTextEmbeddingGenerator.makeDefaultAsync(
             projectRoot: projectRoot)
         {
             return coreML
         }
+        
+        // 3. Fallback to hashing
+        return HashingMemoryEmbeddingGenerator()
+    }
+    
+    /// Load a specific embedding model by identifier
+    public static func makeModel(modelId: String) async -> any MemoryEmbeddingGenerating {
+        // Try BERT models first
+        if let bert = await BERTEmbeddingGeneratorFactory.load(modelName: modelId) {
+            return bert
+        }
+        // Fallback to hashing
         return HashingMemoryEmbeddingGenerator()
     }
 }

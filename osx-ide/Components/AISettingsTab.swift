@@ -10,6 +10,7 @@ import SwiftUI
 struct AISettingsTab: View {
     @ObservedObject var viewModel: OpenRouterSettingsViewModel
     @ObservedObject var localModelViewModel: LocalModelSettingsViewModel
+    @ObservedObject var embeddingModelViewModel: EmbeddingModelSettingsViewModel
     @State private var showAdvanced = false
 
     private func localized(_ key: String) -> String {
@@ -185,6 +186,13 @@ struct AISettingsTab: View {
                     subtitle: "Download and manage local/offline model artifacts."
                 ) {
                     LocalModelSettingsView(viewModel: localModelViewModel)
+                }
+
+                SettingsCard(
+                    title: "Embedding Models",
+                    subtitle: "Download models for semantic search in the codebase index."
+                ) {
+                    EmbeddingModelSettingsView(viewModel: embeddingModelViewModel)
                 }
 
             }

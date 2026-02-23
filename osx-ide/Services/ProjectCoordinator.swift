@@ -111,6 +111,28 @@ class ProjectCoordinator: ObservableObject {
                     "[DIAG] ProjectCoordinator CodebaseIndex created in \(String(format: "%.2f", indexDuration))ms"
                 )
 
+                // Upgrade to CoreML embeddings in background (if available)
+                // This provides semantic search instead of just keyword matching
+                Task.detached(priority: .utility) {
+                    let embedStart = Date()
+                    let betterGenerator = await MemoryEmbeddingGeneratorFactory.makeDefaultAsync(
+                        projectRoot: root
+                    )
+                    // Only upgrade if we got a better generator (not hashing)
+                    if betterGenerator.modelIdentifier != "hashing_v1" {
+                        // Call upgrade on MainActor since CodebaseIndex is MainActor-isolated
+                        await MainActor.run {
+                            index.upgradeEmbeddingGenerator(betterGenerator)
+                        }
+                        let embedDuration = Date().timeIntervalSince(embedStart) * 1000
+                        Swift.print(
+                            "[DIAG] Upgraded to \(betterGenerator.modelIdentifier) embeddings in \(String(format: "%.2f", embedDuration))ms"
+                        )
+                    } else {
+                        Swift.print("[DIAG] Using hashing embeddings (CoreML not available)")
+                    }
+                }
+
                 // Check if cancelled before hopping to MainActor
                 if Task.isCancelled {
                     Swift.print("[DIAG] ProjectCoordinator initializationTask CANCELLED")
@@ -230,6 +252,22 @@ class ProjectCoordinator: ObservableObject {
                     projectRoot: projectRoot,
                     aiService: aiService
                 )
+
+                // Upgrade to CoreML embeddings in background (if available)
+                Task.detached(priority: .utility) {
+                    let betterGenerator = await MemoryEmbeddingGeneratorFactory.makeDefaultAsync(
+                        projectRoot: projectRoot
+                    )
+                    // Only upgrade if we got a better generator (not hashing)
+                    if betterGenerator.modelIdentifier != "hashing_v1" {
+                        await MainActor.run {
+                            index.upgradeEmbeddingGenerator(betterGenerator)
+                        }
+                        Swift.print(
+                            "[DIAG] Rebuilt index: Upgraded to \(betterGenerator.modelIdentifier) embeddings"
+                        )
+                    }
+                }
 
                 if Task.isCancelled { return }
 

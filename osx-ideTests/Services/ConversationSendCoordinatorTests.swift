@@ -1,9 +1,17 @@
 import XCTest
+import Combine
 
 @testable import osx_ide
 
 @MainActor
 final class ConversationSendCoordinatorTests: XCTestCase {
+    private final class MockEventBus: EventBusProtocol {
+        func publish<E: Event>(_ event: E) {}
+        func subscribe<E: Event>(to eventType: E.Type, handler: @escaping (E) -> Void) -> AnyCancellable {
+            return AnyCancellable {}
+        }
+    }
+    
     private final class SequenceAIService: AIService, @unchecked Sendable {
         private let lock = NSLock()
         private var responses: [AIServiceResponse]
@@ -135,6 +143,7 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         func reindexProject() {}
         func reindexProject(aiEnrichmentEnabled: Bool) { _ = aiEnrichmentEnabled }
         func runAIEnrichment() {}
+        func upgradeEmbeddingGenerator(_ generator: any MemoryEmbeddingGenerating) { }
 
         func listIndexedFiles(matching query: String?, limit: Int, offset: Int) async throws -> [String] {
             _ = query
@@ -427,7 +436,7 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         projectRoot: URL,
         codebaseIndex: CodebaseIndexProtocol? = nil
     ) -> ConversationSendCoordinator {
-        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: aiService, codebaseIndex: codebaseIndex)
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: aiService, codebaseIndex: codebaseIndex, eventBus: MockEventBus())
         let toolExecutor = AIToolExecutor(
             fileSystemService: FileSystemService(),
             errorManager: AIToolExecutorNoopErrorManager(),

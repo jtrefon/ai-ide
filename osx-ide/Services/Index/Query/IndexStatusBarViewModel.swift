@@ -14,12 +14,18 @@ final class IndexStatusBarViewModel: ObservableObject {
     @Published private(set) var aiTotalCount: Int = 0
     @Published private(set) var aiCurrentFile: URL?
 
+    @Published private(set) var isRetrieving: Bool = false
+    @Published private(set) var retrievalStatus: String = ""
+
+    @Published private(set) var embeddingModelIdentifier: String = "hashing_v1"
+
     @Published private(set) var openRouterContextUsageText: String = ""
 
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
     private let eventBus: EventBusProtocol
     private var cancellables = Set<AnyCancellable>()
     private var statsTimer: AnyCancellable?
+    private var retrievalStatusTimer: Timer?
 
     init(codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?, eventBus: EventBusProtocol) {
         self.codebaseIndexProvider = codebaseIndexProvider
@@ -28,9 +34,15 @@ final class IndexStatusBarViewModel: ObservableObject {
         subscribeToEvents()
         startStatsPolling()
         refreshStats()
+        refreshEmbeddingModel()
     }
 
     var statusText: String {
+        // RAG retrieval has highest priority
+        if isRetrieving {
+            return "RAG: \(retrievalStatus)"
+        }
+
         if isAIEnriching {
             if aiTotalCount > 0 {
                 let fileName = aiCurrentFile?.lastPathComponent
@@ -76,7 +88,7 @@ final class IndexStatusBarViewModel: ObservableObject {
             ? stats.averageAIQualityScore
             : stats.averageQualityScore
         let quality = score > 0 ? String(format: "%.0f", score) : "0"
-        return "C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | M \(stats.memoryCount) (LT \(stats.longTermMemoryCount)) | DB \(size)"
+        return "E \(embeddingModelIdentifier) | C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | M \(stats.memoryCount) (LT \(stats.longTermMemoryCount)) | DB \(size)"
     }
 
     private func subscribeToEvents() {
@@ -103,6 +115,7 @@ final class IndexStatusBarViewModel: ObservableObject {
             self.isIndexing = false
             self.currentFile = nil
             self.refreshStats()
+            self.refreshEmbeddingModel()
         }
         .store(in: &cancellables)
 
@@ -132,6 +145,39 @@ final class IndexStatusBarViewModel: ObservableObject {
         }
         .store(in: &cancellables)
 
+        eventBus.subscribe(to: RAGRetrievalStartedEvent.self) { [weak self] event in
+            guard let self else { return }
+            self.isRetrieving = true
+            self.retrievalStatus = "Searching..."
+            // Auto-clear after 10 seconds if no completion event received
+            self.retrievalStatusTimer?.invalidate()
+            self.retrievalStatusTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: false) { [weak self] _ in
+                Task { @MainActor in
+                    self?.isRetrieving = false
+                    self?.retrievalStatus = ""
+                }
+            }
+        }
+        .store(in: &cancellables)
+
+        eventBus.subscribe(to: RAGRetrievalCompletedEvent.self) { [weak self] event in
+            guard let self else { return }
+            self.retrievalStatusTimer?.invalidate()
+            self.retrievalStatusTimer = nil
+            // Show summary briefly then clear
+            let symbolInfo = event.symbolCount > 0 ? "\(event.symbolCount) symbols" : ""
+            let overviewInfo = event.overviewCount > 0 ? "\(event.overviewCount) files" : ""
+            let parts = [symbolInfo, overviewInfo].filter { !$0.isEmpty }
+            self.retrievalStatus = parts.isEmpty ? "Done" : parts.joined(separator: ", ")
+            
+            // Clear after 2 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                self?.isRetrieving = false
+                self?.retrievalStatus = ""
+            }
+        }
+        .store(in: &cancellables)
+
         eventBus.subscribe(to: OpenRouterUsageUpdatedEvent.self) { [weak self] event in
             guard let self else { return }
             guard let contextLength = event.contextLength, contextLength > 0 else {
@@ -157,6 +203,23 @@ final class IndexStatusBarViewModel: ObservableObject {
         guard let codebaseIndex = codebaseIndexProvider() else { return }
         Task { @MainActor in
             self.stats = try? await codebaseIndex.getStats()
+        }
+    }
+
+    private func refreshEmbeddingModel() {
+        guard let codebaseIndex = codebaseIndexProvider() else { return }
+        Task { @MainActor in
+            if let index = codebaseIndex as? CodebaseIndex {
+                let modelId = index.currentEmbeddingModelIdentifier
+                // Shorten the identifier for display
+                if modelId.contains("coreml") {
+                    self.embeddingModelIdentifier = "coreml"
+                } else if modelId.contains("hashing") {
+                    self.embeddingModelIdentifier = "hashing"
+                } else {
+                    self.embeddingModelIdentifier = String(modelId.prefix(8))
+                }
+            }
         }
     }
 

@@ -41,20 +41,6 @@ struct DispatcherNode: OrchestrationNode {
 
         let hasToolCalls = !(response.toolCalls?.isEmpty ?? true)
 
-        // If no tool calls, this is likely a direct answer or a request for clarification.
-        // We append it to history now so it's visible.
-        if !hasToolCalls, let content = response.content,
-            !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
-            let split = ChatPromptBuilder.splitReasoning(from: content)
-            historyCoordinator.append(
-                ChatMessage(
-                    role: .assistant,
-                    content: split.content,
-                    context: ChatMessageContentContext(reasoning: split.reasoning)
-                ))
-        }
-
         // Determine next transition
         let nextNodeId = hasToolCalls ? toolLoopNodeId : finalResponseNodeId
 

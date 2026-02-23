@@ -110,7 +110,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
         self.aiInteractionCoordinator = AIInteractionCoordinator(
             aiService: dependencies.services.aiService,
-            codebaseIndex: dependencies.environment.codebaseIndex
+            codebaseIndex: dependencies.environment.codebaseIndex,
+            eventBus: dependencies.environment.eventBus
         )
 
         self.historyManager = ChatHistoryManager()

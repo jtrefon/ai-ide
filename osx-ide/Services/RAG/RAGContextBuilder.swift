@@ -5,7 +5,8 @@ public enum RAGContextBuilder {
         userInput: String,
         explicitContext: String?,
         retriever: (any RAGRetriever)?,
-        projectRoot: URL?
+        projectRoot: URL?,
+        eventBus: (any EventBusProtocol)? = nil
     ) async -> String? {
         var parts: [String] = []
 
@@ -20,8 +21,19 @@ public enum RAGContextBuilder {
             return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
         }
 
+        // Publish retrieval started event
+        eventBus?.publish(RAGRetrievalStartedEvent(userInputPreview: userInput))
+
         let retrieval = await retriever.retrieve(RAGRetrievalRequest(userInput: userInput, projectRoot: projectRoot))
         let ragBlock = formatRAGBlock(retrieval)
+
+        // Publish retrieval completed event
+        eventBus?.publish(RAGRetrievalCompletedEvent(
+            symbolCount: retrieval.symbolLines.count,
+            overviewCount: retrieval.projectOverviewLines.count,
+            memoryCount: retrieval.memoryLines.count,
+            contextCharCount: ragBlock?.count ?? 0
+        ))
 
         // DIAGNOSTIC: Log RAG context size
         if let ragBlock {

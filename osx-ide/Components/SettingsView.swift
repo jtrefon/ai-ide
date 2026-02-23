@@ -11,6 +11,7 @@ struct SettingsView: View {
     @ObservedObject var ui: UIStateManager
     @StateObject private var openRouterViewModel = OpenRouterSettingsViewModel()
     @StateObject private var localModelViewModel = LocalModelSettingsViewModel()
+    @StateObject private var embeddingModelViewModel = EmbeddingModelSettingsViewModel()
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
@@ -30,7 +31,8 @@ struct SettingsView: View {
 
                     AISettingsTab(
                         viewModel: openRouterViewModel,
-                        localModelViewModel: localModelViewModel
+                        localModelViewModel: localModelViewModel,
+                        embeddingModelViewModel: embeddingModelViewModel
                     )
                         .tabItem {
                             Label(localized("settings.tabs.ai"), systemImage: "sparkles")

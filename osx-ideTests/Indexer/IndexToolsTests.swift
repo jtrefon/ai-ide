@@ -240,6 +240,7 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
     func reindexProject() {}
     func reindexProject(aiEnrichmentEnabled: Bool) {}
     func runAIEnrichment() {}
+    func upgradeEmbeddingGenerator(_ generator: any MemoryEmbeddingGenerating) {}
 
     func getSummaries(projectRoot: URL, limit: Int) async throws -> [(path: String, summary: String)] { [] }
     func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry] { [] }

@@ -1,8 +1,16 @@
 import XCTest
 @testable import osx_ide
+import Combine
 
 @MainActor
 final class ToolLoopDropoutHarnessTests: XCTestCase {
+    private final class MockEventBus: EventBusProtocol {
+        func publish<E: Event>(_ event: E) {}
+        func subscribe<E: Event>(to eventType: E.Type, handler: @escaping (E) -> Void) -> AnyCancellable {
+            return AnyCancellable {}
+        }
+    }
+    
     private final class ScriptedAIService: AIService, @unchecked Sendable {
         private let lock = NSLock()
         private var responses: [AIServiceResponse]
@@ -149,7 +157,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             AIServiceResponse(content: "<ide_reasoning>Analyze: done\nPlan: done\nAction: none\nDelivery: DONE</ide_reasoning>All checklist items are complete.", toolCalls: nil)
         ])
 
-        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil)
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
         let toolExecutor = AIToolExecutor(
             fileSystemService: FileSystemService(),
             errorManager: HarnessErrorManager(),
@@ -214,7 +222,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             AIServiceResponse(content: "<ide_reasoning>Analyze: done\nPlan: done\nAction: none\nDelivery: DONE</ide_reasoning>Finished.", toolCalls: nil)
         ])
 
-        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil)
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
         let toolExecutor = AIToolExecutor(
             fileSystemService: FileSystemService(),
             errorManager: HarnessErrorManager(),
@@ -263,7 +271,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             AIServiceResponse(content: "Final summary after repeated loop detection.", toolCalls: nil)
         ])
 
-        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil)
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
         let toolExecutor = AIToolExecutor(
             fileSystemService: FileSystemService(),
             errorManager: HarnessErrorManager(),
@@ -339,7 +347,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             AIServiceResponse(content: pseudoToolCallContent, toolCalls: nil)
         ])
 
-        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil)
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
         let toolExecutor = AIToolExecutor(
             fileSystemService: FileSystemService(),
             errorManager: HarnessErrorManager(),
@@ -391,7 +399,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             AIServiceResponse(content: "Stopped repeated read-only checkpoint loop and returning summary.", toolCalls: nil)
         ])
 
-        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil)
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
         let toolExecutor = AIToolExecutor(
             fileSystemService: FileSystemService(),
             errorManager: HarnessErrorManager(),

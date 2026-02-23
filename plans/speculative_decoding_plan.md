@@ -1,157 +1,143 @@
-# Speculative Decoding Implementation Plan - REVISED
+# Speculative Decoding Implementation Plan - REVISED V2
 
 ## Executive Summary
 
-**The original speculative decoding plan has issues. This revised plan addresses them with better alternatives.**
+**You are absolutely right to be concerned about tool execution.**
 
-Your concern is valid: OpenRouter API doesn't natively support token verification, which creates:
-- Latency jitter from back-and-forth between draft/verify
-- UX chaos when tokens conflict
-- Complexity without clear benefit
-
----
-
-## Why Original Plan Is Problematic
-
-| Problem | Impact |
-|---------|--------|
-| No native verification API | Must embed drafts in prompt = changes model behavior |
-| Race conditions | Which tokens to display? MLX or verified? |
-| Backtracking complexity | UX confusion when drafts are rejected |
-| Network latency | OpenRouter verification adds round-trip, negating MLX speed |
+The user raised a critical point: parallel race or speculative decoding can be **devastating for tool execution** because:
+- MLX might generate incorrect/wrong tool calls
+- OpenRouter might generate different tool calls
+- Picking the "wrong" one means executing wrong commands, editing wrong files, etc.
+- Tool execution has real side effects - can't simply "undo" them
 
 ---
 
-## Recommended Alternatives
-
-### Option 1: Parallel Race Mode (Recommended)
-
-**Best for: Fast perceived latency with quality fallback**
+## The Critical Problem
 
 ```mermaid
 flowchart LR
-    Request --> MLX[MLX Local<br/>Fast Draft]
-    Request --> OR[OpenRouter API<br/>Quality Target]
-    MLX -->|first valid| Display
-    OR -->|if MLX fails| Display
-    Display -->|on success| Cancel[Cancel Other Task]
+    subgraph Race["PARALLEL RACE MODE"]
+        MLX -->|tool_call: delete /important| Result1
+        OR -->|tool_call: read /safe| Result2
+    end
+    
+    Result1 -->|WRONG CHOICE| Execute[Execute Tool]
+    Execute -->|OOPS| Disaster[Data Loss / Security Issue]
 ```
 
-**How it works:**
-1. Launch MLX and OpenRouter requests simultaneously
-2. First valid response wins and is displayed
-3. Cancel the slower request
-4. If MLX fails or times out, use OpenRouter result
-
-**Benefits:**
-- Zero verification conflicts
-- Simple implementation
-- MLX speed when it works, OpenRouter quality as fallback
+**Risk Scenarios:**
+| Scenario | MLX Output | OpenRouter Output | Wrong Choice = |
+|----------|-------------|-------------------|----------------|
+| Delete wrong file | `delete_file("config.yaml")` | `read_file("config.yaml")` | Delete production config |
+| Run dangerous command | `run_command("rm -rf /")` | `run_command("ls")` | Wipes system |
+| Wrong API call | `POST /users/delete` | `GET /users/1` | Data deletion |
 
 ---
 
-### Option 2: MLX Primary + OpenRouter Fallback
+## Safe Alternatives
 
-**Best for: Cost savings + reliability**
+### Option 1: MLX Only for Non-Tool Tasks (Recommended)
+
+**Best for: Safety + Cost savings**
 
 ```mermaid
 flowchart TB
-    Request --> MLX
-    MLX -->|success| Display
-    MLX -->|failure| OR
-    OR -->|success| Display
-    OR -->|failure| Error
+    Request --> HasTools{Contains Tools?}
+    HasTools -->|Yes| OR[OpenRouter Only]
+    HasTools -->|No| MLX[MLX or Race]
 ```
 
 **How it works:**
-1. Always try MLX first (free, fast)
-2. If MLX succeeds → return immediately
-3. If MLX fails → fallback to OpenRouter (paid, reliable)
+- If request requires tool execution → use OpenRouter only (reliable)
+- If request is simple chat (no tools) → use MLX or parallel race
+- MLX capability detection: [`MLXCapability.supportsStructuredToolCalls = false`](osx-ide/Services/ModelCapability.swift:50)
 
-**Benefits:**
-- Maximizes MLX usage (free)
-- Simple fallback logic
-- Your [`ModelRoutingAIService`](osx-ide/Services/ModelRoutingAIService.swift:10) already does this!
+**This is basically what your existing [`ModelRoutingAIService`](osx-ide/Services/ModelRoutingAIService.swift:10) already does!**
 
 ---
 
-### Option 3: Background Verification (Deferred)
-
-**Best for: Streaming with post-hoc quality check**
-
-```mermaid
-flowchart LR
-    Request --> MLX
-    MLX -->|stream| UI
-    MLX -.->|background| OR
-    OR -.->|verified| QualityScore
-```
-
-**How it works:**
-1. Stream MLX response to user immediately (fast perceived latency)
-2. In background, verify with OpenRouter
-3. If verification finds issues, show warning indicator
-
-**Benefits:**
-- User sees response immediately
-- Quality check happens asynchronously
-- No perceived latency
-
----
-
-### Option 4: Context Pre-computation
+### Option 2: MLX for Context, OpenRouter for Execution
 
 **Best for: RAG-heavy workflows**
 
 ```mermaid
 flowchart TB
-    Query --> MLX
-    MLX -->|fetch context| RAG
-    RAG -->|enriched context| OR
+    Query --> MLX[MLX: Fetch/整理 Context]
+    MLX -->|enriched context| OR[OpenRouter: Execute]
+    OR -->|tool_calls| Execute[Execute Tools]
+    Execute -->|results| OR
     OR -->|final response| Display
 ```
 
 **How it works:**
-1. Use MLX to retrieve/relevant RAG context
-2. Feed enriched context to OpenRouter for final generation
-
-**Benefits:**
-- MLX handles fast retrieval
-- OpenRouter generates from better context
-- Works well with your existing RAG system
+- Use MLX for fast context retrieval (search, read files)
+- Use OpenRouter for actual tool calling and final response
+- MLX acts as accelerator for RAG, not for execution
 
 ---
 
-## Recommendation
+### Option 3: MLX Draft + OpenRouter Verify (With Safeguards)
 
-**Use Option 1 (Parallel Race) or enhance Option 2** since your [`ModelRoutingAIService`](osx-ide/Services/ModelRoutingAIService.swift:10) already implements fallback logic.
+**Only for non-destructive operations**
 
-### Implementation Priority
+```mermaid
+flowchart TB
+    MLX -->|draft| SafeCheck{Is Safe?}
+    SafeCheck -->|read-only| OR[OpenRouter Verify]
+    SafeCheck -->|destructive| OR2[OpenRouter Only]
+    
+    OR -->|verified| Display
+    OR2 -->|response| Display
+```
 
-1. **Enhance ModelRoutingAIService** - Add parallel race capability
-2. **Add timeout controls** - Configure MLX timeout before fallback
-3. **Add quality scoring** - Track MLX accuracy for optimization
-4. **Background verification** - If Option 3 desired
-
----
-
-## Files to Create/Modify
-
-### For Parallel Race Mode
-
-**New Files:**
-- `osx-ide/Services/SpeculativeDecoding/ParallelRaceCoordinator.swift`
-
-**Modified Files:**
-- `osx-ide/Services/ModelRoutingAIService.swift` - Add parallel race method
-- `osx-ide/Services/AISettingsTab.swift` - Add race mode toggle
+**Safeguards:**
+- Only use MLX drafts for read-only operations
+- Always use OpenRouter for: file write, delete, command execution, network calls
+- Your existing tool filtering in [`filterToolsForMLX()`](osx-ide/Services/ModelRoutingAIService.swift:196) already does this!
 
 ---
 
-## Conclusion
+## Conclusion: Don't Use Speculative Decoding for Tool Execution
 
-The original speculative decoding plan is NOT recommended due to OpenRouter's lack of native verification support. 
+### Your Architecture Is Already Safe
 
-**Recommended approach:** Implement parallel race mode or enhance the existing MLX → OpenRouter fallback logic that's already in [`ModelRoutingAIService`](osx-ide/Services/ModelRoutingAIService.swift:10).
+Your current [`ModelRoutingAIService`](osx-ide/Services/ModelRoutingAIService.swift:10) already implements the safest approach:
 
-Would you like me to create a detailed implementation plan for the Parallel Race approach instead?
+1. **Offline mode (MLX only)** → forces chat mode, limits tools to read-only ([line 196-210](osx-ide/Services/ModelRoutingAIService.swift:196))
+2. **Online mode (OpenRouter)** → full tool execution
+
+### Recommendation
+
+**Don't implement speculative decoding for tool-heavy tasks.** The risks outweigh benefits because:
+
+| Concern | Why It's Bad |
+|---------|--------------|
+| Wrong tool selected | Execute wrong operation |
+| Different tool arguments | Pass wrong parameters |
+| No verification | Can't trust MLX tool calls |
+| Side effects | Can't undo file deletes, command runs |
+
+### What To Do Instead
+
+1. **Keep current architecture** - It's already safe
+2. **Use MLX for context only** - Let OpenRouter execute
+3. **Optimize RAG retrieval** - Make MLX context fetch faster
+4. **Add caching** - Cache common responses
+
+---
+
+## Final Verdict
+
+**Speculative decoding with local MLX + OpenRouter API is NOT recommended for your use case** because:
+
+1. ❌ OpenRouter lacks native verification API
+2. ❌ Tool execution requires reliability over speed
+3. ❌ Wrong tool selection = real-world damage
+4. ❌ Race conditions create unpredictability
+
+Your existing architecture in [`ModelRoutingAIService`](osx-ide/Services/ModelRoutingAIService.swift:10) is the correct approach: use MLX for read-only/chat, use OpenRouter for tool execution.
+
+If you want to optimize latency, focus on:
+- Better RAG context retrieval with MLX
+- Response caching
+- Prompt prefix caching (you already have this in [`PromptPrefixCache`](osx-ide/Services/LocalModels/PromptPrefixCache.swift:1))

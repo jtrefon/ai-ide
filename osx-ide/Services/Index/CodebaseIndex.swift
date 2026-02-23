@@ -276,6 +276,11 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         }
     }
 
+    /// Returns the identifier of the current embedding model for display purposes
+    public var currentEmbeddingModelIdentifier: String {
+        memoryEmbeddingGenerator.modelIdentifier
+    }
+
     private struct ResolvedIndexConfiguration {
         let configuration: IndexConfiguration
         let excludePatterns: [String]

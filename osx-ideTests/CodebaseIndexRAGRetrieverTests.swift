@@ -257,4 +257,8 @@ extension FakeRAGCodebaseIndex: MemoryEmbeddingSearchProviding {
         _ = userInput
         return Array(stubbedRelevantMemories.prefix(max(1, limit)))
     }
+    
+    func upgradeEmbeddingGenerator(_ generator: any MemoryEmbeddingGenerating) {
+        // No-op for test fake
+    }
 }
