@@ -21,7 +21,7 @@ final class EmbeddingModelSettingsViewModel: ObservableObject {
     /// Currently selected embedding model (for indexing)
     @Published var selectedModelId: String {
         didSet {
-            persistSelectedModelId()
+            // Don't persist immediately - wait for confirmation
         }
     }
 
@@ -29,11 +29,22 @@ final class EmbeddingModelSettingsViewModel: ObservableObject {
     @Published private(set) var isDownloading = false
     @Published private(set) var progressFraction: Double = 0
     @Published private(set) var currentFileName: String? = nil
+    
+    /// Shows reindex confirmation dialog when model change is pending
+    @Published var showReindexConfirmation = false
+    
+    /// Callback triggered when user confirms model change - should trigger reindex
+    var onConfirmModelChange: (() -> Void)?
 
     private let downloader: EmbeddingModelDownloader
     private let settingsStore: SettingsStore
 
     private let selectedModelKey = "EmbeddingModel.SelectedId"
+    
+    /// The model ID before the current selection (for cancel)
+    private var previousModelId: String = ""
+    /// The pending model that needs confirmation
+    private var pendingModelId: String = ""
 
     init(
         downloader: EmbeddingModelDownloader = EmbeddingModelDownloader(),
@@ -46,8 +57,10 @@ final class EmbeddingModelSettingsViewModel: ObservableObject {
         let storedId = settingsStore.string(forKey: selectedModelKey) ?? ""
         if storedId.isEmpty && !EmbeddingModelCatalog.bundledModels.isEmpty {
             self.selectedModelId = EmbeddingModelCatalog.bundledModels[0].id
+            self.previousModelId = self.selectedModelId
         } else {
             self.selectedModelId = storedId
+            self.previousModelId = storedId
         }
     }
 
@@ -80,8 +93,38 @@ final class EmbeddingModelSettingsViewModel: ObservableObject {
     }
 
     func selectModel(_ model: EmbeddingModelDefinition) {
-        selectedModelId = model.id
-        status = Status(kind: .success, message: "Selected \(model.name). Rebuild index to use new embedding model.")
+        // If selecting the same model, do nothing
+        guard model.id != previousModelId else { return }
+        
+        // Store the pending model and show confirmation
+        pendingModelId = model.id
+        selectedModelId = model.id  // Update UI immediately
+        showReindexConfirmation = true
+    }
+    
+    /// User cancelled the model change - revert to previous model
+    func cancelModelChange() {
+        selectedModelId = previousModelId
+        pendingModelId = ""
+        status = Status(kind: .idle, message: "Model change cancelled. Using previous model.")
+    }
+    
+    /// User confirmed the model change - persist and trigger reindex
+    func confirmModelChange() {
+        guard !pendingModelId.isEmpty else { return }
+        
+        // Persist the new selection
+        previousModelId = pendingModelId
+        persistSelectedModelId(pendingModelId)
+        
+        // Find model name for status message
+        let modelName = models.first { $0.id == pendingModelId }?.name ?? pendingModelId
+        status = Status(kind: .success, message: "Switched to \(modelName). Reindexing...")
+        
+        pendingModelId = ""
+        
+        // Trigger reindex callback
+        onConfirmModelChange?()
     }
 
     func downloadModel(_ model: EmbeddingModelDefinition) async {
@@ -133,6 +176,7 @@ final class EmbeddingModelSettingsViewModel: ObservableObject {
 
             if selectedModelId == model.id {
                 selectedModelId = ""
+                previousModelId = ""
             }
             status = Status(kind: .success, message: "Deleted \(model.name).")
         } catch {
@@ -140,7 +184,7 @@ final class EmbeddingModelSettingsViewModel: ObservableObject {
         }
     }
 
-    private func persistSelectedModelId() {
-        settingsStore.set(selectedModelId, forKey: selectedModelKey)
+    private func persistSelectedModelId(_ modelId: String) {
+        settingsStore.set(modelId, forKey: selectedModelKey)
     }
 }

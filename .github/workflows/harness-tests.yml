@@ -1,0 +1,222 @@
+name: Harness Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  harness-tests:
+    runs-on: macos-latest
+    
+    strategy:
+      matrix:
+        test-type: [local-models, external-apis, edge-cases, telemetry]
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+        
+    - name: Cache Swift Package Manager
+      uses: actions/cache@v3
+      with:
+        path: .build
+        key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+        restore-keys: |
+          ${{ runner.os }}-spm-
+          
+    - name: Install dependencies
+      run: |
+        xcodebuild -resolvePackageDependencies
+        
+    - name: Configure test environment
+      run: |
+        # Set environment variables for test configuration
+        echo "ALLOW_EXTERNAL_APIS=false" >> $GITHUB_ENV
+        echo "SERIAL_EXTERNAL_API_TESTS=true" >> $GITHUB_ENV
+        echo "MIN_API_REQUEST_INTERVAL=2.0" >> $GITHUB_ENV
+        echo "EXTERNAL_API_TIMEOUT=300" >> $GITHUB_ENV
+        echo "USE_MOCK_SERVICES=false" >> $GITHUB_ENV
+        
+    - name: Run Local Model Tests
+      if: matrix.test-type == 'local-models'
+      run: |
+        echo "🧪 Running local model harness tests..."
+        xcodebuild test \
+          -scheme osx-ide \
+          -destination 'platform=macOS' \
+          -only-testing:osx-ideHarnessTests/AgenticHarnessTests \
+          -only-testing:osx-ideHarnessTests/RealServiceToolLoopTests \
+          -resultBundlePath TestResults.xcresult \
+          -enableCodeCoverage YES
+          
+    - name: Run External API Tests
+      if: matrix.test-type == 'external-apis'
+      env:
+        ALLOW_EXTERNAL_APIS: "true"
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "🌐 Running external API harness tests..."
+        xcodebuild test \
+          -scheme osx-ide \
+          -destination 'platform=macOS' \
+          -only-testing:osx-ideHarnessTests/AgenticHarnessTests/testHarnessCreateReactApp \
+          -only-testing:osx-ideHarnessTests/AgenticHarnessTests/testHarnessReactTodoToSSRRefactor \
+          -resultBundlePath TestResults.xcresult \
+          -enableCodeCoverage YES
+          
+    - name: Run Edge Case Tests
+      if: matrix.test-type == 'edge-cases'
+      run: |
+        echo "🔍 Running edge case harness tests..."
+        xcodebuild test \
+          -scheme osx-ide \
+          -destination 'platform=macOS' \
+          -only-testing:osx-ideHarnessTests/EdgeCaseScenariosTests \
+          -resultBundlePath TestResults.xcresult \
+          -enableCodeCoverage YES
+          
+    - name: Run Telemetry Tests
+      if: matrix.test-type == 'telemetry'
+      run: |
+        echo "📊 Running telemetry validation tests..."
+        xcodebuild test \
+          -scheme osx-ide \
+          -destination 'platform=macOS' \
+          -only-testing:osx-ideHarnessTests/TelemetryValidationTests \
+          -resultBundlePath TestResults.xcresult \
+          -enableCodeCoverage YES
+          
+    - name: Run Tool Loop Tests
+      if: matrix.test-type == 'local-models'
+      run: |
+        echo "🔄 Running tool loop dropout tests..."
+        xcodebuild test \
+          -scheme osx-ide \
+          -destination 'platform=macOS' \
+          -only-testing:osx-ideHarnessTests/ToolLoopDropoutHarnessTests \
+          -resultBundlePath TestResults.xcresult \
+          -enableCodeCoverage YES
+          
+    - name: Run Orchestration Tests
+      if: matrix.test-type == 'local-models'
+      run: |
+        echo "🎭 Running orchestration snapshot tests..."
+        xcodebuild test \
+          -scheme osx-ide \
+          -destination 'platform=macOS' \
+          -only-testing:osx-ideHarnessTests/OrchestrationSnapshotHarnessTests \
+          -resultBundlePath TestResults.xcresult \
+          -enableCodeCoverage YES
+          
+    - name: Run Index Scope Tests
+      if: matrix.test-type == 'local-models'
+      run: |
+        echo "📁 Running index scope tests..."
+        xcodebuild test \
+          -scheme osx-ide \
+          -destination 'platform=macOS' \
+          -only-testing:osx-ideHarnessTests/IndexScopeHarnessTests \
+          -resultBundlePath TestResults.xcresult \
+          -enableCodeCoverage YES
+          
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.test-type }}
+        path: TestResults.xcresult
+        
+    - name: Generate coverage report
+      if: matrix.test-type == 'local-models'
+      run: |
+        xcrun xccov view --report --json TestResults.xcresult > coverage.json
+        
+    - name: Upload coverage to Codecov
+      if: matrix.test-type == 'local-models'
+      uses: codecov/codecov-action@v3
+      with:
+        file: coverage.json
+        flags: harness-tests
+        name: harness-coverage
+        
+    - name: Check for 421 errors
+      if: always()
+      run: |
+        echo "🔍 Checking for rate limiting errors..."
+        if grep -r "421\|rate.limit\|too.many.requests" TestResults.xcresult 2>/dev/null; then
+          echo "❌ Rate limiting errors detected!"
+          grep -r "421\|rate.limit\|too.many.requests" TestResults.xcresult
+          exit 1
+        else
+          echo "✅ No rate limiting errors found"
+        fi
+        
+    - name: Analyze test performance
+      if: always()
+      run: |
+        echo "⏱️ Analyzing test performance..."
+        # Extract test durations from xcresult
+        xcrun xcresulttool get --format json --path TestResults.xcresult | \
+          jq '.tests[] | select(.duration) | {name: .name, duration: .duration}' | \
+          sort -nr | head -10
+        
+    - name: Generate test report
+      if: always()
+      run: |
+        echo "📋 Generating test report..."
+        echo "# Harness Test Report - ${{ matrix.test-type }}" > test-report.md
+        echo "Generated on: $(date)" >> test-report.md
+        echo "" >> test-report.md
+        
+        # Add test summary
+        xcrun xcresulttool get --format json --path TestResults.xcresult | \
+          jq -r '.tests | group_by(.testStatus) | map({status: .[0].testStatus, count: length}) | .[]' >> test-report.md
+          
+    - name: Upload test report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-report-${{ matrix.test-type }}
+        path: test-report.md
+
+  # Performance regression job
+  performance-regression:
+    runs-on: macos-latest
+    needs: harness-tests
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+        
+    - name: Run performance benchmarks
+      run: |
+        echo "🏃 Running performance benchmarks..."
+        xcodebuild test \
+          -scheme osx-ide \
+          -destination 'platform=macOS' \
+          -only-testing:osx-ideHarnessTests/AgenticHarnessTests/testHarnessComplexArchitectureRefactor \
+          -resultBundlePath PerformanceResults.xcresult
+          
+    - name: Compare performance
+      run: |
+        echo "📊 Comparing performance with baseline..."
+        # Extract performance metrics and compare with previous runs
+        # This would need custom implementation based on your performance tracking

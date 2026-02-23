@@ -47,33 +47,6 @@ struct EmbeddingModelSettingsView: View {
                         )
                     }
                 }
-                
-                // Downloadable models section
-                if !EmbeddingModelCatalog.downloadableModels.isEmpty {
-                    Text("Downloadable Models")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 8)
-                    
-                    ForEach(EmbeddingModelCatalog.downloadableModels) { model in
-                        EmbeddingModelRow(
-                            model: model,
-                            isBundled: false,
-                            isInstalled: viewModel.isInstalled(model),
-                            isSelected: viewModel.selectedModelId == model.id,
-                            isDownloading: viewModel.isDownloading,
-                            onSelect: {
-                                viewModel.selectModel(model)
-                            },
-                            onDownload: {
-                                Task { await viewModel.downloadModel(model) }
-                            },
-                            onDelete: {
-                                viewModel.deleteModel(model)
-                            }
-                        )
-                    }
-                }
             }
 
             EmbeddingModelStatusLine(
@@ -85,6 +58,16 @@ struct EmbeddingModelSettingsView: View {
         }
         .onAppear {
             viewModel.refreshCatalog()
+        }
+        .alert("Model Change Requires Reindex", isPresented: $viewModel.showReindexConfirmation) {
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelModelChange()
+            }
+            Button("Reindex Now") {
+                viewModel.confirmModelChange()
+            }
+        } message: {
+            Text("Switching embedding models requires rebuilding the index to avoid data corruption. This will re-embed all files with the new model. Continue?")
         }
     }
 }

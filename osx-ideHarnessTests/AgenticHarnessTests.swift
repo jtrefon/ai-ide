@@ -1,5 +1,4 @@
 import XCTest
-
 @testable import osx_ide
 
 // MARK: - Real App Parity Harness Tests
@@ -14,6 +13,24 @@ final class AgenticHarnessTests: XCTestCase {
     private var modelId: String {
         ProcessInfo.processInfo.environment["HARNESS_MODEL_ID"]
             ?? "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
+    }
+    
+    override func setUp() async throws {
+        try await super.setUp()
+        // Set up test configuration for isolated testing with real services
+        let config = TestConfiguration(
+            allowExternalAPIs: true,
+            minAPIRequestInterval: 1.0,
+            serialExternalAPITests: true,
+            externalAPITimeout: 60.0,
+            useMockServices: false
+        )
+        await TestConfigurationProvider.shared.setConfiguration(config)
+    }
+    
+    override func tearDown() async throws {
+        await TestConfigurationProvider.shared.resetToDefault()
+        try await super.tearDown()
     }
 
     private struct ProductionRuntime {

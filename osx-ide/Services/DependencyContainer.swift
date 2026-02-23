@@ -32,7 +32,7 @@ private func earlyDiag(_ msg: String) {
 @MainActor
 class DependencyContainer: ObservableObject {
 
-    private let settingsStore: SettingsStore
+    internal let settingsStore: SettingsStore
 
     /// Tracks whether heavy initialization is complete
     @Published private(set) var isInitialized: Bool = false
@@ -77,10 +77,13 @@ class DependencyContainer: ObservableObject {
 
         // Create AI services (these are lightweight)
         earlyDiag("Creating AI services...")
+        
+        // Note: Test configuration will be set up asynchronously in initializeHeavyServices
 
         let openRouterService = OpenRouterAIService(
             settingsStore: OpenRouterSettingsStore(settingsStore: settingsStore),
-            eventBus: _eventBus
+            eventBus: _eventBus,
+            testConfigurationProvider: TestConfigurationProvider.shared
         )
         let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
         let localModelService = LocalModelProcessAIService(
@@ -152,6 +155,8 @@ class DependencyContainer: ObservableObject {
 
         // Small delay to let UI render first
         try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
+        
+        // Note: Test configuration is set up by individual tests in their setUp methods
 
         // Safely access currentDirectory from Main Actor
         let projectRoot = await MainActor.run { _workspaceService.currentDirectory }

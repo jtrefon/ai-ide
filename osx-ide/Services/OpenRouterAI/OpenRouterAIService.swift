@@ -5,17 +5,27 @@ actor OpenRouterAIService: AIService {
     internal let client: OpenRouterAPIClient
     private let eventBus: EventBusProtocol
     private var contextLengthByModelId: [String: Int] = [:]
+    
+    // Rate limiting to prevent 421 errors
+    private var lastRequestTime: Date = Date.distantPast
+    private var minRequestInterval: TimeInterval = 0.5 // 500ms between requests
+    private let rateLimitLock = NSLock()
+    
+    // Test configuration support
+    private let testConfigurationProvider: TestConfigurationProvider
 
     internal static let maxToolOutputCharsForModel = 12_000
 
     init(
         settingsStore: OpenRouterSettingsStore = OpenRouterSettingsStore(),
         client: OpenRouterAPIClient = OpenRouterAPIClient(),
-        eventBus: EventBusProtocol
+        eventBus: EventBusProtocol,
+        testConfigurationProvider: TestConfigurationProvider = TestConfigurationProvider.shared
     ) {
         self.settingsStore = settingsStore
         self.client = client
         self.eventBus = eventBus
+        self.testConfigurationProvider = testConfigurationProvider
     }
 
     /// Send a message with streaming support
@@ -117,6 +127,9 @@ actor OpenRouterAIService: AIService {
         }
         
         let collector = ChunkCollector()
+
+        // Apply rate limiting to prevent 421 errors
+        try await enforceRateLimit()
 
         let requestContext = OpenRouterAPIClient.RequestContext(
             baseURL: preparation.settings.baseURL,
@@ -323,6 +336,9 @@ actor OpenRouterAIService: AIService {
         body: Data,
         requestId: String
     ) async throws -> Data {
+        // Apply rate limiting to prevent 421 errors
+        try await enforceRateLimit()
+        
         do {
             let requestContext = OpenRouterAPIClient.RequestContext(
                 baseURL: baseURL,
@@ -339,10 +355,56 @@ actor OpenRouterAIService: AIService {
                 if case let .serverError(code, body) = openRouterError {
                     let snippet = (body ?? "").prefix(2000)
                     await logRequestError(requestId: requestId, status: code, bodySnippet: String(snippet))
+                    
+                    // Special handling for 421 rate limit errors
+                    if code == 421 {
+                        await AppLogger.shared.error(
+                            category: .ai,
+                            message: "openrouter.rate_limit_hit",
+                            context: AppLogger.LogCallContext(metadata: [
+                                "requestId": requestId,
+                                "statusCode": code,
+                                "retrySuggested": true
+                            ])
+                        )
+                    }
                 }
             }
             throw error
         }
+    }
+    
+    /// Enforces rate limiting to prevent 421 errors from OpenRouter
+    private func enforceRateLimit() async throws {
+        let config = await testConfigurationProvider.configuration
+        
+        // Skip rate limiting if external APIs are disabled
+        guard config.allowExternalAPIs else {
+            throw AppError.aiServiceError("External APIs are disabled in test configuration")
+        }
+        
+        let now = Date()
+        
+        // Use async-safe locking
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            rateLimitLock.lock()
+            defer { rateLimitLock.unlock() }
+            
+            let timeSinceLastRequest = now.timeIntervalSince(lastRequestTime)
+            let effectiveInterval = max(minRequestInterval, config.minAPIRequestInterval)
+            
+            if timeSinceLastRequest < effectiveInterval {
+                let waitTime = effectiveInterval - timeSinceLastRequest
+                Task {
+                    try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
+                    continuation.resume()
+                }
+            } else {
+                continuation.resume()
+            }
+        }
+        
+        lastRequestTime = Date()
     }
 
     private func decodeResponse(data: Data, requestId: String) async throws -> OpenRouterChatResponse {
