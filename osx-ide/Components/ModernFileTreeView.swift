@@ -6,8 +6,8 @@
 //  Modern macOS v26 file tree with native APIs
 //
 
-import SwiftUI
 import AppKit
+import SwiftUI
 
 /// Modern macOS v26 file tree view
 struct ModernFileTreeView: NSViewRepresentable {
@@ -28,6 +28,7 @@ struct ModernFileTreeView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView()
+        containerView.translatesAutoresizingMaskIntoConstraints = false
 
         let outlineView = NSOutlineView(frame: .zero)
         outlineView.setAccessibilityIdentifier("Modern Explorer")
@@ -58,6 +59,7 @@ struct ModernFileTreeView: NSViewRepresentable {
         scrollView.documentView = outlineView
         scrollView.drawsBackground = true
         scrollView.backgroundColor = .textBackgroundColor
+        scrollView.autohidesScrollers = true
 
         context.coordinator.attach(outlineView: outlineView)
 
@@ -67,7 +69,7 @@ struct ModernFileTreeView: NSViewRepresentable {
             scrollView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: containerView.topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
+            scrollView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
         ])
 
         return containerView
