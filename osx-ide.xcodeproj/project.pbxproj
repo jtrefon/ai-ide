@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		6D2E6F7F2C2F4A7F00A1B2C3 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */; };
+		6D2E6F822C2F4A7F00A1B2C6 /* MLXStructured in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */; };
+		6D2E6F852C2F4A7F00A1B2C9 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F842C2F4A7F00A1B2C8 /* MLX */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		04C2CE182E5C8E9E007A5EF7 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -30,20 +36,11 @@
 		};
 /* End PBXContainerItemProxy section */
 
-/* Begin PBXBuildFile section */
- 		6D2E6F7F2C2F4A7F00A1B2C3 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */; };
- 		6D2E6F822C2F4A7F00A1B2C6 /* MLXStructured in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */; };
- 		6D2E6F852C2F4A7F00A1B2C9 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F842C2F4A7F00A1B2C8 /* MLX */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXFileReference section */
 		04C2CE092E5C8E9D007A5EF7 /* osx-ide.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "osx-ide.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		04C2CE172E5C8E9E007A5EF7 /* osx-ideTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "osx-ideTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		04C2CE212E5C8E9E007A5EF7 /* osx-ideUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "osx-ideUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A11AA032F90000100C0DE01 /* osx-ideHarnessTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "osx-ideHarnessTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
-		6D8D2C9A2F1A000100B0A001 /* DatabaseSchemaManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DatabaseSchemaManager.swift; path = "osx-ide/Services/Index/Database/DatabaseSchemaManager.swift"; sourceTree = "<group>"; };
-		6D8D2C9B2F1A000100B0A001 /* DatabaseSymbolManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DatabaseSymbolManager.swift; path = "osx-ide/Services/Index/Database/DatabaseSymbolManager.swift"; sourceTree = "<group>"; };
-		6D8D2C9C2F1A000100B0A001 /* DatabaseMemoryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DatabaseMemoryManager.swift; path = "osx-ide/Services/Index/Database/DatabaseMemoryManager.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -365,57 +362,6 @@
 		};
 /* End PBXTargetDependency section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCRemoteSwiftPackageReference "mlx-swift-structured" */
-		6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/petrukha-ivan/mlx-swift-structured";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
-/* End XCRemoteSwiftPackageReference "mlx-swift-structured" */
-
-/* Begin XCRemoteSwiftPackageReference "mlx-swift" */
-		6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ml-explore/mlx-swift";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 0.30.3;
-			};
-		};
-/* End XCRemoteSwiftPackageReference "mlx-swift" */
-
-/* Begin XCSwiftPackageProductDependency section */
-		6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
-			productName = MLXLLM;
-		};
-		6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */;
-			productName = MLXStructured;
-		};
-		6D2E6F842C2F4A7F00A1B2C8 /* MLX */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */;
-			productName = MLX;
-		};
-/* End XCSwiftPackageProductDependency section */
-
 /* Begin XCBuildConfiguration section */
 		04C2CE292E5C8E9E007A5EF7 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -549,8 +495,8 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
-				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_APP_SANDBOX = NO;
+				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -578,8 +524,8 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
-				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_APP_SANDBOX = NO;
+				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -752,6 +698,51 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/petrukha-ivan/mlx-swift-structured";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.30.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+		6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */;
+			productName = MLXStructured;
+		};
+		6D2E6F842C2F4A7F00A1B2C8 /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 04C2CE012E5C8E9D007A5EF7 /* Project object */;
 }
