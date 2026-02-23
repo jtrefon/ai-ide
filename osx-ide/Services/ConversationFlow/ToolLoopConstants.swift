@@ -30,7 +30,7 @@ enum ToolLoopConstants {
     // MARK: - Stall Detection Thresholds
 
     /// Number of repeated tool batches before stall detection triggers
-    static let repeatedBatchStallThreshold = 3
+    static let repeatedBatchStallThreshold = 2
 
     /// Number of consecutive empty responses before stall detection triggers
     static let emptyResponseStallThreshold = 3
@@ -42,7 +42,7 @@ enum ToolLoopConstants {
     static let readOnlyIterationStallThreshold = 10
 
     /// Number of repeated read-only batches before stall detection triggers
-    static let repeatedReadOnlyBatchStallThreshold = 3
+    static let repeatedReadOnlyBatchStallThreshold = 2
 
     /// Number of repeated content occurrences for textual tool call patterns
     static let textualPatternRepeatedThreshold = 3
@@ -51,7 +51,7 @@ enum ToolLoopConstants {
     static let normalPatternRepeatedThreshold = 4
 
     /// Number of consecutive iterations with the same write targets before forcing diversification
-    static let repeatedWriteTargetStallThreshold = 3
+    static let repeatedWriteTargetStallThreshold = 2
 
     // MARK: - Text Truncation Limits
 

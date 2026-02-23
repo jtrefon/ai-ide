@@ -74,9 +74,7 @@ final class AIInteractionCoordinator {
         for attempt in 1...maxAttempts {
             let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
             let retriever: (any RAGRetriever)?
-            if let codebaseIndex,
-                shouldUseRAGRetrieval(for: request.stage, settings: settings)
-            {
+            if let codebaseIndex, shouldUseRAGRetrieval() {
                 retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
             } else {
                 retriever = nil
@@ -163,11 +161,7 @@ final class AIInteractionCoordinator {
         return .aiServiceError("AIService.\(operation) failed: \(error.localizedDescription)")
     }
 
-    private func shouldUseRAGRetrieval(for stage: AIRequestStage?, settings: OpenRouterSettings)
-        -> Bool
-    {
-        _ = stage
-        _ = settings
+    private func shouldUseRAGRetrieval() -> Bool {
         return true
     }
 

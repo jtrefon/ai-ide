@@ -305,6 +305,71 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         XCTAssertEqual(executionCount, 2, "Repeated third identical batch should be prevented from executing")
     }
 
+    func testHarnessDiversifiesRepeatedWriteTargetLoopBeforeThirdRewrite() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        let runId = UUID().uuidString
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(content: "Retrying write.", toolCalls: [
+                AIToolCall(id: "write-loop-2", name: "write_file", arguments: [
+                    "path": "src/index.html",
+                    "content": "v2"
+                ])
+            ]),
+            AIServiceResponse(content: "Retrying write again.", toolCalls: [
+                AIToolCall(id: "write-loop-3", name: "write_file", arguments: [
+                    "path": "src/index.html",
+                    "content": "v3"
+                ])
+            ]),
+            AIServiceResponse(content: "Diversified execution after repeated same-target writes.", toolCalls: nil)
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let handler = ToolLoopHandler(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        let counter = ToolExecutionCounter()
+        let initialWriteCall = AIToolCall(id: "write-loop-1", name: "write_file", arguments: [
+            "path": "src/index.html",
+            "content": "v1"
+        ])
+
+        let result = try await handler.handleToolLoopIfNeeded(
+            response: AIServiceResponse(content: "Start writing.", toolCalls: [initialWriteCall]),
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: [CountingTool(name: "write_file", counter: counter)],
+            cancelledToolCallIds: { [] },
+            runId: runId,
+            userInput: "Create a React app scaffold"
+        )
+
+        XCTAssertTrue(result.response.toolCalls?.isEmpty ?? true)
+        XCTAssertEqual(
+            result.response.content,
+            "Diversified execution after repeated same-target writes."
+        )
+
+        let executionCount = await counter.count
+        XCTAssertEqual(executionCount, 2, "Third repeated write to the same target should be intercepted before execution")
+    }
+
     func testHarnessStopsRepeatedPseudoToolCallContentWithoutStructuredToolCalls() async throws {
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
