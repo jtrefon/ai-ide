@@ -8,6 +8,7 @@ extension OpenRouterAIService {
         let mode: AIMode?
         let projectRoot: URL?
         let reasoningEnabled: Bool
+        let stage: AIRequestStage?
     }
 
     struct OpenRouterChatInput {

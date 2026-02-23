@@ -219,7 +219,7 @@ public actor IndexCoordinator {
     private func setupDebounceSubscription() {
         // Regular debounce for single file changes
         debounceSubject
-            .debounce(for: .milliseconds(config.debounceMs), scheduler: DispatchQueue.global(qos: .utility))
+            .debounce(for: .milliseconds(config.debounceMs), scheduler: DispatchQueue.main)
             .removeDuplicates()
             .sink { [weak self] url in
                 Task { [weak self] in

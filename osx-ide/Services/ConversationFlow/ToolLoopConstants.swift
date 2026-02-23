@@ -50,6 +50,9 @@ enum ToolLoopConstants {
     /// Number of repeated content occurrences for normal patterns
     static let normalPatternRepeatedThreshold = 4
 
+    /// Number of consecutive iterations with the same write targets before forcing diversification
+    static let repeatedWriteTargetStallThreshold = 3
+
     // MARK: - Text Truncation Limits
 
     /// Character limit for tool result previews in summaries

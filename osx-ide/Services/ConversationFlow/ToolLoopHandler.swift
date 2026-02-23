@@ -43,6 +43,8 @@ final class ToolLoopHandler {
         var consecutiveReadOnlyToolIterations = 0
         var previousReadOnlyToolBatchSignature: String?
         var repeatedReadOnlyToolBatchCount = 0
+        var previousWriteTargetSignature: String?
+        var repeatedWriteTargetCount = 0
         let maxIterations = (mode == .agent) ? ToolLoopConstants.maxAgentIterations : ToolLoopConstants.maxNonAgentIterations
 
         if mode == .agent,
@@ -88,6 +90,39 @@ final class ToolLoopHandler {
                 repeatedToolBatchCount = 0
             }
             previousToolBatchSignature = currentToolBatchSignature
+
+            let currentWriteTargetSignature = writeTargetSignature(toolCalls: uniqueToolCalls)
+            if let currentWriteTargetSignature,
+               let previousWriteTargetSignature,
+               currentWriteTargetSignature == previousWriteTargetSignature {
+                repeatedWriteTargetCount += 1
+            } else {
+                repeatedWriteTargetCount = 0
+            }
+            previousWriteTargetSignature = currentWriteTargetSignature
+
+            if repeatedWriteTargetCount >= ToolLoopConstants.repeatedWriteTargetStallThreshold {
+                await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_write_target_stall", data: [
+                    "runId": runId,
+                    "iteration": toolIteration,
+                    "repeatedWriteTargetCount": repeatedWriteTargetCount + 1,
+                    "writeTargetSignature": currentWriteTargetSignature ?? "none"
+                ])
+
+                currentResponse = try await requestDiversifiedExecutionForRepeatedWriteTargets(
+                    explicitContext: explicitContext,
+                    projectRoot: projectRoot,
+                    mode: mode,
+                    userInput: userInput,
+                    runId: runId,
+                    writeTargetSignature: currentWriteTargetSignature ?? "(none)",
+                    availableTools: availableTools
+                )
+
+                repeatedWriteTargetCount = 0
+                previousWriteTargetSignature = nil
+                continue
+            }
 
             if shouldStopForReadOnlyToolLoopStall(
                 toolCalls: uniqueToolCalls,
@@ -775,9 +810,10 @@ final class ToolLoopHandler {
                     The user's request requires EXECUTION, not just exploration.
                     
                     You MUST now transition to execution:
-                    1. Use write_file to create new files
-                    2. Use replace_in_file to modify existing files  
-                    3. Use run_command for build/test commands
+                    1. Use write_files for multi-file scaffolding and coordinated creation
+                    2. Use write_file only for single-file creation/overwrite
+                    3. Use replace_in_file to modify existing files
+                    4. Use run_command for build/test commands
                     
                     Do NOT call more read-only tools (read_file, index_*, list_*).
                     Proceed with execution now using the available write/edit tools.
@@ -878,5 +914,72 @@ final class ToolLoopHandler {
         }
 
         return "\(toolCall.name)|\(argumentsString)"
+    }
+
+    private func writeTargetSignature(toolCalls: [AIToolCall]) -> String? {
+        var targets: [String] = []
+
+        for toolCall in toolCalls {
+            switch toolCall.name {
+            case "write_file", "replace_in_file", "create_file", "delete_file":
+                if let path = toolCall.arguments["path"] as? String,
+                   !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    targets.append(path)
+                }
+            case "write_files":
+                if let files = toolCall.arguments["files"] as? [[String: Any]] {
+                    for file in files {
+                        if let path = file["path"] as? String,
+                           !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            targets.append(path)
+                        }
+                    }
+                }
+            default:
+                continue
+            }
+        }
+
+        guard !targets.isEmpty else { return nil }
+        return targets.sorted().joined(separator: "||")
+    }
+
+    private func requestDiversifiedExecutionForRepeatedWriteTargets(
+        explicitContext: String?,
+        projectRoot: URL,
+        mode: AIMode,
+        userInput: String,
+        runId: String,
+        writeTargetSignature: String,
+        availableTools: [AITool]
+    ) async throws -> AIServiceResponse {
+        let correctionSystem = ChatMessage(
+            role: .system,
+            content: """
+            You are repeatedly writing the same target files without completing the user's request.
+
+            Repeated write targets: \(writeTargetSignature)
+
+            You MUST diversify execution now:
+            1. Do NOT rewrite the same target files unless strictly necessary.
+            2. Create or modify the remaining missing files required by the user request.
+            3. Return concrete tool calls that advance completion.
+
+            User request:
+            \(userInput)
+            """
+        )
+
+        return try await aiInteractionCoordinator
+            .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                messages: historyCoordinator.messages + [correctionSystem],
+                explicitContext: explicitContext,
+                tools: availableTools,
+                mode: mode,
+                projectRoot: projectRoot,
+                runId: runId,
+                stage: AIRequestStage.tool_loop
+            ))
+            .get()
     }
 }

@@ -195,19 +195,9 @@ actor ModelRoutingAIService: AIService {
     /// Filters tools to only those suitable for MLX (RAG/index read-only tools)
     private func filterToolsForMLX(_ tools: [AITool]?) -> [AITool]? {
         guard let tools = tools else { return nil }
-        
-        // Tools that work well with small models (RAG + read-only)
-        let allowedToolNames: Set<String> = [
-            "index_find_files",
-            "index_list_files",
-            "index_search_text",
-            "index_read_file",
-            "index_search_symbols",
-            "index_list_memories",
-            "run_command"
-        ]
-        
-        return tools.filter { allowedToolNames.contains($0.name) }
+
+        // Reuse mode-based policy to avoid duplicating hardcoded tool lists.
+        return AIMode.chat.allowedTools(from: tools)
     }
 
     // MARK: - Local Model Detection
