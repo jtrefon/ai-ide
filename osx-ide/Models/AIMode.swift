@@ -60,20 +60,10 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
     public func allowedTools(from allTools: [AITool]) -> [AITool] {
         switch self {
         case .chat:
-            // Read-only tools
-            return allTools.filter { tool in
-                [
-                    "index_find_files",
-                    "index_list_files",
-                    "index_search_text",
-                    "index_read_file",
-                    "index_search_symbols",
-                    "run_command",
-                    "read_file"
-                ].contains(tool.name)
-            }
+            // Chat mode - NO tools (read-only interface)
+            return []
         case .agent:
-            // All tools
+            // Agent mode - ALL tools
             return allTools
         }
     }

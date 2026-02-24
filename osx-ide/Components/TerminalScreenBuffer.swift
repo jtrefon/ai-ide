@@ -103,9 +103,10 @@ class TerminalScreenBuffer {
         cursorColumn = 0
     }
     
-    /// Newline - move cursor down, scroll if needed
+    /// Newline - move cursor down, scroll if needed, and reset column to 0
     func newline() {
         advanceRow()
+        cursorColumn = 0
     }
     
     /// Backspace - move cursor back one position

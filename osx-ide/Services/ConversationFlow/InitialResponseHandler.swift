@@ -104,6 +104,41 @@ final class InitialResponseHandler {
                 .get()
         }
 
+        // Retry if response contains only reasoning without actual content
+        if mode == .agent,
+           response.toolCalls?.isEmpty ?? true,
+           let content = response.content,
+           ChatPromptBuilder.isReasoningOnly(content: content),
+           let lastUserMessage = historyCoordinator.messages.last(where: { $0.role == .user }) {
+            await AIToolTraceLogger.shared.log(type: "chat.force_retry.reasoning_only.initial", data: [
+                "runId": runId,
+                "hasToolCalls": false,
+                "contentLength": content.count
+            ])
+            let promptText = PromptRepository.shared.prompt(
+                key: "ConversationFlow/Corrections/reasoning_only_retry",
+                defaultValue: "Your response contained only reasoning without any actual content. " +
+                    "Please provide a complete response with both reasoning and actual content.",
+                projectRoot: projectRoot
+            )
+            let followupSystem = ChatMessage(
+                role: .system,
+                content: promptText
+            )
+
+            response = try await aiInteractionCoordinator
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                    messages: historyCoordinator.messages + [followupSystem, lastUserMessage],
+                    explicitContext: explicitContext,
+                    tools: availableTools,
+                    mode: mode,
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.initial_response
+                ))
+                .get()
+        }
+
         return response
     }
 }

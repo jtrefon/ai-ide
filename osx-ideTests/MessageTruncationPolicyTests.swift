@@ -16,7 +16,7 @@ final class MessageTruncationPolicyTests: XCTestCase {
     }
 
     func testLongToolResultIsTruncated() {
-        let longContent = String(repeating: "x", count: 5000)
+        let longContent = String(repeating: "x", count: 6000)
         let messages = [
             ChatMessage(role: .tool, content: longContent,
                         tool: ChatMessageToolContext(toolName: "read_file"))
@@ -72,14 +72,14 @@ final class MessageTruncationPolicyTests: XCTestCase {
         ]
         let result = MessageTruncationPolicy.truncateForModel(messages)
         let totalChars = result.reduce(0) { $0 + $1.content.count }
-        XCTAssertLessThan(totalChars, 16_000,
+        XCTAssertLessThan(totalChars, MessageTruncationPolicy.maxTotalMessageCharacters,
                           "Total characters should be reduced by budget enforcement")
     }
 
     // MARK: - Mixed Messages
 
     func testMixedMessagesOnlyTruncatesToolResults() {
-        let longToolContent = String(repeating: "c", count: 5000)
+        let longToolContent = String(repeating: "c", count: 6000) // Increased to exceed maxToolResultCharacters
         let messages = [
             ChatMessage(role: .system, content: "You are an assistant"),
             ChatMessage(role: .user, content: "Create a file"),
@@ -91,7 +91,10 @@ final class MessageTruncationPolicyTests: XCTestCase {
         XCTAssertEqual(result[0].content, "You are an assistant")
         XCTAssertEqual(result[1].content, "Create a file")
         XCTAssertEqual(result[2].content, "I'll create that file")
-        XCTAssertTrue(result[3].content.hasSuffix("[truncated]"))
+        // Find the tool message and check it's truncated
+        let toolMessage = result.first { $0.role == .tool }
+        XCTAssertNotNil(toolMessage, "Should have a tool message")
+        XCTAssertTrue(toolMessage!.content.hasSuffix("\n... [truncated]"))
     }
 
     func testEmptyMessagesArrayReturnsEmpty() {

@@ -132,7 +132,7 @@ final class TerminalScreenBufferTests: XCTestCase {
         buffer.moveCursor(row: 5, column: 50)
         buffer.newline()
         XCTAssertEqual(buffer.cursorRow, 6)
-        XCTAssertEqual(buffer.cursorColumn, 50)  // Column unchanged
+        XCTAssertEqual(buffer.cursorColumn, 0)  // Column reset to 0
     }
     
     func testBackspace() {

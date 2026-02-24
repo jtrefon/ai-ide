@@ -407,4 +407,12 @@ class ChatPromptBuilder {
     private static func containsAnyToken(_ tokens: [String], in text: String) -> Bool {
         tokens.contains(where: text.contains)
     }
+    
+    /// Checks if the content contains only reasoning without any actual response
+    static func isReasoningOnly(content: String) -> Bool {
+        let split = splitReasoning(from: content)
+        let hasReasoning = split.reasoning?.isEmpty == false
+        let hasContent = !(split.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        return hasReasoning && !hasContent
+    }
 }

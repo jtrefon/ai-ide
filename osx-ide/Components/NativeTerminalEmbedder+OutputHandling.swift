@@ -70,7 +70,8 @@ extension NativeTerminalEmbedder {
             case "\n":
                 buffer.newline()
             case "\r":
-                buffer.carriageReturn()
+                // Skip carriage returns to avoid overwriting content
+                break
             case "\t":
                 buffer.putCharacter("\t")
             case "\u{08}", "\u{7F}":  // Backspace or DEL
