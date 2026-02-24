@@ -28,6 +28,12 @@ final class ToolExecutionTelemetry {
     
     /// Number of repeated content responses without tool calls.
     private(set) var repeatedContent: Int = 0
+
+    /// Number of repeated assistant update messages observed during tool loops.
+    private(set) var repeatedAssistantUpdates: Int = 0
+
+    /// Number of repeated tool-call signatures observed across iterations.
+    private(set) var repeatedToolCallSignatures: Int = 0
     
     // MARK: - Session Tracking
     
@@ -65,6 +71,19 @@ final class ToolExecutionTelemetry {
         repeatedContent += 1
         logTelemetry()
     }
+
+    /// Record repeated assistant update observation.
+    func recordRepeatedAssistantUpdate() {
+        repeatedAssistantUpdates += 1
+        logTelemetry()
+    }
+
+    /// Record repeated tool-call signature observation.
+    func recordRepeatedToolCallSignatures(count: Int) {
+        guard count > 0 else { return }
+        repeatedToolCallSignatures += count
+        logTelemetry()
+    }
     
     /// Record a tool loop iteration.
     func recordIteration() {
@@ -86,6 +105,8 @@ final class ToolExecutionTelemetry {
             deduplicatedToolCalls: deduplicatedToolCalls,
             repeatedBatches: repeatedBatches,
             repeatedContent: repeatedContent,
+            repeatedAssistantUpdates: repeatedAssistantUpdates,
+            repeatedToolCallSignatures: repeatedToolCallSignatures,
             totalIterations: totalIterations,
             successfulExecutions: successfulExecutions
         )
@@ -98,6 +119,8 @@ final class ToolExecutionTelemetry {
         deduplicatedToolCalls = 0
         repeatedBatches = 0
         repeatedContent = 0
+        repeatedAssistantUpdates = 0
+        repeatedToolCallSignatures = 0
         totalIterations = 0
         successfulExecutions = 0
     }
@@ -115,6 +138,8 @@ final class ToolExecutionTelemetry {
                     "deduplicatedToolCalls": await self.deduplicatedToolCalls,
                     "repeatedBatches": await self.repeatedBatches,
                     "repeatedContent": await self.repeatedContent,
+                    "repeatedAssistantUpdates": await self.repeatedAssistantUpdates,
+                    "repeatedToolCallSignatures": await self.repeatedToolCallSignatures,
                     "totalIterations": await self.totalIterations,
                     "successfulExecutions": await self.successfulExecutions
                 ]
@@ -130,6 +155,8 @@ struct ToolExecutionTelemetrySummary: Codable {
     let deduplicatedToolCalls: Int
     let repeatedBatches: Int
     let repeatedContent: Int
+    let repeatedAssistantUpdates: Int
+    let repeatedToolCallSignatures: Int
     let totalIterations: Int
     let successfulExecutions: Int
     
@@ -139,7 +166,9 @@ struct ToolExecutionTelemetrySummary: Codable {
         textualToolCallPatterns == 0 &&
         deduplicatedToolCalls == 0 &&
         repeatedBatches == 0 &&
-        repeatedContent == 0
+        repeatedContent == 0 &&
+        repeatedAssistantUpdates == 0 &&
+        repeatedToolCallSignatures == 0
     }
     
     /// Returns a human-readable health report.
@@ -159,6 +188,12 @@ struct ToolExecutionTelemetrySummary: Codable {
         }
         if repeatedContent > 0 {
             issues.append("Repeated content: \(repeatedContent)")
+        }
+        if repeatedAssistantUpdates > 0 {
+            issues.append("Repeated assistant updates observed: \(repeatedAssistantUpdates)")
+        }
+        if repeatedToolCallSignatures > 0 {
+            issues.append("Repeated tool-call signatures observed: \(repeatedToolCallSignatures)")
         }
         
         if issues.isEmpty {

@@ -345,6 +345,7 @@ actor LocalModelProcessAIService: AIService {
     private let settingsStore: any OpenRouterSettingsLoading
     private var memoryPressureObserver: (any MemoryPressureObserving)?
     private let prefixCache = PromptPrefixCache()
+    private let activityCoordinator: (any AgentActivityCoordinating)?
 
     init(
         selectionStore: LocalModelSelectionStore = LocalModelSelectionStore(),
@@ -354,7 +355,8 @@ actor LocalModelProcessAIService: AIService {
         settingsStore: any OpenRouterSettingsLoading = OpenRouterSettingsStore(),
         memoryPressureObserverFactory: MemoryPressureObserverFactory = { callback in
             MemoryPressureObserver(onMemoryPressure: callback)
-        }
+        },
+        activityCoordinator: (any AgentActivityCoordinating)? = nil
     ) {
         self.selectionStore = selectionStore
         self.fileStore = fileStore
@@ -362,6 +364,7 @@ actor LocalModelProcessAIService: AIService {
         self.generator = generator ?? NativeMLXGenerator(eventBus: resolvedEventBus)
         self.settingsStore = settingsStore
         self.memoryPressureObserver = nil
+        self.activityCoordinator = activityCoordinator
         let generatorForPressureHandling = self.generator
         let prefixCacheForPressureHandling = self.prefixCache
 
@@ -442,15 +445,31 @@ actor LocalModelProcessAIService: AIService {
             messageCount: chatMessages.count
         )
         
-        let response = try await generator.generate(
-            modelDirectory: modelDirectory,
-            messages: chatMessages,
-            tools: toolSpecs,
-            toolCallFormat: model.toolCallFormat,
-            runId: request.runId,
-            contextLength: contextLength,
-            conversationId: conversationId
-        )
+        // Wrap MLX inference with power management to prevent sleep during long generations
+        let response: AIServiceResponse
+        if let coordinator = activityCoordinator {
+            response = try await coordinator.withActivity(type: .mlxInference) {
+                try await generator.generate(
+                    modelDirectory: modelDirectory,
+                    messages: chatMessages,
+                    tools: toolSpecs,
+                    toolCallFormat: model.toolCallFormat,
+                    runId: request.runId,
+                    contextLength: contextLength,
+                    conversationId: conversationId
+                )
+            }
+        } else {
+            response = try await generator.generate(
+                modelDirectory: modelDirectory,
+                messages: chatMessages,
+                tools: toolSpecs,
+                toolCallFormat: model.toolCallFormat,
+                runId: request.runId,
+                contextLength: contextLength,
+                conversationId: conversationId
+            )
+        }
         
         // TELEMETRY: Log what we got back from the model
         logResponseTelemetry(

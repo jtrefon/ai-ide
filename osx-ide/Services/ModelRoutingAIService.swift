@@ -77,14 +77,12 @@ actor ModelRoutingAIService: AIService {
             // MLX doesn't support Agent mode - force Chat mode
             if request.mode == .agent {
                 let adjustedRequest = adjustRequestForMLX(request, capability: capability)
-                // For local models, just use regular sendMessage (streaming handled by local service)
-                return try await localService.sendMessage(adjustedRequest)
+                return try await localService.sendMessageStreaming(adjustedRequest, runId: runId)
             }
-            return try await localService.sendMessage(request)
+            return try await localService.sendMessageStreaming(request, runId: runId)
         }
-
-        // Online mode: always use OpenRouter with streaming
-        // OpenRouterAIService has sendMessageStreaming method
+        
+        // Online mode: always use OpenRouter (not MLX)
         return try await openRouterService.sendMessageStreaming(request, runId: runId)
     }
 

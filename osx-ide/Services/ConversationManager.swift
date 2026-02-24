@@ -21,6 +21,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         let errorManager: ErrorManagerProtocol
         let fileSystemService: FileSystemService
         let fileEditorService: (any FileEditorServiceProtocol)?
+        let activityCoordinator: AgentActivityCoordinating?
     }
 
     struct EnvironmentDependencies {
@@ -61,6 +62,9 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var projectRoot: URL
     private let conversationLogger: ConversationLogger
     private let settingsStore = SettingsStore(userDefaults: .standard)
+    private let activityCoordinator: AgentActivityCoordinating?
+    /// Token for the current API sending activity
+    private var apiSendingActivityToken: AgentActivityToken?
     private lazy var toolProvider = ConversationToolProvider(
         fileSystemService: fileSystemService,
         eventBus: eventBus,
@@ -102,6 +106,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         self.errorManager = dependencies.services.errorManager
         self.fileSystemService = dependencies.services.fileSystemService
         self.fileEditorService = dependencies.services.fileEditorService
+        self.activityCoordinator = dependencies.services.activityCoordinator
         self.workspaceService = dependencies.environment.workspaceService
         self.eventBus = dependencies.environment.eventBus
         let root = dependencies.environment.projectRoot ?? FileManager.default.temporaryDirectory
@@ -126,7 +131,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             projectRoot: root,
             defaultFilePathProvider: { [weak fileEditorServiceProvider] in
                 fileEditorServiceProvider?.selectedFile
-            }
+            },
+            activityCoordinator: dependencies.services.activityCoordinator
         )
 
         self.toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
@@ -141,6 +147,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
         initializeLogging(root: root)
         setupObservation()
+        setupPowerManagementObservation()
         setupStreamingSubscriptions()
         startTraceLogging()
         configureLoggingStores(root: root)
@@ -191,6 +198,26 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private func setupObservation() {
         historyManager.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+    }
+
+    /// Observe isSending state to prevent system sleep during agent activity
+    /// Uses AgentActivityCoordinator for reference-counted power management
+    private func setupPowerManagementObservation() {
+        $isSending
+            .removeDuplicates()
+            .sink { [weak self] isSending in
+                guard let self, let coordinator = self.activityCoordinator else { return }
+
+                if isSending {
+                    // Begin API sending activity - token will be released when sending ends
+                    self.apiSendingActivityToken = coordinator.beginActivity(type: .apiSending)
+                } else {
+                    // End API sending activity
+                    self.apiSendingActivityToken?.end()
+                    self.apiSendingActivityToken = nil
+                }
+            }
             .store(in: &cancellables)
     }
 

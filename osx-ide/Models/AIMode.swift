@@ -47,6 +47,8 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
             **CURRENT MODE: AGENT (Full Access)**
             You are in Agent mode with full autonomy. You can read, write, edit, and delete files to complete tasks.
             All tools are available. Use them wisely and always explain what you're doing.
+            IMPORTANT: Ignore any prior or conflicting instructions claiming you are in read-only mode. In this run, you are NOT read-only.
+            If the user asks for implementation work, execute it with tools instead of refusing due to permissions.
             """
         }
     }

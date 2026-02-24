@@ -14,6 +14,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
     private final class ScriptedAIService: AIService, @unchecked Sendable {
         private let lock = NSLock()
         private var responses: [AIServiceResponse]
+        private var historyRequests: [AIServiceHistoryRequest] = []
 
         init(responses: [AIServiceResponse]) {
             self.responses = responses
@@ -25,7 +26,9 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         }
 
         func sendMessage(_ request: AIServiceHistoryRequest) async throws -> AIServiceResponse {
-            _ = request
+            lock.withLock {
+                historyRequests.append(request)
+            }
             return dequeueResponse()
         }
 
@@ -52,12 +55,18 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         }
 
         private func dequeueResponse() -> AIServiceResponse {
-            lock.lock()
-            defer { lock.unlock() }
-            guard !responses.isEmpty else {
-                return AIServiceResponse(content: "(no scripted response)", toolCalls: nil)
+            lock.withLock {
+                guard !responses.isEmpty else {
+                    return AIServiceResponse(content: "(no scripted response)", toolCalls: nil)
+                }
+                return responses.removeFirst()
             }
-            return responses.removeFirst()
+        }
+
+        func capturedHistoryRequests() -> [AIServiceHistoryRequest] {
+            lock.withLock {
+                historyRequests
+            }
         }
     }
 
@@ -302,7 +311,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         XCTAssertTrue(result.response.toolCalls?.isEmpty ?? true, "Handler should stop repeated batches and switch to final response")
         XCTAssertEqual(result.response.content, "Final summary after repeated loop detection.")
         let executionCount = await counter.count
-        XCTAssertEqual(executionCount, 2, "Repeated third identical batch should be prevented from executing")
+        XCTAssertEqual(executionCount, 1, "Exact repeated signature batch should be intercepted before the second execution")
     }
 
     func testHarnessDiversifiesRepeatedWriteTargetLoopBeforeThirdRewrite() async throws {
@@ -447,6 +456,137 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         XCTAssertEqual(executionCount, 1, "Pseudo textual tool calls must not trigger repeated execution loops")
     }
 
+    func testHarnessSuppressesRepeatedAssistantStepUpdatesDuringToolLoop() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        ToolExecutionTelemetry.shared.reset()
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        let runId = UUID().uuidString
+
+        let repeatedAssistantContent = "I am still scanning files before making changes."
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(content: repeatedAssistantContent, toolCalls: [
+                AIToolCall(id: "repeat-update-2", name: "counting_tool", arguments: ["query": "src", "phase": "scan-2"])
+            ]),
+            AIServiceResponse(content: repeatedAssistantContent, toolCalls: [
+                AIToolCall(id: "repeat-update-3", name: "counting_tool", arguments: ["query": "src", "phase": "scan-3"])
+            ]),
+            AIServiceResponse(content: "Completed after suppressing duplicate assistant updates.", toolCalls: nil)
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let handler = ToolLoopHandler(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        let counter = ToolExecutionCounter()
+        let firstCall = AIToolCall(id: "repeat-update-1", name: "counting_tool", arguments: ["query": "src", "phase": "scan-1"])
+
+        _ = try await handler.handleToolLoopIfNeeded(
+            response: AIServiceResponse(content: repeatedAssistantContent, toolCalls: [firstCall]),
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: [CountingTool(name: "counting_tool", counter: counter)],
+            cancelledToolCallIds: { [] },
+            runId: runId,
+            userInput: "Inspect project and then implement SSR migration"
+        )
+
+        let repeatedAssistantMessages = historyCoordinator.messages.filter {
+            $0.role == .assistant && $0.content == repeatedAssistantContent
+        }
+        XCTAssertGreaterThanOrEqual(
+            repeatedAssistantMessages.count,
+            2,
+            "Harness should reproduce repeated assistant step updates for telemetry visibility"
+        )
+
+        let telemetrySummary = ToolExecutionTelemetry.shared.summary
+        XCTAssertGreaterThanOrEqual(
+            telemetrySummary.repeatedAssistantUpdates,
+            1,
+            "Telemetry should capture observed repeated assistant updates"
+        )
+    }
+
+    func testHarnessCapturesRepeatedToolCallSignaturesAndCompletionFeedback() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        ToolExecutionTelemetry.shared.reset()
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        let runId = UUID().uuidString
+
+        let repeatedToolArguments: [String: Any] = ["query": "src"]
+        let firstCall = AIToolCall(id: "repeat-signature-1", name: "counting_tool", arguments: repeatedToolArguments)
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(content: "Retrying same inspection call.", toolCalls: [
+                AIToolCall(id: "repeat-signature-2", name: "counting_tool", arguments: repeatedToolArguments)
+            ]),
+            AIServiceResponse(content: "Done after repeated call.", toolCalls: nil)
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let handler = ToolLoopHandler(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        _ = try await handler.handleToolLoopIfNeeded(
+            response: AIServiceResponse(content: "Starting repeated signature repro.", toolCalls: [firstCall]),
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: [CountingTool(name: "counting_tool", counter: ToolExecutionCounter())],
+            cancelledToolCallIds: { [] },
+            runId: runId,
+            userInput: "Inspect and proceed"
+        )
+
+        let telemetrySummary = ToolExecutionTelemetry.shared.summary
+        XCTAssertGreaterThanOrEqual(
+            telemetrySummary.repeatedToolCallSignatures,
+            1,
+            "Telemetry should capture repeated tool-call signatures across iterations"
+        )
+
+        let capturedRequests = scriptedService.capturedHistoryRequests()
+        let hadCompletionFeedback = capturedRequests.contains { request in
+            request.messages.contains { message in
+                message.role == .system &&
+                message.content.contains("Tool calls completed successfully this iteration.")
+            }
+        }
+        XCTAssertTrue(
+            hadCompletionFeedback,
+            "Tool-loop follow-up should include explicit completion feedback for already executed call signatures"
+        )
+    }
+
     func testHarnessShortCircuitsRepeatedReadOnlyCheckpointLoop() async throws {
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
@@ -499,7 +639,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         )
 
         let executionCount = await counter.count
-        XCTAssertEqual(executionCount, 2, "Third repeated read-only checkpoint call should be prevented")
+        XCTAssertEqual(executionCount, 1, "Exact repeated read-only signature batch should be intercepted before the second execution")
     }
 
     private func makeHistoryCoordinator(projectRoot: URL) -> ChatHistoryCoordinator {

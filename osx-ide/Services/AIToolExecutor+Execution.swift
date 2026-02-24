@@ -320,7 +320,13 @@ extension AIToolExecutor {
             targetFile: request.targetFile
         )
 
+        // Begin tool execution activity for power management
+        let activityToken = activityCoordinator?.beginActivity(type: .toolExecution)
+        
         let resultMessage = await resolveToolAndExecute(request)
+
+        // End tool execution activity
+        activityToken?.end()
 
         Task { @MainActor in
             request.onProgress(resultMessage)

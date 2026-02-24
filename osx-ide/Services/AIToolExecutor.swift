@@ -28,12 +28,16 @@ public final class AIToolExecutor {
     let logger: ToolExecutionLogger
     let argumentResolver: ToolArgumentResolver
     let scheduler: ToolScheduler
+    
+    /// Activity coordinator for power management during tool execution
+    let activityCoordinator: AgentActivityCoordinating?
 
     public init(
         fileSystemService: FileSystemService,
         errorManager: any ErrorManagerProtocol,
         projectRoot: URL,
-        defaultFilePathProvider: (@MainActor () -> String?)? = nil
+        defaultFilePathProvider: (@MainActor () -> String?)? = nil,
+        activityCoordinator: AgentActivityCoordinating? = nil
     ) {
         // Initialize specialized services
         self.logger = ToolExecutionLogger(errorManager: errorManager)
@@ -43,6 +47,7 @@ public final class AIToolExecutor {
             defaultFilePathProvider: defaultFilePathProvider
         )
         self.scheduler = ToolScheduler()
+        self.activityCoordinator = activityCoordinator
     }
 
     // MARK: - Helper Methods (using specialized services)

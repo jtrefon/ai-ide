@@ -9,6 +9,7 @@ public actor IndexCoordinator {
     private let indexer: IndexerActor
     private let config: IndexConfiguration
     private let projectRoot: URL?
+    private let activityCoordinator: (any AgentActivityCoordinating)?
     
     private var isEnabled: Bool
     private var reindexTask: Task<Void, Never>?
@@ -27,13 +28,16 @@ public actor IndexCoordinator {
         eventBus: EventBusProtocol,
         indexer: IndexerActor,
         config: IndexConfiguration = .default,
-        projectRoot: URL? = nil
+        projectRoot: URL? = nil,
+        activityCoordinator: (any AgentActivityCoordinating)? = nil
     ) {
         self.eventBus = eventBus
         self.indexer = indexer
         self.config = config
         self.isEnabled = config.enabled
         self.projectRoot = projectRoot?.standardizedFileURL
+        // Use shared instance if no coordinator provided
+        self.activityCoordinator = activityCoordinator ?? AgentActivityCoordinator.shared
 
         // DO NOT start fire-and-forget tasks here!
         // Starting Task.detached or Task {} from actor init can cause
@@ -90,6 +94,17 @@ public actor IndexCoordinator {
     }
 
     private func performReindex(rootURL: URL, localGeneration: UInt64) async {
+        // Wrap indexing with power management to prevent sleep during long operations
+        if let coordinator = activityCoordinator {
+            await coordinator.withActivity(type: .indexing) {
+                await self.performReindexInternal(rootURL: rootURL, localGeneration: localGeneration)
+            }
+        } else {
+            await performReindexInternal(rootURL: rootURL, localGeneration: localGeneration)
+        }
+    }
+    
+    private func performReindexInternal(rootURL: URL, localGeneration: UInt64) async {
         let start = Date()
         await IndexLogger.shared.log("Starting project reindex for: \(rootURL.path)")
         await eventBus.publish(IndexingStartedEvent())

@@ -24,7 +24,10 @@ public enum RAGContextBuilder {
         // Publish retrieval started event
         eventBus?.publish(RAGRetrievalStartedEvent(userInputPreview: userInput))
 
-        let retrieval = await retriever.retrieve(RAGRetrievalRequest(userInput: userInput, projectRoot: projectRoot))
+        // Wrap RAG retrieval with power management to prevent sleep during long operations
+        let retrieval = await AgentActivityCoordinator.shared.withActivity(type: .ragRetrieval) {
+            await retriever.retrieve(RAGRetrievalRequest(userInput: userInput, projectRoot: projectRoot))
+        }
         let ragBlock = formatRAGBlock(retrieval)
 
         // Publish retrieval completed event

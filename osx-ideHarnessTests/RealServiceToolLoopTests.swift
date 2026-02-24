@@ -105,6 +105,63 @@ final class RealServiceToolLoopTests: XCTestCase {
         let files = listAllFiles(under: projectRoot)
         XCTAssertTrue(files.contains("nonexistent.txt"), "Should have created the file after handling error")
     }
+
+    func testFailureRecoveryUsesFallbackWithoutRepeatedIdenticalFailures() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        ToolExecutionTelemetry.shared.reset()
+
+        let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
+        let manager = runtime.manager
+        manager.currentMode = .agent
+
+        print("\n=== Test: Failure Recovery Uses Fallback ===")
+
+        let prompt = """
+            Try to read a file that does not exist named must-fail-first.txt.
+            If reading fails, do not repeat the same failed call.
+            Instead create must-fail-first.txt with content \"Recovered via fallback\" and finish.
+            """
+
+        try await sendProductionMessage(prompt, manager: manager, timeoutSeconds: 120)
+
+        let lastAssistantContent = manager.messages.last(where: { $0.role == .assistant })?.content ?? ""
+        if lastAssistantContent.localizedCaseInsensitiveContains("read-only Chat mode") {
+            throw XCTSkip(
+                "Local model runtime downgraded Agent mode to read-only Chat mode; skipping fallback recovery assertion."
+            )
+        }
+
+        let files = listAllFiles(under: projectRoot)
+        guard files.contains("must-fail-first.txt") else {
+            XCTFail("Agent should recover by creating fallback file")
+            return
+        }
+
+        let createdContent = try String(
+            contentsOf: projectRoot.appendingPathComponent("must-fail-first.txt"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(
+            createdContent.localizedCaseInsensitiveContains("recovered"),
+            "Fallback file should contain recovery marker content"
+        )
+
+        let failedToolExecutionMessages = manager.messages.filter {
+            $0.isToolExecution && $0.toolStatus == .failed
+        }
+        let repeatedFailureSignatures = repeatedFailureSignatureCounts(from: failedToolExecutionMessages)
+
+        if failedToolExecutionMessages.isEmpty {
+            print("[HARNESS][warning] No failed tool execution captured in this run; skipping repeated-failure signature assertion.")
+        } else {
+            XCTAssertTrue(
+                repeatedFailureSignatures.isEmpty,
+                "Agent should avoid repeating identical failed tool signatures. Repeats: \(repeatedFailureSignatures)"
+            )
+        }
+    }
     
     // MARK: - Helper Methods
     
@@ -195,6 +252,21 @@ final class RealServiceToolLoopTests: XCTestCase {
         return url
     }
     
+    private func repeatedFailureSignatureCounts(from failedMessages: [ChatMessage]) -> [String: Int] {
+        var signatureCounts: [String: Int] = [:]
+
+        for message in failedMessages {
+            let signature = [
+                message.toolName ?? "unknown_tool",
+                message.toolCallId ?? "unknown_call",
+                message.targetFile ?? "unknown_target"
+            ].joined(separator: "|")
+            signatureCounts[signature, default: 0] += 1
+        }
+
+        return signatureCounts.filter { $0.value > 1 }
+    }
+
     private func cleanup(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
     }

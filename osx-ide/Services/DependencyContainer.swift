@@ -71,6 +71,7 @@ class DependencyContainer: ObservableObject {
             eventBus: _eventBus
         )
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
+        _activityCoordinator = AgentActivityCoordinator()
         earlyDiag(
             "Lightweight services done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
         )
@@ -88,7 +89,8 @@ class DependencyContainer: ObservableObject {
         let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
         let localModelService = LocalModelProcessAIService(
             selectionStore: selectionStore,
-            eventBus: _eventBus
+            eventBus: _eventBus,
+            activityCoordinator: _activityCoordinator
         )
         _aiService = ModelRoutingAIService(
             openRouterService: openRouterService,
@@ -108,7 +110,8 @@ class DependencyContainer: ObservableObject {
                     aiService: _aiService,
                     errorManager: errorManager,
                     fileSystemService: _fileSystemService,
-                    fileEditorService: _fileEditorService
+                    fileEditorService: _fileEditorService,
+                    activityCoordinator: _activityCoordinator
                 ),
                 environment: ConversationManager.EnvironmentDependencies(
                     workspaceService: _workspaceService,
@@ -400,6 +403,12 @@ class DependencyContainer: ObservableObject {
     private var _aiService: AIService
     private var _conversationManager: ConversationManagerProtocol
     private var _projectCoordinator: ProjectCoordinator
+    private let _activityCoordinator: AgentActivityCoordinating
+    
+    /// Accessor for activity coordinator (for integration with other services)
+    var activityCoordinator: AgentActivityCoordinating {
+        return _activityCoordinator
+    }
 }
 
 // MARK: - Testing Support

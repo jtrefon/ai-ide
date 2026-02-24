@@ -43,9 +43,12 @@ extension CodebaseIndex: MemoryEmbeddingSearchProviding {
         
         // CRITICAL: Run embedding generation off the main thread to avoid blocking UI.
         // Embedding generation can take 100ms-1s+ on NPU/CPU, which would freeze the app.
+        // Also wrap with power management to prevent sleep during long operations.
         let generator = memoryEmbeddingGenerator
         let queryVector = try await Task.detached(priority: .userInitiated) {
-            try await generator.generateEmbedding(for: userInput)
+            try await AgentActivityCoordinator.shared.withActivity(type: .embeddingGeneration) {
+                try await generator.generateEmbedding(for: userInput)
+            }
         }.value
 
         guard !queryVector.isEmpty else {

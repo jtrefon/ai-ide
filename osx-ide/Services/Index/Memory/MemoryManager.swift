@@ -132,7 +132,10 @@ public actor MemoryManager {
         guard entry.tier == .longTerm else { return }
 
         do {
-            let vector = try await embeddingGenerator.generateEmbedding(for: entry.content)
+            // Wrap embedding generation with power management to prevent sleep
+            let vector = try await AgentActivityCoordinator.shared.withActivity(type: .embeddingGeneration) {
+                try await embeddingGenerator.generateEmbedding(for: entry.content)
+            }
             guard !vector.isEmpty else { return }
             try await database.saveMemoryEmbedding(
                 memoryId: entry.id,
