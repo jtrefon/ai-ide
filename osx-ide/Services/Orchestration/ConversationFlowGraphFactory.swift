@@ -11,23 +11,73 @@ enum ConversationFlowGraphFactory {
         finalResponseHandler: FinalResponseHandler,
         qaReviewHandler: QAReviewHandler
     ) -> OrchestrationGraph {
-        let dispatcherNodeId = DispatcherNode.idValue
-        let toolLoopNodeId = ToolLoopNode.idValue
-        let finalResponseNodeId = FinalResponseNode.idValue
+        let strategicPlanningNodeId = StrategicPlanningNode.idValue
+        let tacticalPlanningNodeId = TacticalPlanningNode.idValue
+        let toolLoopAfterReasoningNodeId = "tool_loop_after_reasoning"
+        let toolLoopAfterDeliveryGateNodeId = "tool_loop_after_delivery_gate"
+        let toolLoopAfterFinalDeliveryNodeId = "tool_loop_after_final_delivery"
+        let emptyResponseRecoveryNodeId = "empty_response_recovery"
+        let finalDeliveryCompletionNodeId = "final_delivery_completion"
         let postFinalReasoningCorrectionsNodeId = "post_final_reasoning_corrections"
 
         return OrchestrationGraph(
-            entryNodeId: dispatcherNodeId,
+            entryNodeId: InitialResponseNode.idValue,
             nodes: [
-                DispatcherNode(
+                InitialResponseNode(
                     historyCoordinator: historyCoordinator,
                     handler: initialResponseHandler,
-                    toolLoopNodeId: toolLoopNodeId,
-                    finalResponseNodeId: finalResponseNodeId
+                    nextNodeId: strategicPlanningNodeId
+                ),
+                StrategicPlanningNode(
+                    historyCoordinator: historyCoordinator,
+                    nextNodeId: tacticalPlanningNodeId
+                ),
+                TacticalPlanningNode(
+                    historyCoordinator: historyCoordinator,
+                    nextNodeId: ToolLoopNode.idValue
                 ),
                 ToolLoopNode(
                     handler: toolLoopHandler,
-                    nextNodeId: dispatcherNodeId  // Loop back to dispatcher for next turn/eval
+                    nextNodeId: ReasoningCorrectionsNode.idValue
+                ),
+                ReasoningCorrectionsNode(
+                    handler: reasoningCorrectionsHandler,
+                    nextNodeId: toolLoopAfterReasoningNodeId
+                ),
+                ConditionalToolLoopNode(
+                    id: toolLoopAfterReasoningNodeId,
+                    handler: toolLoopHandler,
+                    nextNodeId: DeliveryGateNode.idValue,
+                    toolLoopNodeId: ToolLoopNode.idValue
+                ),
+                DeliveryGateNode(
+                    historyCoordinator: historyCoordinator,
+                    handler: reasoningCorrectionsHandler,
+                    nextNodeId: toolLoopAfterDeliveryGateNodeId
+                ),
+                ConditionalToolLoopNode(
+                    id: toolLoopAfterDeliveryGateNodeId,
+                    handler: toolLoopHandler,
+                    nextNodeId: emptyResponseRecoveryNodeId,
+                    toolLoopNodeId: ToolLoopNode.idValue
+                ),
+                EmptyResponseRecoveryNode(
+                    id: emptyResponseRecoveryNodeId,
+                    historyCoordinator: historyCoordinator,
+                    aiInteractionCoordinator: aiInteractionCoordinator,
+                    toolLoopHandler: toolLoopHandler,
+                    nextNodeId: finalDeliveryCompletionNodeId
+                ),
+                DeliveryCompletionNode(
+                    id: finalDeliveryCompletionNodeId,
+                    handler: reasoningCorrectionsHandler,
+                    nextNodeId: toolLoopAfterFinalDeliveryNodeId
+                ),
+                ConditionalToolLoopNode(
+                    id: toolLoopAfterFinalDeliveryNodeId,
+                    handler: toolLoopHandler,
+                    nextNodeId: FinalResponseNode.idValue,
+                    toolLoopNodeId: ToolLoopNode.idValue
                 ),
                 FinalResponseNode(
                     handler: finalResponseHandler,
@@ -36,8 +86,13 @@ enum ConversationFlowGraphFactory {
                 PostFinalReasoningCorrectionsNode(
                     id: postFinalReasoningCorrectionsNodeId,
                     handler: reasoningCorrectionsHandler,
-                    nextNodeId: nil  // End after corrections for now, or route to QA
+                    nextNodeId: QAToolOutputReviewNode.idValue
                 ),
+                QAToolOutputReviewNode(
+                    handler: qaReviewHandler,
+                    nextNodeId: QAQualityReviewNode.idValue
+                ),
+                QAQualityReviewNode(handler: qaReviewHandler)
             ]
         )
     }

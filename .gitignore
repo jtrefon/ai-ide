@@ -1,4 +1,18 @@
 verify_build_tests_*.txt
+build_output.txt
+build_*.txt
+*.log
+
+# Debug and test files
+debug_*.swift
+test_*.swift
+debug_*
+old_*.swift
+
+# Build directories
+.build-tests-*/
+.build-tests*/
+.build*/
 
 .ide/index/
 .ide/index/**
