@@ -1,2 +1,18 @@
 tools:
     - trivy@0.66.0
+
+exclude:
+    - '**/sandbox/**'
+    - '**/venv/**'
+    - '**/venv312/**'
+    - '**/.build/**'
+    - '**/.build-tests/**'
+    - '**/Packages/**'
+    - '**/node_modules/**'
+    - '**/*.xcodeproj/**'
+    - '**/*.xcworkspace/**'
+    - '**/*.xcresult/**'
+    - '**/build_output.txt'
+    - '**/test.patch'
+    - '**/debug.swift'
+    - '**/old_handler.swift'
