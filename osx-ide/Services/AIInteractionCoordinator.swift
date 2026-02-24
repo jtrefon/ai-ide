@@ -70,26 +70,44 @@ final class AIInteractionCoordinator {
         let maxAttempts = 7
         var lastError: AppError?
         let settings = settingsStore.load(includeApiKey: false)
+        let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
+        let retriever: (any RAGRetriever)?
+        if let codebaseIndex, shouldUseRAGRetrieval() {
+            retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
+        } else {
+            retriever = nil
+        }
+        let augmentedContext = await RAGContextBuilder.buildContext(
+            userInput: userInput,
+            explicitContext: request.explicitContext,
+            retriever: retriever,
+            projectRoot: request.projectRoot,
+            eventBus: eventBus
+        )
 
         for attempt in 1...maxAttempts {
-            let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
-            let retriever: (any RAGRetriever)?
-            if let codebaseIndex, shouldUseRAGRetrieval() {
-                retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
+            let retryMessages: [ChatMessage]
+            if attempt > 1 {
+                let retryReason = lastError?.localizedDescription ?? "previous attempt failed"
+                let retryPromptTemplate = PromptRepository.shared.prompt(
+                    key: "ConversationFlow/Corrections/retry_context_message",
+                    defaultValue: "Retry context:\n- Attempt: {{attempt}}/{{max_attempts}}\n- Reason for retry: {{retry_reason}}\n- Keep the same user goal and conversation context.\n- Do not repeat the same failed action unchanged.\n- If tools are needed, provide a concise progress update (completed step + next step + how), then return tool calls.",
+                    projectRoot: request.projectRoot
+                )
+                let retryContextMessage = ChatMessage(
+                    role: .system,
+                    content: retryPromptTemplate
+                        .replacingOccurrences(of: "{{attempt}}", with: String(attempt))
+                        .replacingOccurrences(of: "{{max_attempts}}", with: String(maxAttempts))
+                        .replacingOccurrences(of: "{{retry_reason}}", with: retryReason)
+                )
+                retryMessages = sanitizedMessages + [retryContextMessage]
             } else {
-                retriever = nil
+                retryMessages = sanitizedMessages
             }
 
-            let augmentedContext = await RAGContextBuilder.buildContext(
-                userInput: userInput,
-                explicitContext: request.explicitContext,
-                retriever: retriever,
-                projectRoot: request.projectRoot,
-                eventBus: eventBus
-            )
-
             let historyRequest = AIServiceHistoryRequest(
-                messages: sanitizedMessages,
+                messages: retryMessages,
                 context: augmentedContext,
                 tools: filteredTools,
                 mode: request.mode,

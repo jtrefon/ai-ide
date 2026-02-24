@@ -23,6 +23,10 @@ final class FinalResponseHandler {
     ) async throws -> AIServiceResponse {
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
+        if isDeterministicFallbackResponse(draft) {
+            return response
+        }
+
         // In Agent mode, always request a final response to ensure proper completion message
         // The model may return generic status text but we want a summary
         if mode == .agent && !draft.isEmpty {
@@ -72,6 +76,11 @@ final class FinalResponseHandler {
         }
 
         return genericPatterns.contains { lowercased.contains($0) }
+    }
+
+    private func isDeterministicFallbackResponse(_ content: String) -> Bool {
+        let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.hasPrefix("I wasn't able to generate a final response")
     }
 
     private func requestFinalResponse(

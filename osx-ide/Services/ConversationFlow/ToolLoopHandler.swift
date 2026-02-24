@@ -90,6 +90,7 @@ final class ToolLoopHandler {
             let currentToolCallSignatures = Set(uniqueToolCalls.map(toolCallSignature))
             let repeatedCompletedSignatures = currentToolCallSignatures.intersection(previouslyCompletedToolCallSignatures)
             if !repeatedCompletedSignatures.isEmpty {
+                ToolExecutionTelemetry.shared.recordRepeatedToolCallSignatures(count: repeatedCompletedSignatures.count)
                 await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_completed_signature", data: [
                     "runId": runId,
                     "iteration": toolIteration,
@@ -108,6 +109,7 @@ final class ToolLoopHandler {
             }
             let repeatedFailedSignatures = currentToolCallSignatures.intersection(previouslyFailedToolCallSignatures)
             if !repeatedFailedSignatures.isEmpty {
+                ToolExecutionTelemetry.shared.recordRepeatedToolCallSignatures(count: repeatedFailedSignatures.count)
                 await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_failed_signature", data: [
                     "runId": runId,
                     "iteration": toolIteration,
@@ -282,7 +284,10 @@ final class ToolLoopHandler {
 
             markCancelledToolCalls(toolCalls: uniqueToolCalls, cancelledToolCallIds: cancelledToolCallIds())
 
-            let statusSummary = buildGenericToolExecutionStatusSummary()
+            let statusSummary = buildGenericToolExecutionStatusSummary(
+                toolCalls: uniqueToolCalls,
+                iteration: toolIteration
+            )
             if !hasModelStepUpdate && !hasReasoning {
                 let statusSignature = assistantUpdateSignature(
                     content: statusSummary,
@@ -731,14 +736,29 @@ final class ToolLoopHandler {
         )
     }
 
-    private func buildGenericToolExecutionStatusSummary() -> String {
-        // This is shown when model doesn't provide a user-facing update
-        // Keep it brief and informative
-        return "Continuing with next step..."
+    private func buildGenericToolExecutionStatusSummary(
+        toolCalls: [AIToolCall],
+        iteration: Int
+    ) -> String {
+        let callPreview = toolCalls.prefix(2).map { toolCall in
+            let target = (toolCall.arguments["path"] as? String)
+                ?? (toolCall.arguments["target_file"] as? String)
+                ?? "project files"
+            return "\(toolCall.name) on \(target)"
+        }.joined(separator: "; ")
+
+        let moreCount = max(0, toolCalls.count - 2)
+        let suffix = moreCount > 0 ? " (+\(moreCount) more)" : ""
+        return "Update (step \(iteration)): Prepared this execution step and now running \(callPreview)\(suffix) to move the implementation forward."
     }
 
     private func toolLoopStepUpdateInstructionMessage(consecutiveReadOnlyIterations: Int = 0) -> ChatMessage {
-        var content = "Before returning tool calls, include either (a) a short <ide_reasoning> block with Analyze/Plan/Action bullets or (b) at minimum one short user-facing update sentence explaining what you will do next and why. Then return tool calls. Do not ask the user for additional input."
+        let baseInstruction = PromptRepository.shared.prompt(
+            key: "ConversationFlow/Corrections/tool_loop_step_update_instruction",
+            defaultValue: "Before returning tool calls, include either (a) a short <ide_reasoning> block with Analyze/Plan/Action bullets or (b) one short user-facing update sentence that states what was just completed and what you will do next (and how). Then return tool calls. Do not ask the user for additional input.",
+            projectRoot: nil
+        )
+        var content = baseInstruction
         
         // Add nudge after consecutive read-only tool iterations
         if consecutiveReadOnlyIterations >= ToolLoopConstants.readOnlyIterationNudgeThreshold {
@@ -867,7 +887,11 @@ final class ToolLoopHandler {
     ) async throws -> AIServiceResponse {
         let followupSystem = ChatMessage(
             role: .system,
-            content: "The implementation plan is not complete yet. Continue with the next unfinished checklist item. Include a short reasoning/update, then return tool calls. Do not finish with a final answer yet."
+            content: PromptRepository.shared.prompt(
+                key: "ConversationFlow/Corrections/plan_incomplete_continue",
+                defaultValue: "The implementation plan is not complete yet. Continue with the next unfinished checklist item. Include a short reasoning/update, then return tool calls. Do not finish with a final answer yet.",
+                projectRoot: projectRoot
+            )
         )
         return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
@@ -919,14 +943,13 @@ final class ToolLoopHandler {
     ) async -> [ChatMessage] {
         let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
 
-        var parts: [String] = []
-        parts.append("You are a coding assistant. Your job right now is to execute the task with tools.")
-        parts.append("If helpful, include a concise <ide_reasoning> block before your update.")
-        parts.append("RESPONSE FORMAT (required):")
-        parts.append("1) Optional: <ide_reasoning> with short Analyze/Plan/Action bullets only.")
-        parts.append("2) Then one short user-facing update sentence stating what you will do next and why.")
-        parts.append("3) Then return the tool calls needed for that step.")
-        parts.append("Keep reasoning and update concise. Do not ask the user for input.")
+        var parts: [String] = [
+            PromptRepository.shared.prompt(
+                key: "ConversationFlow/Corrections/tool_loop_focused_execution",
+                defaultValue: "You are a coding assistant. Your job right now is to execute the task with tools. If helpful, include a concise <ide_reasoning> block before your update. RESPONSE FORMAT (required): 1) Optional: <ide_reasoning> with short Analyze/Plan/Action bullets only. 2) Then one short user-facing update sentence stating what you will do next and why. 3) Then return the tool calls needed for that step. Keep reasoning and update concise. Do not ask the user for input.",
+                projectRoot: projectRoot
+            )
+        ]
 
         if !plan.isEmpty {
             parts.append("Plan:\n\(plan)")
@@ -961,26 +984,16 @@ final class ToolLoopHandler {
                     "toolSummaryLength": toolSummary.count
                 ])
                 
+                let executionPromptTemplate = PromptRepository.shared.prompt(
+                    key: "ConversationFlow/Corrections/tool_loop_execution_transition",
+                    defaultValue: "You have been gathering context with read-only tools but haven't made any changes yet. The user's request requires EXECUTION, not just exploration. You MUST now transition to execution: 1. Use write_files for multi-file scaffolding and coordinated creation 2. Use write_file only for single-file creation/overwrite 3. Use replace_in_file to modify existing files 4. Use run_command for build/test commands. Proceed with execution now using the available write/edit tools. User request:\n{{user_input}}\n\nContext gathered:\n{{tool_summary}}",
+                    projectRoot: projectRoot
+                )
                 let executionPrompt = ChatMessage(
                     role: .system,
-                    content: """
-                    You have been gathering context with read-only tools but haven't made any changes yet.
-                    The user's request requires EXECUTION, not just exploration.
-                    
-                    You MUST now transition to execution:
-                    1. Use write_files for multi-file scaffolding and coordinated creation
-                    2. Use write_file only for single-file creation/overwrite
-                    3. Use replace_in_file to modify existing files
-                    4. Use run_command for build/test commands
-                    
-                    Do NOT call more read-only tools (read_file, index_*, list_*).
-                    Proceed with execution now using the available write/edit tools.
-                    
-                    User request: \(userInput)
-                    
-                    Context gathered:
-                    \(toolSummary)
-                    """
+                    content: executionPromptTemplate
+                        .replacingOccurrences(of: "{{user_input}}", with: userInput)
+                        .replacingOccurrences(of: "{{tool_summary}}", with: toolSummary)
                 )
                 
                 let executionResponse = try await aiInteractionCoordinator
@@ -1006,11 +1019,16 @@ final class ToolLoopHandler {
         }
         
         // Fallback: request final response without tools
+        let correctionTemplate = PromptRepository.shared.prompt(
+            key: "ConversationFlow/Corrections/tool_loop_stalled_final_response",
+            defaultValue: "You kept calling tools without producing a user-visible response. Stop calling tools now and provide a final response in plain text.\n\nUser request:\n{{user_input}}\n\nTool outputs:\n{{tool_summary}}",
+            projectRoot: projectRoot
+        )
         let correctionSystem = ChatMessage(
             role: .system,
-            content: "You kept calling tools without producing a user-visible response. " +
-                "Stop calling tools now and provide a final response in plain text.\n\n" +
-                "User request:\n\(userInput)\n\nTool outputs:\n\(toolSummary)"
+            content: correctionTemplate
+                .replacingOccurrences(of: "{{user_input}}", with: userInput)
+                .replacingOccurrences(of: "{{tool_summary}}", with: toolSummary)
         )
         let correctionUser = ChatMessage(
             role: .user,
@@ -1128,21 +1146,16 @@ final class ToolLoopHandler {
         writeTargetSignature: String,
         availableTools: [AITool]
     ) async throws -> AIServiceResponse {
+        let correctionTemplate = PromptRepository.shared.prompt(
+            key: "ConversationFlow/Corrections/repeated_write_targets",
+            defaultValue: "You are repeatedly writing the same target files without completing the user's request.\n\nRepeated write targets: {{write_targets}}\n\nDiversify execution now by progressing missing work and returning concrete tool calls.\n\nUser request:\n{{user_input}}",
+            projectRoot: projectRoot
+        )
         let correctionSystem = ChatMessage(
             role: .system,
-            content: """
-            You are repeatedly writing the same target files without completing the user's request.
-
-            Repeated write targets: \(writeTargetSignature)
-
-            You MUST diversify execution now:
-            1. Do NOT rewrite the same target files unless strictly necessary.
-            2. Create or modify the remaining missing files required by the user request.
-            3. Return concrete tool calls that advance completion.
-
-            User request:
-            \(userInput)
-            """
+            content: correctionTemplate
+                .replacingOccurrences(of: "{{write_targets}}", with: writeTargetSignature)
+                .replacingOccurrences(of: "{{user_input}}", with: userInput)
         )
 
         return try await aiInteractionCoordinator
@@ -1167,23 +1180,16 @@ final class ToolLoopHandler {
         repeatedSignatures: [String],
         availableTools: [AITool]
     ) async throws -> AIServiceResponse {
+        let correctionTemplate = PromptRepository.shared.prompt(
+            key: "ConversationFlow/Corrections/repeated_tool_signatures",
+            defaultValue: "You just repeated the exact same tool-call signatures from the prior iteration.\n\nRepeated signatures:\n{{repeated_signatures}}\n\nPivot to a different sequence that advances completion, or finish with a concise final answer if no more tools are needed.\n\nUser request:\n{{user_input}}",
+            projectRoot: projectRoot
+        )
         let correctionSystem = ChatMessage(
             role: .system,
-            content: """
-            You just repeated the exact same tool-call signatures from the prior iteration.
-            Do not repeat already executed signatures without changed arguments.
-
-            Repeated signatures:
-            \(repeatedSignatures.map { "- \($0)" }.joined(separator: "\n"))
-
-            Next action requirements:
-            1. Pivot to a different tool call sequence that advances completion.
-            2. If no more tool calls are needed, return a concise final answer with no tool calls.
-            3. If you still need tools, change arguments, targets, or tool choice.
-
-            User request:
-            \(userInput)
-            """
+            content: correctionTemplate
+                .replacingOccurrences(of: "{{repeated_signatures}}", with: repeatedSignatures.map { "- \($0)" }.joined(separator: "\n"))
+                .replacingOccurrences(of: "{{user_input}}", with: userInput)
         )
 
         return try await aiInteractionCoordinator

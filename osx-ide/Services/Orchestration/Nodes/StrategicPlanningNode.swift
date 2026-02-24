@@ -23,10 +23,7 @@ struct StrategicPlanningNode: OrchestrationNode {
         if shouldReuseExistingPlan {
             plan = existingPlan
         } else {
-            plan = StrategicPlanSynthesizer.build(
-                userInput: state.request.userInput,
-                toolCalls: state.response?.toolCalls ?? []
-            )
+            plan = StrategicPlanSynthesizer.build(userInput: state.request.userInput)
         }
 
         await ConversationPlanStore.shared.set(conversationId: state.request.conversationId, plan: plan)
@@ -56,27 +53,5 @@ struct StrategicPlanningNode: OrchestrationNode {
             role: .assistant,
             content: plan
         ))
-    }
-}
-
-private enum StrategicPlanSynthesizer {
-    static func build(userInput: String, toolCalls: [AIToolCall]) -> String {
-        let toolNames = Array(Set(toolCalls.map(\.name))).sorted()
-        let toolLine = toolNames.isEmpty
-            ? "- [ ] Execute changes using the appropriate tools"
-            : "- [ ] Execute using: \(toolNames.joined(separator: ", "))"
-
-        return """
-        # Implementation Plan
-
-        **Goal:** \(userInput)
-
-        ## Strategy
-        1. [ ] Identify target files and understand current structure
-        2. [ ] Design minimal change set to satisfy the request
-        3. [ ] Implement changes
-        \(toolLine)
-        4. [ ] Verify correctness and report completion
-        """
     }
 }

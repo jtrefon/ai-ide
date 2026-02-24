@@ -411,6 +411,119 @@ final class AgenticHarnessTests: XCTestCase {
             serverCode.contains("renderToString") || serverCode.contains("renderToPipeableStream"),
             label: "SSR rendering API present")
     }
+
+    // MARK: - Test: JavaScript to TypeScript Migration Scenario
+
+    func testHarnessJavaScriptToTypeScriptMigration() async throws {
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+
+        let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
+        let manager = runtime.manager
+        manager.currentMode = .agent
+
+        print("\n=== Test: JavaScript -> TypeScript Migration ===")
+        print("Project root: \(projectRoot.path)")
+
+        let prompt = """
+            Create a small JavaScript utility project and migrate it to TypeScript.
+            1. Create package.json with scripts for build and test (do not run npm install)
+            2. Create src/math.js with add/subtract/divide functions
+            3. Migrate src/math.js to src/math.ts with explicit types
+            4. Add tsconfig.json
+            5. Remove obsolete JS implementation if replaced
+            Use tools only. Keep project runnable after migration.
+            """
+
+        try await sendProductionMessage(prompt, manager: manager, timeoutSeconds: 300)
+
+        let files = listAllFiles(under: projectRoot)
+        print("\nFiles after JS->TS migration: \(files.count)")
+        for file in files { print("  - \(file)") }
+
+        logHarnessCheck(files.contains("package.json"), label: "migration package.json created")
+        logHarnessCheck(files.contains("tsconfig.json"), label: "migration tsconfig created")
+        logHarnessCheck(files.contains("src/math.ts"), label: "migration TypeScript source created")
+
+        let migratedCode = try String(contentsOf: projectRoot.appendingPathComponent("src/math.ts"))
+        logHarnessCheck(migratedCode.contains(": number"), label: "migration typed signatures present")
+        logHarnessCheck(
+            migratedCode.contains("export") || migratedCode.contains("function"),
+            label: "migration usable TS module exported")
+    }
+
+    // MARK: - Test: Add Test Coverage Scenario
+
+    func testHarnessAddsTestCoverageForExistingModule() async throws {
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: projectRoot.appendingPathComponent("src", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        let moduleCode = """
+            export function normalizeName(value) {
+                if (!value) return "";
+                return value.trim().toLowerCase();
+            }
+
+            export function safeDivide(a, b) {
+                if (b === 0) return null;
+                return a / b;
+            }
+            """
+        try moduleCode.write(
+            to: projectRoot.appendingPathComponent("src/utils.js"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
+        let manager = runtime.manager
+        manager.currentMode = .agent
+
+        print("\n=== Test: Add Test Coverage ===")
+        print("Project root: \(projectRoot.path)")
+
+        let prompt = """
+            Add full unit test coverage for src/utils.js.
+            1. Create package.json with test script using vitest or jest (do not run install)
+            2. Create tests that cover normal and edge cases for normalizeName and safeDivide
+            3. Ensure divide-by-zero and empty input cases are covered
+            4. Keep source behavior unchanged
+            Use tools to create/modify files.
+            """
+
+        try await sendProductionMessage(prompt, manager: manager, timeoutSeconds: 300)
+
+        let files = listAllFiles(under: projectRoot)
+        print("\nFiles after coverage scenario: \(files.count)")
+        for file in files { print("  - \(file)") }
+
+        logHarnessCheck(files.contains("package.json"), label: "coverage package.json created")
+
+        let candidateTestFiles = files.filter {
+            $0.contains("test") || $0.contains("spec")
+        }
+        logHarnessCheck(!candidateTestFiles.isEmpty, label: "coverage test file created")
+
+        if let firstTestPath = candidateTestFiles.first {
+            let testCode = try String(contentsOf: projectRoot.appendingPathComponent(firstTestPath))
+            logHarnessCheck(
+                testCode.localizedCaseInsensitiveContains("normalizeName"),
+                label: "coverage includes normalizeName assertions")
+            logHarnessCheck(
+                testCode.localizedCaseInsensitiveContains("safeDivide"),
+                label: "coverage includes safeDivide assertions")
+            logHarnessCheck(
+                testCode.contains("0") || testCode.localizedCaseInsensitiveContains("null"),
+                label: "coverage includes divide-by-zero behavior")
+        }
+    }
+
     // MARK: - Test: Complex Architecture Refactor Scenario
 
     func testHarnessComplexArchitectureRefactor() async throws {
