@@ -15,6 +15,7 @@ final class ConversationManagerTests: XCTestCase {
     var manager: ConversationManager!
     var mockAIService: MockAIService!
     var mockErrorManager: MockErrorManager!
+    var mockActivityCoordinator: AgentActivityCoordinator!
     let historyKey = "AIChatHistory"
 
     override func setUp() async throws {
@@ -22,6 +23,7 @@ final class ConversationManagerTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: historyKey)
         mockAIService = MockAIService()
         mockErrorManager = MockErrorManager()
+        mockActivityCoordinator = AgentActivityCoordinator(powerManagementService: MockPowerManagementService())
         let eventBus = EventBus()
         let fileSystemService = FileSystemService()
         let workspaceService = WorkspaceService(
@@ -35,7 +37,8 @@ final class ConversationManagerTests: XCTestCase {
                     aiService: mockAIService,
                     errorManager: mockErrorManager,
                     fileSystemService: fileSystemService,
-                    fileEditorService: nil
+                    fileEditorService: nil,
+                    activityCoordinator: mockActivityCoordinator
                 ),
                 environment: ConversationManager.EnvironmentDependencies(
                     workspaceService: workspaceService,
