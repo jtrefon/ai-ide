@@ -9,8 +9,7 @@ import XCTest
 @testable import osx_ide
 
 /// Mock power management service for testing
-@MainActor
-final class MockPowerManagementService: PowerManagementServiceProtocol {
+final class MockPowerManagementService: PowerManagementServiceProtocol, @unchecked Sendable {
     var isActive: Bool = false
     var beginPreventingSleepCallCount = 0
     var stopPreventingSleepCallCount = 0

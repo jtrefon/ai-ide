@@ -43,17 +43,6 @@
          </TestableReference>
          <TestableReference
             skipped = "NO"
-            parallelizable = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "7A11AA082F90000100C0DE01"
-               BuildableName = "osx-ideHarnessTests.xctest"
-               BlueprintName = "osx-ideHarnessTests"
-               ReferencedContainer = "container:osx-ide.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
             parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
