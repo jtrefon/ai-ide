@@ -65,11 +65,12 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 .help(localized("file_explorer.refresh_help"))
             }
             .padding(8)
-            .frame(height: 48) // Slightly taller for search bar
+            .frame(height: 48)  // Slightly taller for search bar
             .background(Color(NSColor.windowBackgroundColor))
             // Modern macOS v26 file tree with subtle styling
             ModernFileTreeView(
-                rootURL: context.workspace.currentDirectory ?? FileManager.default.temporaryDirectory,
+                rootURL: context.workspace.currentDirectory
+                    ?? FileManager.default.temporaryDirectory,
                 searchQuery: $searchQuery,
                 expandedRelativePaths: Binding(
                     get: { context.fileTreeExpandedRelativePaths },
@@ -133,6 +134,8 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 fontFamily: context.ui.fontFamily
             )
             .background(Color(NSColor.windowBackgroundColor))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .layoutPriority(1)
             // SwiftUI context menu disabled to allow NSOutlineView native menu
             // .contextMenu {
             //     Button(localized("file_tree.context.new_file")) {
@@ -148,12 +151,14 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 VStack(spacing: 20) {
                     Text(localized("file_tree.create_file.title"))
                         .font(.headline)
-                    TextField(localized("file_tree.create_file.name_placeholder"), text: $newFileName)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .padding()
-                        .onSubmit {
-                            createNewFile()
-                        }
+                    TextField(
+                        localized("file_tree.create_file.name_placeholder"), text: $newFileName
+                    )
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding()
+                    .onSubmit {
+                        createNewFile()
+                    }
                     HStack {
                         Button(localized("common.cancel")) {
                             isShowingNewFileSheet = false
@@ -162,7 +167,8 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                         Button(localized("common.create")) {
                             createNewFile()
                         }
-                        .disabled(newFileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(
+                            newFileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .padding(.horizontal)
                 }
@@ -173,12 +179,14 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 VStack(spacing: 20) {
                     Text(localized("file_tree.create_folder.title"))
                         .font(.headline)
-                    TextField(localized("file_tree.create_folder.name_placeholder"), text: $newFolderName)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .padding()
-                        .onSubmit {
-                            createNewFolder()
-                        }
+                    TextField(
+                        localized("file_tree.create_folder.name_placeholder"), text: $newFolderName
+                    )
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding()
+                    .onSubmit {
+                        createNewFolder()
+                    }
                     HStack {
                         Button(localized("common.cancel")) {
                             isShowingNewFolderSheet = false
@@ -187,7 +195,8 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                         Button(localized("common.create")) {
                             createNewFolder()
                         }
-                        .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(
+                            newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .padding(.horizontal)
                 }
@@ -199,7 +208,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
         .onAppear {
             syncSelectionFromAppState()
         }
-        .onChange(of: context.workspace.currentDirectory) {
+        .onReceive(context.workspace.$currentDirectory) { _ in
             refreshToken += 1
             syncSelectionFromAppState()
         }

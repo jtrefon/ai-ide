@@ -103,6 +103,19 @@ public class DatabaseManager {
         try memoryManager.deleteMemory(id: id)
     }
 
+    public func saveMemoryEmbedding(memoryId: String, modelId: String, vector: [Float]) throws {
+        try memoryManager.saveMemoryEmbedding(memoryId: memoryId, modelId: modelId, vector: vector)
+    }
+
+    public func searchSimilarMemories(
+        modelId: String,
+        queryVector: [Float],
+        limit: Int,
+        tier: MemoryTier?
+    ) throws -> [MemorySimilarityResult] {
+        try memoryManager.searchSimilarMemories(modelId: modelId, queryVector: queryVector, limit: limit, tier: tier)
+    }
+
     public func saveSymbols(_ symbols: [Symbol]) throws {
         try symbolManager.saveSymbols(symbols)
     }
@@ -129,6 +142,10 @@ public class DatabaseManager {
 
     public func findResourceMatches(query: String, limit: Int) throws -> [IndexedFileMatch] {
         try queryExecutor.findResourceMatches(query: query, limit: limit)
+    }
+
+    public func pruneResourcesOutside(projectRoot: URL) throws -> Int {
+        try queryExecutor.pruneResourcesOutside(projectRoot: projectRoot)
     }
 
     public func getResourceLastModified(resourceId: String) throws -> Double? {
@@ -243,6 +260,17 @@ public class DatabaseManager {
             sqlite3_bind_int(statement, index, int32)
         } else if let int64 = value as? Int64 {
             sqlite3_bind_int64(statement, index, int64)
+        } else if let data = value as? Data {
+            data.withUnsafeBytes { bytes in
+                let boundPointer = bytes.bindMemory(to: UInt8.self).baseAddress
+                sqlite3_bind_blob(
+                    statement,
+                    index,
+                    boundPointer,
+                    Int32(data.count),
+                    unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+                )
+            }
         } else if value is NSNull {
             sqlite3_bind_null(statement, index)
         } else {
@@ -295,10 +323,28 @@ public class DatabaseManager {
         }
     }
 
+    /// Execute work on the database queue asynchronously.
+    /// Since DatabaseStore is an actor, it already provides isolation, so we use async to avoid blocking.
+    internal func asyncOnQueue<T: Sendable>(_ work: @escaping () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async {
+                do {
+                    let result = try work()
+                    continuation.resume(returning: result)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    /// Synchronous version for internal use when already on the queue.
+    /// WARNING: This should only be called from within asyncOnQueue or when already on the queue.
     internal func syncOnQueue<T>(_ work: () throws -> T) throws -> T {
         if DispatchQueue.getSpecific(key: queueKey) == queueID {
             return try work()
         }
+        // For legacy compatibility - but prefer asyncOnQueue
         return try queue.sync {
             try work()
         }

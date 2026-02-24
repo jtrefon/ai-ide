@@ -55,8 +55,19 @@ final class DatabaseSchemaManager {
             protection_level INTEGER NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS memory_embeddings (
+            memory_id TEXT NOT NULL,
+            model_id TEXT NOT NULL,
+            dimensions INTEGER NOT NULL,
+            vector_blob BLOB NOT NULL,
+            updated_at REAL NOT NULL,
+            PRIMARY KEY(memory_id, model_id),
+            FOREIGN KEY(memory_id) REFERENCES memories(id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_memories_tier ON memories(tier);
         CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category);
+        CREATE INDEX IF NOT EXISTS idx_memory_embeddings_model ON memory_embeddings(model_id);
         """
         try database.execute(sql: sql)
     }
@@ -71,6 +82,7 @@ final class DatabaseSchemaManager {
             columnDefinition: "INTEGER NOT NULL DEFAULT 0"
         )
         try ensureColumnExists(table: "resources", column: "summary", columnDefinition: "TEXT")
+        try database.execute(sql: "CREATE INDEX IF NOT EXISTS idx_memory_embeddings_model ON memory_embeddings(model_id);")
     }
 
     private func ensureColumnExists(table: String, column: String, columnDefinition: String) throws {

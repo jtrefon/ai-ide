@@ -26,8 +26,7 @@ public actor AppLogger {
     private let encoder: JSONEncoder
     private var config: LoggingConfiguration
 
-    private var baseLogsDir: URL
-    private var appLogFileURL: URL
+    // Project-local log file only
     private var projectLogFileURL: URL?
 
     public init(
@@ -40,15 +39,7 @@ public actor AppLogger {
         let enc = JSONEncoder()
         enc.outputFormatting = []
         self.encoder = enc
-
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-
-        self.baseLogsDir = appSupport.appendingPathComponent("osx-ide/Logs", isDirectory: true)
-
-        let date = ISO8601DateFormatter().string(from: Date()).prefix(10)
-        let datedDir = baseLogsDir.appendingPathComponent(String(date), isDirectory: true)
-        self.appLogFileURL = datedDir.appendingPathComponent("app.ndjson")
+        // Note: No fallback to Application Support - logs only go to project directory
     }
 
     public func updateConfiguration(_ configuration: LoggingConfiguration) {
@@ -66,7 +57,7 @@ public actor AppLogger {
     }
 
     public func logsDirectoryPath() -> String {
-        baseLogsDir.path
+        projectLogFileURL?.deletingLastPathComponent().path ?? "no log configured"
     }
 
     public func log(
@@ -184,29 +175,18 @@ public actor AppLogger {
     }
 
     private func write(record: LogRecord) {
+        guard let projectLogFileURL = projectLogFileURL else { return }
+        
         do {
-            try ensureDirectoryExists(for: appLogFileURL)
+            try ensureDirectoryExists(for: projectLogFileURL)
             let data = try encoder.encode(record)
             var line = Data()
             line.append(data)
             line.append(Data("\n".utf8))
 
-            try append(line: line, to: appLogFileURL)
-            if let projectLogFileURL {
-                try ensureDirectoryExists(for: projectLogFileURL)
-                try append(line: line, to: projectLogFileURL)
-            }
+            try append(line: line, to: projectLogFileURL)
         } catch {
-            Task {
-                await CrashReporter.shared.capture(
-                    error,
-                    context: CrashReportContext(operation: "AppLogger.write"),
-                    metadata: [:],
-                    file: #fileID,
-                    function: #function,
-                    line: #line
-                )
-            }
+            // Silently skip logging errors to avoid impacting app
         }
     }
 

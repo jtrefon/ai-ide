@@ -16,7 +16,15 @@ struct PathValidator {
 
         // Handle absolute vs relative paths
         if path.hasPrefix("/") {
-            url = URL(fileURLWithPath: path)
+            // If the absolute path is already within the project root, use it as is
+            let candidateURL = URL(fileURLWithPath: path).standardized
+            if candidateURL.path.hasPrefix(projectRoot.standardized.path) {
+                url = candidateURL
+            } else {
+                // Otherwise, strip the leading slash and treat it as relative to project root
+                let relativePath = String(path.dropFirst())
+                url = projectRoot.appendingPathComponent(relativePath)
+            }
         } else {
             url = projectRoot.appendingPathComponent(path)
         }

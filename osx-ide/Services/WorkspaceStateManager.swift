@@ -38,8 +38,12 @@ class WorkspaceStateManager: ObservableObject {
         let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
         if isDirectory {
             saveCurrentDirectory(url)
+            // Explicitly trigger objectWillChange to ensure all observers are notified
+            objectWillChange.send()
         } else {
             saveCurrentDirectory(url.deletingLastPathComponent())
+            // Explicitly trigger objectWillChange to ensure all observers are notified
+            objectWillChange.send()
             addToRecentlyOpened(url)
             onFileSelected?(url)
         }
@@ -49,18 +53,30 @@ class WorkspaceStateManager: ObservableObject {
     func openFolder() async {
         guard let url = await fileDialogService.openFolder() else { return }
         saveCurrentDirectory(url)
+        // Explicitly trigger objectWillChange to ensure all observers are notified
+        // This ensures SwiftUI views that observe this manager get updated
+        objectWillChange.send()
+        
+        // Notify the app state to refresh the file tree for the new directory
+        NotificationCenter.default.post(name: NSNotification.Name("WorkspaceDirectoryDidChange"), object: nil)
     }
 
     /// Navigate to parent directory
     func navigateToParent() {
         workspaceService.navigateToParent()
         currentDirectory = workspaceService.currentDirectory
+        // Explicitly trigger objectWillChange to ensure all observers are notified
+        objectWillChange.send()
+        NotificationCenter.default.post(name: NSNotification.Name("WorkspaceDirectoryDidChange"), object: nil)
     }
 
     /// Navigate to subdirectory
     func navigateTo(subdirectory: String) {
         workspaceService.navigateTo(subdirectory: subdirectory)
         currentDirectory = workspaceService.currentDirectory
+        // Explicitly trigger objectWillChange to ensure all observers are notified
+        objectWillChange.send()
+        NotificationCenter.default.post(name: NSNotification.Name("WorkspaceDirectoryDidChange"), object: nil)
     }
 
     // MARK: - File Management
@@ -113,6 +129,8 @@ class WorkspaceStateManager: ObservableObject {
             try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
             workspaceService.currentDirectory = projectURL
             currentDirectory = projectURL
+            // Explicitly trigger objectWillChange to ensure all observers are notified
+            objectWillChange.send()
         } catch {
             workspaceService.handleError(
                 .invalidFilePath("Failed to create project directory: \(error.localizedDescription)")

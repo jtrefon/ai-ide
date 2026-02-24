@@ -39,6 +39,16 @@ struct AgentSettingsTab: View {
                             .toggleStyle(.switch)
                             .accessibilityIdentifier("Settings.Agent.MemoryEnabled")
                     }
+
+                    SettingsRow(
+                        title: "QA review",
+                        subtitle: "Run an advisory QA pass after the agent completes a response.",
+                        systemImage: "checkmark.seal"
+                    ) {
+                        Toggle("", isOn: qaReviewEnabledBinding)
+                            .toggleStyle(.switch)
+                            .accessibilityIdentifier("Settings.Agent.QAReviewEnabled")
+                    }
                 }
             }
             .padding(.top, AppConstants.Settings.contentTopPadding)
@@ -56,6 +66,13 @@ struct AgentSettingsTab: View {
         Binding(
             get: { ui.agentMemoryEnabled },
             set: { ui.setAgentMemoryEnabled($0) }
+        )
+    }
+
+    private var qaReviewEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { ui.agentQAReviewEnabled },
+            set: { ui.setAgentQAReviewEnabled($0) }
         )
     }
 }

@@ -18,6 +18,14 @@ struct ReadFileTool: AITool {
                 "path": [
                     "type": "string",
                     "description": "The absolute path to the file to read."
+                ],
+                "start_line": [
+                    "type": "integer",
+                    "description": "Optional 1-based start line to read from."
+                ],
+                "end_line": [
+                    "type": "integer",
+                    "description": "Optional 1-based end line to read through (inclusive)."
                 ]
             ],
             "required": ["path"]
@@ -33,6 +41,51 @@ struct ReadFileTool: AITool {
             throw AppError.aiServiceError("Missing 'path' argument for read_file")
         }
         let url = try pathValidator.validateAndResolve(path)
-        return try fileSystemService.readFile(at: url)
+        let content = try fileSystemService.readFile(at: url)
+
+        let startLine = parseLineNumber(arguments["start_line"])
+        let endLine = parseLineNumber(arguments["end_line"])
+
+        guard startLine != nil || endLine != nil else {
+            return content
+        }
+
+        return extractLineRange(
+            from: content,
+            startLine: startLine ?? 1,
+            endLine: endLine
+        )
+    }
+
+    private func parseLineNumber(_ value: Any?) -> Int? {
+        switch value {
+        case let number as Int:
+            return number
+        case let number as Int32:
+            return Int(number)
+        case let number as Int64:
+            return Int(number)
+        case let number as Double:
+            return Int(number)
+        case let number as NSNumber:
+            return number.intValue
+        case let string as String:
+            return Int(string)
+        default:
+            return nil
+        }
+    }
+
+    private func extractLineRange(from content: String, startLine: Int, endLine: Int?) -> String {
+        let allLines = content.components(separatedBy: .newlines)
+        guard !allLines.isEmpty else { return "" }
+
+        let safeStart = max(1, startLine)
+        let safeEnd = min(max(safeStart, endLine ?? allLines.count), allLines.count)
+
+        let indexedSlice = (safeStart...safeEnd).map { lineNumber in
+            "\(lineNumber): \(allLines[lineNumber - 1])"
+        }
+        return indexedSlice.joined(separator: "\n")
     }
 }

@@ -9,6 +9,8 @@ import SwiftUI
 
 struct AISettingsTab: View {
     @ObservedObject var viewModel: OpenRouterSettingsViewModel
+    @ObservedObject var localModelViewModel: LocalModelSettingsViewModel
+    @ObservedObject var embeddingModelViewModel: EmbeddingModelSettingsViewModel
     @State private var showAdvanced = false
 
     private func localized(_ key: String) -> String {
@@ -155,6 +157,42 @@ struct AISettingsTab: View {
                         Toggle("", isOn: $viewModel.reasoningEnabled)
                             .toggleStyle(.switch)
                     }
+
+                    SettingsRow(
+                        title: "Tool prompt mode",
+                        subtitle: "Choose the instruction style used when tools are enabled.",
+                        systemImage: "text.quote"
+                    ) {
+                        Picker("", selection: $viewModel.toolPromptMode) {
+                            Text("Full static").tag(ToolPromptMode.fullStatic)
+                            Text("Concise").tag(ToolPromptMode.concise)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 220)
+                    }
+
+                    SettingsRow(
+                        title: "RAG during tool loop",
+                        subtitle: "When disabled, tool-loop turns skip RAG retrieval and use explicit context only.",
+                        systemImage: "rectangle.stack.badge.magnifyingglass"
+                    ) {
+                        Toggle("", isOn: $viewModel.ragEnabledDuringToolLoop)
+                            .toggleStyle(.switch)
+                    }
+                }
+
+                SettingsCard(
+                    title: "Local Models",
+                    subtitle: "Download and manage local/offline model artifacts."
+                ) {
+                    LocalModelSettingsView(viewModel: localModelViewModel)
+                }
+
+                SettingsCard(
+                    title: "Embedding Models",
+                    subtitle: "Download models for semantic search in the codebase index."
+                ) {
+                    EmbeddingModelSettingsView(viewModel: embeddingModelViewModel)
                 }
 
             }

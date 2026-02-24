@@ -27,6 +27,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
     public let reasoning: String?
     public let codeContext: String?
     public let timestamp: Date
+    public let isDraft: Bool // Marks temporary messages during streaming
 
     // Tool execution properties
     public let toolName: String?
@@ -39,7 +40,8 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         role: MessageRole,
         content: String,
         context: ChatMessageContentContext = ChatMessageContentContext(),
-        tool: ChatMessageToolContext = ChatMessageToolContext()
+        tool: ChatMessageToolContext = ChatMessageToolContext(),
+        isDraft: Bool = false
     ) {
         self.id = UUID()
         self.role = role
@@ -47,6 +49,30 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         self.reasoning = context.reasoning
         self.codeContext = context.codeContext
         self.timestamp = Date()
+        self.isDraft = isDraft
+        self.toolName = tool.toolName
+        self.toolStatus = tool.toolStatus
+        self.targetFile = tool.targetFile
+        self.toolCallId = tool.toolCallId
+        self.toolCalls = tool.toolCalls.isEmpty ? nil : tool.toolCalls
+    }
+
+    public init(
+        id: UUID,
+        role: MessageRole,
+        content: String,
+        timestamp: Date,
+        context: ChatMessageContentContext = ChatMessageContentContext(),
+        tool: ChatMessageToolContext = ChatMessageToolContext(),
+        isDraft: Bool = false
+    ) {
+        self.id = id
+        self.role = role
+        self.content = content
+        self.reasoning = context.reasoning
+        self.codeContext = context.codeContext
+        self.timestamp = timestamp
+        self.isDraft = isDraft
         self.toolName = tool.toolName
         self.toolStatus = tool.toolStatus
         self.targetFile = tool.targetFile

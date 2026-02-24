@@ -41,6 +41,7 @@ The application follows a layered architecture pattern:
 - **ConversationManager**: AI chat and conversation handling
 - **AIToolExecutor**: Tool execution and sandboxing
 - **IndexCoordinator**: Code indexing and symbol resolution
+- **PowerManagementService**: Prevents system sleep during agent activity
 
 #### 3. Core Layer (`Core/`)
 
@@ -206,6 +207,58 @@ private func debounceSearch() {
 - **Typed errors** using Swift's `Error` protocol
 - **Context-rich error messages** with operation context
 - **Graceful degradation** for non-critical failures
+
+### 6. Power Management
+
+The IDE prevents macOS sleep/screen saver during agent activity to ensure long-running operations complete successfully.
+
+**Implementation:**
+
+- **PowerManagementService**: Uses IOKit power assertions (`IOPMAssertionCreateWithName`) to prevent system sleep
+- **Automatic lifecycle**: Assertions are created when agent becomes active (`isSending = true`) and released when idle
+- **Power-conscious**: Uses `kIOPMAssertPreventUserIdleSystemSleep` which prevents system sleep but allows display to dim
+
+```swift
+@MainActor
+final class PowerManagementService: PowerManagementServiceProtocol {
+    func beginPreventingSleep() -> Bool {
+        // Creates IOKit power assertion
+        IOPMAssertionCreateWithName(
+            kIOPMAssertPreventUserIdleSystemSleep,
+            IOPMAssertionLevel(kIOPMAssertionLevelOn),
+            assertionName,
+            &assertionID
+        )
+    }
+    
+    func stopPreventingSleep() {
+        // Releases assertion, normal sleep behavior resumes
+        IOPMAssertionRelease(assertionID)
+    }
+}
+```
+
+**Integration with ConversationManager:**
+
+The service observes `isSending` state changes and automatically manages power assertions:
+
+```swift
+$isSending
+    .removeDuplicates()
+    .sink { [weak self] isSending in
+        if isSending {
+            powerManagementService.beginPreventingSleep()
+        } else {
+            powerManagementService.stopPreventingSleep()
+        }
+    }
+```
+
+**Safety guarantees:**
+
+- macOS automatically cleans up orphaned assertions if app crashes
+- Service is idempotent - multiple calls to begin/stop are safe
+- Protocol-based design allows mocking in unit tests
 
 #### Crash & Exception Capture (Centralized)
 

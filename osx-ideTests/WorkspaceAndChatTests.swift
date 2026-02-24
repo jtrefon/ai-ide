@@ -142,6 +142,9 @@ struct WorkspaceAndChatTests {
         }
         #expect(FileManager.default.fileExists(atPath: newURL.path), "Expected new path to exist")
 
+        // Wait for async events to be delivered on main thread
+        try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+
         #expect(capturedOld?.standardizedFileURL.path == file.standardizedFileURL.path, "Expected event oldUrl to match")
         #expect(capturedNew?.standardizedFileURL.path == newURL.standardizedFileURL.path, "Expected event newUrl to match")
     }
@@ -178,6 +181,10 @@ struct WorkspaceAndChatTests {
             !FileManager.default.fileExists(atPath: file.path),
             "Expected file to be removed from original location"
         )
+        
+        // Wait for async events to be delivered on main thread
+        try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        
         #expect(
             capturedDeleted?.standardizedFileURL.path == file.standardizedFileURL.path,
             "Expected delete event to reference the removed file"

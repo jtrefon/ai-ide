@@ -87,7 +87,13 @@ struct ReplaceInFileTool: AITool {
         let content = try fileSystemService.readFile(at: url)
 
         if !content.contains(oldText) {
-            return "Error: Could not find the specified old_text in the file. Make sure it matches exactly."
+            if content.contains(newText) {
+                return "No-op: content already in desired state for \(relativePath)"
+            }
+            throw AppError.aiServiceError(
+                "replace_in_file failed for \(relativePath): could not find old_text. " +
+                    "The match must be exact (including whitespace)."
+            )
         }
 
         let newContent = content.replacingOccurrences(of: oldText, with: newText)

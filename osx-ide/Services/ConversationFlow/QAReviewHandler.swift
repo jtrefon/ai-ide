@@ -27,7 +27,7 @@ final class QAReviewHandler {
         guard qaReviewEnabled, mode == .agent else { return response }
         guard !toolResults.isEmpty else { return response }
 
-        let toolSummary = toolResultsSummaryText(toolResults)
+        let toolSummary = ToolLoopUtilities.toolResultsSummaryText(toolResults)
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !draft.isEmpty else { return response }
 
@@ -93,7 +93,7 @@ final class QAReviewHandler {
             )
         }
 
-        await appendRunSnapshot(payload: RunSnapshotPayload(
+        await ToolLoopUtilities.appendRunSnapshot(
             runId: runId,
             conversationId: historyCoordinator.currentConversationId,
             phase: "tool_output_review",
@@ -103,7 +103,7 @@ final class QAReviewHandler {
             failureReason: nil,
             toolCalls: [],
             toolResults: toolResults
-        ))
+        )
 
         return response
     }
@@ -183,7 +183,7 @@ final class QAReviewHandler {
             )
         }
 
-        await appendRunSnapshot(payload: RunSnapshotPayload(
+        await ToolLoopUtilities.appendRunSnapshot(
             runId: runId,
             conversationId: historyCoordinator.currentConversationId,
             phase: "quality_review",
@@ -193,7 +193,7 @@ final class QAReviewHandler {
             failureReason: nil,
             toolCalls: [],
             toolResults: []
-        ))
+        )
 
         return response
     }
@@ -207,73 +207,5 @@ final class QAReviewHandler {
             "index_search_symbols"
         ])
         return tools.filter { allowed.contains($0.name) }
-    }
-
-    private func toolResultsSummaryText(_ toolResults: [ChatMessage]) -> String {
-        let lines = toolResults.compactMap { message -> String? in
-            guard let toolCallId = message.toolCallId else { return nil }
-            let status = message.toolStatus?.rawValue ?? "unknown"
-            let preview = truncate(toolOutputText(from: message), limit: 400)
-            return "- \(message.toolName ?? "unknown_tool") (\(toolCallId)) [\(status)]: \(preview)"
-        }
-        return lines.isEmpty ? "No tool outputs." : lines.joined(separator: "\n")
-    }
-
-    private func toolOutputText(from message: ChatMessage) -> String {
-        guard message.isToolExecution else { return message.content }
-        if let envelope = ToolExecutionEnvelope.decode(from: message.content) {
-            if let payload = envelope.payload?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !payload.isEmpty {
-                return payload
-            }
-            return envelope.message
-        }
-        return message.content
-    }
-
-    private func truncate(_ text: String, limit: Int) -> String {
-        if text.count <= limit { return text }
-        let head = text.prefix(limit)
-        return String(head) + "\n\n[TRUNCATED]"
-    }
-
-    private func appendRunSnapshot(payload: RunSnapshotPayload) async {
-        let snapshot = OrchestrationRunSnapshot(
-            runId: payload.runId,
-            conversationId: payload.conversationId,
-            phase: payload.phase,
-            iteration: payload.iteration,
-            timestamp: Date(),
-            userInput: payload.userInput,
-            assistantDraft: payload.assistantDraft,
-            failureReason: payload.failureReason,
-            toolCalls: toolCallSummaries(payload.toolCalls),
-            toolResults: toolResultSummaries(payload.toolResults)
-        )
-        try? await OrchestrationRunStore.shared.appendSnapshot(snapshot)
-    }
-
-    private func toolCallSummaries(_ toolCalls: [AIToolCall]) -> [OrchestrationRunSnapshot.ToolCallSummary] {
-        toolCalls.map {
-            OrchestrationRunSnapshot.ToolCallSummary(
-                id: $0.id,
-                name: $0.name,
-                argumentKeys: Array($0.arguments.keys).sorted()
-            )
-        }
-    }
-
-    private func toolResultSummaries(_ toolResults: [ChatMessage]) -> [OrchestrationRunSnapshot.ToolResultSummary] {
-        toolResults.compactMap { message in
-            guard let toolCallId = message.toolCallId else { return nil }
-            let output = toolOutputText(from: message)
-            return OrchestrationRunSnapshot.ToolResultSummary(
-                toolCallId: toolCallId,
-                toolName: message.toolName ?? "unknown_tool",
-                status: message.toolStatus?.rawValue ?? "unknown",
-                targetFile: message.targetFile,
-                outputPreview: truncate(output, limit: 1200)
-            )
-        }
     }
 }

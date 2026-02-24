@@ -6,7 +6,22 @@ extension CodebaseIndex {
     }
 
     public func searchSymbolsWithPaths(nameLike query: String, limit: Int = 50) async throws -> [SymbolSearchResult] {
-        try await queryService.searchSymbolsWithPaths(nameLike: query, limit: limit)
+        let rawResults = try await queryService.searchSymbolsWithPaths(nameLike: query, limit: limit)
+        return rawResults.compactMap { result in
+            if let absolutePath = result.filePath {
+                guard let relativePath = scopedRelativePath(from: absolutePath) else {
+                    return nil
+                }
+                return SymbolSearchResult(symbol: result.symbol, filePath: relativePath)
+            }
+
+            guard let resourcePath = pathFromResourceId(result.symbol.resourceId),
+                  let relativePath = scopedRelativePath(from: resourcePath) else {
+                return nil
+            }
+
+            return SymbolSearchResult(symbol: result.symbol, filePath: relativePath)
+        }
     }
 
     public func getSummaries(projectRoot: URL, limit: Int = 20) async throws -> [(path: String, summary: String)] {
@@ -19,5 +34,43 @@ extension CodebaseIndex {
 
     public func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
         try await memoryManager.addMemory(content: content, tier: tier, category: category)
+    }
+}
+
+extension CodebaseIndex: MemoryEmbeddingSearchProviding {
+    public func getRelevantMemories(userInput: String, limit: Int) async throws -> [MemorySimilarityResult] {
+        let safeLimit = max(1, limit)
+        
+        // CRITICAL: Run embedding generation off the main thread to avoid blocking UI.
+        // Embedding generation can take 100ms-1s+ on NPU/CPU, which would freeze the app.
+        // Also wrap with power management to prevent sleep during long operations.
+        let generator = memoryEmbeddingGenerator
+        let queryVector = try await Task.detached(priority: .userInitiated) {
+            try await AgentActivityCoordinator.shared.withActivity(type: .embeddingGeneration) {
+                try await generator.generateEmbedding(for: userInput)
+            }
+        }.value
+
+        guard !queryVector.isEmpty else {
+            let fallback = try await queryService.getMemories(tier: .longTerm)
+            return fallback.prefix(safeLimit).map { entry in
+                MemorySimilarityResult(entry: entry, similarityScore: 0)
+            }
+        }
+
+        let similar = try await queryService.searchSimilarMemories(
+            modelId: memoryEmbeddingGenerator.modelIdentifier,
+            queryVector: queryVector,
+            limit: safeLimit,
+            tier: .longTerm
+        )
+        if !similar.isEmpty {
+            return similar
+        }
+
+        let fallback = try await queryService.getMemories(tier: .longTerm)
+        return fallback.prefix(safeLimit).map { entry in
+            MemorySimilarityResult(entry: entry, similarityScore: 0)
+        }
     }
 }

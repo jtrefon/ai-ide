@@ -11,22 +11,14 @@ extension OpenRouterAIService {
         let systemContent = buildSystemContent(
             input: BuildSystemContentInput(
                 systemPrompt: settings.systemPrompt,
-                hasTools: request.tools != nil,
+                hasTools: request.tools?.isEmpty == false,
+                toolPromptMode: settings.toolPromptMode,
                 mode: request.mode,
                 projectRoot: request.projectRoot,
-                reasoningEnabled: settings.reasoningEnabled
+                reasoningEnabled: settings.reasoningEnabled,
+                stage: request.stage
             )
         )
-
-#if DEBUG
-        assertReasoningPromptDeterminism(
-            systemContent: systemContent,
-            mode: request.mode,
-            reasoningEnabled: settings.reasoningEnabled,
-            runId: request.runId,
-            stage: request.stage
-        )
-#endif
 
         let finalMessages = buildFinalMessages(
             systemContent: systemContent,
@@ -46,31 +38,6 @@ extension OpenRouterAIService {
         )
     }
 
-#if DEBUG
-    private func assertReasoningPromptDeterminism(
-        systemContent: String,
-        mode: AIMode?,
-        reasoningEnabled: Bool,
-        runId: String?,
-        stage: AIRequestStage?
-    ) {
-        let shouldIncludeReasoning = (mode == .agent && reasoningEnabled)
-        let hasReasoningMarker = systemContent.contains("<ide_reasoning>")
-
-        if shouldIncludeReasoning {
-            assert(
-                hasReasoningMarker,
-                "Invariant violated: reasoningEnabled is true in Agent mode but reasoning prompt is missing (runId=\(runId ?? "nil"), stage=\(stage?.rawValue ?? "nil"))"
-            )
-        } else {
-            assert(
-                !hasReasoningMarker,
-                "Invariant violated: reasoning prompt present when it should not be (mode=\(mode?.rawValue ?? "nil"), reasoningEnabled=\(reasoningEnabled), runId=\(runId ?? "nil"), stage=\(stage?.rawValue ?? "nil"))"
-            )
-        }
-    }
-#endif
-
     internal func loadSettingsSnapshot() -> SettingsSnapshot {
         let settings = settingsStore.load()
         return SettingsSnapshot(
@@ -78,7 +45,8 @@ extension OpenRouterAIService {
             model: settings.model.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
             systemPrompt: settings.systemPrompt.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
             baseURL: settings.baseURL,
-            reasoningEnabled: settings.reasoningEnabled
+            reasoningEnabled: settings.reasoningEnabled,
+            toolPromptMode: settings.toolPromptMode
         )
     }
 
@@ -93,7 +61,13 @@ extension OpenRouterAIService {
 
     internal func buildSystemContent(input: BuildSystemContentInput) -> String {
         var components: [String] = []
-        components.append(buildBaseSystemContent(systemPrompt: input.systemPrompt, hasTools: input.hasTools))
+        components.append(
+            buildBaseSystemContent(
+                systemPrompt: input.systemPrompt,
+                hasTools: input.hasTools,
+                toolPromptMode: input.toolPromptMode
+            )
+        )
 
         if let modeSystemAddition = buildModeSystemAddition(mode: input.mode) {
             components.append(modeSystemAddition)
@@ -105,21 +79,27 @@ extension OpenRouterAIService {
 
         if let reasoningPrompt = buildReasoningPromptIfNeeded(
             reasoningEnabled: input.reasoningEnabled,
-            mode: input.mode
+            mode: input.mode,
+            stage: input.stage
         ) {
             components.append(reasoningPrompt)
         }
 
-        return components.joined()
+        return components.joined(separator: "\n\n")
     }
 
-    internal func buildBaseSystemContent(systemPrompt: String, hasTools: Bool) -> String {
+    internal func buildBaseSystemContent(systemPrompt: String, hasTools: Bool, toolPromptMode: ToolPromptMode) -> String {
         if !systemPrompt.isEmpty {
             return systemPrompt
         }
 
         if hasTools {
-            return ToolAwarenessPrompt.systemPrompt
+            switch toolPromptMode {
+            case .fullStatic:
+                return ToolAwarenessPrompt.systemPrompt
+            case .concise:
+                return ToolAwarenessPrompt.structuredToolCallingSystemPrompt
+            }
         }
 
         return "You are a helpful, concise coding assistant."
@@ -142,9 +122,21 @@ extension OpenRouterAIService {
         """
     }
 
-    internal func buildReasoningPromptIfNeeded(reasoningEnabled: Bool, mode: AIMode?) -> String? {
+    internal func buildReasoningPromptIfNeeded(reasoningEnabled: Bool, mode: AIMode?, stage: AIRequestStage?) -> String? {
         guard let mode else { return nil }
         if mode != .agent || !reasoningEnabled { return nil }
+
+        if stage == .tool_loop {
+            return """
+
+            ## Reasoning
+            During tool loop execution, prioritize actionable tool calls.
+            Keep reasoning brief and optional.
+            Do not output code blocks or pseudo-tool JSON when tools are available.
+            Keep user-facing updates extremely concise (1 short sentence) unless the user explicitly asks for detailed explanation.
+            """
+        }
+
         return """
 
         ## Reasoning
@@ -157,9 +149,11 @@ extension OpenRouterAIService {
         - If no action is needed, write 'None' in Action.
         - Delivery MUST start with either 'DONE' or 'NEEDS_WORK'. Use DONE only when the task is fully complete.
         - Keep it concise and actionable; use short bullets or short sentences.
+        - Prefer depth over verbosity: keep reasoning information-dense and avoid repetitive prose.
         - Do NOT include code blocks in <ide_reasoning>.
         - Do NOT use placeholders like '...' or copy the format example text verbatim.
-        - After </ide_reasoning>, provide the normal user-facing answer as usual (markdown allowed).
+        - After </ide_reasoning>, provide a condensed user-facing update (1-3 short bullets max).
+        - Expand user-facing detail only when the user explicitly asks for it.
 
         Format example:
         <ide_reasoning>

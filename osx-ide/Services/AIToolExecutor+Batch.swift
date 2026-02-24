@@ -112,7 +112,8 @@ extension AIToolExecutor {
                 toolName: toolCall.name,
                 status: .failed,
                 targetFile: targetFile,
-                toolCallId: toolCall.id
+                toolCallId: toolCall.id,
+                preview: nil
             )
         )
     }
@@ -127,7 +128,8 @@ extension AIToolExecutor {
                 toolName: toolCall.name,
                 status: .failed,
                 targetFile: targetFile,
-                toolCallId: toolCall.id
+                toolCallId: toolCall.id,
+                preview: nil
             )
         )
     }
@@ -137,13 +139,19 @@ extension AIToolExecutor {
         targetFile: String?,
         onProgress: @MainActor @Sendable @escaping (ChatMessage) -> Void
     ) {
+        let preview = Self.buildInvocationPreview(
+            toolName: toolCall.name,
+            targetFile: targetFile,
+            arguments: toolCall.arguments
+        )
         let executingMsg = Self.makeToolExecutionMessage(
             content: "Executing \(toolCall.name)...",
             context: ToolExecutionMessageContext(
                 toolName: toolCall.name,
                 status: .executing,
                 targetFile: targetFile,
-                toolCallId: toolCall.id
+                toolCallId: toolCall.id,
+                preview: preview
             )
         )
         onProgress(executingMsg)

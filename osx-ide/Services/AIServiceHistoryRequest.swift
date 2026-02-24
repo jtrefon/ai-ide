@@ -3,6 +3,8 @@ import Foundation
 public enum AIRequestStage: String, Codable, Sendable {
     case warmup
     case initial_response
+    case strategic_planning
+    case tactical_planning
     case tool_loop
     case delivery_gate
     case final_response
@@ -19,6 +21,7 @@ public struct AIServiceHistoryRequest: Sendable {
     public let projectRoot: URL?
     public let runId: String?
     public let stage: AIRequestStage?
+    public let conversationId: String?
 
     public init(
         messages: [ChatMessage],
@@ -27,7 +30,8 @@ public struct AIServiceHistoryRequest: Sendable {
         mode: AIMode?,
         projectRoot: URL?,
         runId: String? = nil,
-        stage: AIRequestStage? = nil
+        stage: AIRequestStage? = nil,
+        conversationId: String? = nil
     ) {
         self.messages = messages
         self.context = context
@@ -36,5 +40,6 @@ public struct AIServiceHistoryRequest: Sendable {
         self.projectRoot = projectRoot
         self.runId = runId
         self.stage = stage
+        self.conversationId = conversationId
     }
 }

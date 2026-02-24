@@ -36,83 +36,67 @@ struct ReasoningMessageView: View {
                 .textSelection(.enabled)
             }
 
-            // Reasoning toggle button
             reasoningToggleButton
 
-            // Reasoning content (when not hidden)
             if !isReasoningHidden {
                 reasoningContent
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color.gray.opacity(0.12))
+        .background(Color.gray.opacity(0.06))
         .cornerRadius(14)
-        .frame(maxWidth: 400)
     }
 
     // MARK: - Private Components
 
     private var reasoningToggleButton: some View {
-        HStack {
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isReasoningHidden.toggle()
-                }
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: isReasoningHidden ? "eye.slash" : "eye")
-                        .font(.system(size: 10, weight: .medium))
-
-                    Text(localized("reasoning.title"))
-                        .font(.caption2)
-                        .fontWeight(.medium)
-                }
-                .foregroundColor(.secondary)
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isReasoningHidden.toggle()
             }
-            .buttonStyle(.borderless)
-
-            if !isReasoningHidden {
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "brain")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.accentColor)
+                Text(localized("reasoning.title"))
+                    .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .medium))
+                    .foregroundColor(.primary)
                 Spacer()
-
-                Button(showFullReasoning ? localized("common.less") : localized("common.more")) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showFullReasoning.toggle()
-                    }
-                }
-                .buttonStyle(.borderless)
-
-                Button(localized("common.hide")) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isReasoningHidden = true
-                    }
-                }
-                .buttonStyle(.borderless)
-
-                Spacer()
+                Image(systemName: isReasoningHidden ? "chevron.down" : "chevron.up")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
             }
         }
-        .font(.caption2)
-        .foregroundColor(.secondary)
+        .buttonStyle(.plain)
     }
 
     private var reasoningContent: some View {
         VStack(alignment: .leading, spacing: 4) {
-            let reasoningContent = (message.reasoning ?? "")
+            let text = (message.reasoning ?? "")
                 .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 
-            if showFullReasoning {
-                Text(reasoningContent)
+            if showFullReasoning || text.count <= 300 {
+                Text(text)
                     .font(.system(size: CGFloat(max(10, fontSize - 2))))
                     .foregroundColor(.secondary)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                let preview = String(reasoningContent.prefix(200))
-                Text(preview + (reasoningContent.count > 200 ? "..." : ""))
+                Text(String(text.prefix(300)) + "…")
                     .font(.system(size: CGFloat(max(10, fontSize - 2))))
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button(showFullReasoning ? "Show less" : "Show more") {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showFullReasoning.toggle()
+                    }
+                }
+                .font(.system(size: CGFloat(max(9, fontSize - 3))))
+                .buttonStyle(.plain)
+                .foregroundColor(.accentColor)
             }
         }
     }

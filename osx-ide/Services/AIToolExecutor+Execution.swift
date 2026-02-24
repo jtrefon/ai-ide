@@ -23,6 +23,7 @@ extension AIToolExecutor {
         let status: ToolExecutionStatus
         let targetFile: String?
         let toolCallId: String
+        let preview: String?
     }
 
     struct ToolProgressSnapshotContext {
@@ -73,6 +74,7 @@ extension AIToolExecutor {
             status: context.status,
             message: message,
             payload: context.status == .failed ? nil : payload,
+            preview: context.preview,
             toolName: context.toolName,
             toolCallId: context.toolCallId,
             targetFile: context.targetFile
@@ -105,10 +107,118 @@ extension AIToolExecutor {
                         toolName: context.toolName,
                         status: .executing,
                         targetFile: context.targetFile,
-                        toolCallId: context.toolCallId
+                        toolCallId: context.toolCallId,
+                        preview: nil
                     )
                 )
             )
+        }
+    }
+
+    nonisolated static func buildInvocationPreview(
+        toolName: String,
+        targetFile: String?,
+        arguments: [String: Any]
+    ) -> String? {
+        func trim(_ value: String, limit: Int) -> String {
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard normalized.count > limit else { return normalized }
+            let prefix = normalized.prefix(limit)
+            return "\(prefix)\n…"
+        }
+
+        func stringArg(_ key: String) -> String? {
+            guard let value = arguments[key] as? String else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        func intArg(_ key: String) -> Int? {
+            if let value = arguments[key] as? Int { return value }
+            if let value = arguments[key] as? Int32 { return Int(value) }
+            if let value = arguments[key] as? Int64 { return Int(value) }
+            if let value = arguments[key] as? Double { return Int(value) }
+            if let value = arguments[key] as? NSNumber { return value.intValue }
+            if let value = arguments[key] as? String, let parsed = Int(value) { return parsed }
+            return nil
+        }
+
+        let filePath = targetFile ?? stringArg("path")
+
+        switch toolName {
+        case "replace_in_file":
+            guard let oldText = stringArg("old_text"), let newText = stringArg("new_text") else {
+                return filePath.map { "Edit file: \($0)" }
+            }
+
+            let fileLabel = filePath ?? "(unspecified file)"
+            return """
+            Proposed edit: \(fileLabel)
+
+            --- before
+            \(trim(oldText, limit: 700))
+
+            +++ after
+            \(trim(newText, limit: 700))
+            """
+
+        case "write_file", "create_file":
+            guard let content = stringArg("content") else {
+                return filePath.map { "Write file: \($0)" }
+            }
+            let fileLabel = filePath ?? "(unspecified file)"
+            return """
+            Write file: \(fileLabel)
+
+            \(trim(content, limit: 1400))
+            """
+
+        case "delete_file":
+            if let filePath {
+                return "Delete file: \(filePath)"
+            }
+            return "Delete file request"
+
+        case "run_command":
+            let command = stringArg("command") ?? "(missing command)"
+            let workingDirectory = stringArg("working_directory")
+            if let workingDirectory {
+                return """
+                Command: \(trim(command, limit: 280))
+                CWD: \(workingDirectory)
+                """
+            }
+            return "Command: \(trim(command, limit: 280))"
+
+        case "read_file":
+            let fileLabel = filePath ?? "(unspecified file)"
+
+            let startLine = intArg("start_line") ?? intArg("offset")
+            let endLine: Int? = {
+                if let explicitEnd = intArg("end_line") {
+                    return explicitEnd
+                }
+                if let startLine, let limit = intArg("limit"), limit > 0 {
+                    return startLine + max(0, limit - 1)
+                }
+                return nil
+            }()
+
+            if let startLine, let endLine, endLine >= startLine {
+                return "Read file: \(fileLabel)\nLines: \(startLine)-\(endLine)"
+            }
+
+            if let startLine {
+                return "Read file: \(fileLabel)\nFrom line: \(startLine)"
+            }
+
+            return "Read file: \(fileLabel)"
+
+        default:
+            if let filePath {
+                return "Target file: \(filePath)"
+            }
+            return nil
         }
     }
 
@@ -171,7 +281,8 @@ extension AIToolExecutor {
     func makeToolCallFinalMessage(
         result: Result<String, Error>,
         toolCall: AIToolCall,
-        targetFile: String?
+        targetFile: String?,
+        preview: String?
     ) -> ChatMessage {
         switch result {
         case .success(let content):
@@ -181,7 +292,8 @@ extension AIToolExecutor {
                     toolName: toolCall.name,
                     status: .completed,
                     targetFile: targetFile,
-                    toolCallId: toolCall.id
+                    toolCallId: toolCall.id,
+                    preview: preview
                 )
             )
         case .failure(let error):
@@ -192,7 +304,8 @@ extension AIToolExecutor {
                     toolName: toolCall.name,
                     status: .failed,
                     targetFile: targetFile,
-                    toolCallId: toolCall.id
+                    toolCallId: toolCall.id,
+                    preview: preview
                 )
             )
         }
@@ -207,7 +320,13 @@ extension AIToolExecutor {
             targetFile: request.targetFile
         )
 
+        // Begin tool execution activity for power management
+        let activityToken = activityCoordinator?.beginActivity(type: .toolExecution)
+        
         let resultMessage = await resolveToolAndExecute(request)
+
+        // End tool execution activity
+        activityToken?.end()
 
         Task { @MainActor in
             request.onProgress(resultMessage)
@@ -224,11 +343,17 @@ extension AIToolExecutor {
             return makeToolNotFoundMessage(request)
         }
 
+        let preview = Self.buildInvocationPreview(
+            toolName: request.toolCall.name,
+            targetFile: request.targetFile,
+            arguments: request.toolCall.arguments
+        )
         let result = await executeKnownTool(tool, request: request)
         return makeToolCallFinalMessage(
             result: result,
             toolCall: request.toolCall,
-            targetFile: request.targetFile
+            targetFile: request.targetFile,
+            preview: preview
         )
     }
 
@@ -297,8 +422,9 @@ extension AIToolExecutor {
 
     private func resolveToolTimeoutSeconds() -> TimeInterval {
         let stored = UserDefaults.standard.double(forKey: AppConstantsStorage.cliTimeoutSecondsKey)
-        let normalized = stored == 0 ? 30 : stored
-        return max(1, min(300, normalized))
+        // Default to 120s for npm operations, up to 600s max
+        let normalized = stored == 0 ? 120 : stored
+        return max(1, min(600, normalized))
     }
 
     private func executeToolAndCaptureResultWithWatchdog(
@@ -330,11 +456,13 @@ extension AIToolExecutor {
 
             group.addTask {
                 let timeoutSecondsInt = Int(timeoutSeconds)
+                
                 while true {
-                    let (isCancelled, remaining) = await MainActor.run {
+                    let (isCancelled, remaining, lastProgressAt) = await MainActor.run {
                         (
                             ToolTimeoutCenter.shared.isCancelled(toolCallId: toolCall.id),
-                            ToolTimeoutCenter.shared.remainingSeconds(toolCallId: toolCall.id)
+                            ToolTimeoutCenter.shared.remainingSeconds(toolCallId: toolCall.id),
+                            ToolTimeoutCenter.shared.lastProgressAt
                         )
                     }
                     if isCancelled {
@@ -343,11 +471,32 @@ extension AIToolExecutor {
                     }
 
                     if let remaining, remaining <= 0 {
-                        await MainActor.run {
-                            ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
+                        // Intelligent timeout: check if there's been recent progress via ToolTimeoutCenter
+                        if let lastProgress = lastProgressAt {
+                            let timeSinceLastProgress = Date().timeIntervalSince(lastProgress)
+                            
+                            if timeSinceLastProgress > Double(timeoutSecondsInt) {
+                                // No progress for the entire timeout period - likely hung
+                                await MainActor.run {
+                                    ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
+                                }
+                                toolTask.cancel()
+                                throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
+                            } else {
+                                // There was progress, extend the timeout
+                                await MainActor.run {
+                                    ToolTimeoutCenter.shared.extendTimeout(toolCallId: toolCall.id, bySeconds: Double(timeoutSecondsInt))
+                                }
+                                continue
+                            }
+                        } else {
+                            // No progress ever recorded, just timeout
+                            await MainActor.run {
+                                ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
+                            }
+                            toolTask.cancel()
+                            throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
                         }
-                        toolTask.cancel()
-                        throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
                     }
 
                     try await Task.sleep(nanoseconds: 200_000_000)
@@ -369,7 +518,8 @@ extension AIToolExecutor {
                 toolName: request.toolCall.name,
                 status: .failed,
                 targetFile: request.targetFile,
-                toolCallId: request.toolCall.id
+                toolCallId: request.toolCall.id,
+                preview: nil
             )
         )
     }

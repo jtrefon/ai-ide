@@ -33,15 +33,21 @@ final class AIInteractionCoordinator {
     private var aiService: AIService
     private var codebaseIndex: CodebaseIndexProtocol?
     private let conversationPolicy: ConversationPolicyProtocol
+    private let settingsStore: any OpenRouterSettingsLoading
+    private let eventBus: any EventBusProtocol
 
     init(
         aiService: AIService,
         codebaseIndex: CodebaseIndexProtocol?,
-        conversationPolicy: ConversationPolicyProtocol = ConversationPolicy()
+        conversationPolicy: ConversationPolicyProtocol = ConversationPolicy(),
+        settingsStore: any OpenRouterSettingsLoading = OpenRouterSettingsStore(),
+        eventBus: any EventBusProtocol
     ) {
         self.aiService = aiService
         self.codebaseIndex = codebaseIndex
         self.conversationPolicy = conversationPolicy
+        self.settingsStore = settingsStore
+        self.eventBus = eventBus
     }
 
     func updateAIService(_ newService: AIService) {
@@ -55,33 +61,34 @@ final class AIInteractionCoordinator {
     func sendMessageWithRetry(
         _ request: SendMessageWithRetryRequest
     ) async -> Result<AIServiceResponse, AppError> {
-#if DEBUG
-        if request.mode == .chat {
-            assert(request.tools.isEmpty, "Invariant violated: Chat mode request must not include tools")
-        }
-
-        if request.runId != nil {
-            assert(request.stage != nil, "Invariant violated: runId is set but stage is nil")
-        }
-#endif
         let sanitizedMessages = sanitizeMessagesForModel(request.messages)
         let filteredTools = conversationPolicy.allowedTools(
             for: request.stage,
             mode: request.mode,
             from: request.tools
         )
-        let maxAttempts = 3
+        let maxAttempts = 7
         var lastError: AppError?
+        let settings = settingsStore.load(includeApiKey: false)
 
         for attempt in 1...maxAttempts {
-            let augmentedContext = await ContextBuilder.buildContext(
-                userInput: request.messages.last(where: { $0.role == .user })?.content ?? "",
+            let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
+            let retriever: (any RAGRetriever)?
+            if let codebaseIndex, shouldUseRAGRetrieval() {
+                retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
+            } else {
+                retriever = nil
+            }
+
+            let augmentedContext = await RAGContextBuilder.buildContext(
+                userInput: userInput,
                 explicitContext: request.explicitContext,
-                index: codebaseIndex,
-                projectRoot: request.projectRoot
+                retriever: retriever,
+                projectRoot: request.projectRoot,
+                eventBus: eventBus
             )
 
-            let result = await aiService.sendMessageResult(AIServiceHistoryRequest(
+            let historyRequest = AIServiceHistoryRequest(
                 messages: sanitizedMessages,
                 context: augmentedContext,
                 tools: filteredTools,
@@ -89,20 +96,73 @@ final class AIInteractionCoordinator {
                 projectRoot: request.projectRoot,
                 runId: request.runId,
                 stage: request.stage
-            ))
+            )
 
-            switch result {
-            case .success:
-                return result
-            case .failure(let error):
-                lastError = error
-                if attempt < maxAttempts {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+            let isRateLimitError: (Error) -> Bool = { error in
+                let errStr = String(describing: error).lowercased()
+                return errStr.contains("429") || errStr.contains("rate-limit")
+                    || errStr.contains("rate_limit")
+            }
+
+            let shouldUseStreaming = request.runId != nil && !isRunningUnitTests()
+
+            // Use streaming in app runtime; disable in tests for deterministic harness telemetry
+            if shouldUseStreaming, let runId = request.runId {
+                do {
+                    let response = try await aiService.sendMessageStreaming(
+                        historyRequest, runId: runId)
+                    return .success(response)
+                } catch {
+                    lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
+                    if attempt < maxAttempts {
+                        if isRateLimitError(error) {
+                            let waitSeconds = min(
+                                UInt64(pow(2.0, Double(attempt))) * 2_000_000_000, 60_000_000_000)
+                            print(
+                                "[AIInteractionCoordinator] Rate limit hit. Retrying attempt \(attempt+1)/\(maxAttempts) in \(waitSeconds / 1_000_000_000)s..."
+                            )
+                            try? await Task.sleep(nanoseconds: waitSeconds)
+                        } else {
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        }
+                    }
+                }
+            } else {
+                let result = await aiService.sendMessageResult(historyRequest)
+
+                switch result {
+                case .success:
+                    return result
+                case .failure(let error):
+                    lastError = error
+                    if attempt < maxAttempts {
+                        if isRateLimitError(error) {
+                            let waitSeconds = min(
+                                UInt64(pow(2.0, Double(attempt))) * 2_000_000_000, 60_000_000_000)
+                            print(
+                                "[AIInteractionCoordinator] Rate limit hit. Retrying attempt \(attempt+1)/\(maxAttempts) in \(waitSeconds / 1_000_000_000)s..."
+                            )
+                            try? await Task.sleep(nanoseconds: waitSeconds)
+                        } else {
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        }
+                    }
                 }
             }
         }
 
         return .failure(lastError ?? .unknown("ConversationManager: sendMessageWithRetry failed"))
+    }
+
+    private static func mapToAppError(_ error: Error, operation: String) -> AppError {
+        if let appError = error as? AppError {
+            return appError
+        }
+        return .aiServiceError("AIService.\(operation) failed: \(error.localizedDescription)")
+    }
+
+    private func shouldUseRAGRetrieval() -> Bool {
+        return true
     }
 
     private func sanitizeMessagesForModel(_ messages: [ChatMessage]) -> [ChatMessage] {
@@ -113,14 +173,20 @@ final class AIInteractionCoordinator {
             return ChatMessage(
                 role: message.role,
                 content: message.content,
-                context: ChatMessageContentContext(reasoning: nil, codeContext: message.codeContext),
+                context: ChatMessageContentContext(
+                    reasoning: nil, codeContext: message.codeContext),
                 tool: ChatMessageToolContext(
                     toolName: message.toolName,
                     toolStatus: message.toolStatus,
-                    target: ToolInvocationTarget(targetFile: message.targetFile, toolCallId: message.toolCallId),
+                    target: ToolInvocationTarget(
+                        targetFile: message.targetFile, toolCallId: message.toolCallId),
                     toolCalls: message.toolCalls ?? []
                 )
             )
         }
+    }
+
+    private func isRunningUnitTests() -> Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 }

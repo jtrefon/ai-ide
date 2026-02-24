@@ -15,6 +15,8 @@ show_help() {
     echo "  build  Build the application"
     echo "  test   Run unit tests [optional suite]"
     echo "         Examples: ./run.sh test | ./run.sh test JSONHighlighterTests | ./run.sh test json"
+    echo "  harness Run headless harness tests (separate from CI test)"
+    echo "         Examples: ./run.sh harness | ./run.sh harness ConversationSendCoordinatorTests"
     echo "  e2e    Run UI (end-to-end) tests [optional suite]"
     echo "         Examples: ./run.sh e2e | ./run.sh e2e TerminalEchoUITests | ./run.sh e2e json"
     echo "  clean  Clean build artifacts"
@@ -57,7 +59,7 @@ run_tests() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
-                   test -only-testing:osx-ideTests/"$suite" -skip-testing:osx-ideUITests
+                   test -only-testing:osx-ideTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideHarnessTests
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                    -scheme "$SCHEME" \
@@ -65,7 +67,52 @@ run_tests() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
-                   test -only-testing:osx-ideTests -skip-testing:osx-ideUITests
+                   test -only-testing:osx-ideTests -skip-testing:osx-ideUITests -skip-testing:osx-ideHarnessTests
+    fi
+}
+
+run_harness() {
+    local suite=$1
+    echo "Running headless harness tests..."
+    
+    # Build environment variables to pass to test runner
+    # Using TEST_RUNNER_ENV_ prefix to pass env vars through xcodebuild to the test process
+    local env_args=()
+    if [ -n "$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS" ]; then
+        env_args+=("TEST_RUNNER_ENV_OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS=$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS")
+        echo "Production parity harness enabled"
+    fi
+    if [ -n "$HARNESS_MODEL_ID" ]; then
+        env_args+=("TEST_RUNNER_ENV_HARNESS_MODEL_ID=$HARNESS_MODEL_ID")
+        echo "Using model: $HARNESS_MODEL_ID"
+    fi
+    if [ -n "$HARNESS_USE_OPENROUTER" ]; then
+        env_args+=("TEST_RUNNER_ENV_HARNESS_USE_OPENROUTER=$HARNESS_USE_OPENROUTER")
+        echo "Using OpenRouter: $HARNESS_USE_OPENROUTER"
+    fi
+    
+    if [ -n "$suite" ]; then
+        echo "Filtering by suite: $suite"
+        xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+                  -scheme "$SCHEME" \
+                  -configuration Debug \
+                  -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
+                  -destination 'platform=macOS' \
+                  ENABLE_PREVIEWS=NO \
+                  "${env_args[@]}" \
+                  test -only-testing:osx-ideHarnessTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideTests
+    else
+        xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+                  -scheme "$SCHEME" \
+                  -configuration Debug \
+                  -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
+                  -destination 'platform=macOS' \
+                  ENABLE_PREVIEWS=NO \
+                  "${env_args[@]}" \
+                  test \
+                  -only-testing:osx-ideHarnessTests \
+                  -skip-testing:osx-ideUITests \
+                  -skip-testing:osx-ideTests
     fi
 }
 
@@ -115,6 +162,9 @@ case "$COMMAND" in
         ;;
     test)
         run_tests "$2"
+        ;;
+    harness)
+        run_harness "$2"
         ;;
     e2e)
         run_e2e "$2"

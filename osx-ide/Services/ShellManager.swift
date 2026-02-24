@@ -237,6 +237,19 @@ class ShellManager: NSObject {
         cleanup()
     }
 
+    /// Resize the PTY window
+    func resize(rows: Int, columns: Int) {
+        guard let primaryFD = ptyPrimaryFD else { return }
+        
+        var winSize = winsize(
+            ws_row: UInt16(rows),
+            ws_col: UInt16(columns),
+            ws_xpixel: 0,
+            ws_ypixel: 0
+        )
+        _ = ioctl(primaryFD, TIOCSWINSZ, &winSize)
+    }
+
     // MARK: - Private Methods
 
     private func setupOutputMonitoring() {

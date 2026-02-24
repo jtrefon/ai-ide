@@ -187,6 +187,7 @@ final class NucleusTests: XCTestCase {
         let workspaceService = MockWorkspaceService()
         let eventBus = EventBus()
         let aiService = ToolExecutionMockAIService()
+        let mockActivityCoordinator = AgentActivityCoordinator(powerManagementService: MockPowerManagementService())
 
         let conversationManager = ConversationManager(
             dependencies: ConversationManager.Dependencies(
@@ -194,7 +195,8 @@ final class NucleusTests: XCTestCase {
                     aiService: aiService,
                     errorManager: errorManager,
                     fileSystemService: FileSystemService(),
-                    fileEditorService: nil
+                    fileEditorService: nil,
+                    activityCoordinator: mockActivityCoordinator
                 ),
                 environment: ConversationManager.EnvironmentDependencies(
                     workspaceService: workspaceService,

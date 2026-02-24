@@ -7,8 +7,7 @@ public actor CrashReporter: CrashReporting {
     private let iso = ISO8601DateFormatter()
     private let encoder: JSONEncoder
 
-    private var baseLogsDir: URL
-    private var appCrashLogFileURL: URL
+    // Project-local crash log only
     private var projectCrashLogFileURL: URL?
 
     public init(sessionId: String = UUID().uuidString) {
@@ -17,15 +16,7 @@ public actor CrashReporter: CrashReporting {
         let enc = JSONEncoder()
         enc.outputFormatting = []
         self.encoder = enc
-
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-
-        self.baseLogsDir = appSupport.appendingPathComponent("osx-ide/Logs", isDirectory: true)
-
-        let date = ISO8601DateFormatter().string(from: Date()).prefix(10)
-        let datedDir = baseLogsDir.appendingPathComponent(String(date), isDirectory: true)
-        self.appCrashLogFileURL = datedDir.appendingPathComponent("crash.ndjson")
+        // Note: No fallback to Application Support - crashes only logged to project directory
     }
 
     public func setProjectRoot(_ root: URL) async {
@@ -58,19 +49,16 @@ public actor CrashReporter: CrashReporting {
     }
 
     private func append(_ event: CrashReportEvent) async {
+        guard let projectCrashLogFileURL = projectCrashLogFileURL else { return }
+        
         do {
             let data = try encoder.encode(event)
             var lineData = Data()
             lineData.append(data)
             lineData.append(Data("\n".utf8))
 
-            try ensureDirectoryExists(for: appCrashLogFileURL)
-            try append(line: lineData, to: appCrashLogFileURL)
-
-            if let projectCrashLogFileURL {
-                try ensureDirectoryExists(for: projectCrashLogFileURL)
-                try append(line: lineData, to: projectCrashLogFileURL)
-            }
+            try ensureDirectoryExists(for: projectCrashLogFileURL)
+            try append(line: lineData, to: projectCrashLogFileURL)
         } catch {
             return
         }

@@ -4,6 +4,7 @@ struct ToolExecutionEnvelope: Codable, Sendable {
     let status: ToolExecutionStatus
     let message: String
     let payload: String?
+    let preview: String?
     let toolName: String
     let toolCallId: String
     let targetFile: String?
@@ -16,6 +17,7 @@ struct ToolExecutionEnvelope: Codable, Sendable {
             let fallback = [
                 "status": status.rawValue,
                 "message": message,
+                "preview": preview ?? "",
                 "toolName": toolName,
                 "toolCallId": toolCallId,
                 "targetFile": targetFile ?? ""

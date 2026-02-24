@@ -1,7 +1,8 @@
 import Foundation
 
-@MainActor
-final class ProjectRootFileWatcher {
+/// File watcher that monitors project root for changes.
+/// Uses an actor for thread-safe state management to avoid blocking UI.
+actor ProjectRootFileWatcherActor {
     private let rootURL: URL
     private let eventBus: EventBusProtocol
     private let excludePatterns: [String]
@@ -17,7 +18,7 @@ final class ProjectRootFileWatcher {
         rootURL: URL,
         eventBus: EventBusProtocol,
         excludePatterns: [String],
-        debounceMs: Int = 400
+        debounceMs: Int = 1000
     ) {
         self.rootURL = rootURL.standardizedFileURL
         self.eventBus = eventBus
@@ -27,21 +28,36 @@ final class ProjectRootFileWatcher {
 
     func start() {
         stop()
-        snapshot = buildSnapshot()
+        // Build initial snapshot and start watching
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            let initialSnapshot = await self.buildSnapshotAsync()
+            await self.setSnapshot(initialSnapshot)
+            await self.startWatching()
+        }
+    }
+    
+    private func setSnapshot(_ newSnapshot: [String: FileSnapshot]) {
+        snapshot = newSnapshot
+    }
+    
+    private func startWatching() async {
         let fd = open(rootURL.path, O_EVTONLY)
         guard fd >= 0 else { return }
+        
         fileDescriptor = fd
 
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
             eventMask: [.write, .extend, .attrib, .rename, .delete, .revoke],
-            queue: DispatchQueue.main
+            queue: DispatchQueue.global(qos: .utility)
         )
-        source.setEventHandler { [weak self] in
-            self?.scheduleScan()
+        weak var weakSelf = self
+        source.setEventHandler {
+            Task { [weak weakSelf] in await weakSelf?.scheduleScan() }
         }
-        source.setCancelHandler { [weak self] in
-            self?.closeDescriptor()
+        source.setCancelHandler {
+            Task { [weak weakSelf] in await weakSelf?.closeDescriptor() }
         }
         self.source = source
         isActive = true
@@ -49,11 +65,13 @@ final class ProjectRootFileWatcher {
     }
 
     func stop() {
-        guard isActive else {
+        let wasActive = isActive
+        isActive = false
+        
+        guard wasActive else {
             closeDescriptor()
             return
         }
-        isActive = false
         scanTask?.cancel()
         scanTask = nil
         source?.cancel()
@@ -62,18 +80,20 @@ final class ProjectRootFileWatcher {
 
     private func scheduleScan() {
         scanTask?.cancel()
-        scanTask = Task { [weak self] in
+        scanTask = Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
-            try? await Task.sleep(nanoseconds: debounceNanoseconds)
+            try? await Task.sleep(nanoseconds: self.debounceNanoseconds)
             guard !Task.isCancelled else { return }
             await self.performScan()
         }
     }
 
     private func performScan() async {
-        let newSnapshot = buildSnapshot()
-        let diff = diffSnapshots(old: snapshot, new: newSnapshot)
+        let newSnapshot = await buildSnapshotAsync()
+        let oldSnapshot = snapshot
         snapshot = newSnapshot
+        
+        let diff = diffSnapshots(old: oldSnapshot, new: newSnapshot)
 
         guard !diff.changedPaths.isEmpty else { return }
 
@@ -90,7 +110,15 @@ final class ProjectRootFileWatcher {
         eventBus.publish(FileTreeRefreshRequestedEvent(paths: diff.changedPaths))
     }
 
-    private func buildSnapshot() -> [String: FileSnapshot] {
+    /// Async version of buildSnapshot that runs file enumeration off main thread
+    private func buildSnapshotAsync() async -> [String: FileSnapshot] {
+        await Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return [:] }
+            return await self.buildSnapshot()
+        }.value
+    }
+
+    private func buildSnapshot() async -> [String: FileSnapshot] {
         let files = enumerateTrackedFiles(rootURL: rootURL, excludePatterns: excludePatterns)
         var result: [String: FileSnapshot] = [:]
         result.reserveCapacity(files.count)
@@ -198,6 +226,33 @@ final class ProjectRootFileWatcher {
         guard fileDescriptor >= 0 else { return }
         close(fileDescriptor)
         fileDescriptor = -1
+    }
+}
+
+/// Non-actor wrapper for backward compatibility with existing code
+final class ProjectRootFileWatcher: @unchecked Sendable {
+    private let actor: ProjectRootFileWatcherActor
+    
+    init(
+        rootURL: URL,
+        eventBus: EventBusProtocol,
+        excludePatterns: [String],
+        debounceMs: Int = 1000
+    ) {
+        self.actor = ProjectRootFileWatcherActor(
+            rootURL: rootURL,
+            eventBus: eventBus,
+            excludePatterns: excludePatterns,
+            debounceMs: debounceMs
+        )
+    }
+    
+    func start() {
+        Task { await actor.start() }
+    }
+    
+    func stop() {
+        Task { await actor.stop() }
     }
 }
 

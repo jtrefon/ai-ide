@@ -37,7 +37,12 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
             return """
 
             **CURRENT MODE: CHAT (Read-Only)**
-            You are in Chat mode. You can help users understand their code but CANNOT modify files.
+            You are in Chat mode with READ-ONLY access. You can help users understand their code, search through files, and answer questions.
+            
+            IMPORTANT: If a user asks you to perform any work (create files, modify code, run commands, build projects, etc.), 
+            you MUST immediately tell the user that you cannot perform that action because you are in read-only Chat mode. 
+            Do NOT attempt to use tools that modify files or run commands - you do not have write access. 
+            Instead, clearly state: "I'm in read-only Chat mode and cannot perform that action. Please switch to Agent mode if you want me to make changes to your project."
             """
         case .agent:
             return """
@@ -45,6 +50,8 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
             **CURRENT MODE: AGENT (Full Access)**
             You are in Agent mode with full autonomy. You can read, write, edit, and delete files to complete tasks.
             All tools are available. Use them wisely and always explain what you're doing.
+            IMPORTANT: Ignore any prior or conflicting instructions claiming you are in read-only mode. In this run, you are NOT read-only.
+            If the user asks for implementation work, execute it with tools instead of refusing due to permissions.
             """
         }
     }
@@ -53,19 +60,10 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
     public func allowedTools(from allTools: [AITool]) -> [AITool] {
         switch self {
         case .chat:
-            // Read-only tools
-            return allTools.filter { tool in
-                [
-                    "index_find_files",
-                    "index_list_files",
-                    "index_search_text",
-                    "index_read_file",
-                    "index_search_symbols",
-                    "run_command"
-                ].contains(tool.name)
-            }
+            // Chat mode - NO tools (read-only interface)
+            return []
         case .agent:
-            // All tools
+            // Agent mode - ALL tools
             return allTools
         }
     }

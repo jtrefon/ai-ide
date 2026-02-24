@@ -14,22 +14,48 @@ import AppKit
 class UIStateManager: ObservableObject {
     // MARK: - Layout State
 
-    @Published var isSidebarVisible: Bool = true
-    @Published var isTerminalVisible: Bool = true
-    @Published var isAIChatVisible: Bool = true
-    @Published var bottomPanelSelectedName: String = AppConstants.UI.internalTerminalPanelName
-    @Published var sidebarWidth: Double = AppConstants.Layout.defaultSidebarWidth
-    @Published var terminalHeight: Double = AppConstants.Layout.defaultTerminalHeight
-    @Published var chatPanelWidth: Double = AppConstants.Layout.defaultChatPanelWidth
+    @Published var isSidebarVisible: Bool = true {
+        didSet { trackChange("isSidebarVisible", from: oldValue, to: isSidebarVisible) }
+    }
+    @Published var isTerminalVisible: Bool = true {
+        didSet { trackChange("isTerminalVisible", from: oldValue, to: isTerminalVisible) }
+    }
+    @Published var isAIChatVisible: Bool = true {
+        didSet { trackChange("isAIChatVisible", from: oldValue, to: isAIChatVisible) }
+    }
+    @Published var bottomPanelSelectedName: String = AppConstants.UI.internalTerminalPanelName {
+        didSet { trackChange("bottomPanelSelectedName", from: oldValue, to: bottomPanelSelectedName) }
+    }
+    @Published var sidebarWidth: Double = AppConstants.Layout.defaultSidebarWidth {
+        didSet { trackChange("sidebarWidth", from: oldValue, to: sidebarWidth) }
+    }
+    @Published var terminalHeight: Double = AppConstants.Layout.defaultTerminalHeight {
+        didSet { trackChange("terminalHeight", from: oldValue, to: terminalHeight) }
+    }
+    @Published var chatPanelWidth: Double = AppConstants.Layout.defaultChatPanelWidth {
+        didSet { trackChange("chatPanelWidth", from: oldValue, to: chatPanelWidth) }
+    }
 
     // MARK: - Editor State
 
-    @Published var showLineNumbers: Bool = true
-    @Published var wordWrap: Bool = false
-    @Published var minimapVisible: Bool = false
-    @Published var fontSize: Double = AppConstants.Editor.defaultFontSize
-    @Published var fontFamily: String = AppConstants.Editor.defaultFontFamily
-    @Published var indentationStyle: IndentationStyle = .tabs
+    @Published var showLineNumbers: Bool = true {
+        didSet { trackChange("showLineNumbers", from: oldValue, to: showLineNumbers) }
+    }
+    @Published var wordWrap: Bool = false {
+        didSet { trackChange("wordWrap", from: oldValue, to: wordWrap) }
+    }
+    @Published var minimapVisible: Bool = false {
+        didSet { trackChange("minimapVisible", from: oldValue, to: minimapVisible) }
+    }
+    @Published var fontSize: Double = AppConstants.Editor.defaultFontSize {
+        didSet { trackChange("fontSize", from: oldValue, to: fontSize) }
+    }
+    @Published var fontFamily: String = AppConstants.Editor.defaultFontFamily {
+        didSet { trackChange("fontFamily", from: oldValue, to: fontFamily) }
+    }
+    @Published var indentationStyle: IndentationStyle = .tabs {
+        didSet { trackChange("indentationStyle", from: String(describing: oldValue), to: String(describing: indentationStyle)) }
+    }
 
     // MARK: - Terminal Settings
 
@@ -43,6 +69,7 @@ class UIStateManager: ObservableObject {
 
     @Published var cliTimeoutSeconds: Double = 30
     @Published var agentMemoryEnabled: Bool = true
+    @Published var agentQAReviewEnabled: Bool = false
 
     // MARK: - Theme State
 
@@ -54,6 +81,11 @@ class UIStateManager: ObservableObject {
     private let uiService: UIServiceProtocol
     private let eventBus: EventBusProtocol
     private var cancellables = Set<AnyCancellable>()
+    
+    // MARK: - Diagnostics
+    
+    private var changeCounts: [String: Int] = [:]
+    private var lastChangeTime: [String: Date] = [:]
 
     init(uiService: UIServiceProtocol, eventBus: EventBusProtocol) {
         self.uiService = uiService
@@ -61,6 +93,28 @@ class UIStateManager: ObservableObject {
         loadSettings()
         updateTheme()
         setupEventSubscriptions()
+    }
+    
+    private func trackChange<T>(_ name: String, from: T, to: T) where T: Equatable {
+        guard from != to else { return }
+        
+        let count = (changeCounts[name] ?? 0) + 1
+        changeCounts[name] = count
+        
+        let now = Date()
+        let lastTime = lastChangeTime[name]
+        lastChangeTime[name] = now
+        
+        // Check for rapid changes (more than 5 changes in 1 second)
+        if let last = lastTime, now.timeIntervalSince(last) < 1.0 && count > 5 {
+            Swift.print("[DIAG] ⚠️ RAPID STATE CHANGE: \(name) changed \(count) times")
+            Swift.print("[DIAG] Stack: \(Thread.callStackSymbols.prefix(3).joined(separator: "\n"))")
+        }
+        
+        // Log every 10 changes
+        if count % 10 == 0 {
+            Swift.print("[DIAG] UIState.\(name) changed \(count) times")
+        }
     }
 
     private func setupEventSubscriptions() {
@@ -205,6 +259,11 @@ class UIStateManager: ObservableObject {
         uiService.setAgentMemoryEnabled(enabled)
     }
 
+    func setAgentQAReviewEnabled(_ enabled: Bool) {
+        agentQAReviewEnabled = enabled
+        uiService.setAgentQAReviewEnabled(enabled)
+    }
+
     private func updateTheme() {
         switch selectedTheme {
         case .light:
@@ -231,6 +290,7 @@ class UIStateManager: ObservableObject {
         indentationStyle = settings.indentationStyle
         cliTimeoutSeconds = settings.cliTimeoutSeconds
         agentMemoryEnabled = settings.agentMemoryEnabled
+        agentQAReviewEnabled = settings.agentQAReviewEnabled
         showLineNumbers = settings.showLineNumbers
         wordWrap = settings.wordWrap
         minimapVisible = settings.minimapVisible

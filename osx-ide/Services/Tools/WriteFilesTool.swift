@@ -92,8 +92,22 @@ struct WriteFilesTool: AITool {
 
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
-        guard let files = arguments["files"] as? [[String: Any]] else {
-            throw AppError.aiServiceError("Missing 'files' argument for write_files")
+        print(">>> WRITE FILES ARGUMENTS: \(arguments)")
+        
+        // Support both "files" array (preferred) and direct "path"/"content" (for compatibility with write_file)
+        let files: [[String: Any]]
+        
+        if let filesArray = arguments["files"] as? [[String: Any]] {
+            files = filesArray
+        } else if let path = arguments["path"] as? String, let content = arguments["content"] as? String {
+            // Allow single file via path/content for compatibility
+            files = [["path": path, "content": content]]
+        } else {
+            throw AppError.aiServiceError(
+                "Missing 'files' argument for write_files. " +
+                "Either provide 'files' as an array of {path, content} objects, " +
+                "or provide 'path' and 'content' directly for a single file."
+            )
         }
 
         let context = ToolInvocationContext.from(arguments: arguments)

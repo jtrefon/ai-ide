@@ -15,7 +15,7 @@ struct MessageFilterCoordinator {
     /// Filters messages to display, removing empty assistant messages
     func filterMessages(_ messages: [ChatMessage]) -> [ChatMessage] {
         messages.filter { message in
-            if message.role == .assistant && isEmptyAssistantMessage(message) {
+            if ChatMessageVisibilityPolicy.isEmptyAssistantMessage(message) {
                 return false
             }
             return true
@@ -24,7 +24,11 @@ struct MessageFilterCoordinator {
 
     /// Determines if a message should be displayed in the list
     func shouldDisplayMessage(_ message: ChatMessage, in messages: [ChatMessage]) -> Bool {
-        if isEmptyAssistantMessage(message) {
+        if ChatMessageVisibilityPolicy.isEmptyAssistantMessage(message) {
+            return false
+        }
+
+        if message.role == .system {
             return false
         }
 
@@ -36,13 +40,6 @@ struct MessageFilterCoordinator {
     }
 
     // MARK: - Private Methods
-
-    private func isEmptyAssistantMessage(_ message: ChatMessage) -> Bool {
-        message.role == .assistant &&
-            message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            (message.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) &&
-            (message.toolCalls?.isEmpty ?? true)
-    }
 
     private func shouldDisplayToolExecutionMessage(_ message: ChatMessage, in messages: [ChatMessage]) -> Bool {
         guard let toolCallId = message.toolCallId else {

@@ -1,16 +1,8 @@
 import Foundation
 
 enum ConversationScopedNDJSONStore {
-    static func conversationDirectory(conversationId: String) -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-
-        let base = appSupport.appendingPathComponent("osx-ide/Logs", isDirectory: true)
-        return base
-            .appendingPathComponent("conversations", isDirectory: true)
-            .appendingPathComponent(conversationId, isDirectory: true)
-    }
-
+    /// Project-scoped conversation directory
+    /// All telemetry is now stored in project directory for proper isolation
     static func projectConversationDirectory(projectRoot: URL, conversationId: String) -> URL {
         projectRoot
             .appendingPathComponent(".ide", isDirectory: true)
@@ -25,13 +17,12 @@ enum ConversationScopedNDJSONStore {
         fileName: String,
         projectRoot: URL?
     ) throws {
-        let dir = conversationDirectory(conversationId: conversationId)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let fileURL = dir.appendingPathComponent(fileName)
-        try NDJSONLogFileWriter.append(line: line, to: fileURL)
+        guard let projectRoot else {
+            // No project root - cannot log (this shouldn't happen in normal operation)
+            return
+        }
 
-        guard let projectRoot else { return }
-
+        // Write ONLY to project directory (no Application Support)
         let projectDir = projectConversationDirectory(projectRoot: projectRoot, conversationId: conversationId)
         try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
         let projectFileURL = projectDir.appendingPathComponent(fileName)

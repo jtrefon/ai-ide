@@ -8,12 +8,32 @@
 import SwiftUI
 import AppKit
 
+fileprivate func earlyDiag(_ msg: String) {
+    let ts = ISO8601DateFormatter().string(from: Date())
+    let line = "[\(ts)] \(msg)\n"
+    let fm = FileManager.default
+    let tmpLog = URL(fileURLWithPath: "/tmp/osx-ide-startup.log")
+    if let data = line.data(using: .utf8) {
+        if fm.fileExists(atPath: tmpLog.path) {
+            if let handle = try? FileHandle(forWritingTo: tmpLog) {
+                try? handle.seekToEnd()
+                try? handle.write(contentsOf: data)
+                try? handle.close()
+            }
+        } else {
+            try? data.write(to: tmpLog)
+        }
+    }
+    Swift.print("[EARLY-DIAG] \(msg)")
+    fflush(stdout)
+}
+
 @main
 struct OSXIDEApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     private let isUnitTesting: Bool
-    private let container: DependencyContainer
+    @ObservedObject private var container: DependencyContainer
     @StateObject private var appState: AppState
     @StateObject private var errorManager: ErrorManager
     @AppStorage(AppConstants.Storage.codebaseIndexEnabledKey) private var codebaseIndexEnabled: Bool = true
@@ -22,17 +42,34 @@ struct OSXIDEApp: App {
     @State private var didInitializeCorePlugin: Bool = false
 
     init() {
+        let _initStart = Date()
+        earlyDiag("OSXIDEApp.init START")
+        
+        Task { await DiagnosticsLogger.shared.logEvent(.appInitStart, name: "OSXIDEApp.init") }
+        
         let isUnitTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             && ProcessInfo.processInfo.environment["XCUI_TESTING"] != "1"
         self.isUnitTesting = isUnitTesting
+        earlyDiag("isUnitTesting=\(isUnitTesting)")
 
+        Task { await DiagnosticsLogger.shared.logEvent(.dependencyContainerInitStart, name: "DependencyContainer") }
+        earlyDiag("About to create DependencyContainer...")
+        
         let container = DependencyContainer(isTesting: isUnitTesting)
+        
+        earlyDiag("DependencyContainer created")
+        
+        Task { await DiagnosticsLogger.shared.logEvent(.dependencyContainerInitEnd, name: "DependencyContainer", metadata: ["durationMs": String(format: "%.2f", Date().timeIntervalSince(_initStart) * 1000)]) }
+        
         self.container = container
 
+        earlyDiag("Getting errorManager...")
         guard let errorMgr = container.errorManager as? ErrorManager else {
             fatalError("DependencyContainer.errorManager must be an ErrorManager")
         }
+        earlyDiag("Creating AppState...")
         let appSt = container.makeAppState()
+        earlyDiag("AppState created")
 
         if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1",
            ProcessInfo.processInfo.environment["UI_TEST_SCENARIO"] == "json_highlighting" {
@@ -52,6 +89,10 @@ struct OSXIDEApp: App {
 
         self._errorManager = StateObject(wrappedValue: errorMgr)
         self._appState = StateObject(wrappedValue: appSt)
+        
+        earlyDiag("OSXIDEApp.init END")
+        
+        Task { await DiagnosticsLogger.shared.logEvent(.appInitEnd, name: "OSXIDEApp.init", metadata: ["totalDurationMs": String(format: "%.2f", Date().timeIntervalSince(_initStart) * 1000)]) }
     }
 
     private func localized(_ key: String) -> String {
@@ -63,40 +104,47 @@ struct OSXIDEApp: App {
             if isUnitTesting {
                 Color.clear.frame(width: 0, height: 0)
             } else {
-                ContentView(appState: appState)
-                    .environmentObject(errorManager)
-                    .onAppear {
-                        NSApp.activate(ignoringOtherApps: true)
-                    }
-                    .task {
-                        if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
-                            return
+                ZStack {
+                    ContentView(appState: appState)
+                        .environmentObject(errorManager)
+                        .onAppear {
+                            NSApp.activate(ignoringOtherApps: true)
                         }
-                        if didInitializeCorePlugin {
-                            return
-                        }
+                        .task {
+                            if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
+                                return
+                            }
+                            if didInitializeCorePlugin {
+                                return
+                            }
 
-                        CorePlugin.initialize(registry: appState.uiRegistry, context: appState)
-                        didInitializeCorePlugin = true
-                    }
-                    .alert(localized("alert.error.title"), isPresented: $errorManager.showErrorAlert) {
-                        Button(localized("common.ok")) {
-                            errorManager.dismissError()
+                            CorePlugin.initialize(registry: appState.uiRegistry, context: appState)
+                            didInitializeCorePlugin = true
                         }
-                    } message: {
-                        if let error = errorManager.currentError {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(error.localizedDescription)
-                                    .font(.headline)
+                        .alert(localized("alert.error.title"), isPresented: $errorManager.showErrorAlert) {
+                            Button(localized("common.ok")) {
+                                errorManager.dismissError()
+                            }
+                        } message: {
+                            if let error = errorManager.currentError {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(error.localizedDescription)
+                                        .font(.headline)
 
-                                if let suggestion = error.recoverySuggestion {
-                                    Text(String(format: localized("alert.suggestion_format"), suggestion))
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                    if let suggestion = error.recoverySuggestion {
+                                        Text(String(format: localized("alert.suggestion_format"), suggestion))
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                             }
                         }
+                    
+                    // Loading overlay while services initialize
+                    if !container.isInitialized {
+                        LoadingOverlayView(status: container.initializationStatus)
                     }
+                }
             }
         }
         .windowToolbarStyle(.unifiedCompact)
@@ -164,6 +212,18 @@ struct OSXIDEApp: App {
             }
 
             CommandMenu(localized("menu.tools")) {
+                // AI Mode Toggle
+                Menu("AI Mode") {
+                    Button("Chat (Read-Only)") {
+                        appState.conversationManager.currentMode = .chat
+                    }
+                    Button("Agent (Full Access)") {
+                        appState.conversationManager.currentMode = .agent
+                    }
+                }
+                
+                Divider()
+                
                 Toggle(localized("menu.tools.codebase_index_enabled"), isOn: $codebaseIndexEnabled)
                     .onChange(of: codebaseIndexEnabled) { _, newValue in
                         appState.setCodebaseIndexEnabled(newValue)
@@ -374,9 +434,34 @@ struct OSXIDEApp: App {
             if isUnitTesting {
                 EmptyView()
             } else {
-                SettingsView(ui: appState.ui)
+                SettingsView(ui: appState.ui) {
+                    appState.reindexProjectNow()
+                }
             }
         }
+    }
+}
+
+/// Loading overlay shown while services initialize
+private struct LoadingOverlayView: View {
+    let status: String
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.5)
+            
+            Text("Initializing...")
+                .font(.headline)
+            
+            Text(status)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(32)
+        .background(Color(NSColor.windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(radius: 10)
     }
 }
 

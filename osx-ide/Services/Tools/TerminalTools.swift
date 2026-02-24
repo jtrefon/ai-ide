@@ -33,7 +33,7 @@ struct RunCommandTool: AIToolProgressReporting {
                 ],
                 "timeout_seconds": [
                     "type": "number",
-                    "description": "Max seconds to wait before terminating the command (optional; default 30)."
+                    "description": "Max seconds to wait before terminating the command (optional; default 120; use 300+ for npm install/build)."
                 ]
             ],
             "required": ["command"]
@@ -201,11 +201,11 @@ struct RunCommandTool: AIToolProgressReporting {
             }
 
             let storedTimeout = UserDefaults.standard.double(forKey: AppConstants.Storage.cliTimeoutSecondsKey)
-            return storedTimeout == 0 ? 30 : storedTimeout
+            return storedTimeout == 0 ? 120 : storedTimeout
         }()
-        if !(1...300).contains(timeoutSeconds) {
+        if !(1...600).contains(timeoutSeconds) {
             throw AppError.aiServiceError(
-                "Invalid 'timeout_seconds' for run_command. Must be between 1 and 300."
+                "Invalid 'timeout_seconds' for run_command. Must be between 1 and 600."
             )
         }
         return timeoutSeconds

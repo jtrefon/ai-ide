@@ -5,8 +5,8 @@
 //  Created by AI Assistant on 11/01/2026.
 //
 
-import Foundation
 import AppKit
+import Foundation
 
 /// Handles appearance and styling for the file tree
 @MainActor
@@ -26,8 +26,14 @@ final class FileTreeAppearanceCoordinator {
         let rowHeight = fontSize + 4
         outlineView.rowHeight = rowHeight
 
-        for row in 0..<outlineView.numberOfRows {
-            if let cellView = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView {
+        // Only iterate over visible rows to avoid CPU spikes in large projects
+        let visibleRows = outlineView.rows(in: outlineView.visibleRect)
+        guard visibleRows.location != NSNotFound else { return }
+
+        for row in visibleRows.location..<NSMaxRange(visibleRows) {
+            if let cellView = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false)
+                as? NSTableCellView
+            {
                 if let textField = cellView.textField {
                     textField.font = NSFont(name: fontFamily, size: fontSize)
                     textField.textColor = NSColor.controlTextColor

@@ -143,6 +143,8 @@ struct ConversationLogger {
     func initializeProjectRoot(_ root: URL) {
         let projectRoot = root
         Task.detached(priority: .utility) {
+            // CRITICAL: Set project root for all loggers including AI trace
+            await AIToolTraceLogger.shared.setProjectRoot(projectRoot)
             await AppLogger.shared.setProjectRoot(projectRoot)
             await CrashReporter.shared.setProjectRoot(projectRoot)
             await ConversationLogStore.shared.setProjectRoot(projectRoot)

@@ -12,22 +12,11 @@ struct SendRequest {
     let availableTools: [AITool]
     let cancelledToolCallIds: @Sendable () -> Set<String>
     let qaReviewEnabled: Bool
+    let draftAssistantMessageId: UUID?
 }
 
 struct ToolLoopResult {
     let response: AIServiceResponse
     let lastToolCalls: [AIToolCall]
     let lastToolResults: [ChatMessage]
-}
-
-struct RunSnapshotPayload {
-    let runId: String
-    let conversationId: String
-    let phase: String
-    let iteration: Int?
-    let userInput: String
-    let assistantDraft: String?
-    let failureReason: String?
-    let toolCalls: [AIToolCall]
-    let toolResults: [ChatMessage]
 }

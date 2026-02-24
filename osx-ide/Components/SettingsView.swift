@@ -10,6 +10,11 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var ui: UIStateManager
     @StateObject private var openRouterViewModel = OpenRouterSettingsViewModel()
+    @StateObject private var localModelViewModel = LocalModelSettingsViewModel()
+    @StateObject private var embeddingModelViewModel = EmbeddingModelSettingsViewModel()
+    
+    /// Callback triggered when embedding model changes and reindex is needed
+    var onEmbeddingModelChange: (() -> Void)?
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
@@ -27,7 +32,11 @@ struct SettingsView: View {
                             Label(localized("settings.tabs.general"), systemImage: "gearshape")
                         }
 
-                    AISettingsTab(viewModel: openRouterViewModel)
+                    AISettingsTab(
+                        viewModel: openRouterViewModel,
+                        localModelViewModel: localModelViewModel,
+                        embeddingModelViewModel: embeddingModelViewModel
+                    )
                         .tabItem {
                             Label(localized("settings.tabs.ai"), systemImage: "sparkles")
                         }
@@ -46,6 +55,12 @@ struct SettingsView: View {
             .padding(24)
         }
         .frame(minWidth: 720, idealWidth: 760, minHeight: 560, idealHeight: 620)
+        .onAppear {
+            // Wire up the embedding model change callback
+            embeddingModelViewModel.onConfirmModelChange = {
+                onEmbeddingModelChange?()
+            }
+        }
     }
 }
 

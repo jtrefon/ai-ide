@@ -24,12 +24,11 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     var fontSize: CGFloat = 12
     var fontFamily: String = "SF Mono"
 
-    var currentLineStartLocation: Int = 0
-    var cursorColumn: Int = 0
-    var currentTextAttributes: [NSAttributedString.Key: Any] = [:]
-    var pendingEraseToEndOfLine: Bool = false
-
     let eventBus: EventBusProtocol
+    
+    // Virtual screen buffer for proper terminal emulation
+    var screenBuffer: TerminalScreenBuffer?
+    var screenRenderer: TerminalScreenRenderer?
 
     init(shellManager: ShellManaging = ShellManager(), eventBus: EventBusProtocol) {
         self.shellManager = shellManager
@@ -85,6 +84,12 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         isCleaningUp = false
         setupTerminalView(in: parentView)
         shellManager.start(in: targetDir)
+        
+        // Schedule initial resize after view is laid out
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 50_000_000) // 50ms delay for layout
+            self?.handleResize(in: parentView)
+        }
     }
 
     func focusTerminal() {
@@ -136,7 +141,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView.font = resolveFont(size: fontSize, family: fontFamily)
         terminalView.backgroundColor = NSColor.black
         terminalView.textColor = NSColor.green
-        terminalView.insertionPointColor = NSColor.white
+        terminalView.insertionPointColor = NSColor.green
         terminalView.alignment = .left
         terminalView.isVerticallyResizable = true
         terminalView.isHorizontallyResizable = true
@@ -194,10 +199,11 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
     }
 
     private func resetTerminalState(for terminalView: TerminalTextView) {
-        currentLineStartLocation = 0
-        cursorColumn = 0
-        currentTextAttributes = terminalView.typingAttributes
-        pendingEraseToEndOfLine = false
+        // Initialize screen buffer and renderer
+        screenBuffer = TerminalScreenBuffer(rows: 24, columns: 80)
+        screenRenderer = TerminalScreenRenderer(textView: terminalView) { [weak self] size, family in
+            self?.resolveFont(size: size, family: family) ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        }
     }
 
     /// Update terminal font
@@ -231,5 +237,24 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
             return NSFontManager.shared.convert(font, toHaveTrait: weight == .bold ? .boldFontMask : .unboldFontMask)
         }
         return NSFont.monospacedSystemFont(ofSize: size, weight: weight)
+    }
+
+    /// Handle terminal resize
+    func handleResize(in view: NSView) {
+        guard terminalView != nil else { return }
+        
+        let font = resolveFont(size: fontSize, family: fontFamily)
+        let charWidth = font.maximumAdvancement.width
+        let charHeight = font.boundingRectForFont.height
+        
+        let viewWidth = view.bounds.width
+        let viewHeight = view.bounds.height
+        
+        let columns = max(1, Int(viewWidth / charWidth))
+        let rows = max(1, Int(viewHeight / charHeight))
+        
+        // Resize both the PTY and the screen buffer
+        screenBuffer?.resize(rows: rows, columns: columns)
+        shellManager.resize(rows: rows, columns: columns)
     }
 }

@@ -10,6 +10,9 @@ extension CodebaseIndex {
 
     public func start() {
         print("CodebaseIndex service started")
+        Task {
+            await pruneOutOfScopeResourcesIfNeeded()
+        }
     }
 
     public func stop() {
@@ -18,13 +21,13 @@ extension CodebaseIndex {
         aiEnrichmentAfterIndexCancellable = nil
         aiEnrichmentTask?.cancel()
         aiEnrichmentTask = nil
-        coordinator.stop()
+        Task { await coordinator.stop() }
         Task { await database.shutdown() }
     }
 
     public func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
-        coordinator.setEnabled(enabled)
+        Task { await coordinator.setEnabled(enabled) }
     }
 
     public func reindexProject() {
@@ -33,7 +36,10 @@ extension CodebaseIndex {
 
     public func reindexProject(aiEnrichmentEnabled: Bool) {
         guard isEnabled else { return }
-        coordinator.reindexProject(rootURL: projectRoot)
+        Task {
+            await pruneOutOfScopeResourcesIfNeeded()
+            await coordinator.reindexProject(rootURL: projectRoot)
+        }
 
         if aiEnrichmentEnabled {
             aiEnrichmentAfterIndexCancellable?.cancel()
@@ -45,6 +51,17 @@ extension CodebaseIndex {
                 self.aiEnrichmentAfterIndexCancellable = nil
                 self.runAIEnrichment()
             }
+        }
+    }
+
+    private func pruneOutOfScopeResourcesIfNeeded() async {
+        do {
+            let removed = try await database.pruneResourcesOutside(projectRoot: projectRoot)
+            if removed > 0 {
+                await IndexLogger.shared.log("Pruned \(removed) out-of-scope resources from index database")
+            }
+        } catch {
+            await IndexLogger.shared.log("Failed to prune out-of-scope resources: \(error)")
         }
     }
 }

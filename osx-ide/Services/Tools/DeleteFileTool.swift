@@ -43,7 +43,9 @@ struct DeleteFileTool: AITool {
         }
         let fileManager = FileManager.default
         if !fileManager.fileExists(atPath: url.path) {
-            return "Error: File does not exist at \(pathValidator.relativePath(for: url))"
+            throw AppError.aiServiceError(
+                "delete_file failed: file does not exist at \(pathValidator.relativePath(for: url))"
+            )
         }
         try fileManager.removeItem(at: url)
         Task { @MainActor in

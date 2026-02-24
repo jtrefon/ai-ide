@@ -11,3 +11,50 @@ verify_build_tests_*.txt
 
 #Ignore windsurf AI rules
 .windsurfrules
+
+# Xcode build artifacts - IMPORTANT (no leading dot!)
+build/
+DerivedData/
+
+# Xcode module caches
+build/ModuleCache.noindex/
+build/SDKStatCaches.noindex/
+
+# Swift Package Manager
+Packages/
+build/SourcePackages/
+.swiftpm/
+
+# Xcode build data
+build/XCBuildData/
+
+# macOS
+.DS_Store
+*.app
+
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.xcworkspace/contents.xcworkspacedata
+
+# Xcode build products
+*.dSYM.zip
+*.dSYM/
+build/Build/Products/Debug/*.app
+build/Build/Products/Release/*.app
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Carthage
+Carthage/Build/
+Carthage/Checkouts/
+
+# Local sandbox for IDE testing/telemetry
+sandbox/
+scripts/
+venv*/

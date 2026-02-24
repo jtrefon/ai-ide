@@ -1,0 +1,13 @@
+--- osx-ide/Services/ConversationFlow/ToolLoopHandler.swift
++++ osx-ide/Services/ConversationFlow/ToolLoopHandler.swift
+@@ -571,10 +571,6 @@
+             return false
+         }
+ 
+-        if isTextualToolCallPattern(content) {
+-            return false
+-        }
+-
+         let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: content ?? "")
+         return deliveryStatus != .done
+     }

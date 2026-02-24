@@ -3,11 +3,36 @@ import Foundation
 public struct IndexConfiguration: Codable, Sendable {
     public var enabled: Bool
     public var debounceMs: Int
+    /// Debounce delay after last file change before triggering index (helps batch npm install, etc.)
+    public var bulkOperationDebounceMs: Int
+    /// Threshold of file changes that triggers immediate reindex instead of waiting
+    public var bulkOperationThreshold: Int
     public var excludePatterns: [String]
+    public var storageDirectoryPath: String?
+
+    public init(
+        enabled: Bool,
+        debounceMs: Int,
+        bulkOperationDebounceMs: Int = 5000,
+        bulkOperationThreshold: Int = 50,
+        excludePatterns: [String],
+        storageDirectoryPath: String? = nil
+    ) {
+        self.enabled = enabled
+        self.debounceMs = debounceMs
+        self.bulkOperationDebounceMs = bulkOperationDebounceMs
+        self.bulkOperationThreshold = bulkOperationThreshold
+        self.excludePatterns = excludePatterns
+        self.storageDirectoryPath = storageDirectoryPath
+    }
 
     public static let `default` = IndexConfiguration(
         enabled: true,
         debounceMs: 300,
+        // Debounce delay after last file change before triggering index (helps batch npm install, etc.)
+        bulkOperationDebounceMs: 5000,
+        // Threshold of file changes that triggers immediate reindex instead of waiting
+        bulkOperationThreshold: 50,
         excludePatterns: [
             "*.generated.*",
             ".git/*",
@@ -59,6 +84,7 @@ public struct IndexConfiguration: Codable, Sendable {
             ".idea",
             ".vscode",
             ".DS_Store"
-        ]
+        ],
+        storageDirectoryPath: nil
     )
 }

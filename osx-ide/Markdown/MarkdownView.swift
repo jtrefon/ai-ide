@@ -31,11 +31,12 @@ struct MarkdownView<CodeBlockContent: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        LazyVStack(alignment: .leading, spacing: 12) {
             ForEach(document.blocks) { block in
                 switch block.kind {
                 case .richText(let markdownText):
-                    MarkdownRichTextView(markdown: markdownText, fontSize: fontSize, fontFamily: fontFamily)
+                    MarkdownRichTextView(
+                        markdown: markdownText, fontSize: fontSize, fontFamily: fontFamily)
                 case .code(let code, let language):
                     codeBlock(code, language)
                 case .horizontalRule:
@@ -102,8 +103,8 @@ private struct MarkdownRichTextView: View {
         )
         text = text.replacingOccurrences(of: "\r\n", with: "\n")
         text = text.replacingOccurrences(of: "\r", with: "\n")
-        text = text.replacingOccurrences(of: "\u{2028}", with: "\n") // line separator
-        text = text.replacingOccurrences(of: "\u{2029}", with: "\n") // paragraph separator
+        text = text.replacingOccurrences(of: "\u{2028}", with: "\n")  // line separator
+        text = text.replacingOccurrences(of: "\u{2029}", with: "\n")  // paragraph separator
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
         guard lines.count > 1 else { return text }
 

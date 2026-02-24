@@ -10,6 +10,7 @@ final class ToolTimeoutCenter: ObservableObject {
     @Published private(set) var activeTargetFile: String?
     @Published private(set) var countdownSeconds: Int?
     @Published private(set) var isPaused: Bool = false
+    @Published private(set) var lastProgressAt: Date?
 
     private var lastProgressAtByToolCallId: [String: Date] = [:]
     private var timeoutSecondsByToolCallId: [String: TimeInterval] = [:]
@@ -39,6 +40,14 @@ final class ToolTimeoutCenter: ObservableObject {
 
     func markProgress(toolCallId: String) {
         lastProgressAtByToolCallId[toolCallId] = Date()
+        lastProgressAt = lastProgressAtByToolCallId[toolCallId]
+        recomputeCountdown()
+    }
+    
+    func extendTimeout(toolCallId: String, bySeconds: TimeInterval) {
+        guard let currentTimeout = timeoutSecondsByToolCallId[toolCallId] else { return }
+        timeoutSecondsByToolCallId[toolCallId] = currentTimeout + bySeconds
+        lastProgressAtByToolCallId[toolCallId] = Date()
         recomputeCountdown()
     }
 
@@ -49,6 +58,7 @@ final class ToolTimeoutCenter: ObservableObject {
             activeTargetFile = nil
             countdownSeconds = nil
             isPaused = false
+            lastProgressAt = nil
         }
         lastProgressAtByToolCallId[toolCallId] = nil
         timeoutSecondsByToolCallId[toolCallId] = nil

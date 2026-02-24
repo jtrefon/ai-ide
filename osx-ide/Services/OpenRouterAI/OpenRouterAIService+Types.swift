@@ -4,9 +4,11 @@ extension OpenRouterAIService {
     internal struct BuildSystemContentInput {
         let systemPrompt: String
         let hasTools: Bool
+        let toolPromptMode: ToolPromptMode
         let mode: AIMode?
         let projectRoot: URL?
         let reasoningEnabled: Bool
+        let stage: AIRequestStage?
     }
 
     struct OpenRouterChatInput {
@@ -44,6 +46,7 @@ extension OpenRouterAIService {
         let systemPrompt: String
         let baseURL: String
         let reasoningEnabled: Bool
+        let toolPromptMode: ToolPromptMode
     }
 
     struct ChatPreparation {
