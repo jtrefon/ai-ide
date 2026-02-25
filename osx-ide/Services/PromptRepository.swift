@@ -11,6 +11,13 @@ protocol PromptRepositoryProtocol {
 final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
     static let shared = PromptRepository()
 
+    /// Controls whether fallback to inline default values is allowed when prompt files cannot be found.
+    /// When `false` (default), the app will crash if a prompt file cannot be loaded.
+    /// This ensures prompt optimization efforts are not undermined by silent fallbacks.
+    /// - Note: This is intentionally mutable global state for runtime configuration.
+    ///         Access is expected to be infrequent (typically at app startup).
+    nonisolated(unsafe) static var allowFallback: Bool = false
+
     private let fileManager: FileManager
 
     init(fileManager: FileManager = .default) {
@@ -23,16 +30,28 @@ final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
         projectRoot: URL?
     ) -> String {
         guard let url = resolvePromptURL(key: key, projectRoot: projectRoot) else {
-            return defaultValue
+            if Self.allowFallback {
+                return defaultValue
+            }
+            fatalError("PromptRepository: Prompt file not found for key '\(key)'. Set allowFallback=true to use inline fallbacks.")
         }
 
         guard let data = try? Data(contentsOf: url),
               let text = String(data: data, encoding: .utf8) else {
-            return defaultValue
+            if Self.allowFallback {
+                return defaultValue
+            }
+            fatalError("PromptRepository: Failed to read prompt file for key '\(key)' at path '\(url.path)'. Set allowFallback=true to use inline fallbacks.")
         }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? defaultValue : trimmed
+        if trimmed.isEmpty {
+            if Self.allowFallback {
+                return defaultValue
+            }
+            fatalError("PromptRepository: Prompt file is empty for key '\(key)' at path '\(url.path)'. Set allowFallback=true to use inline fallbacks.")
+        }
+        return trimmed
     }
 
     private func resolvePromptURL(key: String, projectRoot: URL?) -> URL? {
