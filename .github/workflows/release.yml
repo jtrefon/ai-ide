@@ -32,6 +32,14 @@ jobs:
           CODE_SIGNING_REQUIRED=NO
           CODE_SIGN_IDENTITY=
 
+      - name: Ad-Hoc Code Sign
+        run: |
+          APP_PATH="build/Build/Products/Release/osx-ide.app"
+          echo "Signing application with ad-hoc identity..."
+          codesign --force --deep --sign - "$APP_PATH"
+          echo "Verifying signature..."
+          codesign --verify --verbose=2 "$APP_PATH"
+
       - name: Package App
         run: |
           APP_PATH="build/Build/Products/Release/osx-ide.app"
