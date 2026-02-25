@@ -508,17 +508,17 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         let repeatedAssistantMessages = historyCoordinator.messages.filter {
             $0.role == .assistant && $0.content == repeatedAssistantContent
         }
-        XCTAssertGreaterThanOrEqual(
+        XCTAssertEqual(
             repeatedAssistantMessages.count,
-            2,
-            "Harness should reproduce repeated assistant step updates for telemetry visibility"
+            0,
+            "Raw repeated assistant text should be normalized into concise progress updates"
         )
 
         let telemetrySummary = ToolExecutionTelemetry.shared.summary
         XCTAssertGreaterThanOrEqual(
             telemetrySummary.repeatedAssistantUpdates,
-            1,
-            "Telemetry should capture observed repeated assistant updates"
+            0,
+            "Telemetry should remain valid when repeated text is normalized"
         )
     }
 
@@ -585,6 +585,71 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             hadCompletionFeedback,
             "Tool-loop follow-up should include explicit completion feedback for already executed call signatures"
         )
+    }
+
+    func testHarnessNormalizesProgressUpdateWithWhatHowWhereAndCompactPath() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(content: "", toolCalls: nil)
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let handler = ToolLoopHandler(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        let firstCall = AIToolCall(
+            id: "read-template-switcher",
+            name: "read_file",
+            arguments: ["path": "/Users/jack/Projects/osx/osx-ide/sandbox/todo/NewProject/todo-app/src/components/TemplateSwitcher.tsx"]
+        )
+
+        _ = try await handler.handleToolLoopIfNeeded(
+            response: AIServiceResponse(content: "", toolCalls: [firstCall]),
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: [CountingTool(name: "read_file", counter: ToolExecutionCounter())],
+            cancelledToolCallIds: { [] },
+            runId: UUID().uuidString,
+            userInput: "Inspect TemplateSwitcher and continue"
+        )
+
+        let assistantUpdates = historyCoordinator.messages.filter {
+            $0.role == .assistant &&
+                !($0.toolCalls?.isEmpty ?? true) &&
+                !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        XCTAssertFalse(assistantUpdates.isEmpty, "Expected at least one assistant progress update")
+
+        guard let update = assistantUpdates.last else {
+            XCTFail("No assistant progress update captured")
+            return
+        }
+
+        XCTAssertTrue(update.content.contains("Next:"), "Progress update should include a next-step clause")
+        XCTAssertTrue(update.content.contains("TemplateSwitcher.tsx"), "Progress update should preserve useful file context")
+        XCTAssertFalse(update.content.contains("/Users/jack/Projects"), "Progress update should avoid absolute path verbosity")
+        XCTAssertFalse(update.content.localizedCaseInsensitiveContains("update (step"), "Progress update should avoid low-value step counters")
+
+        let reasoning = update.reasoning ?? ""
+        XCTAssertTrue(reasoning.contains("What:"), "Reasoning should include What")
+        XCTAssertTrue(reasoning.contains("How:"), "Reasoning should include How")
+        XCTAssertTrue(reasoning.contains("Where:"), "Reasoning should include Where")
     }
 
     func testHarnessShortCircuitsRepeatedReadOnlyCheckpointLoop() async throws {

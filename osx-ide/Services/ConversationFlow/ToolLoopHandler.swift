@@ -255,18 +255,24 @@ final class ToolLoopHandler {
             }
 
             let split = ChatPromptBuilder.splitReasoning(from: currentResponse.content ?? "")
-            let hasModelStepUpdate = !split.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let hasReasoning = !(split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            let normalizedProgress = normalizedProgressUpdate(
+                modelContent: split.content,
+                modelReasoning: split.reasoning,
+                toolCalls: uniqueToolCalls,
+                iteration: toolIteration
+            )
+            let hasModelStepUpdate = !normalizedProgress.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let hasReasoning = !(normalizedProgress.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
             let assistantMsg = ChatMessage(
                 role: .assistant,
-                content: split.content,
-                context: ChatMessageContentContext(reasoning: split.reasoning),
+                content: normalizedProgress.content,
+                context: ChatMessageContentContext(reasoning: normalizedProgress.reasoning),
                 tool: ChatMessageToolContext(toolCalls: uniqueToolCalls)
             )
             if hasModelStepUpdate || hasReasoning {
                 let updateSignature = assistantUpdateSignature(
-                    content: split.content,
-                    reasoning: split.reasoning,
+                    content: normalizedProgress.content,
+                    reasoning: normalizedProgress.reasoning,
                     toolCalls: uniqueToolCalls
                 )
                 if updateSignature == previousAssistantUpdateSignature {
@@ -278,7 +284,7 @@ final class ToolLoopHandler {
 
             logAssistantToolCalls(
                 conversationId: conversationId,
-                content: split.content,
+                content: normalizedProgress.content,
                 toolCalls: uniqueToolCalls
             )
 
@@ -740,16 +746,136 @@ final class ToolLoopHandler {
         toolCalls: [AIToolCall],
         iteration: Int
     ) -> String {
-        let callPreview = toolCalls.prefix(2).map { toolCall in
-            let target = (toolCall.arguments["path"] as? String)
-                ?? (toolCall.arguments["target_file"] as? String)
-                ?? "project files"
-            return "\(toolCall.name) on \(target)"
-        }.joined(separator: "; ")
+        let summary = progressTriplet(toolCalls: toolCalls, modelContent: nil, iteration: iteration)
+        return "\(summary.what) Next: \(summary.how) in \(summary.wherePath)."
+    }
 
-        let moreCount = max(0, toolCalls.count - 2)
-        let suffix = moreCount > 0 ? " (+\(moreCount) more)" : ""
-        return "Update (step \(iteration)): Prepared this execution step and now running \(callPreview)\(suffix) to move the implementation forward."
+    private func normalizedProgressUpdate(
+        modelContent: String,
+        modelReasoning: String?,
+        toolCalls: [AIToolCall],
+        iteration: Int
+    ) -> (content: String, reasoning: String?) {
+        let trimmedContent = modelContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = progressTriplet(
+            toolCalls: toolCalls,
+            modelContent: trimmedContent.isEmpty ? nil : trimmedContent,
+            iteration: iteration
+        )
+
+        let normalizedContent = "\(summary.what) Next: \(summary.how) in \(summary.wherePath)."
+        let normalizedReasoning: String
+        if let modelReasoning,
+           !modelReasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            normalizedReasoning = modelReasoning
+        } else {
+            normalizedReasoning = [
+                "What: \(summary.what)",
+                "How: \(summary.how)",
+                "Where: \(summary.wherePath)"
+            ].joined(separator: "\n")
+        }
+
+        return (normalizedContent, normalizedReasoning)
+    }
+
+    private func progressTriplet(
+        toolCalls: [AIToolCall],
+        modelContent: String?,
+        iteration: Int
+    ) -> (what: String, how: String, wherePath: String) {
+        let compactTargets = uniqueStringsPreservingOrder(toolCalls.compactMap(extractCompactTarget(from:)))
+        let compactPathSummary = compactTargets.prefix(2).joined(separator: ", ")
+        let wherePath = compactPathSummary.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty
+            ? "project files"
+            : compactPathSummary
+
+        let actionPreview = toolCalls.prefix(2).map { $0.name }.joined(separator: ", ")
+        let extraCount = max(0, toolCalls.count - 2)
+        let how = extraCount > 0
+            ? "running \(actionPreview) (+\(extraCount) more)"
+            : "running \(actionPreview)"
+
+        let what: String
+        if let modelContent, let distilled = distilledWhat(from: modelContent) {
+            what = distilled
+        } else {
+            what = "Completed progress update for step \(iteration)"
+        }
+
+        return (what, how, wherePath)
+    }
+
+    private func uniqueStringsPreservingOrder(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for value in values where !seen.contains(value) {
+            seen.insert(value)
+            result.append(value)
+        }
+        return result
+    }
+
+    private func distilledWhat(from content: String) -> String? {
+        let cleaned = content
+            .replacingOccurrences(of: "\n", with: " ")
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleaned.isEmpty else { return nil }
+        if cleaned.localizedCaseInsensitiveContains("update (step") {
+            return nil
+        }
+
+        let noDuplicateNext: String
+        if let range = cleaned.range(of: " Next:", options: [.caseInsensitive]) {
+            noDuplicateNext = String(cleaned[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            noDuplicateNext = cleaned
+        }
+
+        guard !noDuplicateNext.isEmpty else { return nil }
+        return noDuplicateNext.count > 120
+            ? String(noDuplicateNext.prefix(120)).trimmingCharacters(in: .whitespacesAndNewlines)
+            : noDuplicateNext
+    }
+
+    private func extractCompactTarget(from toolCall: AIToolCall) -> String? {
+        let keys = ["path", "target_file", "file", "file_path", "directory"]
+        for key in keys {
+            if let raw = toolCall.arguments[key] as? String,
+               let compact = compactPath(raw) {
+                return compact
+            }
+        }
+        return nil
+    }
+
+    private func compactPath(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let normalized = trimmed.replacingOccurrences(of: "\\", with: "/")
+        let parts = normalized.split(separator: "/").map(String.init)
+        guard !parts.isEmpty else { return nil }
+        if parts.count == 1 { return parts[0] }
+
+        if let srcIndex = parts.firstIndex(of: "src"), srcIndex < parts.count {
+            return parts[srcIndex...].prefix(3).joined(separator: "/")
+        }
+
+        let penultimate = parts[parts.count - 2]
+        if looksLikeEphemeralIdentifier(penultimate) {
+            return parts.last
+        }
+
+        return parts.suffix(2).joined(separator: "/")
+    }
+
+    private func looksLikeEphemeralIdentifier(_ value: String) -> Bool {
+        let lowercase = value.lowercased()
+        return lowercase.count >= 16 && lowercase.contains("-")
     }
 
     private func toolLoopStepUpdateInstructionMessage(consecutiveReadOnlyIterations: Int = 0) -> ChatMessage {
