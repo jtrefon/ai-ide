@@ -552,13 +552,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let window = NSWindow(contentViewController: hosting)
             window.styleMask.insert(.resizable)
             window.title = "osx-ide"
-            window.minSize = NSSize(width: 900, height: 600)
-            window.setContentSize(NSSize(width: 1280, height: 800))
-            window.center()
+            if let screen = NSScreen.main {
+                let visible = screen.visibleFrame
+                window.minSize = UILayoutNormalizer.normalizedMinWindowSize(screenVisibleFrame: visible)
+                let defaultFrame = UILayoutNormalizer.normalizedDefaultWindowFrame(screenVisibleFrame: visible)
+                window.setFrame(defaultFrame, display: true)
+            } else {
+                window.minSize = NSSize(width: 700, height: 480)
+                window.setContentSize(NSSize(width: 1280, height: 800))
+                window.center()
+            }
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             Self.uiTestFallbackWindow = window
             earlyDiag("uiTest fallback window created. windows=\(NSApp.windows.count)")
         }
+    }
+
+    @MainActor
+    func applicationWillTerminate(_ notification: Notification) {
+        Self.sharedAppState?.persistSessionNow()
     }
 }

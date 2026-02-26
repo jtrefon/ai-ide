@@ -8,19 +8,6 @@
 import SwiftUI
 import AppKit
 
-private enum HorizontalPanelKind: Hashable {
-    case sidebar
-    case chat
-}
-
-private struct HorizontalPanelWidthPreferenceKey: PreferenceKey {
-    static let defaultValue: [HorizontalPanelKind: CGFloat] = [:]
-
-    static func reduce(value: inout [HorizontalPanelKind: CGFloat], nextValue: () -> [HorizontalPanelKind: CGFloat]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
 struct ContentView: View {
     let appState: AppState
     @ObservedObject private var fileEditor: FileEditorStateManager
@@ -30,6 +17,8 @@ struct ContentView: View {
 
     @State private var logsFollow: Bool = true
     @State private var logsSource: String = LogsPanelView.LogSource.app.rawValue
+    @State private var sidebarDragStartWidth: Double?
+    @State private var chatDragStartWidth: Double?
 
     init(appState: AppState) {
         self.appState = appState
@@ -78,54 +67,117 @@ struct ContentView: View {
 
     private var workspaceLayout: some View {
         let _ = trackViewRender("ContentView.workspaceLayout")
-        return HSplitView {
-            if uiState.isSidebarVisible, let pluginView = registry.views(for: .sidebarLeft).first {
-                pluginView.makeView()
-                    .frame(
-                        minWidth: AppConstants.Layout.minSidebarWidth,
-                        idealWidth: uiState.sidebarWidth,
-                        maxWidth: AppConstants.Layout.maxSidebarWidth
-                    )
-                    .background(
-                        GeometryReader { proxy in
-                            Color.clear.preference(
-                                key: HorizontalPanelWidthPreferenceKey.self,
-                                value: [.sidebar: proxy.size.width]
-                            )
-                        }
-                    )
-                    .accessibilityIdentifier(AccessibilityID.leftSidebarPanel)
-            }
-
-            HSplitView {
-                editorAndTerminal
-
-                if uiState.isAIChatVisible, let pluginView = registry.views(for: .panelRight).first {
+        return GeometryReader { proxy in
+            HStack(spacing: 0) {
+                if uiState.isSidebarVisible, let pluginView = registry.views(for: .sidebarLeft).first {
                     pluginView.makeView()
-                        .frame(
-                            minWidth: AppConstants.Layout.minChatPanelWidth,
-                            idealWidth: uiState.chatPanelWidth,
-                            maxWidth: AppConstants.Layout.maxChatPanelWidth
+                        .frame(width: uiState.sidebarWidth)
+                        .frame(minWidth: AppConstants.Layout.minSidebarWidth, maxWidth: AppConstants.Layout.maxSidebarWidth)
+                        .accessibilityIdentifier(AccessibilityID.leftSidebarPanel)
+
+                    horizontalDivider(accessibilityID: AccessibilityID.sidebarResizeHandle) {
+                        if sidebarDragStartWidth == nil {
+                            sidebarDragStartWidth = uiState.sidebarWidth
+                        }
+                        let proposed = (sidebarDragStartWidth ?? uiState.sidebarWidth) + $0.translation.width
+                        applyHorizontalPanelWidths(
+                            proposedSidebarWidth: proposed,
+                            proposedChatWidth: nil,
+                            windowWidth: proxy.size.width
                         )
-                        .background(
-                            GeometryReader { proxy in
-                                Color.clear.preference(
-                                    key: HorizontalPanelWidthPreferenceKey.self,
-                                    value: [.chat: proxy.size.width]
-                                )
-                            }
-                        )
-                        .accessibilityIdentifier(AccessibilityID.rightChatPanel)
+                    } onEnded: { _ in
+                        sidebarDragStartWidth = nil
+                    }
                 }
+
+                HStack(spacing: 0) {
+                    editorAndTerminal
+
+                    if uiState.isAIChatVisible, let pluginView = registry.views(for: .panelRight).first {
+                        horizontalDivider(accessibilityID: AccessibilityID.chatResizeHandle) {
+                            if chatDragStartWidth == nil {
+                                chatDragStartWidth = uiState.chatPanelWidth
+                            }
+                            let proposed = (chatDragStartWidth ?? uiState.chatPanelWidth) - $0.translation.width
+                            applyHorizontalPanelWidths(
+                                proposedSidebarWidth: nil,
+                                proposedChatWidth: proposed,
+                                windowWidth: proxy.size.width
+                            )
+                        } onEnded: { _ in
+                            chatDragStartWidth = nil
+                        }
+
+                        pluginView.makeView()
+                            .frame(width: uiState.chatPanelWidth)
+                            .frame(minWidth: AppConstants.Layout.minChatPanelWidth, maxWidth: AppConstants.Layout.maxChatPanelWidth)
+                            .accessibilityIdentifier(AccessibilityID.rightChatPanel)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .onAppear {
+                applyHorizontalPanelWidths(
+                    proposedSidebarWidth: uiState.sidebarWidth,
+                    proposedChatWidth: uiState.chatPanelWidth,
+                    windowWidth: proxy.size.width
+                )
+            }
+            .onChange(of: proxy.size.width) { _, width in
+                applyHorizontalPanelWidths(
+                    proposedSidebarWidth: uiState.sidebarWidth,
+                    proposedChatWidth: uiState.chatPanelWidth,
+                    windowWidth: width
+                )
             }
         }
-        .onPreferenceChange(HorizontalPanelWidthPreferenceKey.self) { widths in
-            if let sidebar = widths[.sidebar], uiState.isSidebarVisible, abs(uiState.sidebarWidth - sidebar) > 1 {
-                uiState.updateSidebarWidth(sidebar)
-            }
-            if let chat = widths[.chat], uiState.isAIChatVisible, abs(uiState.chatPanelWidth - chat) > 1 {
-                uiState.updateChatPanelWidth(chat)
-            }
+    }
+
+    private func horizontalDivider(
+        accessibilityID: String,
+        onChanged: @escaping (DragGesture.Value) -> Void,
+        onEnded: @escaping (DragGesture.Value) -> Void
+    ) -> some View {
+        Rectangle()
+            .fill(Color(NSColor.separatorColor))
+            .frame(width: 6)
+            .contentShape(Rectangle())
+            .overlay(
+                ResizeCursorView(cursor: .resizeLeftRight)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            )
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged(onChanged)
+                    .onEnded(onEnded)
+            )
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier(accessibilityID)
+    }
+
+    private func applyHorizontalPanelWidths(
+        proposedSidebarWidth: Double?,
+        proposedChatWidth: Double?,
+        windowWidth: CGFloat
+    ) {
+        let sidebarSource = proposedSidebarWidth ?? uiState.sidebarWidth
+        let chatSource = proposedChatWidth ?? uiState.chatPanelWidth
+        let sidebar = UILayoutNormalizer.normalizeSidebarWidth(sidebarSource, windowWidth: windowWidth)
+        let chat = UILayoutNormalizer.normalizeChatPanelWidth(chatSource, windowWidth: windowWidth)
+        let balanced = UILayoutNormalizer.rebalanceHorizontalPanels(
+            sidebarWidth: sidebar,
+            chatWidth: chat,
+            isSidebarVisible: uiState.isSidebarVisible,
+            isChatVisible: uiState.isAIChatVisible,
+            windowWidth: windowWidth,
+            minimumEditorWidth: 400
+        )
+
+        if uiState.isSidebarVisible, abs(uiState.sidebarWidth - balanced.sidebar) > 0.5 {
+            uiState.updateSidebarWidth(balanced.sidebar)
+        }
+        if uiState.isAIChatVisible, abs(uiState.chatPanelWidth - balanced.chat) > 0.5 {
+            uiState.updateChatPanelWidth(balanced.chat)
         }
     }
 
@@ -366,30 +418,40 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
 private struct WindowSetupView: View {
     @ObservedObject var appState: AppState
 
+    private func configureWindow(_ window: NSWindow) {
+        appState.windowProvider.setWindow(window)
+        appState.attachWindow(window)
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = false
+        window.isMovableByWindowBackground = false
+        window.isOpaque = true
+        window.backgroundColor = NSColor.windowBackgroundColor
+        window.hasShadow = true
+        window.styleMask.insert(.resizable)
+        window.styleMask.insert(.unifiedTitleAndToolbar)
+
+        guard let screen = window.screen ?? NSScreen.main else { return }
+        let visibleFrame = screen.visibleFrame
+        let minSize = UILayoutNormalizer.normalizedMinWindowSize(screenVisibleFrame: visibleFrame)
+        window.minSize = minSize
+
+        var targetFrame = window.frame
+        if targetFrame.width <= 1 || targetFrame.height <= 1 {
+            targetFrame = UILayoutNormalizer.normalizedDefaultWindowFrame(screenVisibleFrame: visibleFrame)
+        }
+
+        let normalized = UILayoutNormalizer.normalizeWindowFrame(
+            targetFrame,
+            screenVisibleFrame: visibleFrame
+        )
+        if normalized != window.frame {
+            window.setFrame(normalized, display: true)
+        }
+    }
+
     var body: some View {
         WindowAccessor { window in
-            appState.windowProvider.setWindow(window)
-            appState.attachWindow(window)
-            window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = false
-            window.isMovableByWindowBackground = false
-            window.isOpaque = true
-            window.backgroundColor = NSColor.windowBackgroundColor
-            window.hasShadow = true
-            window.styleMask.insert(.resizable)
-            window.styleMask.insert(.unifiedTitleAndToolbar)
-            window.minSize = NSSize(width: 900, height: 600)
-            
-            // Normalize persisted geometry against the currently visible frame.
-            if let screen = window.screen ?? NSScreen.main {
-                let normalized = UILayoutNormalizer.normalizeWindowFrame(
-                    window.frame,
-                    screenVisibleFrame: screen.visibleFrame
-                )
-                if normalized != window.frame {
-                    window.setFrame(normalized, display: true)
-                }
-            }
+            configureWindow(window)
         }
         .frame(width: 0, height: 0)
     }

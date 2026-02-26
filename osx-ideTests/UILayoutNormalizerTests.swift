@@ -44,4 +44,24 @@ final class UILayoutNormalizerTests: XCTestCase {
 
         XCTAssertLessThanOrEqual(result.sidebar + result.chat + 400, 1000)
     }
+
+    func testNormalizedMinWindowSize_AdaptsToSmallScreens() {
+        let tinyVisible = NSRect(x: 0, y: 0, width: 640, height: 420)
+
+        let size = UILayoutNormalizer.normalizedMinWindowSize(screenVisibleFrame: tinyVisible)
+
+        XCTAssertEqual(size.width, 640, accuracy: 0.1)
+        XCTAssertEqual(size.height, 420, accuracy: 0.1)
+    }
+
+    func testNormalizedDefaultWindowFrame_IsInsideVisibleFrame() {
+        let visible = NSRect(x: 40, y: 30, width: 1200, height: 760)
+
+        let frame = UILayoutNormalizer.normalizedDefaultWindowFrame(screenVisibleFrame: visible)
+
+        XCTAssertGreaterThanOrEqual(frame.minX, visible.minX)
+        XCTAssertGreaterThanOrEqual(frame.minY, visible.minY)
+        XCTAssertLessThanOrEqual(frame.maxX, visible.maxX)
+        XCTAssertLessThanOrEqual(frame.maxY, visible.maxY)
+    }
 }

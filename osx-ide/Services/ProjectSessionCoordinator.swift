@@ -10,6 +10,7 @@ final class ProjectSessionCoordinator {
     private weak var window: NSWindow?
     private var saveSessionTask: Task<Void, Never>?
     private var isRestoringSession: Bool = false
+    private var hasLoadedInitialSession: Bool = false
 
     private let workspace: WorkspaceStateManager
     private let ui: UIStateManager
@@ -91,6 +92,7 @@ final class ProjectSessionCoordinator {
 
     func scheduleSaveProjectSession() {
         guard !isRestoringSession else { return }
+        guard hasLoadedInitialSession else { return }
         saveSessionTask?.cancel()
         saveSessionTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -98,6 +100,13 @@ final class ProjectSessionCoordinator {
                 self?.saveProjectSessionNow()
             }
         }
+    }
+
+    func persistProjectSessionNow() {
+        guard !isRestoringSession else { return }
+        guard hasLoadedInitialSession else { return }
+        saveSessionTask?.cancel()
+        saveProjectSessionNow()
     }
 
     private func loadExistingNonDirectoryFileIfPresent(_ url: URL) {
@@ -136,12 +145,20 @@ final class ProjectSessionCoordinator {
 
     private func loadProjectSessionImpl(for projectRoot: URL) async {
         isRestoringSession = true
-        defer { isRestoringSession = false }
+        hasLoadedInitialSession = false
+        var shouldBootstrapSave = false
+        defer {
+            isRestoringSession = false
+            hasLoadedInitialSession = true
+            if shouldBootstrapSave {
+                scheduleSaveProjectSession()
+            }
+        }
 
         await projectSessionStore.setProjectRoot(projectRoot)
 
         guard let session = try? await projectSessionStore.load() else {
-            scheduleSaveProjectSession()
+            shouldBootstrapSave = true
             return
         }
 

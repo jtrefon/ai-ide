@@ -18,7 +18,7 @@ struct WindowAccessor: NSViewRepresentable {
         Task { @MainActor [weak nsView] in
             guard let nsView else { return }
             guard let window = nsView.window else { return }
-            context.coordinator.resolveIfNeeded(window: window, onResolve: onResolve)
+            context.coordinator.resolve(window: window, onResolve: onResolve)
         }
     }
 
@@ -29,8 +29,15 @@ struct WindowAccessor: NSViewRepresentable {
     final class Coordinator {
         private weak var resolvedWindow: NSWindow?
 
+        // Initial binding path.
         func resolveIfNeeded(window: NSWindow, onResolve: (NSWindow) -> Void) {
             guard resolvedWindow !== window else { return }
+            resolvedWindow = window
+            onResolve(window)
+        }
+
+        // Update path: re-apply window configuration each render pass.
+        func resolve(window: NSWindow, onResolve: (NSWindow) -> Void) {
             resolvedWindow = window
             onResolve(window)
         }
