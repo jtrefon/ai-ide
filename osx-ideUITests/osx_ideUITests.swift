@@ -177,8 +177,12 @@ struct ChatRobot {
     }
 
     func sendMessage(_ text: String) {
-        input.click()
-        input.typeText(text)
+        let center = input.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        center.click()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        center.click()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        app.typeText(text)
         XCTAssertTrue(send.isEnabled, "Send button must be enabled")
         send.click()
     }

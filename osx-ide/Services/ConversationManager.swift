@@ -61,7 +61,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var codebaseIndex: CodebaseIndexProtocol?
     private var projectRoot: URL
     private let conversationLogger: ConversationLogger
-    private let settingsStore = SettingsStore(userDefaults: .standard)
+    private let settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
     private let activityCoordinator: AgentActivityCoordinating?
     /// Token for the current API sending activity
     private var apiSendingActivityToken: AgentActivityToken?

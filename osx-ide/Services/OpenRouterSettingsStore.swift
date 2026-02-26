@@ -14,7 +14,7 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading, @unchecked Senda
     private let toolPromptModeKey = "OpenRouterToolPromptMode"
     private let ragEnabledDuringToolLoopKey = "OpenRouterRAGEnabledDuringToolLoop"
 
-    init(settingsStore: SettingsStore = SettingsStore(userDefaults: .standard)) {
+    init(settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)) {
         self.settingsStore = settingsStore
     }
 

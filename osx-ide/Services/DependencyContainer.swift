@@ -31,22 +31,17 @@ private func earlyDiag(_ msg: String) {
 /// Dependency injection container for managing service instances
 @MainActor
 class DependencyContainer: ObservableObject {
-
     internal let settingsStore: SettingsStore
 
     /// Tracks whether heavy initialization is complete
     @Published private(set) var isInitialized: Bool = false
     @Published private(set) var initializationStatus: String = "Starting..."
 
-    init(
-        isTesting: Bool = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-    ) {
+    init(launchContext: AppLaunchContext = AppRuntimeEnvironment.launchContext) {
         let _initStart = Date()
         earlyDiag("DependencyContainer.init START")
 
-        // If testing, try to load the actual app's UserDefaults so harness has access to API keys and models
-        let defaults = isTesting ? (UserDefaults(suiteName: "tdc.osx-ide") ?? .standard) : .standard
-        settingsStore = SettingsStore(userDefaults: defaults)
+        settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
 
         // Create lightweight services immediately
         earlyDiag("Creating lightweight services...")
@@ -147,14 +142,23 @@ class DependencyContainer: ObservableObject {
 
         // Defer truly heavy initialization to background - MUST use detached to escape @MainActor
         Task.detached(priority: .userInitiated) { [weak self] in
-            await self?.initializeHeavyServices(isTesting: isTesting)
+            await self?.initializeHeavyServices(launchContext: launchContext)
         }
     }
 
     /// Initialize heavy services asynchronously (database, embedding models, etc.)
-    nonisolated private func initializeHeavyServices(isTesting: Bool) async {
+    nonisolated private func initializeHeavyServices(launchContext: AppLaunchContext) async {
         let heavyStart = Date()
         Swift.print("[DIAG] initializeHeavyServices START (Background)")
+
+        if launchContext.disableHeavyInit {
+            await MainActor.run {
+                self.isInitialized = true
+                self.initializationStatus = "Ready (heavy init disabled)"
+            }
+            Swift.print("[DIAG] initializeHeavyServices SKIPPED due to launch context")
+            return
+        }
 
         // Small delay to let UI render first
         try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
@@ -164,7 +168,7 @@ class DependencyContainer: ObservableObject {
         // Safely access currentDirectory from Main Actor
         let projectRoot = await MainActor.run { _workspaceService.currentDirectory }
 
-        if !isTesting, let root = projectRoot {
+        if !launchContext.isTesting, let root = projectRoot {
             Swift.print("[DIAG] Setting up diagnostics logger for project: \(root.path)")
 
             // Setup diagnostics logger with project root

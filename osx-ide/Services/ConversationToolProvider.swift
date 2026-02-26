@@ -31,7 +31,7 @@ final class ConversationToolProvider {
         let projectRoot = projectRootProvider()
         let aiService = aiServiceProvider()
         let codebaseIndex = codebaseIndexProvider()
-        let settingsStore = SettingsStore(userDefaults: .standard)
+        let settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
         let agentMemoryEnabled = settingsStore.bool(
             forKey: AppConstantsStorage.agentMemoryEnabledKey, default: true)
 

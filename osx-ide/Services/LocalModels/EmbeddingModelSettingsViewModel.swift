@@ -48,7 +48,7 @@ final class EmbeddingModelSettingsViewModel: ObservableObject {
 
     init(
         downloader: EmbeddingModelDownloader = EmbeddingModelDownloader(),
-        settingsStore: SettingsStore = SettingsStore(userDefaults: .standard)
+        settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
     ) {
         self.downloader = downloader
         self.settingsStore = settingsStore

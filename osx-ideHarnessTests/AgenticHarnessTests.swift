@@ -40,7 +40,7 @@ final class AgenticHarnessTests: XCTestCase {
 
     private func makeProductionRuntime(projectRoot: URL) async throws -> ProductionRuntime {
         // Initialize the app's real DependencyContainer in testing mode
-        let container = DependencyContainer(isTesting: true)
+        let container = DependencyContainer(launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false, testProfilePath: nil, disableHeavyInit: false))
 
         guard let manager = container.conversationManager as? ConversationManager else {
             throw NSError(

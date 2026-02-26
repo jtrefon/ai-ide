@@ -72,7 +72,7 @@ struct ContentView: View {
                 if uiState.isSidebarVisible, let pluginView = registry.views(for: .sidebarLeft).first {
                     pluginView.makeView()
                         .frame(width: uiState.sidebarWidth)
-                        .frame(minWidth: AppConstants.Layout.minSidebarWidth, maxWidth: AppConstants.Layout.maxSidebarWidth)
+                        .frame(maxHeight: .infinity)
                         .accessibilityIdentifier(AccessibilityID.leftSidebarPanel)
 
                     horizontalDivider(accessibilityID: AccessibilityID.sidebarResizeHandle) {
@@ -110,7 +110,7 @@ struct ContentView: View {
 
                         pluginView.makeView()
                             .frame(width: uiState.chatPanelWidth)
-                            .frame(minWidth: AppConstants.Layout.minChatPanelWidth, maxWidth: AppConstants.Layout.maxChatPanelWidth)
+                            .frame(maxHeight: .infinity)
                             .accessibilityIdentifier(AccessibilityID.rightChatPanel)
                     }
                 }
@@ -139,8 +139,8 @@ struct ContentView: View {
         onEnded: @escaping (DragGesture.Value) -> Void
     ) -> some View {
         Rectangle()
-            .fill(Color(NSColor.separatorColor))
-            .frame(width: 6)
+            .fill(Color(NSColor.separatorColor).opacity(0.95))
+            .frame(width: 8)
             .contentShape(Rectangle())
             .overlay(
                 ResizeCursorView(cursor: .resizeLeftRight)
@@ -152,6 +152,8 @@ struct ContentView: View {
                     .onEnded(onEnded)
             )
             .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityID)
+            .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier(accessibilityID)
     }
 

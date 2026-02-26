@@ -19,7 +19,7 @@ public final class LanguageModuleManager: ObservableObject {
     private let settingsStore: SettingsStore
 
     private init() {
-        settingsStore = SettingsStore(userDefaults: .standard)
+        settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
         // Register default modules
         register(SwiftModule())
         register(JavaScriptModule())

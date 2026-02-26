@@ -9,7 +9,7 @@ final class SettingsStore: @unchecked Sendable {
         changesSubject.eraseToAnyPublisher()
     }
 
-    init(userDefaults: UserDefaults) {
+    init(userDefaults: UserDefaults = AppRuntimeEnvironment.userDefaults) {
         self.userDefaults = userDefaults
     }
 

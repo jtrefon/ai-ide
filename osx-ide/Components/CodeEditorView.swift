@@ -41,7 +41,7 @@ struct CodeEditorView: View {
                         Text(highlightDiagnostics.diagnostics)
                             .font(.system(size: 1))
                             .foregroundColor(.clear)
-                            .accessibilityIdentifier("EditorHighlightDiagnostics")
+                            .accessibilityIdentifier(AccessibilityID.editorHighlightDiagnostics)
                             .accessibilityLabel(highlightDiagnostics.diagnostics)
                             .accessibilityValue(highlightDiagnostics.diagnostics)
                     }

@@ -15,7 +15,7 @@ enum IndentationStyle: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    static func current(userDefaults: UserDefaults = .standard) -> IndentationStyle {
+    static func current(userDefaults: UserDefaults = AppRuntimeEnvironment.userDefaults) -> IndentationStyle {
         if let raw = userDefaults.string(forKey: AppConstants.Storage.indentationStyleKey),
            let style = IndentationStyle(rawValue: raw) {
             return style
@@ -23,7 +23,7 @@ enum IndentationStyle: String, CaseIterable, Codable, Sendable {
         return .tabs
     }
 
-    static func setCurrent(_ style: IndentationStyle, userDefaults: UserDefaults = .standard) {
+    static func setCurrent(_ style: IndentationStyle, userDefaults: UserDefaults = AppRuntimeEnvironment.userDefaults) {
         userDefaults.set(style.rawValue, forKey: AppConstants.Storage.indentationStyleKey)
     }
 

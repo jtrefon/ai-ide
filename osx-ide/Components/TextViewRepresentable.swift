@@ -41,7 +41,7 @@ struct TextViewRepresentable: NSViewRepresentable {
 
         // UI Tests need a stable identifier; otherwise `app.textViews.firstMatch` can
         // accidentally match the AI chat input instead of the editor.
-        textView.setAccessibilityIdentifier("CodeEditorTextView")
+        textView.setAccessibilityIdentifier(AccessibilityID.codeEditorTextView)
     }
 
     private func configureTextContainerSizing(for textView: NSTextView) {

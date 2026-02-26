@@ -172,7 +172,7 @@ final class RealServiceToolLoopTests: XCTestCase {
     
     private func makeProductionRuntime(projectRoot: URL) async throws -> ProductionRuntime {
         // Use real DependencyContainer but force local model usage
-        let container = DependencyContainer(isTesting: true)
+        let container = DependencyContainer(launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false, testProfilePath: nil, disableHeavyInit: false))
         
         // Force offline mode to use local models only
         let selectionStore = LocalModelSelectionStore(settingsStore: container.settingsStore)

@@ -36,7 +36,7 @@ class ProjectCoordinator: ObservableObject {
         self.errorManager = errorManager
         self.eventBus = eventBus
         self.conversationManager = conversationManager
-        self.settingsStore = SettingsStore(userDefaults: .standard)
+        self.settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
     }
 
     /// Configure project asynchronously - does NOT block the main thread
