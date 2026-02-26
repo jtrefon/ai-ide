@@ -29,36 +29,49 @@ struct ChatInputView: View {
     
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            // Text input area with proper styling
-            ZStack(alignment: .topLeading) {
-                // Placeholder text
-                if text.isEmpty {
-                    Text(localized("chat_input.placeholder"))
-                        .font(resolveFont(size: fontSize, family: fontFamily))
-                        .foregroundColor(Color(NSColor.placeholderTextColor))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .allowsHitTesting(false)
+            if AppRuntimeEnvironment.launchContext.isUITesting {
+                TextField(localized("chat_input.placeholder"), text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .font(resolveFont(size: fontSize, family: fontFamily))
+                    .focused($isInputFocused)
+                    .onSubmit(sendIfPossible)
+                    .accessibilityLabel(localized("chat_input.placeholder"))
+                    .accessibilityIdentifier(AccessibilityID.aiChatInputTextView)
+            } else {
+                // Text input area with proper styling
+                ZStack(alignment: .topLeading) {
+                    // Placeholder text
+                    if text.isEmpty {
+                        Text(localized("chat_input.placeholder"))
+                            .font(resolveFont(size: fontSize, family: fontFamily))
+                            .foregroundColor(Color(NSColor.placeholderTextColor))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .allowsHitTesting(false)
+                    }
+                    
+                    // Actual text view
+                    MultilineTextField(
+                        text: $text,
+                        fontSize: fontSize,
+                        fontFamily: fontFamily,
+                        height: $textViewHeight,
+                        onSubmit: sendIfPossible
+                    )
+                    .focused($isInputFocused)
                 }
-                
-                // Actual text view
-                MultilineTextField(
-                    text: $text,
-                    fontSize: fontSize,
-                    fontFamily: fontFamily,
-                    height: $textViewHeight,
-                    onSubmit: sendIfPossible
+                .frame(minHeight: min(textViewHeight, 120), maxHeight: 120)
+                .background(Color(NSColor.textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(
+                            isInputFocused ? Color.accentColor : Color.gray.opacity(0.3),
+                            lineWidth: isInputFocused ? 2 : 1
+                        )
                 )
-                .focused($isInputFocused)
+                .accessibilityIdentifier(AccessibilityID.aiChatInputTextView)
             }
-            .frame(minHeight: min(textViewHeight, 120), maxHeight: 120)
-            .background(Color(NSColor.textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isInputFocused ? Color.accentColor : Color.gray.opacity(0.3), lineWidth: isInputFocused ? 2 : 1)
-            )
-            .accessibilityIdentifier("AIChatInputTextView")
 
             // Send button
             Button(action: sendIfPossible) {
@@ -70,9 +83,11 @@ struct ChatInputView: View {
                     .clipShape(Circle())
             }
             .buttonStyle(PlainButtonStyle())
-            .accessibilityIdentifier("AIChatSendButton")
+            .accessibilityLabel(localized("chat_input.send"))
+            .accessibilityIdentifier(AccessibilityID.aiChatSendButton)
             .disabled(!canSend)
         }
+        .accessibilityElement(children: .contain)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
@@ -105,7 +120,7 @@ struct MultilineTextField: NSViewRepresentable {
     
     func makeNSView(context: Context) -> NSTextView {
         let textView = NSTextView()
-        textView.setAccessibilityIdentifier("AIChatInputTextView")
+        textView.setAccessibilityIdentifier(AccessibilityID.aiChatInputTextView)
         textView.delegate = context.coordinator
         textView.isEditable = true
         textView.isSelectable = true

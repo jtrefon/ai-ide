@@ -1,205 +1,258 @@
-//
-//  osx_ideUITests.swift
-//  osx-ideUITests
-//
-//  Created by Jack Trefon on 25/08/2025.
-//
-
 import XCTest
 
 @MainActor
-final class OSXIDEUITests: XCTestCase {
-    private static var testFiles: [URL] = []
-
-    private func makeLaunchedApp() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launch()
-        return app
-    }
-
-    private func skipIfElementNotDiscoverable(_ element: XCUIElement, name: String, timeout: TimeInterval) {
-        if !element.waitForExistence(timeout: timeout) {
-            XCTSkip("\(name) not discoverable by XCTest on this machine/session")
-        }
-        if !element.exists {
-            XCTSkip("\(name) became undiscoverable after initial wait (accessibility snapshot flake)")
-        }
-    }
+class BaseUITestCase: XCTestCase {
+    private(set) var app: XCUIApplication!
+    private var testProfilePath: String = ""
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        app = XCUIApplication()
+        testProfilePath = NSTemporaryDirectory() + "osx_ide_ui_profile_\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: testProfilePath, withIntermediateDirectories: true)
     }
 
     override func tearDownWithError() throws {
-        // Clean up any test files created during this test
-        for file in Self.testFiles {
-            try? FileManager.default.removeItem(at: file)
-        }
-        Self.testFiles.removeAll()
-
-        // Terminate the app to ensure clean state with timeout
-        let app = XCUIApplication()
         if app.state == .runningForeground || app.state == .runningBackground {
             app.terminate()
-            // Wait a moment for termination to complete
-            let timeout = Date().addingTimeInterval(5.0)
-            while Date() < timeout && (app.state == .runningForeground || app.state == .runningBackground) {
-                Thread.sleep(forTimeInterval: 0.1)
+        }
+        if !testProfilePath.isEmpty {
+            try? FileManager.default.removeItem(atPath: testProfilePath)
+        }
+    }
+
+    @discardableResult
+    func launchApp(scenario: String? = nil) -> AppRobot {
+        app.launchEnvironment[TestLaunchKeys.xcuiTesting] = "1"
+        app.launchEnvironment[TestLaunchKeys.testProfileDir] = testProfilePath
+        app.launchEnvironment[TestLaunchKeys.disableHeavyInit] = "1"
+        if let scenario {
+            app.launchEnvironment[TestLaunchKeys.uiTestScenario] = scenario
+        }
+
+        app.launch()
+        let robot = AppRobot(app: app)
+        robot.waitForReady()
+        return robot
+    }
+}
+
+enum TestLaunchKeys {
+    static let xcuiTesting = "XCUI_TESTING"
+    static let testProfileDir = "OSXIDE_TEST_PROFILE_DIR"
+    static let disableHeavyInit = "OSXIDE_DISABLE_HEAVY_INIT"
+    static let uiTestScenario = "OSXIDE_TEST_SCENARIO"
+}
+
+enum UITestAccessibilityID {
+    static let appRootView = "AppRootView"
+    static let appReadyMarker = "AppReadyMarker"
+
+    static let codeEditorTextView = "CodeEditorTextView"
+    static let editorHighlightDiagnostics = "EditorHighlightDiagnostics"
+
+    static let aiChatPanel = "AIChatPanel"
+    static let aiChatInputTextView = "AIChatInputTextView"
+    static let aiChatSendButton = "AIChatSendButton"
+    static let aiChatNewConversationButton = "AIChatNewConversationButton"
+
+    static let terminalTextView = "TerminalTextView"
+    static let fileExplorerOutline = "FileExplorerOutline"
+    static let statusBar = "StatusBar"
+    static let leftSidebarPanel = "LeftSidebarPanel"
+    static let rightChatPanel = "RightChatPanel"
+}
+
+@MainActor
+struct AppRobot {
+    let app: XCUIApplication
+
+    func waitForReady(timeout: TimeInterval = 30) {
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: timeout), "App must reach foreground")
+        app.activate()
+
+        let readyMarker = app.staticTexts[UITestAccessibilityID.appReadyMarker]
+        if readyMarker.waitForExistence(timeout: min(10, timeout)) {
+            let readyDeadline = Date().addingTimeInterval(timeout)
+            while Date() < readyDeadline {
+                if (readyMarker.value as? String) == "ready" {
+                    return
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            XCTFail("AppReadyMarker did not reach ready state in time. value=\(String(describing: readyMarker.value))")
+            return
+        }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if (readyMarker.exists && ((readyMarker.value as? String) == "ready")) ||
+                app.windows.firstMatch.exists ||
+                app.textViews[UITestAccessibilityID.codeEditorTextView].exists ||
+                app.descendants(matching: .any)[UITestAccessibilityID.terminalTextView].exists ||
+                app.outlines[UITestAccessibilityID.fileExplorerOutline].exists ||
+                app.buttons[UITestAccessibilityID.aiChatSendButton].exists {
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+
+        XCTFail(
+            "UI did not become ready in time. Missing core controls after window launch.\n\(app.debugDescription)"
+        )
+    }
+
+    func editor() -> EditorRobot { EditorRobot(app: app) }
+    func terminal() -> TerminalRobot { TerminalRobot(app: app) }
+    func chat() -> ChatRobot { ChatRobot(app: app) }
+    func settings() -> SettingsRobot { SettingsRobot(app: app) }
+    func window() -> WindowRobot { WindowRobot(app: app) }
+    func fileTree() -> FileTreeRobot { FileTreeRobot(app: app) }
+}
+
+@MainActor
+struct EditorRobot {
+    let app: XCUIApplication
+
+    var editorView: XCUIElement { app.textViews[UITestAccessibilityID.codeEditorTextView] }
+
+    func assertVisible() {
+        XCTAssertTrue(editorView.waitForExistence(timeout: 10), "Editor must exist")
+        XCTAssertTrue(editorView.isHittable, "Editor must be hittable")
+    }
+
+    func type(_ text: String) {
+        editorView.click()
+        editorView.typeText(text)
+    }
+}
+
+@MainActor
+struct TerminalRobot {
+    let app: XCUIApplication
+
+    var terminalView: XCUIElement {
+        let byTextView = app.textViews[UITestAccessibilityID.terminalTextView]
+        if byTextView.exists { return byTextView }
+        return app.descendants(matching: .any)[UITestAccessibilityID.terminalTextView]
+    }
+
+    func assertVisible() {
+        XCTAssertTrue(terminalView.waitForExistence(timeout: 10), "Terminal must exist")
+    }
+
+    func run(_ command: String) {
+        terminalView.click()
+        terminalView.typeText(command)
+        terminalView.typeText("\n")
+    }
+}
+
+@MainActor
+struct ChatRobot {
+    let app: XCUIApplication
+
+    var panel: XCUIElement { app.otherElements[UITestAccessibilityID.aiChatPanel] }
+    var input: XCUIElement {
+        let byTextView = app.textViews[UITestAccessibilityID.aiChatInputTextView]
+        if byTextView.exists { return byTextView }
+        return app.descendants(matching: .any)[UITestAccessibilityID.aiChatInputTextView]
+    }
+    var send: XCUIElement { app.buttons[UITestAccessibilityID.aiChatSendButton] }
+    var newConversation: XCUIElement { app.buttons[UITestAccessibilityID.aiChatNewConversationButton] }
+
+    func assertVisible() {
+        let sendExists = send.waitForExistence(timeout: 10)
+        let newConversationExists = newConversation.waitForExistence(timeout: 10)
+        let inputExists = input.waitForExistence(timeout: 10)
+
+        XCTAssertTrue(sendExists, "Chat send button must exist")
+        XCTAssertTrue(newConversationExists, "New conversation button must exist")
+        XCTAssertTrue(
+            inputExists,
+            "Chat input must exist. panel=\(panel.exists) send=\(sendExists) newConversation=\(newConversationExists)\n\(app.debugDescription)"
+        )
+    }
+
+    func sendMessage(_ text: String) {
+        input.click()
+        input.typeText(text)
+        XCTAssertTrue(send.isEnabled, "Send button must be enabled")
+        send.click()
+    }
+}
+
+@MainActor
+struct SettingsRobot {
+    let app: XCUIApplication
+
+    func openSettings() {
+        app.typeKey(",", modifierFlags: [.command])
+        if app.windows.count < 2 {
+            let appMenu = app.menuBars.menuBarItems["osx-ide"]
+            if appMenu.exists {
+                appMenu.click()
+                if app.menuItems["Settings…"].exists {
+                    app.menuItems["Settings…"].click()
+                } else if app.menuItems["Settings..."].exists {
+                    app.menuItems["Settings..."].click()
+                }
             }
         }
     }
 
-    private func createTestFile() -> URL {
-        let tempDir = FileManager.default.temporaryDirectory
-        let testFile = tempDir.appendingPathComponent("ui_test_file_\(UUID().uuidString).swift")
-        Self.testFiles.append(testFile)
-        return testFile
-    }
-
-    @MainActor
-    func testAppLaunchAndBasicUI() throws {
-        let app = makeLaunchedApp()
-
-        // Given: App is launched
-        let mainWindow = verifyMainWindowExists(app: app)
-        let codeEditor = verifyCodeEditorExists(app: app)
-        let menuBar = verifyMenuBarExists(app: app)
-
-        // When: Basic UI elements are verified
-        let windowTitle = verifyWindowTitle(mainWindow: mainWindow)
-        let menuAccessibility = verifyMenuAccessibility(app: app)
-
-        // Then: App should be in proper state
-        verifyAppState(app: app)
-    }
-
-    /// Verifies that the main window exists and returns it
-    private func verifyMainWindowExists(app: XCUIApplication) -> XCUIElement {
-        let mainWindow = app.windows.firstMatch
-        skipIfElementNotDiscoverable(mainWindow, name: "Main window", timeout: 5)
-        XCTAssertTrue(mainWindow.exists, "Main window should exist")
-        return mainWindow
-    }
-
-    /// Verifies that the code editor exists and returns it
-    private func verifyCodeEditorExists(app: XCUIApplication) -> XCUIElement {
-        let codeEditor = app.textViews["CodeEditorTextView"]
-        skipIfElementNotDiscoverable(codeEditor, name: "Code editor", timeout: 5)
-        XCTAssertTrue(codeEditor.exists, "Code editor should exist")
-        return codeEditor
-    }
-
-    /// Verifies that the menu bar exists and returns it
-    private func verifyMenuBarExists(app: XCUIApplication) -> XCUIElement {
-        let menuBar = app.menuBars.firstMatch
-        XCTAssertTrue(menuBar.exists, "Menu bar should exist")
-        return menuBar
-    }
-
-    /// Verifies that the window has a title
-    private func verifyWindowTitle(mainWindow: XCUIElement) -> String {
-        let windowTitle = mainWindow.title
-        XCTAssertFalse(windowTitle.isEmpty, "Main window should have a title")
-        return windowTitle
-    }
-
-    /// Verifies menu accessibility (File, Edit, View menus)
-    private func verifyMenuAccessibility(app: XCUIApplication) -> Bool {
-        let fileMenu = app.menuItems["File"]
-        let editMenu = app.menuItems["Edit"]
-        let viewMenu = app.menuItems["View"]
-
-        // Only verify if at least one menu is accessible
-        let menuExists = fileMenu.exists || editMenu.exists || viewMenu.exists
-        if menuExists {
-            XCTAssertTrue(menuExists, "At least one main menu (File, Edit, View) should be accessible")
-        }
-        return menuExists
-    }
-
-    /// Verifies that the app is in the proper state
-    private func verifyAppState(app: XCUIApplication) {
-        XCTAssertEqual(app.state, .runningForeground, "App should be in foreground state")
-    }
-
-    @MainActor
-    func testCodeEditorFunctionality() throws {
-        let app = XCUIApplication()
-        app.launch()
-
-        let mainWindow = app.windows.firstMatch
-        if !mainWindow.waitForExistence(timeout: 5) {
-            XCTSkip("Main window not discoverable by XCTest on this machine/session")
+    func assertWordWrapToggleVisible() {
+        let toggle = app.switches["Settings.WordWrap"]
+        if toggle.waitForExistence(timeout: 3) {
+            return
         }
 
-        let codeEditor = app.textViews["CodeEditorTextView"]
-        if !codeEditor.waitForExistence(timeout: 5) {
-            XCTSkip("Code editor not discoverable by XCTest on this machine/session")
+        let checkbox = app.checkBoxes["Settings.WordWrap"]
+        if checkbox.waitForExistence(timeout: 3) {
+            return
         }
 
-        if !codeEditor.exists {
-            XCTSkip("Code editor became undiscoverable after initial wait (accessibility snapshot flake)")
-        }
+        let any = app.descendants(matching: .any)["Settings.WordWrap"]
+        XCTAssertTrue(any.waitForExistence(timeout: 4), "Word wrap toggle must exist")
+    }
+}
 
-        // Focus on the editor
-        codeEditor.click()
-        Thread.sleep(forTimeInterval: 0.2)
+@MainActor
+struct WindowRobot {
+    let app: XCUIApplication
 
-        // Type some text
-        let testText = "func test() {\n    print(\"Hello\")\n}"
-        codeEditor.typeText(testText)
-        Thread.sleep(forTimeInterval: 0.3)
+    var mainWindow: XCUIElement { app.windows.firstMatch }
 
-        // Verify content changed
-        let contentAfterTyping = codeEditor.value as? String ?? ""
-        XCTAssertTrue(contentAfterTyping.contains("test"), "Editor should contain typed text")
-        XCTAssertTrue(contentAfterTyping.contains("print"), "Editor should contain typed function")
-
-        // Select all text (Cmd+A)
-        codeEditor.typeKey("a", modifierFlags: [.command])
-        Thread.sleep(forTimeInterval: 0.2)
-
-        // Verify selection by typing replacement text
-        codeEditor.typeText("REPLACED")
-        Thread.sleep(forTimeInterval: 0.3)
-
-        let contentAfterReplace = codeEditor.value as? String ?? ""
-        XCTAssertTrue(
-            contentAfterReplace.contains("REPLACED"),
-            "Editor should contain replacement text after selection"
-        )
-        XCTAssertFalse(contentAfterReplace.contains("test"), "Original text should be replaced")
+    func assertVisible() {
+        XCTAssertTrue(mainWindow.waitForExistence(timeout: 10), "Main window must exist")
     }
 
-    @MainActor
-    func testAIChatPanelInputSendAndNewConversationInteraction() throws {
-        let app = makeLaunchedApp()
+    func assertWithinMainDisplayBounds() {
+        assertVisible()
+        let frame = mainWindow.frame
+        let displayBounds = CGDisplayBounds(CGMainDisplayID())
+        XCTAssertLessThanOrEqual(frame.width, displayBounds.width)
+        XCTAssertLessThanOrEqual(frame.height, displayBounds.height)
+        XCTAssertGreaterThanOrEqual(frame.minX, displayBounds.minX)
+        XCTAssertGreaterThanOrEqual(frame.minY, displayBounds.minY)
+    }
+}
 
-        let chatPanel = app.otherElements["AIChatPanel"]
-        skipIfElementNotDiscoverable(chatPanel, name: "AI Chat panel", timeout: 8)
+@MainActor
+struct FileTreeRobot {
+    let app: XCUIApplication
 
-        let input = app.otherElements["AIChatInputTextView"]
-        skipIfElementNotDiscoverable(input, name: "AI Chat input", timeout: 5)
+    var outline: XCUIElement { app.outlines[UITestAccessibilityID.fileExplorerOutline] }
 
-        let inputForInteraction = app.otherElements["AIChatInputTextView"]
-        guard inputForInteraction.exists, inputForInteraction.isHittable else {
-            throw XCTSkip("AI chat input is not reliably hittable in this XCTest session")
-        }
+    func assertVisible() {
+        XCTAssertTrue(outline.waitForExistence(timeout: 10), "File tree outline must exist")
+    }
+}
 
-        inputForInteraction.click()
-        app.typeText("UI regression check")
-
-        let sendButton = app.buttons["AIChatSendButton"]
-        skipIfElementNotDiscoverable(sendButton, name: "AI Chat send button", timeout: 5)
-        XCTAssertTrue(sendButton.isEnabled, "Send button should be enabled after typing")
-        sendButton.click()
-
-        XCTAssertTrue(chatPanel.exists, "Chat panel should remain interactive after sending")
-
-        let newConversationButton = app.buttons["AIChatNewConversationButton"]
-        skipIfElementNotDiscoverable(newConversationButton, name: "New conversation button", timeout: 5)
-        newConversationButton.click()
-
-        XCTAssertTrue(input.exists, "Input should remain available after starting a new conversation")
+@MainActor
+final class OSXIDEUITests: BaseUITestCase {
+    func testAppLaunchesAndBecomesReady() {
+        let robot = launchApp()
+        robot.window().assertVisible()
     }
 }

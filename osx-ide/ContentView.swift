@@ -8,6 +8,19 @@
 import SwiftUI
 import AppKit
 
+private enum HorizontalPanelKind: Hashable {
+    case sidebar
+    case chat
+}
+
+private struct HorizontalPanelWidthPreferenceKey: PreferenceKey {
+    static let defaultValue: [HorizontalPanelKind: CGFloat] = [:]
+
+    static func reduce(value: inout [HorizontalPanelKind: CGFloat], nextValue: () -> [HorizontalPanelKind: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 struct ContentView: View {
     let appState: AppState
     @ObservedObject private var fileEditor: FileEditorStateManager
@@ -44,7 +57,7 @@ struct ContentView: View {
         .background(Color(NSColor.windowBackgroundColor))
         .environment(\.font, .system(size: CGFloat(uiState.fontSize)))
         .preferredColorScheme(appState.selectedTheme.colorScheme)
-        .accessibilityIdentifier("AppRootView")
+        .accessibilityIdentifier(AccessibilityID.appRootView)
         .accessibilityValue("theme=\(appState.selectedTheme.rawValue)")
     }
 
@@ -73,6 +86,15 @@ struct ContentView: View {
                         idealWidth: uiState.sidebarWidth,
                         maxWidth: AppConstants.Layout.maxSidebarWidth
                     )
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: HorizontalPanelWidthPreferenceKey.self,
+                                value: [.sidebar: proxy.size.width]
+                            )
+                        }
+                    )
+                    .accessibilityIdentifier(AccessibilityID.leftSidebarPanel)
             }
 
             HSplitView {
@@ -85,7 +107,24 @@ struct ContentView: View {
                             idealWidth: uiState.chatPanelWidth,
                             maxWidth: AppConstants.Layout.maxChatPanelWidth
                         )
+                        .background(
+                            GeometryReader { proxy in
+                                Color.clear.preference(
+                                    key: HorizontalPanelWidthPreferenceKey.self,
+                                    value: [.chat: proxy.size.width]
+                                )
+                            }
+                        )
+                        .accessibilityIdentifier(AccessibilityID.rightChatPanel)
                 }
+            }
+        }
+        .onPreferenceChange(HorizontalPanelWidthPreferenceKey.self) { widths in
+            if let sidebar = widths[.sidebar], uiState.isSidebarVisible, abs(uiState.sidebarWidth - sidebar) > 1 {
+                uiState.updateSidebarWidth(sidebar)
+            }
+            if let chat = widths[.chat], uiState.isAIChatVisible, abs(uiState.chatPanelWidth - chat) > 1 {
+                uiState.updateChatPanelWidth(chat)
             }
         }
     }
@@ -337,25 +376,18 @@ private struct WindowSetupView: View {
             window.isOpaque = true
             window.backgroundColor = NSColor.windowBackgroundColor
             window.hasShadow = true
+            window.styleMask.insert(.resizable)
             window.styleMask.insert(.unifiedTitleAndToolbar)
+            window.minSize = NSSize(width: 900, height: 600)
             
-            // Constrain window to screen size
-            if let screen = window.screen {
-                window.maxSize = screen.visibleFrame.size
-                
-                // If currently larger than screen, shrink it
-                var frame = window.frame
-                var changed = false
-                if frame.width > screen.visibleFrame.width {
-                    frame.size.width = screen.visibleFrame.width
-                    changed = true
-                }
-                if frame.height > screen.visibleFrame.height {
-                    frame.size.height = screen.visibleFrame.height
-                    changed = true
-                }
-                if changed {
-                    window.setFrame(frame, display: true)
+            // Normalize persisted geometry against the currently visible frame.
+            if let screen = window.screen ?? NSScreen.main {
+                let normalized = UILayoutNormalizer.normalizeWindowFrame(
+                    window.frame,
+                    screenVisibleFrame: screen.visibleFrame
+                )
+                if normalized != window.frame {
+                    window.setFrame(normalized, display: true)
                 }
             }
         }

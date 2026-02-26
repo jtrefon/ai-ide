@@ -40,7 +40,8 @@ struct AIChatPanel: View {
                 }
                 .buttonStyle(BorderlessButtonStyle())
                 .help(localized("ai_chat.new_conversation_help"))
-                .accessibilityIdentifier("AIChatNewConversationButton")
+                .accessibilityLabel(localized("ai_chat.new_conversation_help"))
+                .accessibilityIdentifier(AccessibilityID.aiChatNewConversationButton)
                 .padding(.horizontal)
             }
             .frame(height: 30)
@@ -173,7 +174,8 @@ struct AIChatPanel: View {
             .background(Color.gray.opacity(0.1))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityIdentifier("AIChatPanel")
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(AccessibilityID.aiChatPanel)
         .background(Color(NSColor.controlBackgroundColor))
         .onReceive(conversationManager.statePublisher) { _ in
             renderRefreshToken &+= 1

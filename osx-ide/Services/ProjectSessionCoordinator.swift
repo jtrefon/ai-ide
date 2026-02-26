@@ -145,17 +145,17 @@ final class ProjectSessionCoordinator {
             return
         }
 
+        let visibleFrame = (window?.screen ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        var normalizedWindowRect = session.windowFrame?.rect
+
         if let frame = session.windowFrame?.rect {
+            let targetFrame = UILayoutNormalizer.normalizeWindowFrame(
+                frame,
+                screenVisibleFrame: visibleFrame
+            )
+            normalizedWindowRect = targetFrame
             if let window {
-                var targetFrame = frame
-                if let screen = window.screen {
-                    let visible = screen.visibleFrame
-                    if targetFrame.height > visible.height { targetFrame.size.height = visible.height }
-                    if targetFrame.minY < visible.minY { targetFrame.origin.y = visible.minY }
-                    if targetFrame.minX < visible.minX { targetFrame.origin.x = visible.minX }
-                    else if targetFrame.maxX > visible.maxX { targetFrame.origin.x = visible.maxX - targetFrame.width }
-                    if targetFrame.maxY > visible.maxY { targetFrame.origin.y = visible.maxY - targetFrame.height }
-                }
                 window.setFrame(targetFrame, display: true)
             }
         }
@@ -163,9 +163,34 @@ final class ProjectSessionCoordinator {
         ui.isSidebarVisible = session.isSidebarVisible
         ui.isTerminalVisible = session.isTerminalVisible
         ui.isAIChatVisible = session.isAIChatVisible
-        ui.sidebarWidth = session.sidebarWidth
-        ui.terminalHeight = session.terminalHeight
-        ui.chatPanelWidth = session.chatPanelWidth
+        let referenceFrame = window?.frame
+            ?? normalizedWindowRect
+            ?? NSRect(x: 0, y: 0, width: visibleFrame.width, height: visibleFrame.height)
+        var normalizedSidebarWidth = UILayoutNormalizer.normalizeSidebarWidth(
+            session.sidebarWidth,
+            windowWidth: referenceFrame.width
+        )
+        var normalizedChatPanelWidth = UILayoutNormalizer.normalizeChatPanelWidth(
+            session.chatPanelWidth,
+            windowWidth: referenceFrame.width
+        )
+        let normalizedTerminalHeight = UILayoutNormalizer.normalizeTerminalHeight(
+            session.terminalHeight,
+            windowHeight: referenceFrame.height
+        )
+        let balanced = UILayoutNormalizer.rebalanceHorizontalPanels(
+            sidebarWidth: normalizedSidebarWidth,
+            chatWidth: normalizedChatPanelWidth,
+            isSidebarVisible: session.isSidebarVisible,
+            isChatVisible: session.isAIChatVisible,
+            windowWidth: referenceFrame.width,
+            minimumEditorWidth: 400
+        )
+        normalizedSidebarWidth = balanced.sidebar
+        normalizedChatPanelWidth = balanced.chat
+        ui.sidebarWidth = normalizedSidebarWidth
+        ui.terminalHeight = normalizedTerminalHeight
+        ui.chatPanelWidth = normalizedChatPanelWidth
 
         if let theme = AppTheme(rawValue: session.selectedThemeRawValue) {
             ui.selectedTheme = theme
