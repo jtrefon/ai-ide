@@ -37,6 +37,14 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         let message: ChatMessage
     }
 
+    private struct ConversationSessionSnapshot {
+        let messages: [ChatMessage]
+        let mode: AIMode
+        let input: String
+        let livePreview: String
+        let liveStatusPreview: String
+    }
+
     @Published var currentInput: String = ""
     @Published var isSending: Bool = false
     @Published var error: String?
@@ -45,6 +53,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published private(set) var liveModelOutputPreview: String = ""
     @Published private(set) var liveModelOutputStatusPreview: String = ""
     @Published private(set) var isLiveModelOutputPreviewVisible: Bool = true
+    @Published private(set) var conversationTabs: [ConversationTabItem] = []
 
     private let historyManager: ChatHistoryManager
     private let historyCoordinator: ChatHistoryCoordinator
@@ -80,17 +89,20 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var activeSendTask: Task<Void, Never>?
     private let maxPreviewCharacters = 12_000
     private let maxStatusPreviewCharacters = 4_000
+    private var currentSessionId: String
+    private var conversationSessionOrder: [String]
+    private var conversationSessionSnapshots: [String: ConversationSessionSnapshot]
 
     var messages: [ChatMessage] {
         historyCoordinator.messages
     }
 
     var currentConversationId: String {
-        historyCoordinator.currentConversationId
+        currentSessionId
     }
 
     private var conversationId: String {
-        historyCoordinator.currentConversationId
+        currentSessionId
     }
 
     private var pathValidator: PathValidator {
@@ -124,6 +136,18 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             historyManager: historyManager,
             projectRoot: root
         )
+        let initialConversationId = historyCoordinator.currentConversationId
+        self.currentSessionId = initialConversationId
+        self.conversationSessionOrder = [initialConversationId]
+        self.conversationSessionSnapshots = [
+            initialConversationId: ConversationSessionSnapshot(
+                messages: historyCoordinator.messages,
+                mode: .chat,
+                input: "",
+                livePreview: "",
+                liveStatusPreview: ""
+            )
+        ]
         let fileEditorServiceProvider = fileEditorService
         self.toolExecutor = AIToolExecutor(
             fileSystemService: dependencies.services.fileSystemService,
@@ -151,6 +175,41 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         setupStreamingSubscriptions()
         startTraceLogging()
         configureLoggingStores(root: root)
+        refreshConversationTabs()
+    }
+
+    private func refreshConversationTabs() {
+        conversationTabs = conversationSessionOrder.enumerated().map { index, id in
+            ConversationTabItem(id: id, title: "Chat \(index + 1)")
+        }
+    }
+
+    private func saveCurrentSessionSnapshot() {
+        conversationSessionSnapshots[currentSessionId] = ConversationSessionSnapshot(
+            messages: historyCoordinator.messages,
+            mode: currentMode,
+            input: currentInput,
+            livePreview: liveModelOutputPreview,
+            liveStatusPreview: liveModelOutputStatusPreview
+        )
+    }
+
+    private func restoreSession(_ sessionId: String) {
+        let snapshot = conversationSessionSnapshots[sessionId] ?? ConversationSessionSnapshot(
+            messages: [],
+            mode: .chat,
+            input: "",
+            livePreview: "",
+            liveStatusPreview: ""
+        )
+        currentSessionId = sessionId
+        historyCoordinator.switchConversation(to: sessionId, projectRoot: projectRoot)
+        historyCoordinator.replaceAllMessages(with: snapshot.messages)
+        currentMode = snapshot.mode
+        currentInput = snapshot.input
+        setLiveModelPreview(snapshot.livePreview)
+        setLiveModelStatusPreview(snapshot.liveStatusPreview)
+        cancelledToolCallIds.removeAll()
     }
 
     private func setupStreamingSubscriptions() {
@@ -268,6 +327,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
         projectRoot = newRoot
 
+        saveCurrentSessionSnapshot()
+
         // Clear conversation history when switching to a new project
         // This ensures the chat is fresh for the new project
         clearConversation()
@@ -279,6 +340,20 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 _ = ()
             }
         )
+
+        let migratedSessionId = historyCoordinator.currentConversationId
+        currentSessionId = migratedSessionId
+        conversationSessionOrder = [migratedSessionId]
+        conversationSessionSnapshots = [
+            migratedSessionId: ConversationSessionSnapshot(
+                messages: historyCoordinator.messages,
+                mode: currentMode,
+                input: currentInput,
+                livePreview: liveModelOutputPreview,
+                liveStatusPreview: liveModelOutputStatusPreview
+            )
+        ]
+        refreshConversationTabs()
 
         conversationLogger.initializeProjectRoot(newRoot)
         conversationLogger.logConversationStart(
@@ -495,20 +570,63 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     func startNewConversation() {
         cancelActiveSendTask()
         resetConversationInteractionState()
+        saveCurrentSessionSnapshot()
         currentInput = ""
         setLiveModelPreview("")
         setLiveModelStatusPreview("")
 
-        let oldConversationId = conversationId
-        let ids = historyCoordinator.startNewConversation(projectRoot: projectRoot)
+        let oldConversationId = currentSessionId
+        let newConversationId = UUID().uuidString
+        conversationSessionOrder.append(newConversationId)
+        conversationSessionSnapshots[newConversationId] = ConversationSessionSnapshot(
+            messages: [],
+            mode: currentMode,
+            input: "",
+            livePreview: "",
+            liveStatusPreview: ""
+        )
+        restoreSession(newConversationId)
+        refreshConversationTabs()
         cancelledToolCallIds.removeAll()
 
         conversationLogger.logConversationStart(
-            conversationId: ids.newConversationId,
+            conversationId: newConversationId,
             mode: self.currentMode.rawValue,
             projectRootPath: self.projectRoot.path,
             previousConversationId: oldConversationId
         )
+    }
+
+    func switchConversation(to id: String) {
+        guard id != currentSessionId else { return }
+        guard conversationSessionSnapshots[id] != nil else { return }
+
+        cancelActiveSendTask()
+        resetConversationInteractionState()
+        saveCurrentSessionSnapshot()
+        restoreSession(id)
+        refreshConversationTabs()
+    }
+
+    func closeConversation(id: String) {
+        guard conversationSessionOrder.count > 1 else { return }
+        guard let closingIndex = conversationSessionOrder.firstIndex(of: id) else { return }
+
+        cancelActiveSendTask()
+        if id == currentSessionId {
+            saveCurrentSessionSnapshot()
+        }
+
+        conversationSessionOrder.remove(at: closingIndex)
+        conversationSessionSnapshots[id] = nil
+
+        if id == currentSessionId {
+            let fallbackIndex = min(closingIndex, conversationSessionOrder.count - 1)
+            let fallbackId = conversationSessionOrder[fallbackIndex]
+            restoreSession(fallbackId)
+        }
+
+        refreshConversationTabs()
     }
 
     func stopGeneration() {

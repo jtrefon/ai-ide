@@ -134,6 +134,19 @@ final class ConversationManagerTests: XCTestCase {
 
         await fulfillment(of: [agentResponded], timeout: 5.0)
 
+        let sendingCleared = expectation(description: "Agent sending cleared")
+        Task { @MainActor in
+            let deadline = Date().addingTimeInterval(2.0)
+            while Date() < deadline {
+                if self.manager.isSending == false {
+                    sendingCleared.fulfill()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+        await fulfillment(of: [sendingCleared], timeout: 3.0)
+
         XCTAssertEqual(mockAIService.lastHistoryRequest?.mode, .agent)
         XCTAssertFalse(manager.isSending)
     }
@@ -238,6 +251,36 @@ final class ConversationManagerTests: XCTestCase {
 
         XCTAssertFalse(manager.isSending)
         XCTAssertEqual(manager.liveModelOutputPreview, "Generation stopped by user.")
+    }
+
+    func testStartNewConversationCreatesNewTabAndSwitchesToIt() {
+        let initialTabCount = manager.conversationTabs.count
+        let initialConversationId = manager.currentConversationId
+
+        manager.startNewConversation()
+
+        XCTAssertEqual(manager.conversationTabs.count, initialTabCount + 1)
+        XCTAssertNotEqual(manager.currentConversationId, initialConversationId)
+        XCTAssertEqual(manager.currentConversationId, manager.conversationTabs.last?.id)
+    }
+
+    func testSwitchConversationRestoresPerTabInputStateAndCloseRemovesSession() {
+        manager.currentInput = "Session A draft"
+        let firstSessionId = manager.currentConversationId
+
+        manager.startNewConversation()
+        let secondSessionId = manager.currentConversationId
+        manager.currentInput = "Session B draft"
+
+        manager.switchConversation(to: firstSessionId)
+        XCTAssertEqual(manager.currentInput, "Session A draft")
+
+        manager.switchConversation(to: secondSessionId)
+        XCTAssertEqual(manager.currentInput, "Session B draft")
+
+        manager.closeConversation(id: secondSessionId)
+        XCTAssertEqual(manager.currentConversationId, firstSessionId)
+        XCTAssertFalse(manager.conversationTabs.contains(where: { $0.id == secondSessionId }))
     }
 }
 

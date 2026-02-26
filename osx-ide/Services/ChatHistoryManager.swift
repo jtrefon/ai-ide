@@ -152,6 +152,12 @@ public class ChatHistoryManager: ObservableObject {
         saveHistoryAsync()
     }
 
+    public func replaceAllMessages(with newMessages: [ChatMessage]) {
+        messages = newMessages
+        ensureDefaultGreetingMessageIfNeeded()
+        saveHistoryAsync()
+    }
+
     public func updateMessageStatus(toolCallId: String, status: ToolExecutionStatus, content: String? = nil) {
         if let index = messages.lastIndex(where: { $0.toolCallId == toolCallId }) {
             let oldMessage = messages[index]
