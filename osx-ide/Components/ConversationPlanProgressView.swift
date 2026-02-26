@@ -7,7 +7,9 @@ struct ConversationPlanProgressView: View {
     let onStopGenerating: (() -> Void)?
     var fontSize: Double
 
-    @State private var isExpanded: Bool = true
+    @State private var isExpanded: Bool = false
+
+    private let maxExpandedPlanHeight: CGFloat = 280
 
     private var latestPlanMessage: ChatMessage? {
         messages.last(where: { message in
@@ -97,7 +99,11 @@ struct ConversationPlanProgressView: View {
 
                 if isExpanded {
                     if let plan = latestPlanMessage {
-                        PlanOutlineView(rawPlan: plan.content, fontSize: fontSize, fontFamily: "")
+                        ScrollView(.vertical) {
+                            PlanOutlineView(rawPlan: plan.content, fontSize: fontSize, fontFamily: "")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: maxExpandedPlanHeight)
                     } else if isSending {
                         Text("Preparing plan…")
                             .font(.system(size: CGFloat(max(9, fontSize - 3))))
