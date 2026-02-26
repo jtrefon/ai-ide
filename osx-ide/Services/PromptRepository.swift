@@ -5,7 +5,7 @@ protocol PromptRepositoryProtocol {
         key: String,
         defaultValue: String,
         projectRoot: URL?
-    ) -> String
+    ) throws -> String
 }
 
 final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
@@ -28,12 +28,22 @@ final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
         key: String,
         defaultValue: String,
         projectRoot: URL?
-    ) -> String {
+    ) throws -> String {
         guard let url = resolvePromptURL(key: key, projectRoot: projectRoot) else {
             if Self.allowFallback {
                 return defaultValue
             }
-            fatalError("PromptRepository: Prompt file not found for key '\(key)'. Set allowFallback=true to use inline fallbacks.")
+            let environment = ProcessInfo.processInfo.environment
+            let promptRoot = environment["OSX_IDE_PROMPTS_ROOT"] ?? "<unset>"
+            let testRunnerPromptRoot = environment["TEST_RUNNER_ENV_OSX_IDE_PROMPTS_ROOT"] ?? "<unset>"
+            let projectRootPath = projectRoot?.path ?? "<nil>"
+            let currentDirectory = fileManager.currentDirectoryPath
+            throw AppError.promptLoadingFailed(
+                "Prompt file not found for key '\(key)'. Expected path segment: Prompts/\(key).md. " +
+                "projectRoot=\(projectRootPath), cwd=\(currentDirectory), " +
+                "OSX_IDE_PROMPTS_ROOT=\(promptRoot), " +
+                "TEST_RUNNER_ENV_OSX_IDE_PROMPTS_ROOT=\(testRunnerPromptRoot)"
+            )
         }
 
         guard let data = try? Data(contentsOf: url),
@@ -41,7 +51,9 @@ final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
             if Self.allowFallback {
                 return defaultValue
             }
-            fatalError("PromptRepository: Failed to read prompt file for key '\(key)' at path '\(url.path)'. Set allowFallback=true to use inline fallbacks.")
+            throw AppError.promptLoadingFailed(
+                "Failed to read prompt file for key '\(key)' at path '\(url.path)'"
+            )
         }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -49,7 +61,9 @@ final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
             if Self.allowFallback {
                 return defaultValue
             }
-            fatalError("PromptRepository: Prompt file is empty for key '\(key)' at path '\(url.path)'. Set allowFallback=true to use inline fallbacks.")
+            throw AppError.promptLoadingFailed(
+                "Prompt file is empty for key '\(key)' at path '\(url.path)'"
+            )
         }
         return trimmed
     }
@@ -64,9 +78,14 @@ final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
             }
         }
 
-        if let envRoot = ProcessInfo.processInfo.environment["OSX_IDE_PROMPTS_ROOT"],
-           !envRoot.isEmpty {
-            let envURL = URL(fileURLWithPath: envRoot, isDirectory: true)
+        let environment = ProcessInfo.processInfo.environment
+        let promptRoots = [
+            environment["OSX_IDE_PROMPTS_ROOT"],
+            environment["TEST_RUNNER_ENV_OSX_IDE_PROMPTS_ROOT"]
+        ]
+        for root in promptRoots {
+            guard let root, !root.isEmpty else { continue }
+            let envURL = URL(fileURLWithPath: root, isDirectory: true)
             let candidate = envURL.appendingPathComponent("\(key).md")
             if fileManager.fileExists(atPath: candidate.path) {
                 return candidate
@@ -74,12 +93,26 @@ final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
         }
 
         let cwd = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
-        return searchUpwardsForPromptsFolder(from: cwd, key: key)
+        if let resolved = searchUpwardsForPromptsFolder(from: cwd, key: key) {
+            return resolved
+        }
+
+        let bundleCandidates = [
+            Bundle.main.bundleURL,
+            Bundle(for: PromptRepository.self).bundleURL
+        ]
+        for bundleURL in bundleCandidates {
+            if let resolved = searchUpwardsForPromptsFolder(from: bundleURL, key: key) {
+                return resolved
+            }
+        }
+
+        return nil
     }
 
     private func searchUpwardsForPromptsFolder(from start: URL, key: String) -> URL? {
         var current = start
-        for _ in 0..<8 {
+        for _ in 0..<12 {
             let promptsFolder = current.appendingPathComponent("Prompts", isDirectory: true)
             if fileManager.fileExists(atPath: promptsFolder.path) {
                 let candidate = promptsFolder.appendingPathComponent("\(key).md")

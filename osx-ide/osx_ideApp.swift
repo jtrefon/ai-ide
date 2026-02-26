@@ -521,10 +521,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let isUnitTesting = launchMode == .unitTest
         if isUnitTesting {
             NSApp.setActivationPolicy(.accessory)
-            DispatchQueue.main.async {
-                NSApp.windows.forEach { $0.orderOut(nil) }
-            }
-            earlyDiag("AppDelegate hid windows for unit-test mode")
+            earlyDiag("AppDelegate configured accessory activation policy for unit-test mode")
             return
         }
 

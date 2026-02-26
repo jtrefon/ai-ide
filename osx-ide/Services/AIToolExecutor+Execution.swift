@@ -338,7 +338,7 @@ extension AIToolExecutor {
     private func resolveToolAndExecute(
         _ request: ExecuteToolCallRequest
     ) async -> ChatMessage {
-        guard let tool = request.availableTools.first(where: { $0.name == request.toolCall.name }) else {
+        guard let tool = resolveTool(for: request.toolCall, from: request.availableTools) else {
             await logToolNotFound(conversationId: request.conversationId, toolCall: request.toolCall)
             return makeToolNotFoundMessage(request)
         }
@@ -355,6 +355,45 @@ extension AIToolExecutor {
             targetFile: request.targetFile,
             preview: preview
         )
+    }
+
+    private func resolveTool(for toolCall: AIToolCall, from availableTools: [AITool]) -> AITool? {
+        if let directMatch = availableTools.first(where: { $0.name == toolCall.name }) {
+            return directMatch
+        }
+
+        let aliases: [String: [String]] = [
+            "find": ["find_by_name"],
+            "grep": ["grep_search"],
+            "read": ["read_file"],
+            "write": ["write_file", "write_files"],
+            "write_files": ["write_file"],
+            "create_file": ["write_file", "write_files"],
+            "edit_file": ["replace_in_file", "write_file"],
+            "run_terminal_command": ["run_command"]
+        ]
+
+        guard let candidates = aliases[toolCall.name] else {
+            return nil
+        }
+
+        for candidate in candidates {
+            if let resolved = availableTools.first(where: { $0.name == candidate }) {
+                Task {
+                    await AIToolTraceLogger.shared.log(
+                        type: "tool.alias_resolved",
+                        data: [
+                            "requested": toolCall.name,
+                            "resolved": candidate,
+                            "toolCallId": toolCall.id
+                        ]
+                    )
+                }
+                return resolved
+            }
+        }
+
+        return nil
     }
 
     private func executeKnownTool(

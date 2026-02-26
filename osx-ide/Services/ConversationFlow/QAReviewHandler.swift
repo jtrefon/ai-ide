@@ -31,7 +31,7 @@ final class QAReviewHandler {
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !draft.isEmpty else { return response }
 
-        let toolOutputReviewSystemPrompt = PromptRepository.shared.prompt(
+        let toolOutputReviewSystemPrompt = try PromptRepository.shared.prompt(
             key: "ConversationFlow/QA/tool_output_review_system",
             defaultValue: "You are the QA reviewer for tool execution results. Validate the assistant draft against " +
                 "the tool outputs and user request. Identify mistakes, omissions, and risk. " +
@@ -122,7 +122,7 @@ final class QAReviewHandler {
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !draft.isEmpty else { return response }
 
-        let qualityReviewSystemPrompt = PromptRepository.shared.prompt(
+        let qualityReviewSystemPrompt = try PromptRepository.shared.prompt(
             key: "ConversationFlow/QA/quality_review_system",
             defaultValue: "You are the QA reviewer. Review the assistant draft response for correctness, completeness, " +
                 "and adherence to the user request. Return a QA report only (do not rewrite the response). " +

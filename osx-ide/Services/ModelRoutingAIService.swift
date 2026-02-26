@@ -25,17 +25,15 @@ actor ModelRoutingAIService: AIService {
     func sendMessage(_ request: AIServiceMessageWithProjectRootRequest) async throws -> AIServiceResponse {
         // Check if offline mode is enabled
         let isOfflineMode = await selectionStore.isOfflineModeEnabled()
+
+        if isOfflineMode, request.mode == .agent {
+            throw AppError.aiServiceError(
+                "Agent mode is unavailable in Offline Mode. Disable Offline Mode to use full tool-executing agent behavior."
+            )
+        }
         
         // Simple routing: if offline mode, use MLX; otherwise use OpenRouter
         if isOfflineMode {
-            // Get MLX capability
-            let capability = MLXCapability()
-            
-            // MLX doesn't support Agent mode - force Chat mode
-            if request.mode == .agent {
-                let adjustedRequest = adjustRequestForMLX(request, capability: capability)
-                return try await localService.sendMessage(adjustedRequest)
-            }
             return try await localService.sendMessage(request)
         }
         
@@ -46,17 +44,15 @@ actor ModelRoutingAIService: AIService {
     func sendMessage(_ request: AIServiceHistoryRequest) async throws -> AIServiceResponse {
         // Check if offline mode is enabled
         let isOfflineMode = await selectionStore.isOfflineModeEnabled()
+
+        if isOfflineMode, request.mode == .agent {
+            throw AppError.aiServiceError(
+                "Agent mode is unavailable in Offline Mode. Disable Offline Mode to use full tool-executing agent behavior."
+            )
+        }
         
         // Simple routing: if offline mode, use MLX; otherwise use OpenRouter
         if isOfflineMode {
-            // Get MLX capability
-            let capability = MLXCapability()
-            
-            // MLX doesn't support Agent mode - force Chat mode
-            if request.mode == .agent {
-                let adjustedRequest = adjustRequestForMLX(request, capability: capability)
-                return try await localService.sendMessage(adjustedRequest)
-            }
             return try await localService.sendMessage(request)
         }
         
@@ -69,16 +65,14 @@ actor ModelRoutingAIService: AIService {
         // Check if offline mode is enabled
         let isOfflineMode = await selectionStore.isOfflineModeEnabled()
 
+        if isOfflineMode, request.mode == .agent {
+            throw AppError.aiServiceError(
+                "Agent mode is unavailable in Offline Mode. Disable Offline Mode to use full tool-executing agent behavior."
+            )
+        }
+
         // Simple routing: if offline mode, use MLX; otherwise use OpenRouter
         if isOfflineMode {
-            // Get MLX capability
-            let capability = MLXCapability()
-
-            // MLX doesn't support Agent mode - force Chat mode
-            if request.mode == .agent {
-                let adjustedRequest = adjustRequestForMLX(request, capability: capability)
-                return try await localService.sendMessageStreaming(adjustedRequest, runId: runId)
-            }
             return try await localService.sendMessageStreaming(request, runId: runId)
         }
         

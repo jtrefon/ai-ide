@@ -47,7 +47,7 @@ struct EmptyResponseRecoveryNode: OrchestrationNode {
             )
         }
 
-        let promptText = PromptRepository.shared.prompt(
+        let promptText = try PromptRepository.shared.prompt(
             key: "ConversationFlow/Corrections/empty_response_followup",
             defaultValue: "In Agent mode you returned an empty response. You must continue autonomously. " +
                 "If tools are needed, return tool calls now. If you are done, provide the final answer. " +

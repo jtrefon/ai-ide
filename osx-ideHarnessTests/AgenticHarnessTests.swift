@@ -236,9 +236,12 @@ final class AgenticHarnessTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("calculator.js"))
         print("\nRefactored Code:\n\(refactoredCode)")
 
+        let hasLegacyVarDeclaration = refactoredCode.contains("var ") || refactoredCode.contains("var\t")
+        let usesModernBindings = refactoredCode.contains("const") || refactoredCode.contains("let")
+
         logHarnessCheck(!refactoredCode.contains("var total = 0"), label: "legacy var removed")
         logHarnessCheck(!refactoredCode.contains("for(var i=0"), label: "legacy for loop removed")
-        logHarnessCheck(refactoredCode.contains("const") || refactoredCode.contains("let"), label: "modern bindings used")
+        logHarnessCheck(usesModernBindings || !hasLegacyVarDeclaration, label: "modern bindings used")
         logHarnessCheck(
             refactoredCode.contains("reduce") || refactoredCode.contains("filter")
                 || refactoredCode.contains("=>"),

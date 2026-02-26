@@ -17,6 +17,7 @@ public enum AppError: LocalizedError {
     case aiServiceError(String)
     case terminalError(String)
     case commandNotFound(String)
+    case promptLoadingFailed(String)
     case unknown(String)
 
     public var errorDescription: String? {
@@ -37,6 +38,8 @@ public enum AppError: LocalizedError {
             return "Terminal error: \(message)"
         case .commandNotFound(let commandId):
             return "Command not found: \(commandId)"
+        case .promptLoadingFailed(let message):
+            return "Prompt loading failed: \(message)"
         case .unknown(let message):
             return "Unknown error: \(message)"
         }
@@ -60,6 +63,8 @@ public enum AppError: LocalizedError {
             return "Restart terminal session or check shell configuration."
         case .commandNotFound:
             return "Restart the application. If the issue persists, report it as a bug."
+        case .promptLoadingFailed:
+            return "Verify the external prompt markdown files are present and readable."
         case .unknown:
             return "Restart the application and try again."
         }
@@ -69,7 +74,7 @@ public enum AppError: LocalizedError {
         switch self {
         case .fileOperationFailed, .invalidFilePath, .fileNotFound, .commandNotFound:
             return .warning
-        case .permissionDenied, .networkError, .aiServiceError, .terminalError:
+        case .permissionDenied, .networkError, .aiServiceError, .terminalError, .promptLoadingFailed:
             return .error
         case .unknown:
             return .critical

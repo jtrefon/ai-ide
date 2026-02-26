@@ -89,11 +89,16 @@ final class AIInteractionCoordinator {
             let retryMessages: [ChatMessage]
             if attempt > 1 {
                 let retryReason = lastError?.localizedDescription ?? "previous attempt failed"
-                let retryPromptTemplate = PromptRepository.shared.prompt(
-                    key: "ConversationFlow/Corrections/retry_context_message",
-                    defaultValue: "Retry context:\n- Attempt: {{attempt}}/{{max_attempts}}\n- Reason for retry: {{retry_reason}}\n- Keep the same user goal and conversation context.\n- Do not repeat the same failed action unchanged.\n- If tools are needed, provide a concise progress update (completed step + next step + how), then return tool calls.",
-                    projectRoot: request.projectRoot
-                )
+                let retryPromptTemplate: String
+                do {
+                    retryPromptTemplate = try PromptRepository.shared.prompt(
+                        key: "ConversationFlow/Corrections/retry_context_message",
+                        defaultValue: "Retry context:\n- Attempt: {{attempt}}/{{max_attempts}}\n- Reason for retry: {{retry_reason}}\n- Keep the same user goal and conversation context.\n- Do not repeat the same failed action unchanged.\n- If tools are needed, provide a concise progress update (completed step + next step + how), then return tool calls.",
+                        projectRoot: request.projectRoot
+                    )
+                } catch {
+                    return .failure(Self.mapToAppError(error, operation: "prompt.retry_context_message"))
+                }
                 let retryContextMessage = ChatMessage(
                     role: .system,
                     content: retryPromptTemplate

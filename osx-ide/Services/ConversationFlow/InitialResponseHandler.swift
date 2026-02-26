@@ -50,7 +50,7 @@ final class InitialResponseHandler {
                 "hasToolCalls": false,
                 "contentLength": content.count
             ])
-            let promptText = PromptRepository.shared.prompt(
+            let promptText = try PromptRepository.shared.prompt(
                 key: "ConversationFlow/Corrections/force_tool_followup",
                 defaultValue: "You indicated you will implement changes, but you returned no tool calls. " +
                     "In Agent mode, you MUST now proceed by calling the appropriate tools. " +
@@ -79,7 +79,7 @@ final class InitialResponseHandler {
            response.toolCalls?.isEmpty ?? true,
            let content = response.content,
            ChatPromptBuilder.isRequestingUserInputForNextStep(content: content) {
-            let promptText = PromptRepository.shared.prompt(
+            let promptText = try PromptRepository.shared.prompt(
                 key: "ConversationFlow/Corrections/no_user_input_next_step",
                 defaultValue: "In Agent mode, do not ask the user for additional inputs (diffs, files, confirmations) as a next step. " +
                     "Proceed autonomously using the available tools and make reasonable assumptions. " +
@@ -115,7 +115,7 @@ final class InitialResponseHandler {
                 "hasToolCalls": false,
                 "contentLength": content.count
             ])
-            let promptText = PromptRepository.shared.prompt(
+            let promptText = try PromptRepository.shared.prompt(
                 key: "ConversationFlow/Corrections/reasoning_only_retry",
                 defaultValue: "Your response contained only reasoning without any actual content. " +
                     "Please provide a complete response with both reasoning and actual content.",

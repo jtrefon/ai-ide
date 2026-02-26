@@ -7,6 +7,103 @@ SCHEME="osx-ide"
 DERIVED_DATA_PATH_APP="./.build"
 DERIVED_DATA_PATH_TEST="./.build-tests"
 
+collect_descendant_pids() {
+    local root_pid=$1
+    local children
+    children=$(pgrep -P "$root_pid" || true)
+    for child_pid in $children; do
+        echo "$child_pid"
+        collect_descendant_pids "$child_pid"
+    done
+}
+
+sum_process_tree_rss_mb() {
+    local root_pid=$1
+    local rss_kb=0
+    local pid
+
+    for pid in "$root_pid" $(collect_descendant_pids "$root_pid"); do
+        local pid_rss
+        pid_rss=$(ps -o rss= -p "$pid" 2>/dev/null | awk '{s+=$1} END {print s+0}')
+        rss_kb=$((rss_kb + pid_rss))
+    done
+
+    echo $((rss_kb / 1024))
+}
+
+kill_process_tree() {
+    local root_pid=$1
+    local pid
+
+    for pid in "$root_pid" $(collect_descendant_pids "$root_pid"); do
+        kill -TERM "$pid" 2>/dev/null || true
+    done
+
+    sleep 2
+
+    for pid in "$root_pid" $(collect_descendant_pids "$root_pid"); do
+        kill -KILL "$pid" 2>/dev/null || true
+    done
+}
+
+run_with_memory_guard() {
+    local rss_limit_gb=$1
+    shift
+    local rss_limit_mb=$((rss_limit_gb * 1024))
+    local check_interval_seconds="${HARNESS_MEMORY_CHECK_INTERVAL_SECONDS:-5}"
+    local status_file
+    status_file=$(mktemp)
+
+    "$@" &
+    local guarded_pid=$!
+
+    cleanup_guarded_processes() {
+        if [ -n "$monitor_pid" ]; then
+            kill "$monitor_pid" 2>/dev/null || true
+            wait "$monitor_pid" 2>/dev/null || true
+        fi
+        if kill -0 "$guarded_pid" 2>/dev/null; then
+            echo "[harness-memory] interruption detected, terminating harness process tree"
+            kill_process_tree "$guarded_pid"
+        fi
+    }
+
+    trap cleanup_guarded_processes INT TERM
+
+    (
+        while kill -0 "$guarded_pid" 2>/dev/null; do
+            local rss_mb
+            rss_mb=$(sum_process_tree_rss_mb "$guarded_pid")
+            echo "[harness-memory] pid=$guarded_pid rss_mb=$rss_mb limit_mb=$rss_limit_mb"
+
+            if [ "$rss_mb" -ge "$rss_limit_mb" ]; then
+                echo "[harness-memory] limit exceeded, terminating harness test process tree"
+                echo "killed" > "$status_file"
+                kill_process_tree "$guarded_pid"
+                break
+            fi
+
+            sleep "$check_interval_seconds"
+        done
+    ) &
+    local monitor_pid=$!
+
+    wait "$guarded_pid"
+    local command_exit_code=$?
+    trap - INT TERM
+    kill "$monitor_pid" 2>/dev/null || true
+    wait "$monitor_pid" 2>/dev/null || true
+
+    if grep -q "killed" "$status_file" 2>/dev/null; then
+        rm -f "$status_file"
+        echo "[harness-memory] harness terminated due to memory guard (limit ${rss_limit_gb}GB)"
+        return 99
+    fi
+
+    rm -f "$status_file"
+    return "$command_exit_code"
+}
+
 show_help() {
     echo "Usage: ./run.sh [command]"
     echo ""
@@ -74,6 +171,15 @@ run_tests() {
 run_harness() {
     local suite=$1
     echo "Running headless harness tests..."
+    local harness_memory_limit_gb="${HARNESS_MAX_RSS_GB:-6}"
+    echo "Harness memory guard enabled: ${harness_memory_limit_gb}GB limit"
+    local test_profile_dir
+    test_profile_dir="${HARNESS_TEST_PROFILE_DIR:-$(pwd)/.build-tests/harness-test-profile}"
+    mkdir -p "$test_profile_dir"
+    echo "Harness test profile dir: $test_profile_dir"
+    local prompts_root_default
+    prompts_root_default="$(pwd)/Prompts"
+    local resolved_prompts_root=""
     
     # Build environment variables to pass to test runner
     # Using TEST_RUNNER_ENV_ prefix to pass env vars through xcodebuild to the test process
@@ -90,10 +196,21 @@ run_harness() {
         env_args+=("TEST_RUNNER_ENV_HARNESS_USE_OPENROUTER=$HARNESS_USE_OPENROUTER")
         echo "Using OpenRouter: $HARNESS_USE_OPENROUTER"
     fi
+    env_args+=("TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR=$test_profile_dir")
+    if [ -n "$OSX_IDE_PROMPTS_ROOT" ]; then
+        env_args+=("TEST_RUNNER_ENV_OSX_IDE_PROMPTS_ROOT=$OSX_IDE_PROMPTS_ROOT")
+        resolved_prompts_root="$OSX_IDE_PROMPTS_ROOT"
+        echo "Using prompt root from OSX_IDE_PROMPTS_ROOT: $OSX_IDE_PROMPTS_ROOT"
+    elif [ -d "$prompts_root_default" ]; then
+        env_args+=("TEST_RUNNER_ENV_OSX_IDE_PROMPTS_ROOT=$prompts_root_default")
+        resolved_prompts_root="$prompts_root_default"
+        echo "Using prompt root: $prompts_root_default"
+    fi
     
     if [ -n "$suite" ]; then
         echo "Filtering by suite: $suite"
-        xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+        run_with_memory_guard "$harness_memory_limit_gb" \
+            env OSX_IDE_PROMPTS_ROOT="$resolved_prompts_root" OSXIDE_TEST_PROFILE_DIR="$test_profile_dir" xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                   -scheme "$SCHEME" \
                   -configuration Debug \
                   -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
@@ -102,7 +219,8 @@ run_harness() {
                   "${env_args[@]}" \
                   test -only-testing:osx-ideHarnessTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideTests
     else
-        xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+        run_with_memory_guard "$harness_memory_limit_gb" \
+            env OSX_IDE_PROMPTS_ROOT="$resolved_prompts_root" OSXIDE_TEST_PROFILE_DIR="$test_profile_dir" xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                   -scheme "$SCHEME" \
                   -configuration Debug \
                   -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
