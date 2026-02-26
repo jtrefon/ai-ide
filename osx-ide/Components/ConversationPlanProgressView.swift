@@ -39,26 +39,51 @@ struct ConversationPlanProgressView: View {
         return PlanProgress(completed: 0, total: stepCount)
     }
 
+    private var activePlanItem: PlanActiveItem? {
+        guard let plan = latestPlanMessage else { return nil }
+        return PlanActiveItemResolver.activeItem(in: plan.content)
+    }
+
+    private var headerTitle: String {
+        activePlanItem?.stepTitle ?? "Implementation Plan"
+    }
+
+    private var headerSubtitle: String? {
+        activePlanItem?.substepTitle?.nilIfEmpty
+    }
+
     var body: some View {
         if hasContent {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
+                HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "list.bullet.clipboard")
                         .font(.caption)
                         .foregroundColor(.accentColor)
 
-                    Text("Implementation Plan")
-                        .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .semibold))
-                        .foregroundColor(.primary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(headerTitle)
+                                .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .semibold))
+                                .foregroundColor(.primary)
 
-                    if progress.total > 0 {
-                        Text("\(progress.completed)/\(progress.total)")
-                            .font(.system(size: CGFloat(max(9, fontSize - 3)), weight: .medium).monospacedDigit())
-                            .foregroundColor(.secondary)
+                            if progress.total > 0 {
+                                Text("\(progress.completed)/\(progress.total)")
+                                    .font(.system(size: CGFloat(max(9, fontSize - 3)), weight: .medium).monospacedDigit())
+                                    .foregroundColor(.secondary)
 
-                        Text("\(progress.percentage)%")
-                            .font(.system(size: CGFloat(max(9, fontSize - 3)), weight: .semibold).monospacedDigit())
-                            .foregroundColor(progress.isComplete ? .green : .accentColor)
+                                Text("\(progress.percentage)%")
+                                    .font(.system(size: CGFloat(max(9, fontSize - 3)), weight: .semibold).monospacedDigit())
+                                    .foregroundColor(progress.isComplete ? .green : .accentColor)
+                            }
+                        }
+
+                        if let subtitle = headerSubtitle {
+                            Text(subtitle)
+                                .font(.system(size: CGFloat(max(9, fontSize - 3)), weight: .regular))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
                     }
 
                     Spacer()
@@ -137,4 +162,10 @@ private struct PlanProgress {
         return Int((Double(completed) / Double(total) * 100).rounded())
     }
     var isComplete: Bool { completed >= total && total > 0 }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
 }
