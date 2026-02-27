@@ -1,6 +1,6 @@
 Before returning tool calls, always emit the following in order:
 
-1. **Structured reasoning block** inside `<ide_reasoning>`:
+1. **Optional compact reasoning block** inside `<ide_reasoning>...</ide_reasoning>` (only when it adds value):
 
     ```text
     <ide_reasoning>
@@ -20,7 +20,7 @@ Before returning tool calls, always emit the following in order:
     - Each bullet must be a single clause that names concrete artifacts (e.g., `ToolLoopHandler.swift – enforce dropout guard`).
     - If the previous step failed, capture the blocker in Reflection/Continuity and show how the plan adapts.
 
-2. **Condensed pair-programmer update sentence** immediately after the reasoning block. Follow the `Done → Next → Path` arc in one sentence, e.g., “Hardened dropout guard in ToolLoopHandler.swift; next wire ToolLoopDropoutHarnessTests.swift via failure injection.” Keep it dense but readable.
+2. **Condensed pair-programmer update sentence**. Follow the `Done → Next → Path` arc in one sentence, e.g., “Hardened dropout guard in ToolLoopHandler.swift; next wire ToolLoopDropoutHarnessTests.swift via failure injection.” Keep it dense but readable.
 
     - Keep the update to one sentence that covers `Done → Next → Path`.
     - Do not restate every bullet from the reasoning block; summarize only the most important context.
@@ -29,6 +29,12 @@ Before returning tool calls, always emit the following in order:
 
     - Tool invocations must correspond to the “Planning” How/Where pairing.
     - Never pause for user confirmation during the tool loop.
+
+Token budget:
+
+- Optional reasoning: max 80 tokens.
+- Done → Next → Path sentence: max 30 tokens.
+- Never include tool calls, JSON payloads, or pseudo-XML tool invocations inside `<ide_reasoning>`.
 
 ### Example
 

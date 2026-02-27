@@ -21,16 +21,29 @@ class ChatPromptBuilder {
     static func splitReasoning(from text: String) -> (reasoning: String?, content: String) {
         guard !text.isEmpty else { return (nil, "") }
 
+        if let tagged = splitTaggedReasoning(from: text) {
+            return tagged
+        }
+
+        if let plain = splitPlainReasoning(from: text) {
+            return plain
+        }
+
+        return (nil, text)
+    }
+
+    private static func splitTaggedReasoning(from text: String) -> (reasoning: String?, content: String)? {
+
         let startTag = "<ide_reasoning>"
         let endTag = "</ide_reasoning>"
 
         guard let startRange = text.range(of: startTag),
               let endRange = text.range(of: endTag) else {
-            return (nil, text)
+            return nil
         }
 
         guard startRange.lowerBound < endRange.lowerBound else {
-            return (nil, text)
+            return nil
         }
 
         let reasoningStart = startRange.upperBound
@@ -44,6 +57,23 @@ class ChatPromptBuilder {
         return (reasoning.isEmpty ? nil : reasoning, cleaned)
     }
 
+    private static func splitPlainReasoning(from text: String) -> (reasoning: String?, content: String)? {
+        let pattern = #"(?s)^\s*(Reflection:\s*.*?\n\s*Continuity:.*?)(?:\n{1,2}|$)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: fullRange),
+              let reasoningRange = Range(match.range(at: 1), in: text),
+              let removeRange = Range(match.range(at: 0), in: text) else {
+            return nil
+        }
+
+        let reasoning = String(text[reasoningRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        var remaining = text
+        remaining.removeSubrange(removeRange)
+        let cleaned = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+        return reasoning.isEmpty ? nil : (reasoning, cleaned)
+    }
+
     /// Checks if a reasoning format correction is needed based on required sections.
     /// - Parameter text: The raw response text.
     /// - Returns: True if correction is needed.
@@ -52,8 +82,20 @@ class ChatPromptBuilder {
         guard let reasoning = split.reasoning, !reasoning.isEmpty else { return false }
 
         let lowercasedReasoning = reasoning.lowercased()
-        let required = ["analyze:", "research:", "plan:", "reflect:", "action:", "delivery:"]
-        return required.contains(where: { !lowercasedReasoning.contains($0) })
+        let modernRequired = ["reflection:", "planning:", "continuity:"]
+        let legacyRequired = ["analyze:", "research:", "plan:", "reflect:", "action:", "delivery:"]
+
+        let hasModern = modernRequired.contains(where: { lowercasedReasoning.contains($0) })
+        if hasModern {
+            return modernRequired.contains(where: { !lowercasedReasoning.contains($0) })
+        }
+
+        let hasLegacy = legacyRequired.contains(where: { lowercasedReasoning.contains($0) })
+        if hasLegacy {
+            return legacyRequired.contains(where: { !lowercasedReasoning.contains($0) })
+        }
+
+        return false
     }
 
     /// Checks if the reasoning block is present but low-quality (placeholders like "..." or no concrete content).
@@ -111,7 +153,10 @@ class ChatPromptBuilder {
     private static func extractReasoningSections(_ reasoning: String) -> [(key: String, value: String)] {
         // Parse lines like "Analyze: ..."; tolerate leading/trailing whitespace.
         let lines = reasoning.split(whereSeparator: \.isNewline).map { String($0) }
-        let keys = ["Analyze:", "Research:", "Plan:", "Reflect:", "Action:", "Delivery:"]
+        let keys = [
+            "Analyze:", "Research:", "Plan:", "Reflect:", "Action:", "Delivery:",
+            "Reflection:", "Planning:", "Continuity:"
+        ]
         var results: [(String, String)] = []
 
         for line in lines {
@@ -138,9 +183,9 @@ class ChatPromptBuilder {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        let planDelta = value(for: "Plan:")
+        let planDelta = value(for: "Plan:") ?? value(for: "Planning:")
         let nextAction = value(for: "Action:")
-        let knownRisks = value(for: "Reflect:")
+        let knownRisks = value(for: "Reflect:") ?? value(for: "Continuity:")
 
         let deliveryValue = (value(for: "Delivery:") ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -377,7 +422,7 @@ class ChatPromptBuilder {
 
         let sections = extractReasoningSections(reasoning)
         guard let deliveryLine = sections.first(where: { $0.key.lowercased().hasPrefix("delivery:") })?.value else {
-            return .needsWork
+            return nil
         }
 
         let normalized = deliveryLine

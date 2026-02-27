@@ -23,6 +23,7 @@ struct QAQualityReviewNode: OrchestrationNode {
             projectRoot: request.projectRoot,
             qaReviewEnabled: request.qaReviewEnabled,
             availableTools: request.availableTools,
+            toolResults: state.lastToolResults,
             runId: request.runId,
             userInput: request.userInput
         )

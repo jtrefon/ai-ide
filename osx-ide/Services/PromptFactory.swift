@@ -23,7 +23,7 @@ public actor PromptFactory {
         var components: [PromptComponent] = []
         
         // 1. Base system prompt
-        components.append(await loadBaseSystemPrompt())
+        components.append(try loadBaseSystemPrompt(projectRoot: projectRoot))
         
         // 2. Tool descriptions (if available)
         if let tools = tools, !tools.isEmpty {
@@ -44,7 +44,8 @@ public actor PromptFactory {
         if let reasoningComponent = try await buildReasoningComponent(
             enabled: reasoningEnabled,
             mode: mode,
-            stage: stage
+            stage: stage,
+            projectRoot: projectRoot
         ) {
             components.append(reasoningComponent)
         }
@@ -59,36 +60,16 @@ public actor PromptFactory {
     
     // MARK: - Component Builders
     
-    private func loadBaseSystemPrompt() async -> PromptComponent {
-        let path = "Prompts/System/base-system-prompt.md"
-        
-        do {
-            let content = try String(
-                contentsOfFile: path,
-                encoding: .utf8
-            )
-            return PromptComponent(
-                type: .baseSystem,
-                content: content,
-                priority: 100
-            )
-        } catch {
-            // Fallback to hardcoded base prompt
-            return PromptComponent(
-                type: .baseSystem,
-                content: """
-                You are an expert AI software engineer assistant integrated into an IDE.
-                
-                ## Core Principles
-                
-                - **Use tools, don't describe actions**: When tools are available, you MUST return real structured tool calls
-                - **Index-first discovery**: Always use codebase index tools for file discovery
-                - **Read before editing**: Understand existing code before making changes
-                - **Prefer precise operations**: Use targeted edits over full file rewrites
-                """,
-                priority: 100
-            )
-        }
+    private func loadBaseSystemPrompt(projectRoot: URL?) throws -> PromptComponent {
+        let content = try PromptRepository.shared.prompt(
+            key: "System/base-system-prompt",
+            projectRoot: projectRoot
+        )
+        return PromptComponent(
+            type: .baseSystem,
+            content: content,
+            priority: 100
+        )
     }
     
     private func buildToolDescriptionsComponent(tools: [EnhancedAITool]) -> PromptComponent {
@@ -152,11 +133,13 @@ public actor PromptFactory {
     private func buildReasoningComponent(
         enabled: Bool,
         mode: AIMode?,
-        stage: AIRequestStage?
+        stage: AIRequestStage?,
+        projectRoot: URL?
     ) async throws -> PromptComponent? {
         guard enabled, mode == .agent else { return nil }
+        if stage == .initial_response { return nil }
         
-        let reasoningPrompt = try await loadReasoningPrompt(stage: stage)
+        let reasoningPrompt = try loadReasoningPrompt(stage: stage, projectRoot: projectRoot)
         return PromptComponent(
             type: .reasoning,
             content: reasoningPrompt,
@@ -194,41 +177,14 @@ public actor PromptFactory {
     
     // MARK: - Helper Methods
     
-    private func loadReasoningPrompt(stage: AIRequestStage?) async throws -> String {
-        // Load reasoning prompt based on stage
-        switch stage {
-        case .initial_response:
-            return """
-                ## Reasoning Instructions
-                
-                You are in the initial response stage. Provide a high-level plan before execution:
-                
-                1. **Analysis**: Understand the user's request and current state
-                2. **Planning**: Outline the approach and tools needed
-                3. **Next Steps**: Specify immediate tool calls to begin implementation
-                
-                Use the `<ide_reasoning>` tag to structure your analysis.
-                """
-        case .tool_loop:
-            return """
-                ## Reasoning Instructions
-                
-                You are in the tool loop stage. Focus on execution:
-                
-                1. **Execute**: Make the necessary tool calls
-                2. **Verify**: Check results and handle errors
-                3. **Continue**: Proceed with next steps or complete the task
-                
-                Do not include reasoning in this stage - focus on tool execution.
-                """
-        default:
-            return """
-                ## Reasoning Instructions
-                
-                Use structured reasoning to plan and execute tasks effectively.
-                Include analysis, planning, and next steps in your reasoning.
-                """
-        }
+    private func loadReasoningPrompt(stage: AIRequestStage?, projectRoot: URL?) throws -> String {
+        let key: String = {
+            if stage == .tool_loop {
+                return "ConversationFlow/Corrections/reasoning_optional_tool_loop"
+            }
+            return "ConversationFlow/Corrections/reasoning_optional_general"
+        }()
+        return try PromptRepository.shared.prompt(key: key, projectRoot: projectRoot)
     }
 }
 

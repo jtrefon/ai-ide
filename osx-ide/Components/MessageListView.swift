@@ -21,8 +21,12 @@ struct MessageListView: View {
 
     private let filterCoordinator = MessageFilterCoordinator()
 
+    private var orderedMessages: [ChatMessage] {
+        MessageChronology.sort(messages)
+    }
+
     private var visibleMessages: [ChatMessage] {
-        messages.filter { filterCoordinator.shouldDisplayMessage($0, in: messages) }
+        orderedMessages.filter { filterCoordinator.shouldDisplayMessage($0, in: orderedMessages) }
     }
 
     private var visibleMessagesSignature: String {

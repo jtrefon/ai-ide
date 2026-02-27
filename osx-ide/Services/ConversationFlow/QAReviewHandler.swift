@@ -26,6 +26,7 @@ final class QAReviewHandler {
     ) async throws -> AIServiceResponse {
         guard qaReviewEnabled, mode == .agent else { return response }
         guard !toolResults.isEmpty else { return response }
+        guard hasProjectMutations(in: toolResults) else { return response }
 
         let toolSummary = ToolLoopUtilities.toolResultsSummaryText(toolResults)
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -66,14 +67,6 @@ final class QAReviewHandler {
             .get()
 
         let qaReport = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !qaReport.isEmpty {
-            historyCoordinator.append(
-                ChatMessage(
-                    role: .assistant,
-                    content: "QA Review (advisory):\n\n\(qaReport)"
-                )
-            )
-        }
 
         Task.detached(priority: .utility) {
             await AppLogger.shared.info(
@@ -115,10 +108,12 @@ final class QAReviewHandler {
         projectRoot: URL,
         qaReviewEnabled: Bool,
         availableTools: [AITool],
+        toolResults: [ChatMessage],
         runId: String,
         userInput: String
     ) async throws -> AIServiceResponse {
         guard qaReviewEnabled, mode == .agent else { return response }
+        guard hasProjectMutations(in: toolResults) else { return response }
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !draft.isEmpty else { return response }
 
@@ -207,5 +202,25 @@ final class QAReviewHandler {
             "index_search_symbols"
         ])
         return tools.filter { allowed.contains($0.name) }
+    }
+
+    private func hasProjectMutations(in toolResults: [ChatMessage]) -> Bool {
+        let mutatingTools = Set([
+            "write_file",
+            "write_files",
+            "create_file",
+            "delete_file",
+            "replace_in_file",
+            "patchset_apply"
+        ])
+
+        return toolResults.contains { message in
+            guard message.isToolExecution, message.toolStatus == .completed,
+                  let toolName = message.toolName
+            else {
+                return false
+            }
+            return mutatingTools.contains(toolName)
+        }
     }
 }

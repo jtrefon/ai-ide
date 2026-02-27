@@ -105,25 +105,6 @@ actor LocalModelProcessAIService: AIService {
 
                 var output = ""
                 var collectedToolCalls: [AIToolCall] = []
-                var bufferedChunk = ""
-                var lastFlushInstant = ContinuousClock.now
-                let flushInterval = Duration.milliseconds(50)
-
-                func flushBufferedChunkIfNeeded(force: Bool = false) async {
-                    guard let runId else { return }
-                    guard !bufferedChunk.isEmpty else { return }
-
-                    let elapsed = lastFlushInstant.duration(to: ContinuousClock.now)
-                    guard force || elapsed >= flushInterval else { return }
-
-                    let chunkToPublish = bufferedChunk
-                    bufferedChunk = ""
-                    lastFlushInstant = ContinuousClock.now
-
-                    await MainActor.run {
-                        eventBus.publish(LocalModelStreamingChunkEvent(runId: runId, chunk: chunkToPublish))
-                    }
-                }
 
                 func publishStatus(_ message: String) async {
                     guard let runId else { return }
@@ -138,9 +119,9 @@ actor LocalModelProcessAIService: AIService {
                     case .chunk(let text):
                         output.append(text)
                         if let runId, !text.isEmpty {
-                            _ = runId
-                            bufferedChunk.append(text)
-                            await flushBufferedChunkIfNeeded()
+                            await MainActor.run {
+                                eventBus.publish(LocalModelStreamingChunkEvent(runId: runId, chunk: text))
+                            }
                         }
                     case .info:
                         break
@@ -149,7 +130,6 @@ actor LocalModelProcessAIService: AIService {
                         await publishStatus("Structured tool call detected: \(toolCall.function.name)")
                     }
                 }
-                await flushBufferedChunkIfNeeded(force: true)
                 let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
                 if collectedToolCalls.isEmpty, !trimmedOutput.isEmpty {
                     let recoveredToolCalls = Self.recoverTextualToolCalls(from: trimmedOutput)
@@ -406,7 +386,7 @@ actor LocalModelProcessAIService: AIService {
         let contextLength = LocalModelFileStore.contextLength(for: model)
         
         // Build system content for caching
-        let systemContent = buildSystemContent(tools: request.tools, mode: request.mode, stage: request.stage)
+        let systemContent = try buildSystemContent(tools: request.tools, mode: request.mode, stage: request.stage, projectRoot: request.projectRoot)
         
         // Check prefix cache for this conversation
         let conversationId = request.conversationId
@@ -568,7 +548,12 @@ actor LocalModelProcessAIService: AIService {
         return chatMessages
     }
 
-    private func buildSystemContent(tools: [AITool]?, mode: AIMode?, stage: AIRequestStage? = nil) -> String {
+    private func buildSystemContent(
+        tools: [AITool]?,
+        mode: AIMode?,
+        stage: AIRequestStage? = nil,
+        projectRoot: URL?
+    ) throws -> String {
         var parts: [String] = []
 
         // Load custom system prompt from settings
@@ -591,55 +576,40 @@ actor LocalModelProcessAIService: AIService {
             parts.append("\n\n\(mode.systemPromptAddition)")
         }
 
-        if let reasoningPrompt = buildReasoningPromptIfNeeded(reasoningEnabled: settings.reasoningEnabled, mode: mode, stage: stage) {
+        if let reasoningPrompt = try buildReasoningPromptIfNeeded(
+            reasoningEnabled: settings.reasoningEnabled,
+            mode: mode,
+            stage: stage,
+            projectRoot: projectRoot
+        ) {
             parts.append(reasoningPrompt)
         }
 
         return parts.joined(separator: "\n")
     }
 
-    private func buildReasoningPromptIfNeeded(reasoningEnabled: Bool, mode: AIMode?, stage: AIRequestStage? = nil) -> String? {
+    private func buildReasoningPromptIfNeeded(
+        reasoningEnabled: Bool,
+        mode: AIMode?,
+        stage: AIRequestStage? = nil,
+        projectRoot: URL?
+    ) throws -> String? {
         guard let mode else { return nil }
         guard mode == .agent, reasoningEnabled else { return nil }
-        if stage == .tool_loop {
-            return """
+        if stage == .initial_response { return nil }
 
-            ## Reasoning
-            During tool loop execution you MUST follow the pair-programming cadence:
+        let promptKey: String = {
+            if stage == .tool_loop {
+                return "ConversationFlow/Corrections/reasoning_optional_tool_loop"
+            }
+            return "ConversationFlow/Corrections/reasoning_optional_general"
+        }()
 
-            - Always emit a <ide_reasoning> block using the Reflection/Planning/Continuity schema.
-            - Each bullet is a single clause referencing concrete files/functions/components.
-            - After </ide_reasoning>, write one sentence covering Done → Next → Path.
-            - Immediately return tool calls that implement the “Planning” How/Where instructions without asking the user for confirmation.
-            - Keep everything terse and technical—no filler, no repeated blocks, no pseudo-tool JSON.
-
-            Format example:
-            <ide_reasoning>
-            Reflection:
-            - What: <result>
-            - Where: <file/component>
-            - How: <tool/operation>
-            Planning:
-            - What: <next objective>
-            - Where: <exact locus>
-            - How: <tool/action>
-            Continuity: <risks/invariants>
-            </ide_reasoning>
-            Hardened X in File.swift; next adjust Tests.swift via write_file.
-            """
-        }
-
-        return """
-
-        ## Reasoning
-        Always include a structured <ide_reasoning> block using the Reflection/Planning/Continuity schema. This block is rendered separately for the user, so keep it dense and technical.
-
-        - Reflection: three bullets (What/Where/How) describing the latest outcome or blocker. Reference concrete files, components, or commands.
-        - Planning: three bullets (What/Where/How) detailing the very next objective, locus, and tool/action you intend to execute.
-        - Continuity: note the risks, invariants, or context that must carry forward.
-
-        After </ide_reasoning>, write one concise user-facing sentence covering the Done → Next → Path arc. If tools are available, transition directly into the necessary tool calls; if tools are unavailable, state the blocker explicitly.
-        """
+        let prompt = try PromptRepository.shared.prompt(
+            key: promptKey,
+            projectRoot: projectRoot
+        )
+        return prompt
     }
     
     /// Convert AITool array to ToolSpec array for MLXLLM

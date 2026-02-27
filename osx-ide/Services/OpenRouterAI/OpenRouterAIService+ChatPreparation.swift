@@ -8,7 +8,7 @@ extension OpenRouterAIService {
         let settings = loadSettingsSnapshot()
         try validateSettings(apiKey: settings.apiKey, model: settings.model)
 
-        let systemContent = buildSystemContent(
+        let systemContent = try buildSystemContent(
             input: BuildSystemContentInput(
                 systemPrompt: settings.systemPrompt,
                 hasTools: request.tools?.isEmpty == false,
@@ -59,7 +59,7 @@ extension OpenRouterAIService {
         }
     }
 
-    internal func buildSystemContent(input: BuildSystemContentInput) -> String {
+    internal func buildSystemContent(input: BuildSystemContentInput) throws -> String {
         var components: [String] = []
         components.append(
             buildBaseSystemContent(
@@ -77,10 +77,11 @@ extension OpenRouterAIService {
             components.append(projectRootContext)
         }
 
-        if let reasoningPrompt = buildReasoningPromptIfNeeded(
+        if let reasoningPrompt = try buildReasoningPromptIfNeeded(
             reasoningEnabled: input.reasoningEnabled,
             mode: input.mode,
-            stage: input.stage
+            stage: input.stage,
+            projectRoot: input.projectRoot
         ) {
             components.append(reasoningPrompt)
         }
@@ -122,49 +123,28 @@ extension OpenRouterAIService {
         """
     }
 
-    internal func buildReasoningPromptIfNeeded(reasoningEnabled: Bool, mode: AIMode?, stage: AIRequestStage?) -> String? {
+    internal func buildReasoningPromptIfNeeded(
+        reasoningEnabled: Bool,
+        mode: AIMode?,
+        stage: AIRequestStage?,
+        projectRoot: URL?
+    ) throws -> String? {
         guard let mode else { return nil }
         if mode != .agent || !reasoningEnabled { return nil }
+        if stage == .initial_response { return nil }
 
-        if stage == .tool_loop {
-            return """
+        let promptKey: String = {
+            if stage == .tool_loop {
+                return "ConversationFlow/Corrections/reasoning_optional_tool_loop"
+            }
+            return "ConversationFlow/Corrections/reasoning_optional_general"
+        }()
 
-            ## Reasoning
-            During tool loop execution you MUST follow the pair-programming cadence:
-
-            - Always emit a <ide_reasoning> block using the Reflection/Planning/Continuity schema.
-            - Each bullet is a single clause referencing concrete files/functions/components.
-            - After </ide_reasoning>, write one sentence covering Done → Next → Path.
-            - Immediately return tool calls that implement the “Planning” How/Where instructions without asking the user for confirmation.
-            - Keep everything terse and technical—no filler, no repeated blocks, no pseudo-tool JSON.
-
-            Format example:
-            <ide_reasoning>
-            Reflection:
-            - What: <result>
-            - Where: <file/component>
-            - How: <tool/operation>
-            Planning:
-            - What: <next objective>
-            - Where: <exact locus>
-            - How: <tool/action>
-            Continuity: <risks/invariants>
-            </ide_reasoning>
-            Hardened X in File.swift; next adjust Tests.swift via write_file.
-            """
-        }
-
-        return """
-
-        ## Reasoning
-        Always include a structured <ide_reasoning> block using the Reflection/Planning/Continuity schema. This block is rendered separately for the user, so keep it dense and technical.
-
-        - Reflection: three bullets (What/Where/How) describing the latest outcome or blocker. Reference concrete files, components, or commands.
-        - Planning: three bullets (What/Where/How) detailing the very next objective, locus, and tool/action you intend to execute.
-        - Continuity: note the risks, invariants, or context that must carry forward.
-
-        After </ide_reasoning>, write one concise user-facing sentence covering the Done → Next → Path arc. If tools are available, transition directly into the necessary tool calls; if tools are unavailable, state the blocker explicitly.
-        """
+        let prompt = try PromptRepository.shared.prompt(
+            key: promptKey,
+            projectRoot: projectRoot
+        )
+        return prompt
     }
 
     internal func buildFinalMessages(

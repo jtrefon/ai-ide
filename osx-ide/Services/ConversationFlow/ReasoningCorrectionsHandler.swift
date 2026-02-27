@@ -27,7 +27,7 @@ final class ReasoningCorrectionsHandler {
 
         if ChatPromptBuilder.needsReasoningFormatCorrection(text: response.content ?? "") {
             let promptText =
-                "Note: Your reasoning block was missing sections. Please ensure all sections (Analyze, Research, Plan, Reflect, Action, Delivery) are present in future responses."
+                "Note: If you include reasoning, wrap it in <ide_reasoning>...</ide_reasoning>, keep it compact, and include Reflection/Planning/Continuity sections."
             historyCoordinator.append(ChatMessage(role: .system, content: promptText))
         }
 

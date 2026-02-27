@@ -232,21 +232,46 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         guard let runId = activeStreamingRunId, runId == event.runId else { return }
         guard let draftId = draftAssistantMessageId else { return }
 
-        draftAssistantText.append(event.chunk)
-        appendToLiveModelPreview(event.chunk)
-        let trimmed = draftAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Update the draft message with streaming content
-        // Draft messages are always visible, even with empty content
-        historyCoordinator.upsertMessage(
-            ChatMessage(
-                id: draftId,
-                role: .assistant,
-                content: trimmed.isEmpty ? "..." : trimmed,
-                timestamp: Date(),
-                isDraft: true
+        let chunks = chunkForDisplay(event.chunk)
+        for chunk in chunks {
+            draftAssistantText.append(chunk)
+            appendToLiveModelPreview(chunk)
+
+            // Update the draft message with streaming content
+            // Draft messages are always visible, even with empty content
+            historyCoordinator.upsertMessage(
+                ChatMessage(
+                    id: draftId,
+                    role: .assistant,
+                    content: draftAssistantText.isEmpty ? "..." : draftAssistantText,
+                    timestamp: Date(),
+                    isDraft: true
+                )
             )
-        )
+        }
+    }
+
+    private func chunkForDisplay(_ rawChunk: String) -> [String] {
+        guard !rawChunk.isEmpty else { return [] }
+        // Keep tiny chunks as-is; split large deltas to reduce perceived "block" updates in UI.
+        guard rawChunk.count > 24 else { return [rawChunk] }
+
+        var output: [String] = []
+        var current = ""
+
+        for character in rawChunk {
+            current.append(character)
+            if character.isWhitespace || current.count >= 12 {
+                output.append(current)
+                current = ""
+            }
+        }
+
+        if !current.isEmpty {
+            output.append(current)
+        }
+
+        return output.isEmpty ? [rawChunk] : output
     }
 
     private func handleLocalModelStreamingStatus(_ event: LocalModelStreamingStatusEvent) {

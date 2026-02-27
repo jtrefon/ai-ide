@@ -3,6 +3,11 @@ import Foundation
 protocol PromptRepositoryProtocol {
     func prompt(
         key: String,
+        projectRoot: URL?
+    ) throws -> String
+
+    func prompt(
+        key: String,
         defaultValue: String,
         projectRoot: URL?
     ) throws -> String
@@ -22,6 +27,13 @@ final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
+    }
+
+    func prompt(
+        key: String,
+        projectRoot: URL?
+    ) throws -> String {
+        try prompt(key: key, defaultValue: "", projectRoot: projectRoot)
     }
 
     func prompt(
@@ -111,7 +123,16 @@ final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
             }
         }
 
+        if let resolved = searchFromSourceRoot(key: key) {
+            return resolved
+        }
+
         return nil
+    }
+
+    private func searchFromSourceRoot(key: String) -> URL? {
+        let sourceFileURL = URL(fileURLWithPath: #filePath)
+        return searchUpwardsForPromptsFolder(from: sourceFileURL, key: key)
     }
 
     private func searchUpwardsForPromptsFolder(from start: URL, key: String) -> URL? {

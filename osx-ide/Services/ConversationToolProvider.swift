@@ -56,6 +56,7 @@ final class ConversationToolProvider {
                 pathValidator: pathValidator
             )
         )
+        tools.append(ListFilesTool(pathValidator: pathValidator))
         tools.append(
             WriteFileTool(
                 fileSystemService: fileSystemService,
