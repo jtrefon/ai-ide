@@ -130,40 +130,40 @@ extension OpenRouterAIService {
             return """
 
             ## Reasoning
-            During tool loop execution, prioritize actionable tool calls.
-            Keep reasoning brief and optional.
-            Do not output code blocks or pseudo-tool JSON when tools are available.
-            Keep user-facing updates extremely concise (1 short sentence) unless the user explicitly asks for detailed explanation.
+            During tool loop execution you MUST follow the pair-programming cadence:
+
+            - Always emit a <ide_reasoning> block using the Reflection/Planning/Continuity schema.
+            - Each bullet is a single clause referencing concrete files/functions/components.
+            - After </ide_reasoning>, write one sentence covering Done → Next → Path.
+            - Immediately return tool calls that implement the “Planning” How/Where instructions without asking the user for confirmation.
+            - Keep everything terse and technical—no filler, no repeated blocks, no pseudo-tool JSON.
+
+            Format example:
+            <ide_reasoning>
+            Reflection:
+            - What: <result>
+            - Where: <file/component>
+            - How: <tool/operation>
+            Planning:
+            - What: <next objective>
+            - Where: <exact locus>
+            - How: <tool/action>
+            Continuity: <risks/invariants>
+            </ide_reasoning>
+            Hardened X in File.swift; next adjust Tests.swift via write_file.
             """
         }
 
         return """
 
         ## Reasoning
-        When responding, include a structured reasoning block enclosed in <ide_reasoning>...</ide_reasoning>.
-        This block will be shown in a separate, foldable UI panel.
+        Always include a structured <ide_reasoning> block using the Reflection/Planning/Continuity schema. This block is rendered separately for the user, so keep it dense and technical.
 
-        Requirements:
-        - ALWAYS include all six sections in this exact order: Analyze, Research, Plan, Reflect, Action, Delivery.
-        - If a section is not applicable, write 'N/A' (do not omit the section).
-        - If no action is needed, write 'None' in Action.
-        - Delivery MUST start with either 'DONE' or 'NEEDS_WORK'. Use DONE only when the task is fully complete.
-        - Keep it concise and actionable; use short bullets or short sentences.
-        - Prefer depth over verbosity: keep reasoning information-dense and avoid repetitive prose.
-        - Do NOT include code blocks in <ide_reasoning>.
-        - Do NOT use placeholders like '...' or copy the format example text verbatim.
-        - After </ide_reasoning>, provide a condensed user-facing update (1-3 short bullets max).
-        - Expand user-facing detail only when the user explicitly asks for it.
+        - Reflection: three bullets (What/Where/How) describing the latest outcome or blocker. Reference concrete files, components, or commands.
+        - Planning: three bullets (What/Where/How) detailing the very next objective, locus, and tool/action you intend to execute.
+        - Continuity: note the risks, invariants, or context that must carry forward.
 
-        Format example:
-        <ide_reasoning>
-        Analyze: - ... (write real bullets)
-        Research: - ... (write real bullets)
-        Plan: - ... (write real bullets)
-        Reflect: - ... (write real bullets)
-        Action: - ... (write real bullets)
-        Delivery: DONE - ... (write real bullets)
-        </ide_reasoning>
+        After </ide_reasoning>, write one concise user-facing sentence covering the Done → Next → Path arc. If tools are available, transition directly into the necessary tool calls; if tools are unavailable, state the blocker explicitly.
         """
     }
 

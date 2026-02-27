@@ -19,7 +19,8 @@ final class FinalResponseHandler {
         mode: AIMode,
         projectRoot: URL,
         toolResults: [ChatMessage],
-        runId: String
+        runId: String,
+        conversationId: String
     ) async throws -> AIServiceResponse {
         let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
@@ -40,7 +41,9 @@ final class FinalResponseHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     toolResults: toolResults,
-                    runId: runId
+                    runId: runId,
+                    conversationId: conversationId,
+                    followupReason: "Your previous response was too generic and did not include the required Final Delivery Summary. Provide the mandated summary now."
                 )
             }
         }
@@ -53,7 +56,9 @@ final class FinalResponseHandler {
             mode: mode,
             projectRoot: projectRoot,
             toolResults: toolResults,
-            runId: runId
+            runId: runId,
+            conversationId: conversationId,
+            followupReason: nil
         )
     }
 
@@ -89,31 +94,31 @@ final class FinalResponseHandler {
         mode: AIMode,
         projectRoot: URL,
         toolResults: [ChatMessage],
-        runId: String
+        runId: String,
+        conversationId: String,
+        followupReason: String?
     ) async throws -> AIServiceResponse {
 
         let toolSummary = ToolLoopUtilities.toolResultsSummaryText(toolResults)
-        let correctionContent: String
-        if toolResults.isEmpty {
-            correctionContent =
-                "You returned no user-visible response. Provide a final response in plain text now. "
-                + "Do not call tools. Do not ask the user for more inputs (diffs, files, confirmations)."
+        let resolvedReason: String
+        if let followupReason {
+            resolvedReason = followupReason
+        } else if toolResults.isEmpty {
+            resolvedReason = "You returned no user-visible response. Provide the mandated Final Delivery Summary now without calling tools."
         } else {
-            correctionContent =
-                "You returned no user-visible response after tool execution. "
-                + "Provide a final response in plain text now summarizing what was done. "
-                + "Do not call tools. Do not ask the user for more inputs (diffs, files, confirmations). "
-                + "Do NOT repeat the raw tool outputs verbatim. Provide a high-level summary for the user.\n\nTool outputs:\n\(toolSummary)"
+            resolvedReason = "You returned no user-visible response after executing tools. Summarize the work using the Final Delivery Summary scaffold without calling tools."
         }
-        // Improve the prompt to get a better completion message
-        let improvedCorrection =
-            correctionContent + "\n\nIMPORTANT: Your final response should include:\n"
-            + "1. Brief summary of what was accomplished\n"
-            + "2. Files that were modified (if any)\n" + "3. Any errors or issues encountered\n"
-            + "4. Next steps if task is incomplete"
+
+        let summaryPrompt = try await buildFinalDeliveryPrompt(
+            followupReason: resolvedReason,
+            toolSummary: toolSummary,
+            projectRoot: projectRoot,
+            conversationId: conversationId
+        )
+
         let correctionSystem = ChatMessage(
             role: .system,
-            content: improvedCorrection
+            content: summaryPrompt
         )
 
         let followupMode: AIMode = (mode == .agent) ? .agent : .chat
@@ -142,10 +147,93 @@ final class FinalResponseHandler {
             (finalContent?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
             ? finalContent
             : "I wasn't able to generate a final response. "
-                + "Here is a summary of tool outputs:\n\n\(toolSummary)\n\n"
+                + "Here is a summary of tool outputs:\n\n\(toolSummary.isEmpty ? "No tools executed." : toolSummary)\n\n"
                 + "Please retry or clarify the next step."
         return AIServiceResponse(content: resolvedContent, toolCalls: nil)
     }
+
+    private func buildFinalDeliveryPrompt(
+        followupReason: String,
+        toolSummary: String,
+        projectRoot: URL,
+        conversationId: String
+    ) async throws -> String {
+        let template = try PromptRepository.shared.prompt(
+            key: "ConversationFlow/FinalResponse/final_delivery_summary",
+            defaultValue: Self.defaultFinalDeliveryPrompt,
+            projectRoot: projectRoot
+        )
+
+        let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let progress = formatPlanProgress(planMarkdown: planMarkdown)
+        let sanitizedPlan = planMarkdown.isEmpty ? "None" : planMarkdown
+        let sanitizedToolSummary = toolSummary.isEmpty ? "No tool outputs recorded." : toolSummary
+
+        return template
+            .replacingOccurrences(of: "{{followup_reason}}", with: followupReason)
+            .replacingOccurrences(of: "{{tool_summary}}", with: sanitizedToolSummary)
+            .replacingOccurrences(of: "{{plan_markdown}}", with: sanitizedPlan)
+            .replacingOccurrences(of: "{{plan_progress}}", with: progress)
+    }
+
+    private func formatPlanProgress(planMarkdown: String) -> String {
+        guard !planMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "No plan on record"
+        }
+
+        let progress = PlanChecklistTracker.progress(in: planMarkdown)
+        guard progress.total > 0 else {
+            return "Plan has no checklist items"
+        }
+        return "\(progress.completed)/\(progress.total) (\(progress.percentage)% complete)"
+    }
+
+    private static let defaultFinalDeliveryPrompt = """
+# Final Delivery Contract
+
+{{followup_reason}}
+
+Before returning the final answer:
+
+1. Emit the standard `<ide_reasoning>` block using the Reflection/Planning/Continuity schema (single-clause What/Where/How bullets; mention concrete files, commands, or tests). Keep it terse—this is still engineer-to-engineer pairing.
+2. Immediately follow with **one** sentence covering `Done → Next → Path` so the user sees the closing state at a glance.
+3. Do **not** call tools during this stage. This is a summary only.
+
+After the reasoning block, output the final user-visible summary using the exact scaffold below:
+
+```text
+### Final Delivery Summary
+- Objective: <restate the user objective in one clause>
+- Work Performed: <concise bullet or clause describing the key changes>
+- Files Touched: <comma-separated list of files or `None`>
+- Verification: <tests/commands run, or `Not Run` + why>
+- Next Steps / Risks: <what remains or any open risks>
+- Undo / Recovery: <how to roll back (e.g., git checkout, revert instructions)>
+- Plan Status: {{plan_progress}}
+
+Delivery: <DONE or NEEDS_WORK>
+```
+
+Context you can reference (do **not** rewrite verbatim):
+
+- **Tool recap**:
+
+{{tool_summary}}
+
+- **Plan markdown (read-only)**:
+
+{{plan_markdown}}
+
+Rules:
+
+- If the plan is incomplete, be explicit about which checklist items remain.
+
+- If no tools ran, say “Work Performed: None (explanation-only).”
+
+- Never claim edits/tests that did not actually happen earlier in this run.
+
+- Keep the entire response under 400 tokens—prioritize signal over fluff.
+"""
 
     func appendFinalMessageAndLog(
         response: AIServiceResponse,

@@ -24,7 +24,8 @@ struct FinalResponseNode: OrchestrationNode {
             mode: request.mode,
             projectRoot: request.projectRoot,
             toolResults: state.lastToolResults,
-            runId: request.runId
+            runId: request.runId,
+            conversationId: request.conversationId
         )
 
         return OrchestrationState(

@@ -76,6 +76,10 @@ final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
             if fileManager.fileExists(atPath: direct.path) {
                 return direct
             }
+
+            if let resolved = searchUpwardsForPromptsFolder(from: projectRoot, key: key) {
+                return resolved
+            }
         }
 
         let environment = ProcessInfo.processInfo.environment

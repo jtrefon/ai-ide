@@ -497,11 +497,10 @@ extension AIToolExecutor {
                 let timeoutSecondsInt = Int(timeoutSeconds)
                 
                 while true {
-                    let (isCancelled, remaining, lastProgressAt) = await MainActor.run {
+                    let (isCancelled, remaining) = await MainActor.run {
                         (
                             ToolTimeoutCenter.shared.isCancelled(toolCallId: toolCall.id),
-                            ToolTimeoutCenter.shared.remainingSeconds(toolCallId: toolCall.id),
-                            ToolTimeoutCenter.shared.lastProgressAt
+                            ToolTimeoutCenter.shared.remainingSeconds(toolCallId: toolCall.id)
                         )
                     }
                     if isCancelled {
@@ -510,32 +509,13 @@ extension AIToolExecutor {
                     }
 
                     if let remaining, remaining <= 0 {
-                        // Intelligent timeout: check if there's been recent progress via ToolTimeoutCenter
-                        if let lastProgress = lastProgressAt {
-                            let timeSinceLastProgress = Date().timeIntervalSince(lastProgress)
-                            
-                            if timeSinceLastProgress > Double(timeoutSecondsInt) {
-                                // No progress for the entire timeout period - likely hung
-                                await MainActor.run {
-                                    ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
-                                }
-                                toolTask.cancel()
-                                throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
-                            } else {
-                                // There was progress, extend the timeout
-                                await MainActor.run {
-                                    ToolTimeoutCenter.shared.extendTimeout(toolCallId: toolCall.id, bySeconds: Double(timeoutSecondsInt))
-                                }
-                                continue
-                            }
-                        } else {
-                            // No progress ever recorded, just timeout
-                            await MainActor.run {
-                                ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
-                            }
-                            toolTask.cancel()
-                            throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
+                        // Deadline is computed from the most recent progress timestamp.
+                        // If we reached it, the tool has made no progress for timeoutSeconds.
+                        await MainActor.run {
+                            ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
                         }
+                        toolTask.cancel()
+                        throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
                     }
 
                     try await Task.sleep(nanoseconds: 200_000_000)
