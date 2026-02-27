@@ -31,9 +31,19 @@ struct InitialResponseNode: OrchestrationNode {
         if !hasToolCalls, let content = response.content,
            !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let split = ChatPromptBuilder.splitReasoning(from: content)
+            let displayContent = ChatPromptBuilder.contentForDisplay(from: content)
+            let hasReasoning = !(split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            guard !displayContent.isEmpty || hasReasoning else {
+                return OrchestrationState(
+                    request: request,
+                    response: response,
+                    lastToolResults: [],
+                    transition: .next(nextNodeId)
+                )
+            }
             historyCoordinator.append(ChatMessage(
                 role: .assistant,
-                content: split.content,
+                content: displayContent,
                 context: ChatMessageContentContext(reasoning: split.reasoning)
             ))
         }

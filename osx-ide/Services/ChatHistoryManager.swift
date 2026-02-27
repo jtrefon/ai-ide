@@ -77,7 +77,7 @@ public class ChatHistoryManager: ObservableObject {
             id: oldMessage.id,
             role: oldMessage.role,
             content: content,
-            timestamp: Date(),
+            timestamp: oldMessage.timestamp,
             context: ChatMessageContentContext(reasoning: reasoning, codeContext: oldMessage.codeContext),
             tool: ChatMessageToolContext(
                 toolName: oldMessage.toolName,

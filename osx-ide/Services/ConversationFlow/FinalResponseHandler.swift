@@ -242,11 +242,12 @@ Rules:
     ) {
         let splitFinal = ChatPromptBuilder.splitReasoning(
             from: response.content ?? "No response received.")
-        let trimmedContent = splitFinal.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedDisplay = ChatPromptBuilder.contentForDisplay(from: response.content ?? "No response received.")
+        let trimmedContent = sanitizedDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayContent =
             trimmedContent.isEmpty
             ? "Assistant returned no user-visible response. Please retry or rephrase."
-            : splitFinal.content
+            : sanitizedDisplay
         if let reasoning = splitFinal.reasoning,
             let outcome = ChatPromptBuilder.reasoningOutcome(from: reasoning)
         {

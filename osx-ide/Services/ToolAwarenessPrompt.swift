@@ -111,6 +111,7 @@ When you see a system message indicating that context was folded (with a fold id
 3. replace_in_file(path: "...", old_text: "...", new_text: "...")
 
 Always explain what you're doing and show tool results to the user.
+Keep progress updates short and intent-focused; avoid quoting tool function names unless the user asks for tool-level detail.
 """
 
     /// Concise system prompt for local models using structured tool calling via chat templates.

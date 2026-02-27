@@ -86,6 +86,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var activeStreamingRunId: String?
     private var draftAssistantMessageId: UUID?
     private var draftAssistantText: String = ""
+    private var pendingStreamingBuffer: String = ""
+    private var streamingRenderTask: Task<Void, Never>?
+    private let streamingRenderIntervalNanoseconds: UInt64 = 16_000_000
+    private let maxStreamingCharactersPerTick = 8
     private var activeSendTask: Task<Void, Never>?
     private let maxPreviewCharacters = 12_000
     private let maxStatusPreviewCharacters = 4_000
@@ -231,47 +235,81 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private func handleLocalModelStreamingChunk(_ event: LocalModelStreamingChunkEvent) {
         guard let runId = activeStreamingRunId, runId == event.runId else { return }
         guard let draftId = draftAssistantMessageId else { return }
+        guard !event.chunk.isEmpty else { return }
 
-        let chunks = chunkForDisplay(event.chunk)
-        for chunk in chunks {
-            draftAssistantText.append(chunk)
-            appendToLiveModelPreview(chunk)
+        appendToLiveModelPreview(event.chunk)
+        pendingStreamingBuffer.append(event.chunk)
+        startStreamingRenderLoopIfNeeded(draftId: draftId)
+    }
 
-            // Update the draft message with streaming content
-            // Draft messages are always visible, even with empty content
-            historyCoordinator.upsertMessage(
-                ChatMessage(
-                    id: draftId,
-                    role: .assistant,
-                    content: draftAssistantText.isEmpty ? "..." : draftAssistantText,
-                    timestamp: Date(),
-                    isDraft: true
+    private func startStreamingRenderLoopIfNeeded(draftId: UUID) {
+        guard streamingRenderTask == nil else { return }
+        streamingRenderTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.streamingRenderTask = nil }
+            while self.activeStreamingRunId != nil {
+                if self.pendingStreamingBuffer.isEmpty {
+                    try? await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds)
+                    continue
+                }
+
+                let delta = self.dequeueStreamingDelta()
+                guard !delta.isEmpty else {
+                    try? await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds)
+                    continue
+                }
+                guard self.historyCoordinator.getDraftMessage(id: draftId) != nil else { break }
+
+                self.draftAssistantText.append(delta)
+                let displayText = ChatPromptBuilder.contentForDisplay(from: self.draftAssistantText)
+                let draftTimestamp = self.historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date()
+
+                self.historyCoordinator.upsertMessage(
+                    ChatMessage(
+                        id: draftId,
+                        role: .assistant,
+                        content: displayText.isEmpty ? "Generating..." : displayText,
+                        timestamp: draftTimestamp,
+                        isDraft: true
+                    )
                 )
-            )
+
+                try? await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds)
+            }
         }
     }
 
-    private func chunkForDisplay(_ rawChunk: String) -> [String] {
-        guard !rawChunk.isEmpty else { return [] }
-        // Keep tiny chunks as-is; split large deltas to reduce perceived "block" updates in UI.
-        guard rawChunk.count > 24 else { return [rawChunk] }
+    private func dequeueStreamingDelta() -> String {
+        guard !pendingStreamingBuffer.isEmpty else { return "" }
+        let take = min(maxStreamingCharactersPerTick, pendingStreamingBuffer.count)
+        let splitIndex = pendingStreamingBuffer.index(
+            pendingStreamingBuffer.startIndex,
+            offsetBy: take
+        )
+        let chunk = String(pendingStreamingBuffer[..<splitIndex])
+        pendingStreamingBuffer.removeSubrange(pendingStreamingBuffer.startIndex..<splitIndex)
+        return chunk
+    }
 
-        var output: [String] = []
-        var current = ""
-
-        for character in rawChunk {
-            current.append(character)
-            if character.isWhitespace || current.count >= 12 {
-                output.append(current)
-                current = ""
-            }
+    private func flushPendingStreamingBuffer() {
+        guard let draftId = draftAssistantMessageId, !pendingStreamingBuffer.isEmpty else { return }
+        guard historyCoordinator.getDraftMessage(id: draftId) != nil else {
+            pendingStreamingBuffer = ""
+            return
         }
-
-        if !current.isEmpty {
-            output.append(current)
-        }
-
-        return output.isEmpty ? [rawChunk] : output
+        draftAssistantText.append(pendingStreamingBuffer)
+        pendingStreamingBuffer = ""
+        let displayText = ChatPromptBuilder.contentForDisplay(from: draftAssistantText)
+        let draftTimestamp = historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date()
+        historyCoordinator.upsertMessage(
+            ChatMessage(
+                id: draftId,
+                role: .assistant,
+                content: displayText.isEmpty ? "Generating..." : displayText,
+                timestamp: draftTimestamp,
+                isDraft: true
+            )
+        )
     }
 
     private func handleLocalModelStreamingStatus(_ event: LocalModelStreamingStatusEvent) {
@@ -481,6 +519,9 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         activeStreamingRunId = nil
         draftAssistantMessageId = nil
         draftAssistantText = ""
+        pendingStreamingBuffer = ""
+        streamingRenderTask?.cancel()
+        streamingRenderTask = nil
     }
 
     private func resetConversationInteractionState() {
@@ -538,6 +579,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     )
                 )
 
+                self.flushPendingStreamingBuffer()
                 if let finalAssistantMessage = self.messages.last(where: { $0.role == .assistant && !$0.isDraft }) {
                     self.setLiveModelPreview(finalAssistantMessage.content)
                 }

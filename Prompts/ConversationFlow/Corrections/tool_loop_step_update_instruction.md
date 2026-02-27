@@ -1,4 +1,4 @@
-Before returning tool calls, always emit the following in order:
+Before returning tool calls, keep the update compact and in this order:
 
 1. **Optional compact reasoning block** inside `<ide_reasoning>...</ide_reasoning>` (only when it adds value):
 
@@ -7,48 +7,30 @@ Before returning tool calls, always emit the following in order:
     Reflection:
     - What: <single-clause summary of the most recent result or blocker>
     - Where: <specific file/function/component touched>
-    - How: <tool, technique, or approach used>
+    - How: <method used (intent/technique; do not name tool calls)>
     Planning:
     - What: <next target or objective>
     - Where: <exact locus for the next change>
-    - How: <tool/action you will apply>
+    - How: <next implementation intent (not tool syntax)>
     Continuity: <risks, invariants, or context to carry forward>
     </ide_reasoning>
     ```
 
-    - Use terse, technical language—no filler such as “just finished” or “planning to.”
-    - Each bullet must be a single clause that names concrete artifacts (e.g., `ToolLoopHandler.swift – enforce dropout guard`).
-    - If the previous step failed, capture the blocker in Reflection/Continuity and show how the plan adapts.
+    - Terse, technical language only.
+    - Single-clause bullets with concrete artifacts.
+    - If the previous step failed, state blocker + adaptation.
 
-2. **Condensed pair-programmer update sentence**. Follow the `Done → Next → Path` arc in one sentence, e.g., “Hardened dropout guard in ToolLoopHandler.swift; next wire ToolLoopDropoutHarnessTests.swift via failure injection.” Keep it dense but readable.
+2. **Condensed pair-programmer update sentence**. One sentence with `Done → Next → Path`.
 
-    - Keep the update to one sentence that covers `Done → Next → Path`.
-    - Do not restate every bullet from the reasoning block; summarize only the most important context.
+    - Keep only the highest-signal detail.
 
-3. **Tool calls** for the upcoming step. Ensure actions match the Planning section and do not ask the user for more input.
+3. **Tool calls** for the upcoming step. Match the Planning intent and do not ask the user for more input.
 
-    - Tool invocations must correspond to the “Planning” How/Where pairing.
     - Never pause for user confirmation during the tool loop.
 
 Token budget:
-
-- Optional reasoning: max 80 tokens.
-- Done → Next → Path sentence: max 30 tokens.
+- Optional reasoning: max 60 tokens.
+- Done → Next → Path sentence: max 24 tokens.
 - Never include tool calls, JSON payloads, or pseudo-XML tool invocations inside `<ide_reasoning>`.
 
-### Example
-
-```text
-<ide_reasoning>
-Reflection:
-- What: Tightened dropout guard
-- Where: ToolLoopHandler.swift – executePhase()
-- How: Inserted early-return when no tool calls
-Planning:
-- What: Validate dropout handling
-- Where: ToolLoopDropoutHarnessTests.swift
-- How: Expand failure-injection harness
-Continuity: Watching cache pressure after repeated retries
-</ide_reasoning>
-Locked in the dropout guard; next extend ToolLoopDropoutHarnessTests.swift with failure injection to prove the path.
-```
+Avoid naming tool call functions in the sentence unless the user explicitly asked for tool-level detail.

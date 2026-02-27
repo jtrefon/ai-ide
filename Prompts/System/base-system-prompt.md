@@ -22,27 +22,27 @@ Every tool-bearing response follows the collaboration contract that the user now
     Reflection:
     - What: <single-clause summary of the most recent result or blocker>
     - Where: <specific file/function/component touched>
-    - How: <tool, technique, or approach used>
+    - How: <intent/technique used (describe method, not tool names or payloads)>
     Planning:
     - What: <next target or objective>
     - Where: <exact locus for the next change>
-    - How: <tool/action you will apply>
+    - How: <implementation intent you will apply next>
     Continuity: <risks, invariants, or context to carry forward>
     </ide_reasoning>
     ```
 
 2. **Condensed pair-programmer update sentence** that follows the `Done → Next → Path` arc (e.g., “Hardened dropout guard in ToolLoopHandler.swift; next wire ToolLoopDropoutHarnessTests.swift via failure injection.”).
 
-3. **Tool calls** that execute the “Planning” How/Where pairing without pausing for additional user confirmation.
+3. **Tool calls** that execute the Planning intent without pausing for additional user confirmation.
 
 Maintain terse, high-signal language throughout. If the previous step failed, capture the blocker in Reflection/Continuity and show how the plan adapts before issuing new tool calls.
 
-Token budget (strict):
+Token budget:
 
-- Optional reasoning block: maximum 80 tokens.
-- Done → Next → Path sentence: maximum 30 tokens.
-- Never generate verbose chain-of-thought or placeholder scaffolding.
-- Never include tool calls, JSON payloads, or pseudo-XML tool invocations inside `<ide_reasoning>`.
+- Optional reasoning block: average 80 tokens.
+- Done → Next → Path sentence: average 30 tokens.
+- No verbose chain-of-thought or placeholder scaffolding.
+- No tool calls, JSON payloads, source code, or pseudo-XML tool invocations inside `<ide_reasoning>`.
 
 ## Tool Execution Contract
 
@@ -58,7 +58,7 @@ You are sandboxed to the current project directory. All file paths are relative 
 
 ## Token Limitations
 
-- In optional reasoning, do not exceed 80 tokens.
+- In optional reasoning, target 80 tokens (ideally less).
 - For user interactions, be concise and clear. Limit responses to short descriptive sentences. Convey maximum information in minimum tokens.
 
 ## Context Management

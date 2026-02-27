@@ -58,7 +58,10 @@ actor OpenRouterAIService: AIService {
         let requestBody = OpenRouterChatRequest(
             model: preparation.settings.model,
             messages: preparation.finalMessages,
-            maxTokens: nil,
+            maxTokens: outputTokenBudget(
+                stage: request.stage,
+                hasTools: (preparation.toolDefinitions?.isEmpty == false)
+            ),
             temperature: nil,
             tools: preparation.toolDefinitions,
             toolChoice: preparation.toolChoice,
@@ -249,7 +252,10 @@ actor OpenRouterAIService: AIService {
         let requestBody = OpenRouterChatRequest(
             model: preparation.settings.model,
             messages: preparation.finalMessages,
-            maxTokens: nil,
+            maxTokens: outputTokenBudget(
+                stage: request.stage,
+                hasTools: (preparation.toolDefinitions?.isEmpty == false)
+            ),
             temperature: nil,
             tools: preparation.toolDefinitions,
             toolChoice: preparation.toolChoice,
@@ -474,5 +480,23 @@ actor OpenRouterAIService: AIService {
             return "OpenRouter error: \(message).\(providerSuffix)"
         }
         return nil
+    }
+
+    private func outputTokenBudget(stage: AIRequestStage?, hasTools: Bool) -> Int {
+        switch stage {
+        case .tool_loop:
+            // Tool loop responses should stay compact and action-oriented.
+            return hasTools ? 320 : 420
+        case .final_response:
+            return 500
+        case .delivery_gate:
+            return 380
+        case .initial_response, .strategic_planning, .tactical_planning:
+            return hasTools ? 420 : 640
+        case .qa_tool_output_review, .qa_quality_review:
+            return 520
+        case .warmup, .other, .none:
+            return hasTools ? 420 : 640
+        }
     }
 }

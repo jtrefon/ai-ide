@@ -16,7 +16,9 @@ struct ChatInputView: View {
     let onSend: () -> Void
     
     @FocusState private var isInputFocused: Bool
-    @State private var textViewHeight: CGFloat = 36
+    @State private var textViewHeight: CGFloat = 44
+    private let minimumComposerHeight: CGFloat = 44
+    private let maximumComposerHeight: CGFloat = 140
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
@@ -28,58 +30,65 @@ struct ChatInputView: View {
     }
     
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            // Text input area with proper styling
-            ZStack(alignment: .topLeading) {
-                // Placeholder text
-                if text.isEmpty {
-                    Text(localized("chat_input.placeholder"))
-                        .font(resolveFont(size: fontSize, family: fontFamily))
-                        .foregroundColor(Color(NSColor.placeholderTextColor))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .allowsHitTesting(false)
+        HStack(alignment: .bottom, spacing: 0) {
+            ZStack(alignment: .bottomTrailing) {
+                ZStack(alignment: .topLeading) {
+                    if text.isEmpty {
+                        Text(localized("chat_input.placeholder"))
+                            .font(resolveFont(size: fontSize, family: fontFamily))
+                            .foregroundColor(Color(NSColor.placeholderTextColor))
+                            .padding(.leading, 14)
+                            .padding(.top, 12)
+                            .padding(.trailing, 44)
+                            .allowsHitTesting(false)
+                    }
+
+                    MultilineTextField(
+                        text: $text,
+                        fontSize: fontSize,
+                        fontFamily: fontFamily,
+                        minimumHeight: minimumComposerHeight,
+                        maximumHeight: maximumComposerHeight,
+                        height: $textViewHeight,
+                        onSubmit: sendIfPossible
+                    )
+                    .padding(.leading, 14)
+                    .padding(.trailing, 42)
+                    .focused($isInputFocused)
                 }
 
-                // Actual text view
-                MultilineTextField(
-                    text: $text,
-                    fontSize: fontSize,
-                    fontFamily: fontFamily,
-                    height: $textViewHeight,
-                    onSubmit: sendIfPossible
-                )
-                .focused($isInputFocused)
+                Button(action: sendIfPossible) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 26, height: 26)
+                        .background(canSend ? Color.accentColor : Color.gray.opacity(0.55))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel(localized("chat_input.send"))
+                .accessibilityIdentifier(AccessibilityID.aiChatSendButton)
+                .disabled(!canSend)
+                .padding(.trailing, 10)
+                .padding(.bottom, 9)
             }
-            .frame(minHeight: min(textViewHeight, 120), maxHeight: 120)
+            .frame(minHeight: max(minimumComposerHeight, textViewHeight), maxHeight: maximumComposerHeight)
             .background(Color(NSColor.textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .stroke(
                         isInputFocused ? Color.accentColor : Color.gray.opacity(0.3),
                         lineWidth: isInputFocused ? 2 : 1
                     )
             )
             .accessibilityIdentifier(AccessibilityID.aiChatInputTextView)
-
-            // Send button
-            Button(action: sendIfPossible) {
-                Image(systemName: "paperplane.fill")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white)
-                    .frame(width: 32, height: 32)
-                    .background(canSend ? Color.accentColor : Color.gray)
-                    .clipShape(Circle())
-            }
-            .buttonStyle(PlainButtonStyle())
-            .accessibilityLabel(localized("chat_input.send"))
-            .accessibilityIdentifier(AccessibilityID.aiChatSendButton)
-            .disabled(!canSend)
         }
         .accessibilityElement(children: .contain)
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .animation(.spring(response: 0.22, dampingFraction: 0.92), value: textViewHeight)
     }
     
     private func resolveFont(size: Double, family: String) -> Font {
@@ -93,7 +102,7 @@ struct ChatInputView: View {
         guard canSend else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        textViewHeight = 36  // Reset height
+        textViewHeight = 44  // Reset height
         onSend()
     }
 }
@@ -105,6 +114,8 @@ struct MultilineTextField: NSViewRepresentable {
     @Binding var text: String
     let fontSize: Double
     let fontFamily: String
+    let minimumHeight: CGFloat
+    let maximumHeight: CGFloat
     @Binding var height: CGFloat
     let onSubmit: () -> Void
     
@@ -117,8 +128,13 @@ struct MultilineTextField: NSViewRepresentable {
         textView.isRichText = false
         textView.allowsUndo = true
         textView.drawsBackground = false
-        textView.textContainerInset = NSSize(width: 8, height: 6)
+        textView.textContainerInset = NSSize(width: 0, height: 11)
         textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(
+            width: textView.bounds.width,
+            height: CGFloat.greatestFiniteMagnitude
+        )
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
@@ -155,10 +171,13 @@ struct MultilineTextField: NSViewRepresentable {
         
         // Update height based on content
         DispatchQueue.main.async {
-            let usedRect = nsView.layoutManager?.usedRect(for: nsView.textContainer ?? NSTextContainer())
-            let newHeight = max(36, (usedRect?.height ?? 0) + 12)  // 12 = textContainerInset * 2
+            let textContainer = nsView.textContainer ?? NSTextContainer()
+            let usedRect = nsView.layoutManager?.usedRect(for: textContainer)
+            let verticalInsets = nsView.textContainerInset.height * 2
+            let rawHeight = ceil((usedRect?.height ?? 0) + verticalInsets)
+            let newHeight = min(self.maximumHeight, max(self.minimumHeight, rawHeight))
             if abs(self.height - newHeight) > 1 {
-                self.height = min(newHeight, 120)
+                self.height = newHeight
             }
         }
     }
@@ -179,10 +198,13 @@ struct MultilineTextField: NSViewRepresentable {
             self.parent.text = textView.string
 
             // Update height based on content
-            let usedRect = textView.layoutManager?.usedRect(for: textView.textContainer ?? NSTextContainer())
-            let newHeight = max(36, (usedRect?.height ?? 0) + 12)
+            let textContainer = textView.textContainer ?? NSTextContainer()
+            let usedRect = textView.layoutManager?.usedRect(for: textContainer)
+            let verticalInsets = textView.textContainerInset.height * 2
+            let rawHeight = ceil((usedRect?.height ?? 0) + verticalInsets)
+            let newHeight = min(parent.maximumHeight, max(parent.minimumHeight, rawHeight))
             if abs(self.parent.height - newHeight) > 1 {
-                self.parent.height = min(newHeight, 120)
+                self.parent.height = newHeight
             }
         }
         
