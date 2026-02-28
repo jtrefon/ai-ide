@@ -29,6 +29,10 @@ final class SettingsStore: @unchecked Sendable {
         userDefaults.stringArray(forKey: key)
     }
 
+    func dictionary(forKey key: String) -> [String: Any]? {
+        userDefaults.dictionary(forKey: key)
+    }
+
     func set(_ value: Any?, forKey key: String) {
         userDefaults.set(value, forKey: key)
         changesSubject.send(key)

@@ -54,6 +54,7 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
             self.editorContent = content
             self.editorLanguage = Self.languageForFileExtension(url.pathExtension)
             self.isDirty = false
+            eventBus.publish(FileOpenedEvent(url: url, languageIdentifier: editorLanguage, content: content))
         case .failure(let error):
             errorManager.handle(error)
         }
@@ -104,9 +105,9 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
         let map: [String: String] = [
             "swift": "swift",
             "js": "javascript",
-            "jsx": "jsx",
+            "jsx": "javascript",
             "ts": "typescript",
-            "tsx": "tsx",
+            "tsx": "typescript",
             "py": "python",
             "html": "html",
             "css": "css",

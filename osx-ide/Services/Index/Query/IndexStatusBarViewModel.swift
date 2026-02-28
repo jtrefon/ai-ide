@@ -23,13 +23,19 @@ final class IndexStatusBarViewModel: ObservableObject {
 
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
     private let eventBus: EventBusProtocol
+    private let statsPollInterval: TimeInterval
     private var cancellables = Set<AnyCancellable>()
     private var statsTimer: AnyCancellable?
     private var retrievalStatusTimer: Timer?
 
-    init(codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?, eventBus: EventBusProtocol) {
+    init(
+        codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
+        eventBus: EventBusProtocol,
+        statsPollInterval: TimeInterval = 2.0
+    ) {
         self.codebaseIndexProvider = codebaseIndexProvider
         self.eventBus = eventBus
+        self.statsPollInterval = max(0.1, statsPollInterval)
 
         subscribeToEvents()
         startStatsPolling()
@@ -192,10 +198,11 @@ final class IndexStatusBarViewModel: ObservableObject {
 
     private func startStatsPolling() {
         statsTimer = Timer
-            .publish(every: 2.0, on: .main, in: .common)
+            .publish(every: statsPollInterval, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 self?.refreshStats()
+                self?.refreshEmbeddingModel()
             }
     }
 
@@ -209,33 +216,31 @@ final class IndexStatusBarViewModel: ObservableObject {
     private func refreshEmbeddingModel() {
         guard let codebaseIndex = codebaseIndexProvider() else { return }
         Task { @MainActor in
-            if let index = codebaseIndex as? CodebaseIndex {
-                let modelId = index.currentEmbeddingModelIdentifier
-                // Convert model identifier to display-friendly name
-                // Model IDs are like "bert_bge-small-en-v1.5" or "bert_nomic-embed-text-v1.5"
-                if modelId.contains("hashing") {
-                    self.embeddingModelIdentifier = "hashing"
-                } else if modelId.hasPrefix("bert_") {
-                    // Extract the model name after "bert_" prefix
-                    let modelName = String(modelId.dropFirst(5))
-                    // Create short display names
-                    if modelName.contains("nomic") {
-                        self.embeddingModelIdentifier = "nomic"
-                    } else if modelName.contains("bge-small") {
-                        self.embeddingModelIdentifier = "bge-s"
-                    } else if modelName.contains("bge-base") {
-                        self.embeddingModelIdentifier = "bge-b"
-                    } else if modelName.contains("bge-large") {
-                        self.embeddingModelIdentifier = "bge-l"
-                    } else {
-                        // Fallback: use first 8 chars of model name
-                        self.embeddingModelIdentifier = String(modelName.prefix(8))
-                    }
-                } else if modelId.contains("coreml") {
-                    self.embeddingModelIdentifier = "coreml"
+            let modelId = codebaseIndex.currentEmbeddingModelIdentifier
+            // Convert model identifier to display-friendly name
+            // Model IDs are like "bert_bge-small-en-v1.5" or "bert_nomic-embed-text-v1.5"
+            if modelId.contains("hashing") {
+                self.embeddingModelIdentifier = "hashing"
+            } else if modelId.hasPrefix("bert_") {
+                // Extract the model name after "bert_" prefix
+                let modelName = String(modelId.dropFirst(5))
+                // Create short display names
+                if modelName.contains("nomic") {
+                    self.embeddingModelIdentifier = "nomic"
+                } else if modelName.contains("bge-small") {
+                    self.embeddingModelIdentifier = "bge-s"
+                } else if modelName.contains("bge-base") {
+                    self.embeddingModelIdentifier = "bge-b"
+                } else if modelName.contains("bge-large") {
+                    self.embeddingModelIdentifier = "bge-l"
                 } else {
-                    self.embeddingModelIdentifier = String(modelId.prefix(8))
+                    // Fallback: use first 8 chars of model name
+                    self.embeddingModelIdentifier = String(modelName.prefix(8))
                 }
+            } else if modelId.contains("coreml") {
+                self.embeddingModelIdentifier = "coreml"
+            } else {
+                self.embeddingModelIdentifier = String(modelId.prefix(8))
             }
         }
     }

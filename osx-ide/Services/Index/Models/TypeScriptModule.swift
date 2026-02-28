@@ -8,38 +8,30 @@
 import Foundation
 import AppKit
 
-public final class TypeScriptModule: RegexLanguageModule, @unchecked Sendable {
+public final class TypeScriptModule: TokenLanguageModule, @unchecked Sendable {
     public init() {
-        super.init(id: .typescript, fileExtensions: ["ts", "tsx"])
+        let configuration = LanguageKeywordRepository.typeScriptConfiguration
+        super.init(
+            id: .typescript,
+            fileExtensions: ["ts", "tsx"],
+            definition: TokenLanguageDefinition(
+                keywords: Set(configuration.keywords),
+                typeKeywords: Set(configuration.typeKeywords),
+                booleanLiterals: Set(configuration.booleanLiterals),
+                nullLiterals: Set(configuration.nullLiterals)
+            ),
+            palette: Self.makePalette(language: .typescript)
+        )
     }
 
-    public override func highlight(_ code: String, font: NSFont) -> NSAttributedString {
-        let base = makeBaseAttributedString(code: code, font: font)
-        let attr = base.attributed
-
-        applyDoubleAndSingleQuotedStringHighlighting(color: NSColor.systemRed, in: attr, code: code)
-        applyLineAndBlockCommentHighlighting(color: NSColor.systemGreen, in: attr, code: code)
-        applyDecimalNumberHighlighting(color: NSColor.systemOrange, in: attr, code: code)
-        LanguageKeywordHighlighter.highlight(LanguageKeywordHighlighter.HighlightRequest(
-            words: LanguageKeywordRepository.javascript,
-            context: LanguageKeywordHighlighter.HighlightContext(
-                color: NSColor.systemBlue,
-                attributedString: attr,
-                code: code,
-                helper: self
-            )
-        ))
-        LanguageKeywordHighlighter.highlight(LanguageKeywordHighlighter.HighlightRequest(
-            words: LanguageKeywordRepository.typescriptExtras,
-            context: LanguageKeywordHighlighter.HighlightContext(
-                color: NSColor.systemPurple,
-                attributedString: attr,
-                code: code,
-                helper: self
-            )
-        ))
-
-        return attr
+    private static func makePalette(language: CodeLanguage) -> HighlightPalette {
+        var palette = HighlightPalette()
+        for role in HighlightRole.allCases {
+            if let color = LanguageKeywordRepository.tokenColor(for: language, role: role) {
+                palette.setColor(color, for: role)
+            }
+        }
+        return palette
     }
 
     public override func parseSymbols(content: String, resourceId: String) -> [Symbol] {

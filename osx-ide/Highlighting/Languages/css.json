@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "language": "css",
+  "highlighting": {
+    "keywords": ["@media", "@import", "@supports", "@keyframes", "@font-face"],
+    "typeKeywords": ["px", "em", "rem", "vh", "vw", "%", "fr"],
+    "booleanLiterals": [],
+    "nullLiterals": []
+  },
+  "styling": {
+    "tokenColors": {
+      "keyword": "#C586C0",
+      "type": "#4EC9B0",
+      "number": "#B5CEA8",
+      "string": "#CE9178",
+      "comment": "#6A9955"
+    },
+    "fontTraitsByRole": {
+      "keyword": "semibold",
+      "comment": "italic"
+    },
+    "preferredFontFamily": null
+  },
+  "formatting": {
+    "indentUnitStyle": "spaces",
+    "indentWidth": 2,
+    "trimTrailingWhitespace": true,
+    "ensureTrailingNewline": true,
+    "maxConsecutiveBlankLines": 1
+  },
+  "linting": {
+    "registry": "builtin.css",
+    "rules": [
+      {
+        "id": "property-order",
+        "severity": "info",
+        "enabled": false,
+        "message": "Enforce preferred property ordering",
+        "options": {
+          "preset": "concentric-css"
+        }
+      },
+      {
+        "id": "no-important",
+        "severity": "warning",
+        "enabled": true,
+        "message": "Avoid !important declarations",
+        "options": {}
+      }
+    ]
+  }
+}

@@ -36,16 +36,16 @@ struct AppStateEditorTests {
             "JS files should detect as javascript"
         )
         #expect(
-            FileEditorStateManager.languageForFileExtension("jsx") == "jsx",
-            "JSX files should detect as jsx"
+            FileEditorStateManager.languageForFileExtension("jsx") == "javascript",
+            "JSX files should detect as javascript"
         )
         #expect(
             FileEditorStateManager.languageForFileExtension("ts") == "typescript",
             "TS files should detect as typescript"
         )
         #expect(
-            FileEditorStateManager.languageForFileExtension("tsx") == "tsx",
-            "TSX files should detect as tsx"
+            FileEditorStateManager.languageForFileExtension("tsx") == "typescript",
+            "TSX files should detect as typescript"
         )
         #expect(
             FileEditorStateManager.languageForFileExtension("py") == "python",

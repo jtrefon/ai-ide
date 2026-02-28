@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "language": "json",
+  "highlighting": {
+    "keywords": [],
+    "typeKeywords": [],
+    "booleanLiterals": ["true", "false"],
+    "nullLiterals": ["null"]
+  },
+  "styling": {
+    "tokenColors": {
+      "boolean": "#569CD6",
+      "null": "#C586C0",
+      "number": "#B5CEA8",
+      "string": "#CE9178"
+    },
+    "fontTraitsByRole": {},
+    "preferredFontFamily": null
+  },
+  "formatting": {
+    "indentUnitStyle": "spaces",
+    "indentWidth": 2,
+    "trimTrailingWhitespace": true,
+    "ensureTrailingNewline": true,
+    "maxConsecutiveBlankLines": 0
+  },
+  "linting": {
+    "registry": "builtin.json",
+    "rules": [
+      {
+        "id": "no-duplicate-keys",
+        "severity": "error",
+        "enabled": true,
+        "message": "Object keys must be unique",
+        "options": {}
+      },
+      {
+        "id": "trailing-comma",
+        "severity": "error",
+        "enabled": true,
+        "message": "Trailing commas are not allowed in strict JSON",
+        "options": {}
+      }
+    ]
+  }
+}

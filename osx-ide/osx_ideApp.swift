@@ -81,19 +81,39 @@ struct OSXIDEApp: App {
         }
 
         if launchContext.isUITesting,
-           ProcessInfo.processInfo.environment[TestLaunchKeys.uiTestScenario] == "json_highlighting" {
-            let json = """
-            {
-              "key": "value",
-              "number": 123,
-              "bool": true,
-              "nullVal": null,
-              "arr": [1, false],
-              "obj": {"nested": false}
+           let scenario = ProcessInfo.processInfo.environment[TestLaunchKeys.uiTestScenario] {
+            switch scenario {
+            case "json_highlighting":
+                let json = """
+                {
+                  "key": "value",
+                  "number": 123,
+                  "bool": true,
+                  "nullVal": null,
+                  "arr": [1, false],
+                  "obj": {"nested": false}
+                }
+                """
+                appSt.fileEditor.primaryPane.editorContent = json
+                appSt.fileEditor.primaryPane.editorLanguage = "json"
+            case "typescript_highlighting":
+                let typescript = """
+                interface User {
+                  id: number
+                  name: string
+                }
+
+                const getUser = async (id: number): Promise<User> => {
+                  // load user
+                  const response = await fetch(`/users/${id}`)
+                  return response.json() as Promise<User>
+                }
+                """
+                appSt.fileEditor.primaryPane.editorContent = typescript
+                appSt.fileEditor.primaryPane.editorLanguage = "typescript"
+            default:
+                break
             }
-            """
-            appSt.fileEditor.primaryPane.editorContent = json
-            appSt.fileEditor.primaryPane.editorLanguage = "json"
         }
 
         self._errorManager = StateObject(wrappedValue: errorMgr)
@@ -421,6 +441,7 @@ struct OSXIDEApp: App {
 private struct AppRootView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var errorManager: ErrorManager
+    @ObservedObject private var editorHighlightDiagnostics = EditorHighlightDiagnosticsStore.shared
     let isContainerInitialized: Bool
     let initializationStatus: String
     @State private var didInitializeCorePlugin: Bool = false
@@ -479,6 +500,18 @@ private struct AppRootView: View {
                 .accessibilityIdentifier(AccessibilityID.appReadyMarker)
                 .accessibilityValue(appState.isUIReady ? "ready" : "not_ready")
                 .allowsHitTesting(false)
+
+            if AppRuntimeEnvironment.launchContext.isUITesting {
+                let diagnosticsText = editorHighlightDiagnostics.diagnostics.isEmpty
+                    ? "pending"
+                    : editorHighlightDiagnostics.diagnostics
+                Text(diagnosticsText)
+                    .font(.caption2)
+                    .opacity(0.01)
+                    .accessibilityIdentifier(AccessibilityID.editorHighlightDiagnostics)
+                    .accessibilityValue(diagnosticsText)
+                    .allowsHitTesting(false)
+            }
 
             if !isContainerInitialized {
                 LoadingOverlayView(status: initializationStatus)

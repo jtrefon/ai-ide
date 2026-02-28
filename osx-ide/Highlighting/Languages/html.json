@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "language": "html",
+  "highlighting": {
+    "keywords": [
+      "html", "head", "body", "div", "span", "script", "style", "meta", "link",
+      "section", "article", "header", "footer", "main", "nav"
+    ],
+    "typeKeywords": [],
+    "booleanLiterals": [],
+    "nullLiterals": []
+  },
+  "styling": {
+    "tokenColors": {
+      "keyword": "#569CD6",
+      "type": "#4EC9B0",
+      "number": "#B5CEA8",
+      "string": "#CE9178",
+      "comment": "#6A9955"
+    },
+    "fontTraitsByRole": {
+      "keyword": "semibold",
+      "comment": "italic"
+    },
+    "preferredFontFamily": null
+  },
+  "formatting": {
+    "indentUnitStyle": "spaces",
+    "indentWidth": 2,
+    "trimTrailingWhitespace": true,
+    "ensureTrailingNewline": true,
+    "maxConsecutiveBlankLines": 1
+  },
+  "linting": {
+    "registry": "builtin.html",
+    "rules": [
+      {
+        "id": "attr-quotes",
+        "severity": "warning",
+        "enabled": true,
+        "message": "Use quoted attribute values",
+        "options": {
+          "quote": "double"
+        }
+      },
+      {
+        "id": "no-inline-style",
+        "severity": "info",
+        "enabled": false,
+        "message": "Avoid inline style attributes",
+        "options": {}
+      }
+    ]
+  }
+}

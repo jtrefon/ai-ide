@@ -200,7 +200,9 @@ class AppState: ObservableObject, IDEContext {
 
         setupFileTreeRefreshSubscription()
 
-        projectSessionCoordinator.loadProjectSessionIfAvailable()
+        if !AppRuntimeEnvironment.launchContext.isTesting {
+            projectSessionCoordinator.loadProjectSessionIfAvailable()
+        }
     }
 
     func attachWindow(_ window: NSWindow) {

@@ -117,6 +117,11 @@ struct EditorRobot {
     let app: XCUIApplication
 
     var editorView: XCUIElement { app.textViews[UITestAccessibilityID.codeEditorTextView] }
+    var highlightDiagnostics: XCUIElement {
+        let byStaticText = app.staticTexts[UITestAccessibilityID.editorHighlightDiagnostics]
+        if byStaticText.exists { return byStaticText }
+        return app.descendants(matching: .any)[UITestAccessibilityID.editorHighlightDiagnostics]
+    }
 
     func assertVisible() {
         XCTAssertTrue(editorView.waitForExistence(timeout: 10), "Editor must exist")
@@ -126,6 +131,23 @@ struct EditorRobot {
     func type(_ text: String) {
         editorView.click()
         editorView.typeText(text)
+    }
+
+    func assertHighlightDiagnosticsContain(_ expectedFragments: [String], timeout: TimeInterval = 10) {
+        XCTAssertTrue(highlightDiagnostics.waitForExistence(timeout: timeout), "Highlight diagnostics marker must exist")
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let value = (highlightDiagnostics.value as? String) ??
+                (highlightDiagnostics.label)
+            if expectedFragments.allSatisfy({ value.contains($0) }) {
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+
+        let finalValue = (highlightDiagnostics.value as? String) ?? highlightDiagnostics.label
+        XCTFail("Highlight diagnostics missing fragments \(expectedFragments). actual=\(finalValue)")
     }
 }
 

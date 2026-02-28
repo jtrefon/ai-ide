@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "themeName": "default",
+  "languages": {
+    "javascript": {
+      "keyword": "#4A90E2",
+      "type": "#B779FF",
+      "boolean": "#FF9F0A",
+      "null": "#FF9F0A",
+      "number": "#FF9F0A",
+      "string": "#FF5E57",
+      "comment": "#58D68D"
+    },
+    "typescript": {
+      "keyword": "#4A90E2",
+      "type": "#B779FF",
+      "boolean": "#FF9F0A",
+      "null": "#FF9F0A",
+      "number": "#FF9F0A",
+      "string": "#FF5E57",
+      "comment": "#58D68D"
+    }
+  }
+}

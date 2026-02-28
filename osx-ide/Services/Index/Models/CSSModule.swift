@@ -8,20 +8,30 @@
 import Foundation
 import AppKit
 
-// No explicit imports needed if types are in the same module,
-// but added for clarity and to resolve potential indexing issues.
-public final class CSSModule: RegexLanguageModule, @unchecked Sendable {
+public final class CSSModule: TokenLanguageModule, @unchecked Sendable {
     public init() {
-        super.init(id: .css, fileExtensions: ["css"])
+        let configuration = LanguageKeywordRepository.supportConfiguration(for: .css).highlighting
+        super.init(
+            id: .css,
+            fileExtensions: ["css"],
+            definition: TokenLanguageDefinition(
+                keywords: Set(configuration.keywords),
+                typeKeywords: Set(configuration.typeKeywords),
+                booleanLiterals: Set(configuration.booleanLiterals),
+                nullLiterals: Set(configuration.nullLiterals)
+            ),
+            palette: Self.makePalette(language: .css)
+        )
     }
 
-    public override func highlight(_ code: String, font: NSFont) -> NSAttributedString {
-        let base = makeBaseAttributedString(code: code, font: font)
-        let attr = base.attributed
-
-        DefaultCSSHighlighter.applyAll(in: attr, code: code)
-
-        return attr
+    private static func makePalette(language: CodeLanguage) -> HighlightPalette {
+        var palette = HighlightPalette()
+        for role in HighlightRole.allCases {
+            if let color = LanguageKeywordRepository.tokenColor(for: language, role: role) {
+                palette.setColor(color, for: role)
+            }
+        }
+        return palette
     }
 
     public override func format(_ code: String) -> String {

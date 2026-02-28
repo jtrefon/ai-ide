@@ -34,18 +34,6 @@ final class SyntaxHighlighter {
     static let shared = SyntaxHighlighter()
     private init() {}
 
-    private let regexHelper = RegexLanguageModule(id: .unknown, fileExtensions: [])
-
-    private lazy var fallbackModules: [CodeLanguage: any LanguageModule] = [
-        .swift: SwiftModule(),
-        .javascript: JavaScriptModule(),
-        .typescript: TypeScriptModule(),
-        .python: PythonModule(),
-        .html: HTMLModule(),
-        .css: CSSModule(),
-        .json: JSONModule()
-    ]
-
     /// Highlights the given code with syntax highlighting for the specified language.
     ///
     /// - Parameters:
@@ -64,30 +52,14 @@ final class SyntaxHighlighter {
         print("[Highlighter] highlight raw=\(language) normalized=\(langStr) len=\((code as NSString).length)")
         #endif
 
-        // Try to use modular language support if enabled
-        if let module = resolveModule(for: langStr) {
-            #if DEBUG
-            print("[Highlighter] using module id=\(module.id.rawValue) extensions=\(module.fileExtensions)")
-            #endif
-            return module.highlight(code, font: font)
+        guard let module = resolveModule(for: langStr) else {
+            fatalError("Missing highlight module for language identifier: \(langStr)")
         }
 
-        let (attributed, _) = regexHelper.makeBaseAttributedString(code: code, font: font)
-
-        // Built-in always-on fallback highlighting (when no module is registered/enabled)
-        let fallbackLanguage = CodeLanguage(rawValue: langStr) ?? .unknown
         #if DEBUG
-        print("[Highlighter] using fallback language=\(fallbackLanguage.rawValue)")
+        print("[Highlighter] using module id=\(module.id.rawValue) extensions=\(module.fileExtensions)")
         #endif
-
-        applyFallbackHighlighting(
-            fallbackLanguage: fallbackLanguage,
-            attributed: attributed,
-            code: code,
-            font: font
-        )
-
-        return attributed
+        return module.highlight(code, font: font)
     }
 
     /// Incremental highlighting that reuses previous results for better performance
@@ -119,109 +91,10 @@ final class SyntaxHighlighter {
     }
 
     private func resolveModule(for languageIdentifier: String) -> (any LanguageModule)? {
-        LanguageModuleManager.shared.getModule(forExtension: languageIdentifier) ??
-            LanguageModuleManager.shared.getModule(
+        LanguageModuleManager.shared.getHighlightModule(forExtension: languageIdentifier) ??
+            LanguageModuleManager.shared.getHighlightModule(
                 for: CodeLanguage(rawValue: languageIdentifier) ?? .unknown
             )
     }
 
-    private func applyFallbackHighlighting(
-        fallbackLanguage: CodeLanguage,
-        attributed: NSMutableAttributedString,
-        code: String,
-        font: NSFont
-    ) {
-        let handlers: [CodeLanguage: (NSMutableAttributedString, String) -> Void] = [
-            .swift: { [weak self] attr, code in self?.applySwiftHighlighting(in: attr, code: code, font: font) },
-            .javascript: { [weak self] attr, code in self?.applyJavaScriptHighlighting(in: attr, code: code, font: font) },
-            .typescript: { [weak self] attr, code in self?.applyTypeScriptHighlighting(in: attr, code: code, font: font) },
-            .python: { [weak self] attr, code in self?.applyPythonHighlighting(in: attr, code: code, font: font) },
-            .html: { [weak self] attr, code in self?.applyHTMLHighlighting(in: attr, code: code, font: font) },
-            .css: { [weak self] attr, code in self?.applyCSSHighlighting(in: attr, code: code, font: font) },
-            .json: { [weak self] attr, code in self?.applyJSONHighlighting(in: attr, code: code, font: font) }
-        ]
-
-        handlers[fallbackLanguage]?(attributed, code)
-    }
-
-    private func applyModuleHighlighting(
-        language: CodeLanguage,
-        in attr: NSMutableAttributedString,
-        code: String,
-        font: NSFont
-    ) {
-        guard let module = fallbackModules[language] else { return }
-        let highlighted = module.highlight(code, font: font)
-        attr.setAttributedString(highlighted)
-    }
-
-    private func applySwiftHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
-        applyModuleHighlighting(language: .swift, in: attr, code: code, font: font)
-    }
-
-    private func applyJavaScriptHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
-        applyModuleHighlighting(language: .javascript, in: attr, code: code, font: font)
-    }
-
-    private func applyTypeScriptHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
-        applyModuleHighlighting(language: .typescript, in: attr, code: code, font: font)
-    }
-
-    private func applyPythonHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
-        applyModuleHighlighting(language: .python, in: attr, code: code, font: font)
-    }
-
-    private func applyHTMLHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
-        applyModuleHighlighting(language: .html, in: attr, code: code, font: font)
-    }
-
-    private func applyCSSHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
-        // Match the stronger CSS scheme used by CSSModule so fallback stays consistent.
-        applyModuleHighlighting(language: .css, in: attr, code: code, font: font)
-    }
-
-    private func applyJSONHighlighting(in attr: NSMutableAttributedString, code: String, font: NSFont) {
-        #if DEBUG
-        print("[Highlighter] applyJSONHighlighting triggered")
-        #endif
-        applyModuleHighlighting(language: .json, in: attr, code: code, font: font)
-    }
-
-    private func applyGenericHighlighting(in attr: NSMutableAttributedString, code: String) {
-        regexHelper.applyDoubleAndSingleQuotedStringHighlighting(color: NSColor.systemRed, in: attr, code: code)
-        regexHelper.applyLineAndBlockCommentHighlighting(color: NSColor.systemGreen, in: attr, code: code)
-        regexHelper.applyDecimalNumberHighlighting(color: NSColor.systemOrange, in: attr, code: code)
-    }
-
-    // MARK: - Helpers
-
-    private func highlightWholeWords(
-        _ words: [String],
-        color: NSColor,
-        in attr: NSMutableAttributedString,
-        code: String
-    ) {
-        regexHelper.highlightWholeWords(words, color: color, in: attr, code: code)
-    }
-
-    private struct ApplyRegexRequest {
-        let pattern: String
-        let color: NSColor
-        let attributedString: NSMutableAttributedString
-        let code: String
-        let captureGroup: Int?
-    }
-
-    private func applyRegex(_ request: ApplyRegexRequest) {
-        let context = RegexLanguageModule.RegexHighlightContext(
-            attributedString: request.attributedString,
-            code: request.code
-        )
-        regexHelper.applyRegex(RegexLanguageModule.RegexHighlightRequest(
-            pattern: request.pattern,
-            color: request.color,
-            context: context,
-            captureGroup: request.captureGroup
-        ))
-    }
 }

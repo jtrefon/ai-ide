@@ -11,30 +11,44 @@ import AppKit
 // These types are defined in IndexModels.swift in the same module.
 // If SourceKit fails to find them, ensure they are in the same target.
 
-public final class JSONModule: RegexLanguageModule,
+public final class JSONModule: TokenLanguageModule,
                                HighlightPaletteProviding,
-                               HighlightDiagnosticsPaletteProviding,
                                @unchecked Sendable {
     public let highlightPalette: HighlightPalette
 
     public init() {
-        var palette = HighlightPalette()
-        palette.setColor(.systemGreen, for: .key)
-        palette.setColor(.systemTeal, for: .string)
-        palette.setColor(.systemOrange, for: .number)
-        palette.setColor(.systemBlue, for: .boolean)
-        palette.setColor(.systemGray, for: .null)
-        palette.setColor(.systemPink, for: .quote)
-        palette.setColor(.systemTeal, for: .brace)
-        palette.setColor(.systemPurple, for: .bracket)
-        palette.setColor(.systemBrown, for: .comma)
-        palette.setColor(.systemYellow, for: .colon)
-        self.highlightPalette = palette
-
-        super.init(id: CodeLanguage.json, fileExtensions: ["json"])
+        self.highlightPalette = Self.makePalette(language: .json)
+        let configuration = LanguageKeywordRepository.supportConfiguration(for: .json).highlighting
+        super.init(
+            id: .json,
+            fileExtensions: ["json"],
+            definition: TokenLanguageDefinition(
+                keywords: Set(configuration.keywords),
+                typeKeywords: Set(configuration.typeKeywords),
+                booleanLiterals: Set(configuration.booleanLiterals),
+                nullLiterals: Set(configuration.nullLiterals)
+            ),
+            palette: highlightPalette
+        )
     }
 
-    public var highlightDiagnosticsPalette: [HighlightDiagnosticsSwatch] {
+    private static func makePalette(language: CodeLanguage) -> HighlightPalette {
+        var palette = HighlightPalette()
+        for role in HighlightRole.allCases {
+            if let color = LanguageKeywordRepository.tokenColor(for: language, role: role) {
+                palette.setColor(color, for: role)
+            }
+        }
+
+        if palette.color(for: .string) == nil { palette.setColor(.systemTeal, for: .string) }
+        if palette.color(for: .number) == nil { palette.setColor(.systemOrange, for: .number) }
+        if palette.color(for: .boolean) == nil { palette.setColor(.systemBlue, for: .boolean) }
+        if palette.color(for: .null) == nil { palette.setColor(.systemGray, for: .null) }
+        if palette.color(for: .key) == nil { palette.setColor(.systemGreen, for: .key) }
+        return palette
+    }
+
+    public override var highlightDiagnosticsPalette: [HighlightDiagnosticsSwatch] {
         return [
             HighlightDiagnosticsSwatch(name: "key", color: highlightPalette.color(for: .key) ?? .labelColor),
             HighlightDiagnosticsSwatch(name: "string", color: highlightPalette.color(for: .string) ?? .labelColor),
@@ -50,51 +64,36 @@ public final class JSONModule: RegexLanguageModule,
     }
 
     public override func highlight(_ code: String, font: NSFont) -> NSAttributedString {
-        let attr = NSMutableAttributedString(string: code)
-        let fullRange = NSRange(location: 0, length: (code as NSString).length)
+        let attributed = NSMutableAttributedString(attributedString: super.highlight(code, font: font))
+        guard let keyColor = highlightPalette.color(for: .key) else { return attributed }
 
-        attr.addAttributes([
-            .font: font,
-            .foregroundColor: NSColor.labelColor
-        ], range: fullRange)
+        let ns = code as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        attributed.enumerateAttribute(.foregroundColor, in: fullRange, options: []) { value, range, _ in
+            guard let color = value as? NSColor else { return }
+            guard color == (self.highlightPalette.color(for: .string) ?? .systemTeal) else { return }
+            guard self.isJSONStringKey(range: range, in: ns) else { return }
+            attributed.addAttribute(.foregroundColor, value: keyColor, range: range)
+        }
 
-        let defaultColors = JSONTokenHighlighter.DefaultColors(colors: [
-            .key: NSColor.labelColor,
-            .string: NSColor.labelColor,
-            .number: NSColor.labelColor,
-            .boolean: NSColor.labelColor,
-            .null: NSColor.labelColor,
-            .quote: NSColor.labelColor,
-            .brace: NSColor.labelColor,
-            .bracket: NSColor.labelColor,
-            .comma: NSColor.labelColor,
-            .colon: NSColor.labelColor
-        ])
+        return attributed
+    }
 
-        let callbacks = JSONTokenHighlighter.Callbacks(
-            applyRegex: { [weak self] pattern, color, captureGroup in
-                let context = RegexLanguageModule.RegexHighlightContext(attributedString: attr, code: code)
-                self?.applyRegex(RegexLanguageModule.RegexHighlightRequest(
-                    pattern: pattern,
-                    color: color,
-                    context: context,
-                    captureGroup: captureGroup
-                ))
-            },
-            highlightWholeWords: { [weak self] words, color in
-                self?.highlightWholeWords(words, color: color, in: attr, code: code)
+    private func isJSONStringKey(range: NSRange, in text: NSString) -> Bool {
+        let afterStringIndex = range.location + range.length
+        guard afterStringIndex <= text.length else { return false }
+
+        var cursor = afterStringIndex
+        while cursor < text.length {
+            let scalar = text.character(at: cursor)
+            if CharacterSet.whitespacesAndNewlines.contains(UnicodeScalar(scalar)!) {
+                cursor += 1
+                continue
             }
-        )
+            return Character(UnicodeScalar(scalar)!) == ":"
+        }
 
-        JSONTokenHighlighter.applyAll(
-            in: attr,
-            code: code,
-            palette: highlightPalette,
-            defaultColors: defaultColors,
-            callbacks: callbacks
-        )
-
-        return attr
+        return false
     }
 
     public override func format(_ code: String) -> String {

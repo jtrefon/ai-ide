@@ -8,6 +8,18 @@ public struct TerminalOutputProducedEvent: Event {
     }
 }
 
+public struct FileOpenedEvent: Event {
+    public let url: URL
+    public let languageIdentifier: String
+    public let content: String
+
+    public init(url: URL, languageIdentifier: String, content: String) {
+        self.url = url
+        self.languageIdentifier = languageIdentifier
+        self.content = content
+    }
+}
+
 public struct DiagnosticsUpdatedEvent: Event {
     public let diagnostics: [Diagnostic]
 

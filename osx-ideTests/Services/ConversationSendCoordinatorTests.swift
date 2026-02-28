@@ -119,6 +119,7 @@ final class ConversationSendCoordinatorTests: XCTestCase {
     }
 
     private final class FakeCodebaseIndex: CodebaseIndexProtocol {
+        let currentEmbeddingModelIdentifier: String = "hashing_v1"
         private(set) var getSummariesCallCount: Int = 0
         private(set) var searchSymbolsWithPathsCallCount: Int = 0
         private(set) var getMemoriesCallCount: Int = 0

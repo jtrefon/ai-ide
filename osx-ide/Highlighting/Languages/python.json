@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "language": "python",
+  "highlighting": {
+    "keywords": [
+      "False", "None", "True", "and", "as", "assert", "async", "await", "break", "class",
+      "continue", "def", "del", "elif", "else", "except", "finally", "for", "from",
+      "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass",
+      "raise", "return", "try", "while", "with", "yield"
+    ],
+    "typeKeywords": [],
+    "booleanLiterals": ["True", "False"],
+    "nullLiterals": ["None"]
+  },
+  "styling": {
+    "tokenColors": {
+      "keyword": "#569CD6",
+      "type": "#4EC9B0",
+      "boolean": "#D19A66",
+      "null": "#D19A66",
+      "number": "#B5CEA8",
+      "string": "#CE9178",
+      "comment": "#6A9955"
+    },
+    "fontTraitsByRole": {
+      "keyword": "semibold",
+      "comment": "italic"
+    },
+    "preferredFontFamily": null
+  },
+  "formatting": {
+    "indentUnitStyle": "spaces",
+    "indentWidth": 4,
+    "trimTrailingWhitespace": true,
+    "ensureTrailingNewline": true,
+    "maxConsecutiveBlankLines": 2
+  },
+  "linting": {
+    "registry": "builtin.python",
+    "rules": [
+      {
+        "id": "unused-import",
+        "severity": "warning",
+        "enabled": true,
+        "message": "Remove unused imports",
+        "options": {}
+      },
+      {
+        "id": "pep8-line-length",
+        "severity": "info",
+        "enabled": true,
+        "message": "Prefer PEP8 line length",
+        "options": {
+          "max": "88"
+        }
+      }
+    ]
+  }
+}

@@ -18,4 +18,5 @@ enum AppConstantsStorage {
     static let codebaseIndexEnabledKey = "CodebaseIndexEnabled"
     static let codebaseIndexAIEnrichmentEnabledKey = "CodebaseIndexAIEnrichmentEnabled"
     static let enabledLanguageModulesKey = "EnabledLanguageModules"
+    static let disabledLanguageModuleCapabilitiesKey = "DisabledLanguageModuleCapabilities"
 }

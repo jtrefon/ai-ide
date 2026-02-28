@@ -66,6 +66,13 @@ class DependencyContainer: ObservableObject {
             eventBus: _eventBus
         )
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
+        _unifiedLintingFramework = UnifiedLintingFramework(
+            eventBus: _eventBus,
+            diagnosticsStore: _diagnosticsStore,
+            workspaceRootProvider: { [weak _workspaceService] in
+                _workspaceService?.currentDirectory
+            }
+        )
         _activityCoordinator = AgentActivityCoordinator()
         earlyDiag(
             "Lightweight services done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
@@ -214,6 +221,10 @@ class DependencyContainer: ObservableObject {
                 )
             } else {
                 Swift.print("[DIAG] Project already configured, skipping redundant initialization")
+            }
+
+            await MainActor.run {
+                _unifiedLintingFramework.runProjectScanIfNeeded()
             }
         }
 
@@ -404,6 +415,7 @@ class DependencyContainer: ObservableObject {
     private let _fileSystemService: FileSystemService
     private let _fileDialogService: FileDialogServiceProtocol
     private let _windowProvider: WindowProvider
+    private let _unifiedLintingFramework: UnifiedLintingFramework
     private var _aiService: AIService
     private var _conversationManager: ConversationManagerProtocol
     private var _projectCoordinator: ProjectCoordinator
