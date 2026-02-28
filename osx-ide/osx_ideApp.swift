@@ -111,6 +111,35 @@ struct OSXIDEApp: App {
                 """
                 appSt.fileEditor.primaryPane.editorContent = typescript
                 appSt.fileEditor.primaryPane.editorLanguage = "typescript"
+            case "typescript_realworld_highlighting":
+                let typescript = """
+                import React, { useState } from 'react'
+
+                interface PasswordRecoveryProps {
+                  onBackToLogin: () => void
+                  onPasswordRecovery?: (email: string) => void
+                }
+
+                const PasswordRecovery: React.FC<PasswordRecoveryProps> = ({
+                  onBackToLogin,
+                  onPasswordRecovery
+                }) => {
+                  const [email, setEmail] = useState('')
+                  const [emailError, setEmailError] = useState('')
+                  const [isSubmitting, setIsSubmitting] = useState(false)
+
+                  // Simulate API call
+                  const validateForm = () => {
+                    if (!email) {
+                      setEmailError('Email is required')
+                      return false
+                    }
+                    return true
+                  }
+                }
+                """
+                appSt.fileEditor.primaryPane.editorContent = typescript
+                appSt.fileEditor.primaryPane.editorLanguage = "typescript"
             default:
                 break
             }

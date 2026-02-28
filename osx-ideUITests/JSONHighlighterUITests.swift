@@ -28,4 +28,18 @@ final class JSONHighlighterUITests: BaseUITestCase {
             "keyword=true"
         ])
     }
+
+    func testTypeScriptHighlightingDiagnosticsPresentForRealWorldSnippet() {
+        let robot = launchApp(scenario: "typescript_realworld_highlighting")
+        robot.editor().assertVisible()
+        robot.editor().assertHighlightDiagnosticsContain([
+            "lang=typescript",
+            "module=typescript",
+            "keyword=true",
+            "type=true",
+            "string=true",
+            "boolean=true",
+            "comment=true"
+        ])
+    }
 }

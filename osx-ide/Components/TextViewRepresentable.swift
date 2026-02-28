@@ -183,10 +183,13 @@ struct TextViewRepresentable: NSViewRepresentable {
             return
         }
 
+        if textView.selectedRange() == range {
+            return
+        }
+
         coordinator.isProgrammaticSelectionUpdate = true
         defer { coordinator.isProgrammaticSelectionUpdate = false }
         textView.setSelectedRange(range)
-        textView.scrollRangeToVisible(range)
     }
 
     private func syncRulerVisibilityIfNeeded(for scrollView: NSScrollView, textView: NSTextView) {
