@@ -116,6 +116,11 @@ public final class TSXModule: TokenLanguageModule, @unchecked Sendable {
                     continue
                 }
 
+                if scalar == 123 { // {
+                    cursor = scanPastExpressionBlock(in: source, from: cursor, length: length)
+                    continue
+                }
+
                 if scalar == 62 { // >
                     cursor += 1
                     break
@@ -154,6 +159,41 @@ public final class TSXModule: TokenLanguageModule, @unchecked Sendable {
     private func isIdentifierContinue(_ scalar: unichar) -> Bool {
         isIdentifierStart(scalar) || scalar == 45 || scalar == 58 || // - or :
             (48...57).contains(Int(scalar))
+    }
+
+    private func scanPastExpressionBlock(in source: NSString, from index: Int, length: Int) -> Int {
+        var cursor = index + 1
+        var depth = 1
+
+        while cursor < length, depth > 0 {
+            let scalar = source.character(at: cursor)
+            if scalar == 34 || scalar == 39 { // " or '
+                let quote = scalar
+                cursor += 1
+                while cursor < length {
+                    let current = source.character(at: cursor)
+                    if current == 92 { // \
+                        cursor = min(length, cursor + 2)
+                        continue
+                    }
+                    if current == quote {
+                        cursor += 1
+                        break
+                    }
+                    cursor += 1
+                }
+                continue
+            }
+
+            if scalar == 123 { // {
+                depth += 1
+            } else if scalar == 125 { // }
+                depth -= 1
+            }
+            cursor += 1
+        }
+
+        return cursor
     }
 
     private func isComponentTagName(_ tagName: String) -> Bool {

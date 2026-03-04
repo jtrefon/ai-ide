@@ -111,13 +111,15 @@ struct TextViewRepresentable: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
         let resolvedFont = Self.resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize)
+        let languageDidChange = context.coordinator.currentLanguageIdentifier != language
+        context.coordinator.currentLanguageIdentifier = language
         let needsRehighlight = syncFont(resolvedFont, for: textView, in: scrollView)
         scheduleWordWrapUpdate(for: scrollView, textView: textView)
         syncTextAndHighlightIfNeeded(
             for: textView,
             coordinator: context.coordinator,
             resolvedFont: resolvedFont,
-            needsRehighlight: needsRehighlight
+            needsRehighlight: needsRehighlight || languageDidChange
         )
         syncSelectionIfNeeded(for: textView, coordinator: context.coordinator)
         syncRulerVisibilityIfNeeded(for: scrollView, textView: textView)

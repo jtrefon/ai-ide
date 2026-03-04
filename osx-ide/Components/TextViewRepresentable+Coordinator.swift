@@ -22,6 +22,7 @@ extension TextViewRepresentable {
     @MainActor
     class Coordinator: NSObject, NSTextViewDelegate {
         let parent: TextViewRepresentable
+        var currentLanguageIdentifier: String
         var isProgrammaticUpdate = false
         var isProgrammaticSelectionUpdate = false
         var currentHighlightTask: Task<Void, Never>?
@@ -31,6 +32,7 @@ extension TextViewRepresentable {
 
         init(_ parent: TextViewRepresentable) {
             self.parent = parent
+            self.currentLanguageIdentifier = parent.language
             self.textStorageDelegateProxy = TextStorageDelegateProxy()
             super.init()
             self.textStorageDelegateProxy.coordinator = self
@@ -234,7 +236,7 @@ extension TextViewRepresentable {
             scheduleHighlight(
                 for: textView.string,
                 in: textView,
-                language: parent.language,
+                language: currentLanguageIdentifier,
                 font: textView.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
             )
         }

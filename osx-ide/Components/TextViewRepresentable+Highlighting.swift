@@ -221,7 +221,7 @@ extension TextViewRepresentable.Coordinator {
         scheduleHighlight(
             for: textView.string,
             in: textView,
-            language: parent.language,
+            language: currentLanguageIdentifier,
             font: editorFont(for: textView)
         )
     }
