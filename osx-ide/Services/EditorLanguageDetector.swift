@@ -27,7 +27,7 @@ struct DefaultEditorLanguageDetector: EditorLanguageDetecting {
         "js": "javascript",
         "jsx": "javascript",
         "ts": "typescript",
-        "tsx": "typescript",
+        "tsx": "tsx",
         "py": "python",
         "html": "html",
         "css": "css",

@@ -13,7 +13,7 @@ public final class TypeScriptModule: TokenLanguageModule, @unchecked Sendable {
         let configuration = LanguageKeywordRepository.typeScriptConfiguration
         super.init(
             id: .typescript,
-            fileExtensions: ["ts", "tsx"],
+            fileExtensions: ["ts"],
             definition: TokenLanguageDefinition(
                 keywords: Set(configuration.keywords),
                 typeKeywords: Set(configuration.typeKeywords),

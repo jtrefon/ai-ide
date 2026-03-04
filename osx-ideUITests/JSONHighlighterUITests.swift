@@ -29,17 +29,18 @@ final class JSONHighlighterUITests: BaseUITestCase {
         ])
     }
 
-    func testTypeScriptHighlightingDiagnosticsPresentForRealWorldSnippet() {
-        let robot = launchApp(scenario: "typescript_realworld_highlighting")
+    func testTSXHighlightingDiagnosticsPresentForRealWorldSnippet() {
+        let robot = launchApp(scenario: "tsx_realworld_highlighting")
         robot.editor().assertVisible()
         robot.editor().assertHighlightDiagnosticsContain([
-            "lang=typescript",
-            "module=typescript",
+            "lang=tsx",
+            "module=tsx",
             "keyword=true",
             "type=true",
             "string=true",
-            "boolean=true",
-            "comment=true"
+            "comment=true",
+            "tag=true",
+            "attribute=true"
         ])
     }
 }

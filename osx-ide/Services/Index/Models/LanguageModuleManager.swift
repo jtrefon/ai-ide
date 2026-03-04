@@ -25,6 +25,7 @@ public final class LanguageModuleManager: ObservableObject {
         register(SwiftModule())
         register(JavaScriptModule())
         register(TypeScriptModule())
+        register(TSXModule())
         register(PythonModule())
         register(HTMLModule())
         register(CSSModule())

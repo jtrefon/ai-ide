@@ -156,7 +156,7 @@ struct SyntaxHighlighterTests {
         #expect(duration < .seconds(1), "Highlighting should complete within 1 second")
     }
 
-    @Test func testTypeScriptAndTSXShareHighlightingBehavior() async throws {
+    @Test func testTSXHighlightingIncludesJSXMarkupRoles() async throws {
         let highlighter = SyntaxHighlighter.shared
         let code = """
         import React from 'react'
@@ -168,30 +168,27 @@ struct SyntaxHighlighterTests {
         if (!email) {
             return false
         }
+        return <div><PasswordRecoveryForm onPasswordRecovery={onPasswordRecovery} /></div>
         """
 
-        let tsResult = highlighter.highlight(code, language: "typescript")
         let tsxResult = highlighter.highlight(code, language: "tsx")
 
-        let keywordColor = expectedColor(language: .typescript, role: .keyword, fallback: .systemBlue)
-        let typeColor = expectedColor(language: .typescript, role: .type, fallback: .systemPurple)
-        let boolColor = expectedColor(language: .typescript, role: .boolean, fallback: .systemOrange)
-        let stringColor = expectedColor(language: .typescript, role: .string, fallback: .systemRed)
-        let commentColor = expectedColor(language: .typescript, role: .comment, fallback: .systemGreen)
-
-        #expect(colorAt(range(of: "import", in: code), in: tsResult) == keywordColor)
-        #expect(colorAt(range(of: "interface", in: code), in: tsResult) == keywordColor)
-        #expect(colorAt(range(of: "const", in: code), in: tsResult) == keywordColor)
-        #expect(colorAt(range(of: "if", in: code), in: tsResult) == keywordColor)
-        #expect(colorAt(range(of: "return", in: code), in: tsResult) == keywordColor)
-        #expect(colorAt(range(of: "string", in: code), in: tsResult) == typeColor)
-        #expect(colorAt(range(of: "false", in: code), in: tsResult) == boolColor)
-        #expect(colorAt(range(of: "'react'", in: code), in: tsResult) == stringColor)
-        #expect(colorAt(range(of: "// Simulate API call", in: code), in: tsResult) == commentColor)
+        let keywordColor = expectedColor(language: .tsx, role: .keyword, fallback: .systemBlue)
+        let typeColor = expectedColor(language: .tsx, role: .type, fallback: .systemPurple)
+        let boolColor = expectedColor(language: .tsx, role: .boolean, fallback: .systemOrange)
+        let stringColor = expectedColor(language: .tsx, role: .string, fallback: .systemRed)
+        let commentColor = expectedColor(language: .tsx, role: .comment, fallback: .systemGreen)
+        let tagColor = expectedColor(language: .tsx, role: .tag, fallback: .systemBlue)
+        let attributeColor = expectedColor(language: .tsx, role: .attribute, fallback: .systemTeal)
 
         #expect(colorAt(range(of: "import", in: code), in: tsxResult) == keywordColor)
         #expect(colorAt(range(of: "interface", in: code), in: tsxResult) == keywordColor)
         #expect(colorAt(range(of: "string", in: code), in: tsxResult) == typeColor)
         #expect(colorAt(range(of: "false", in: code), in: tsxResult) == boolColor)
+        #expect(colorAt(range(of: "'react'", in: code), in: tsxResult) == stringColor)
+        #expect(colorAt(range(of: "// Simulate API call", in: code), in: tsxResult) == commentColor)
+        #expect(colorAt(range(of: "div", in: code), in: tsxResult) == tagColor)
+        #expect(colorAt(range(of: "PasswordRecoveryForm", in: code), in: tsxResult) == typeColor)
+        #expect(colorAt(range(of: "onPasswordRecovery", in: code), in: tsxResult) == attributeColor)
     }
 }

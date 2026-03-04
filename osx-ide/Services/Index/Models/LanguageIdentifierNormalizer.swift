@@ -19,7 +19,7 @@ public enum LanguageIdentifierNormalizer {
         case "ts":
             return "typescript"
         case "tsx":
-            return "typescript"
+            return "tsx"
         case "py":
             return "python"
         default:

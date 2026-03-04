@@ -107,7 +107,7 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
             "js": "javascript",
             "jsx": "javascript",
             "ts": "typescript",
-            "tsx": "typescript",
+            "tsx": "tsx",
             "py": "python",
             "html": "html",
             "css": "css",

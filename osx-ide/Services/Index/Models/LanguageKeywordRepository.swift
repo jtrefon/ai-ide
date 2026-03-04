@@ -479,6 +479,8 @@ enum LanguageKeywordRepository {
             return javascriptSupportConfiguration
         case .typescript:
             return typeScriptSupportConfiguration
+        case .tsx:
+            return tsxSupportConfiguration
         case .swift:
             return swiftSupportConfiguration
         case .python:
@@ -539,6 +541,25 @@ enum LanguageKeywordRepository {
         return loadRequiredSupportConfiguration(
             named: "javascript.json",
             language: .javascript,
+            fallbackHighlighting: fallback
+        )
+    }()
+
+    static let tsxConfiguration: TokenLanguageConfiguration = {
+        tsxSupportConfiguration.highlighting
+    }()
+
+    static let tsxSupportConfiguration: LanguageSupportConfiguration = {
+        let fallback = TokenLanguageConfiguration(
+            keywords: javascript + typescriptExtras,
+            typeKeywords: ["string", "number", "boolean", "any", "unknown", "never", "void", "React", "FC"],
+            booleanLiterals: ["true", "false"],
+            nullLiterals: ["null", "undefined"]
+        )
+
+        return loadRequiredSupportConfiguration(
+            named: "tsx.json",
+            language: .tsx,
             fallbackHighlighting: fallback
         )
     }()

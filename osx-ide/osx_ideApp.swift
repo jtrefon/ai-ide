@@ -140,6 +140,36 @@ struct OSXIDEApp: App {
                 """
                 appSt.fileEditor.primaryPane.editorContent = typescript
                 appSt.fileEditor.primaryPane.editorLanguage = "typescript"
+            case "tsx_realworld_highlighting":
+                let tsx = """
+                import React from 'react'
+
+                interface PasswordRecoveryProps {
+                  onBackToLogin: () => void
+                  onPasswordRecovery: (email: string) => void
+                }
+
+                export const PasswordRecovery: React.FC<PasswordRecoveryProps> = ({
+                  onBackToLogin,
+                  onPasswordRecovery
+                }) => {
+                  const handlePasswordRecovery = (email: string) => {
+                    // In a real app, this would call the password recovery API
+                    console.log('Password recovery requested for:', email)
+                  }
+
+                  return (
+                    <div className="app-shell">
+                      <PasswordRecoveryForm
+                        onBackToLogin={onBackToLogin}
+                        onPasswordRecovery={handlePasswordRecovery}
+                      />
+                    </div>
+                  )
+                }
+                """
+                appSt.fileEditor.primaryPane.editorContent = tsx
+                appSt.fileEditor.primaryPane.editorLanguage = "tsx"
             default:
                 break
             }
