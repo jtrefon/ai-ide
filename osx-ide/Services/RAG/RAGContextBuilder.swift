@@ -6,6 +6,8 @@ public enum RAGContextBuilder {
         explicitContext: String?,
         retriever: (any RAGRetriever)?,
         projectRoot: URL?,
+        stage: AIRequestStage? = nil,
+        conversationId: String? = nil,
         eventBus: (any EventBusProtocol)? = nil
     ) async -> String? {
         var parts: [String] = []
@@ -26,15 +28,34 @@ public enum RAGContextBuilder {
 
         // Wrap RAG retrieval with power management to prevent sleep during long operations
         let retrieval = await AgentActivityCoordinator.shared.withActivity(type: .ragRetrieval) {
-            await retriever.retrieve(RAGRetrievalRequest(userInput: userInput, projectRoot: projectRoot))
+            await retriever.retrieve(
+                RAGRetrievalRequest(
+                    userInput: userInput,
+                    projectRoot: projectRoot,
+                    stage: stage?.rawValue,
+                    conversationId: conversationId
+                )
+            )
         }
         let ragBlock = formatRAGBlock(retrieval)
+
+        eventBus?.publish(
+            RetrievalEvidencePreparedEvent(
+                evidenceCount: retrieval.evidenceCards.count,
+                retrievalIntent: retrieval.intent.rawValue,
+                retrievalConfidence: retrieval.retrievalConfidence
+            )
+        )
 
         // Publish retrieval completed event
         eventBus?.publish(RAGRetrievalCompletedEvent(
             symbolCount: retrieval.symbolLines.count,
             overviewCount: retrieval.projectOverviewLines.count,
             memoryCount: retrieval.memoryLines.count,
+            segmentCount: retrieval.segmentLines.count,
+            evidenceCount: retrieval.evidenceCards.count,
+            retrievalIntent: retrieval.intent.rawValue,
+            retrievalConfidence: retrieval.retrievalConfidence,
             contextCharCount: ragBlock?.count ?? 0
         ))
 
@@ -64,6 +85,14 @@ public enum RAGContextBuilder {
 
         if !retrieval.memoryLines.isEmpty {
             sections.append("PROJECT MEMORY (long-term rules):\n" + retrieval.memoryLines.joined(separator: "\n"))
+        }
+
+        if !retrieval.segmentLines.isEmpty {
+            sections.append("CODE SEGMENTS (high-signal snippets):\n" + retrieval.segmentLines.joined(separator: "\n"))
+        }
+
+        if !retrieval.reuseCandidateLines.isEmpty {
+            sections.append("REUSE CANDIDATES (must consider before new implementation):\n" + retrieval.reuseCandidateLines.joined(separator: "\n"))
         }
 
         guard !sections.isEmpty else { return nil }

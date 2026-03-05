@@ -17,6 +17,7 @@ final class InitialResponseHandler {
         explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
+        conversationId: String,
         availableTools: [AITool],
         runId: String,
         userInput: String
@@ -29,7 +30,8 @@ final class InitialResponseHandler {
                 mode: mode,
                 projectRoot: projectRoot,
                 runId: runId,
-                stage: AIRequestStage.initial_response
+                stage: AIRequestStage.initial_response,
+                conversationId: conversationId
             ))
             .get()
 
@@ -67,7 +69,8 @@ final class InitialResponseHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
-                    stage: AIRequestStage.initial_response
+                    stage: AIRequestStage.initial_response,
+                    conversationId: conversationId
                 ))
                 .get()
         }
@@ -93,7 +96,8 @@ final class InitialResponseHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
-                    stage: AIRequestStage.initial_response
+                    stage: AIRequestStage.initial_response,
+                    conversationId: conversationId
                 ))
                 .get()
         }
@@ -126,7 +130,8 @@ final class InitialResponseHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
-                    stage: AIRequestStage.initial_response
+                    stage: AIRequestStage.initial_response,
+                    conversationId: conversationId
                 ))
                 .get()
         }

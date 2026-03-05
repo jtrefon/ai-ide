@@ -157,6 +157,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             fileSystemService: dependencies.services.fileSystemService,
             errorManager: dependencies.services.errorManager,
             projectRoot: root,
+            eventBus: dependencies.environment.eventBus,
             defaultFilePathProvider: { [weak fileEditorServiceProvider] in
                 fileEditorServiceProvider?.selectedFile
             },

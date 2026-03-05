@@ -48,22 +48,52 @@ final class ReasoningCorrectionsHandler {
 
         let content = response.content ?? ""
         let status = ChatPromptBuilder.deliveryStatus(from: content)
+        let hasToolCalls = !(response.toolCalls?.isEmpty ?? true)
+        let requiresExecution = ChatPromptBuilder.userRequestRequiresExecution(userInput: userInput)
+        let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
+        let planIsIncomplete = planProgress.total > 0 && !planProgress.isComplete
+
+        if status == .needsWork, !hasToolCalls, (requiresExecution || planIsIncomplete) {
+            let deliveryPrompt = try PromptRepository.shared.prompt(
+                key: "ConversationFlow/DeliveryGate/enforce_delivery_completion",
+                projectRoot: projectRoot
+            )
+            let deliverySystem = ChatMessage(role: .system, content: deliveryPrompt)
+
+            var followupMessages = historyCoordinator.messages + [deliverySystem]
+            if planIsIncomplete {
+                let planPrompt = try PromptRepository.shared.prompt(
+                    key: "ConversationFlow/Corrections/plan_incomplete_continue",
+                    projectRoot: projectRoot
+                )
+                followupMessages.append(ChatMessage(role: .system, content: planPrompt))
+            }
+
+            return try await aiInteractionCoordinator
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                    messages: followupMessages,
+                    explicitContext: explicitContext,
+                    tools: availableTools,
+                    mode: mode,
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.delivery_gate
+                ))
+                .get()
+        }
 
         if status == .done {
-            // Auto-mark plan as complete if the agent successfully delivered
-            if let plan = await ConversationPlanStore.shared.get(
-                conversationId: conversationId),
-                !plan.isEmpty,
-                let completedPlan = PlanChecklistTracker.markAllPendingItemsCompleted(in: plan)
+            // Guard against false "DONE" claims: only persist if checklist is already complete.
+            if planProgress.isComplete, !planMarkdown.isEmpty,
+                let completedPlan = PlanChecklistTracker.markAllPendingItemsCompleted(in: planMarkdown)
             {
-                await ConversationPlanStore.shared.set(
-                    conversationId: conversationId, plan: completedPlan)
+                await ConversationPlanStore.shared.set(conversationId: conversationId, plan: completedPlan)
             }
         }
 
-        // We no longer force a synchronous LLM followup here.
-        // If the model stuck or didn't provide a correct status, it will be handled in the next turn
-        // or during final response generation.
+        // Default path: keep current response. Additional follow-up is only injected for
+        // explicit NEEDS_WORK no-tool dropout scenarios handled above.
         return response
     }
 }

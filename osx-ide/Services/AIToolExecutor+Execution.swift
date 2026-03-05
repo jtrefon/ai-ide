@@ -450,6 +450,11 @@ extension AIToolExecutor {
                 conversationId: request.conversationId
             )
 
+            try runPreWritePreventionIfNeeded(
+                toolCall: request.toolCall,
+                mergedArguments: mergedArguments
+            )
+
             let content = try await executeToolAndCaptureResultWithWatchdog(
                 tool: tool,
                 toolCall: request.toolCall,
@@ -487,6 +492,119 @@ extension AIToolExecutor {
         // Default to 120s for npm operations, up to 600s max
         let normalized = stored == 0 ? 120 : stored
         return max(1, min(600, normalized))
+    }
+
+    private func runPreWritePreventionIfNeeded(
+        toolCall: AIToolCall,
+        mergedArguments: [String: Any]
+    ) throws {
+        guard supportsPreWritePrevention(toolName: toolCall.name) else {
+            return
+        }
+
+        let candidateFileCount = candidateFileCountForPrevention(toolName: toolCall.name, arguments: mergedArguments)
+        eventBus?.publish(
+            PreWritePreventionCheckStartedEvent(
+                toolName: toolCall.name,
+                candidateFileCount: candidateFileCount
+            )
+        )
+
+        let allowOverride = preventionOverrideEnabled(arguments: mergedArguments)
+        let result = preventionEngine.check(
+            toolName: toolCall.name,
+            arguments: mergedArguments,
+            allowOverride: allowOverride
+        )
+
+        for finding in result.findings {
+            switch finding.findingType {
+            case .duplicateImpl:
+                eventBus?.publish(
+                    DuplicateRiskDetectedEvent(
+                        summary: finding.explanation,
+                        severity: finding.severity.rawValue
+                    )
+                )
+            case .deadCodeRisk:
+                eventBus?.publish(
+                    DeadCodeRiskDetectedEvent(
+                        summary: finding.explanation,
+                        severity: finding.severity.rawValue
+                    )
+                )
+            case .parallelPathRisk, .orphanAPI:
+                break
+            }
+        }
+
+        let guardStatus = guardStatusLabel(outcome: result.outcome)
+        eventBus?.publish(
+            DebtPressureUpdatedEvent(
+                duplicateRiskCount: result.duplicateRiskCount,
+                deadCodeRiskCount: result.deadCodeRiskCount,
+                guardStatus: guardStatus
+            )
+        )
+        eventBus?.publish(
+            PreWritePreventionCheckCompletedEvent(
+                toolName: toolCall.name,
+                outcome: result.outcome.rawValue,
+                findingCount: result.findings.count
+            )
+        )
+
+        if result.outcome == .block {
+            throw AppError.aiServiceError(
+                "Pre-write prevention blocked tool '\(toolCall.name)'. Resolve duplicate/dead-code findings or pass prevention_override=true with justification.\n\n\(result.summary)"
+            )
+        }
+    }
+
+    private func supportsPreWritePrevention(toolName: String) -> Bool {
+        switch toolName {
+        case "write_file", "write_files", "create_file", "replace_in_file":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func preventionOverrideEnabled(arguments: [String: Any]) -> Bool {
+        if let boolValue = arguments["prevention_override"] as? Bool {
+            return boolValue
+        }
+
+        if let textValue = arguments["prevention_override"] as? String {
+            let normalized = textValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return normalized == "1" || normalized == "true" || normalized == "yes"
+        }
+
+        return false
+    }
+
+    private func candidateFileCountForPrevention(toolName: String, arguments: [String: Any]) -> Int {
+        if toolName == "write_files", let files = arguments["files"] as? [[String: Any]] {
+            return files.count
+        }
+
+        if let path = arguments["path"] as? String,
+           !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return 1
+        }
+
+        return 0
+    }
+
+    private func guardStatusLabel(outcome: PreventionPolicyOutcome) -> String {
+        switch outcome {
+        case .pass:
+            return "clear"
+        case .warn:
+            return "warn"
+        case .block:
+            return "block"
+        }
     }
 
     private func executeToolAndCaptureResultWithWatchdog(

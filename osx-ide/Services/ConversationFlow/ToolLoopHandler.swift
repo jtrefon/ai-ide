@@ -643,6 +643,17 @@ final class ToolLoopHandler {
             }
         }
 
+        currentResponse = try await requestContinuationIfPlanIncompleteOrNeedsWork(
+            currentResponse: currentResponse,
+            explicitContext: explicitContext,
+            mode: mode,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: availableTools,
+            runId: runId,
+            userInput: userInput
+        )
+
         return ToolLoopResult(
             response: currentResponse,
             lastToolCalls: lastToolCalls,
@@ -1202,7 +1213,6 @@ final class ToolLoopHandler {
                 
                 let executionPromptTemplate = try PromptRepository.shared.prompt(
                     key: "ConversationFlow/Corrections/tool_loop_execution_transition",
-                    defaultValue: "You have been gathering context with read-only tools but haven't made any changes yet. The user's request requires EXECUTION, not just exploration. You MUST now transition to execution: 1. Use write_files for multi-file scaffolding and coordinated creation 2. Use write_file only for single-file creation/overwrite 3. Use replace_in_file to modify existing files 4. Use run_command for build/test commands. Proceed with execution now using the available write/edit tools. User request:\n{{user_input}}\n\nContext gathered:\n{{tool_summary}}",
                     projectRoot: projectRoot
                 )
                 let executionPrompt = ChatMessage(
@@ -1429,20 +1439,6 @@ final class ToolLoopHandler {
     ) async throws -> AIServiceResponse {
         let correctionTemplate = try PromptRepository.shared.prompt(
             key: "ConversationFlow/Corrections/execution_required_missing_tool_calls",
-            defaultValue: """
-            Execution-required request detected but no tool calls were produced.
-            User request:
-            {{user_input}}
-
-            Your previous response (no tool calls):
-            {{previous_content}}
-
-            Recovery requirements:
-            - Emit concrete tool calls now.
-            - Start with the smallest valid execution step that advances the request.
-            - If a prior approach failed, change parameters or strategy.
-            - Do not claim completion without corresponding tool results.
-            """,
             projectRoot: projectRoot
         )
         let correctionSystem = ChatMessage(
@@ -1455,6 +1451,66 @@ final class ToolLoopHandler {
         return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: historyCoordinator.messages + [correctionSystem],
+                explicitContext: explicitContext,
+                tools: availableTools,
+                mode: mode,
+                projectRoot: projectRoot,
+                runId: runId,
+                stage: AIRequestStage.tool_loop
+            ))
+            .get()
+    }
+
+    private func requestContinuationIfPlanIncompleteOrNeedsWork(
+        currentResponse: AIServiceResponse,
+        explicitContext: String?,
+        mode: AIMode,
+        projectRoot: URL,
+        conversationId: String,
+        availableTools: [AITool],
+        runId: String,
+        userInput: String
+    ) async throws -> AIServiceResponse {
+        guard mode == .agent else { return currentResponse }
+        guard currentResponse.toolCalls?.isEmpty ?? true else { return currentResponse }
+        guard !availableTools.isEmpty else { return currentResponse }
+
+        let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: currentResponse.content ?? "")
+        let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
+
+        let shouldContinueForNeedsWork = deliveryStatus == .needsWork
+        let shouldContinueForPlan = planProgress.total > 0 && !planProgress.isComplete && deliveryStatus != .done
+        guard shouldContinueForNeedsWork || shouldContinueForPlan else { return currentResponse }
+
+        var followupSystemMessages: [ChatMessage] = []
+
+        if shouldContinueForNeedsWork {
+            let deliveryPrompt = try PromptRepository.shared.prompt(
+                key: "ConversationFlow/DeliveryGate/enforce_delivery_completion",
+                projectRoot: projectRoot
+            )
+            followupSystemMessages.append(ChatMessage(role: .system, content: deliveryPrompt))
+        }
+
+        if shouldContinueForPlan {
+            let planPrompt = try PromptRepository.shared.prompt(
+                key: "ConversationFlow/Corrections/plan_incomplete_continue",
+                projectRoot: projectRoot
+            )
+            followupSystemMessages.append(ChatMessage(role: .system, content: planPrompt))
+        }
+
+        await AIToolTraceLogger.shared.log(type: "chat.tool_loop_continuation_recovery", data: [
+            "runId": runId,
+            "deliveryStatus": deliveryStatus == .done ? "done" : (deliveryStatus == .needsWork ? "needs_work" : "missing"),
+            "planProgress": "\(planProgress.completed)/\(planProgress.total)",
+            "userInputLength": userInput.count
+        ])
+
+        return try await aiInteractionCoordinator
+            .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                messages: historyCoordinator.messages + followupSystemMessages,
                 explicitContext: explicitContext,
                 tools: availableTools,
                 mode: mode,

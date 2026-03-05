@@ -31,9 +31,19 @@ final class FinalResponseHandler {
         // In Agent mode, always request a final response to ensure proper completion message
         // The model may return generic status text but we want a summary
         if mode == .agent && !draft.isEmpty {
+            let hasUnresolvedToolCalls = response.toolCalls?.isEmpty == false
+            let missingFinalDeliverySummary = !hasRequiredFinalDeliverySummary(draft)
             // Check if content is too generic (short or contains generic patterns)
             let isGenericContent = isGenericStatusMessage(draft)
-            if isGenericContent {
+            if hasUnresolvedToolCalls || missingFinalDeliverySummary || isGenericContent {
+                let followupReason: String
+                if hasUnresolvedToolCalls {
+                    followupReason = "Your previous response still included tool calls at finalization. Do not call tools now. Return only the mandated Final Delivery Summary scaffold."
+                } else if missingFinalDeliverySummary {
+                    followupReason = "Your previous response did not include the mandated Final Delivery Summary scaffold. Provide it now using the exact structure."
+                } else {
+                    followupReason = "Your previous response was too generic and did not include the required Final Delivery Summary. Provide the mandated summary now."
+                }
                 // Force final response generation for generic content
                 return try await requestFinalResponse(
                     response: response,
@@ -43,7 +53,7 @@ final class FinalResponseHandler {
                     toolResults: toolResults,
                     runId: runId,
                     conversationId: conversationId,
-                    followupReason: "Your previous response was too generic and did not include the required Final Delivery Summary. Provide the mandated summary now."
+                    followupReason: followupReason
                 )
             }
         }
@@ -81,6 +91,29 @@ final class FinalResponseHandler {
         }
 
         return genericPatterns.contains { lowercased.contains($0) }
+    }
+
+    private func hasRequiredFinalDeliverySummary(_ content: String) -> Bool {
+        let normalized = content.lowercased()
+        let hasHeading = normalized.contains("### final delivery summary")
+        let hasObjective = normalized.contains("- objective:")
+        let hasWorkPerformed = normalized.contains("- work performed:")
+        let hasFilesTouched = normalized.contains("- files touched:")
+        let hasVerification = normalized.contains("- verification:")
+        let hasNextSteps = normalized.contains("- next steps / risks:") || normalized.contains("- next steps/risks:")
+        let hasUndo = normalized.contains("- undo / recovery:") || normalized.contains("- undo/recovery:")
+        let hasPlanStatus = normalized.contains("- plan status:")
+        let hasDelivery = normalized.contains("delivery:")
+
+        return hasHeading
+            && hasObjective
+            && hasWorkPerformed
+            && hasFilesTouched
+            && hasVerification
+            && hasNextSteps
+            && hasUndo
+            && hasPlanStatus
+            && hasDelivery
     }
 
     private func isDeterministicFallbackResponse(_ content: String) -> Bool {
@@ -138,18 +171,87 @@ final class FinalResponseHandler {
             )
             .get()
 
-        let followupContent = followup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalContent =
-            followupContent?.isEmpty == false
-            ? followup.content
-            : response.content
-        let resolvedContent =
-            (finalContent?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
-            ? finalContent
-            : "I wasn't able to generate a final response. "
-                + "Here is a summary of tool outputs:\n\n\(toolSummary.isEmpty ? "No tools executed." : toolSummary)\n\n"
-                + "Please retry or clarify the next step."
-        return AIServiceResponse(content: resolvedContent, toolCalls: nil)
+        let firstFollowupContent = followup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let firstFollowupContent, !firstFollowupContent.isEmpty,
+            hasRequiredFinalDeliverySummary(firstFollowupContent)
+        {
+            return AIServiceResponse(content: followup.content, toolCalls: nil)
+        }
+
+        let retryPrompt = try await buildFinalDeliveryPrompt(
+            followupReason: "Your previous final response still missed the mandated Final Delivery Summary scaffold. Return the exact scaffold now and do not call tools.",
+            toolSummary: toolSummary,
+            projectRoot: projectRoot,
+            conversationId: conversationId
+        )
+
+        let retryFollowup = try await aiInteractionCoordinator
+            .sendMessageWithRetry(
+                AIInteractionCoordinator.SendMessageWithRetryRequest(
+                    messages: historyCoordinator.messages + [ChatMessage(role: .system, content: retryPrompt)],
+                    explicitContext: explicitContext,
+                    tools: [],
+                    mode: followupMode,
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.final_response
+                )
+            )
+            .get()
+
+        let retryFollowupContent = retryFollowup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let retryFollowupContent, !retryFollowupContent.isEmpty,
+            hasRequiredFinalDeliverySummary(retryFollowupContent)
+        {
+            return AIServiceResponse(content: retryFollowup.content, toolCalls: nil)
+        }
+
+        let deterministicSummary = await buildDeterministicFinalSummaryFallback(
+            toolSummary: toolSummary,
+            conversationId: conversationId
+        )
+        return AIServiceResponse(content: deterministicSummary, toolCalls: nil)
+    }
+
+    private func buildDeterministicFinalSummaryFallback(
+        toolSummary: String,
+        conversationId: String
+    ) async -> String {
+        let userObjective = historyCoordinator.messages
+            .reversed()
+            .first(where: { $0.role == .user })?
+            .content
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? "Summarize current request"
+
+        let oneLineObjective = userObjective
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let planProgress = formatPlanProgress(planMarkdown: planMarkdown)
+        let checklist = PlanChecklistTracker.progress(in: planMarkdown)
+        let deliveryStatus = (checklist.total > 0 && !checklist.isComplete) ? "NEEDS_WORK" : "DONE"
+        let workPerformed = toolSummary.isEmpty
+            ? "None (explanation-only)."
+            : "Summarized executed tool outputs from this run."
+        let filesTouched = toolSummary.isEmpty ? "None" : "See tool recap in run logs"
+        let nextSteps = deliveryStatus == "NEEDS_WORK"
+            ? "Checklist items remain; continue execution for unfinished plan steps."
+            : "None noted."
+
+        return """
+        ### Final Delivery Summary
+        - Objective: \(oneLineObjective.isEmpty ? "Summarize current request" : oneLineObjective)
+        - Work Performed: \(workPerformed)
+        - Files Touched: \(filesTouched)
+        - Verification: Not Run
+        - Next Steps / Risks: \(nextSteps)
+        - Undo / Recovery: Use version control to revert affected files if needed.
+        - Plan Status: \(planProgress)
+
+        Delivery: \(deliveryStatus)
+        """
     }
 
     private func buildFinalDeliveryPrompt(

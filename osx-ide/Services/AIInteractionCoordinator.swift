@@ -10,6 +10,7 @@ final class AIInteractionCoordinator {
         let projectRoot: URL
         let runId: String?
         let stage: AIRequestStage?
+        let conversationId: String?
 
         init(
             messages: [ChatMessage],
@@ -18,7 +19,8 @@ final class AIInteractionCoordinator {
             mode: AIMode,
             projectRoot: URL,
             runId: String? = nil,
-            stage: AIRequestStage? = nil
+            stage: AIRequestStage? = nil,
+            conversationId: String? = nil
         ) {
             self.messages = messages
             self.explicitContext = explicitContext
@@ -27,6 +29,7 @@ final class AIInteractionCoordinator {
             self.projectRoot = projectRoot
             self.runId = runId
             self.stage = stage
+            self.conversationId = conversationId
         }
     }
 
@@ -82,6 +85,8 @@ final class AIInteractionCoordinator {
             explicitContext: request.explicitContext,
             retriever: retriever,
             projectRoot: request.projectRoot,
+            stage: request.stage,
+            conversationId: request.conversationId,
             eventBus: eventBus
         )
 
@@ -122,7 +127,8 @@ final class AIInteractionCoordinator {
                 mode: request.mode,
                 projectRoot: request.projectRoot,
                 runId: request.runId,
-                stage: request.stage
+                stage: request.stage,
+                conversationId: request.conversationId
             )
 
             let isRateLimitError: (Error) -> Bool = { error in

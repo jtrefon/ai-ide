@@ -5,33 +5,73 @@ import Foundation
 /// All operations run asynchronously off the main thread.
 public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable {
     private let index: CodebaseIndexProtocol
+    private let intentClassifier: RetrievalIntentClassifier
+    private let ranker: RAGEvidenceFusionRanker
 
     public init(index: CodebaseIndexProtocol) {
         self.index = index
+        self.intentClassifier = RetrievalIntentClassifier()
+        self.ranker = RAGEvidenceFusionRanker()
     }
 
     public func retrieve(_ request: RAGRetrievalRequest) async -> RAGRetrievalResult {
-        let projectOverviewLines = await retrieveProjectOverviewLines(projectRoot: request.projectRoot)
-        let symbolLines = await retrieveSymbolLines(userInput: request.userInput, projectRoot: request.projectRoot)
-        let memoryLines = await retrieveMemoryLines(userInput: request.userInput)
+        let intent = intentClassifier.classify(userInput: request.userInput)
+
+        let overviewCandidates = await retrieveProjectOverviewCandidates(projectRoot: request.projectRoot)
+        let symbolCandidates = await retrieveSymbolCandidates(userInput: request.userInput, projectRoot: request.projectRoot)
+        let memoryCandidates = await retrieveMemoryCandidates(userInput: request.userInput)
+        let segmentCandidates = await retrieveSegmentCandidates(userInput: request.userInput)
+
+        let ranked = ranker.rank(
+            candidates: overviewCandidates + symbolCandidates + memoryCandidates + segmentCandidates,
+            userInput: request.userInput,
+            intent: intent
+        )
+        let evidenceCards = Array(ranked.prefix(24))
+
+        let projectOverviewLines = lines(for: .summary, from: evidenceCards)
+        let symbolLines = lines(for: .symbol, from: evidenceCards)
+        let memoryLines = lines(for: .memory, from: evidenceCards)
+        let segmentLines = lines(for: .segment, from: evidenceCards)
+        let reuseCandidateLines = reuseCandidateLines(from: evidenceCards)
+        let retrievalConfidence = confidence(from: evidenceCards)
 
         return RAGRetrievalResult(
             projectOverviewLines: projectOverviewLines,
             symbolLines: symbolLines,
-            memoryLines: memoryLines
+            memoryLines: memoryLines,
+            segmentLines: segmentLines,
+            reuseCandidateLines: reuseCandidateLines,
+            evidenceCards: evidenceCards,
+            intent: intent,
+            retrievalConfidence: retrievalConfidence
         )
     }
 
-    private func retrieveProjectOverviewLines(projectRoot: URL?) async -> [String] {
+    private func retrieveProjectOverviewCandidates(projectRoot: URL?) async -> [RAGEvidenceCandidate] {
         guard let projectRoot else { return [] }
         guard let summaries = try? await index.getSummaries(projectRoot: projectRoot, limit: 10) else { return [] }
 
         return summaries
             .sorted(by: { $0.path < $1.path })
-            .map { "- \(relPath($0.path, projectRoot: projectRoot)): \($0.summary)" }
+            .map {
+                let relativePath = relPath($0.path, projectRoot: projectRoot)
+                let preview = "- \(relativePath): \($0.summary)"
+                return RAGEvidenceCandidate(
+                    id: "summary|\(relativePath)",
+                    type: .summary,
+                    filePath: relativePath,
+                    lineStart: nil,
+                    lineEnd: nil,
+                    preview: preview,
+                    searchableText: "\(relativePath) \($0.summary)",
+                    qualityScore: inferredQualityScore(from: $0.summary),
+                    freshness: 0.85
+                )
+            }
     }
 
-    private func retrieveSymbolLines(userInput: String, projectRoot: URL?) async -> [String] {
+    private func retrieveSymbolCandidates(userInput: String, projectRoot: URL?) async -> [RAGEvidenceCandidate] {
         let tokens = tokenizeForSymbolSearch(userInput)
         let queryTokens = uniqueOrderedTokens(tokens).prefix(5)
 
@@ -54,6 +94,7 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
 
         return uniqueSortedResults.prefix(25).map { result in
             let symbol = result.symbol
+            let symbolName = "[\(symbol.kind.rawValue)] \(symbol.name)"
             if let filePath = result.filePath {
                 let displayPath: String
                 if let projectRoot {
@@ -61,26 +102,157 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
                 } else {
                     displayPath = filePath
                 }
-                return "- [\(symbol.kind.rawValue)] \(symbol.name) (\(displayPath):\(symbol.lineStart)-\(symbol.lineEnd))"
+                return RAGEvidenceCandidate(
+                    id: "symbol|\(symbol.kind.rawValue)|\(symbol.name)|\(displayPath)|\(symbol.lineStart)|\(symbol.lineEnd)",
+                    type: .symbol,
+                    filePath: displayPath,
+                    lineStart: symbol.lineStart,
+                    lineEnd: symbol.lineEnd,
+                    preview: "- \(symbolName) (\(displayPath):\(symbol.lineStart)-\(symbol.lineEnd))",
+                    searchableText: "\(symbol.name) \(displayPath) \(symbol.kind.rawValue)",
+                    qualityScore: nil,
+                    freshness: 0.8
+                )
             }
-            return "- [\(symbol.kind.rawValue)] \(symbol.name) (lines \(symbol.lineStart)-\(symbol.lineEnd))"
+            return RAGEvidenceCandidate(
+                id: "symbol|\(symbol.kind.rawValue)|\(symbol.name)|\(symbol.lineStart)|\(symbol.lineEnd)",
+                type: .symbol,
+                filePath: nil,
+                lineStart: symbol.lineStart,
+                lineEnd: symbol.lineEnd,
+                preview: "- \(symbolName) (lines \(symbol.lineStart)-\(symbol.lineEnd))",
+                searchableText: "\(symbol.name) \(symbol.kind.rawValue)",
+                qualityScore: nil,
+                freshness: 0.8
+            )
         }
     }
 
-    private func retrieveMemoryLines(userInput: String) async -> [String] {
+    private func retrieveMemoryCandidates(userInput: String) async -> [RAGEvidenceCandidate] {
         if let provider = index as? MemoryEmbeddingSearchProviding,
            let embeddingMatches = try? await provider.getRelevantMemories(userInput: userInput, limit: 15),
            !embeddingMatches.isEmpty {
-            return embeddingMatches.map { "- \($0.entry.content)" }
+            return embeddingMatches.enumerated().map { offset, match in
+                let normalizedSimilarity = max(0, min(1, match.similarityScore))
+                return RAGEvidenceCandidate(
+                    id: "memory|semantic|\(match.entry.id)|\(offset)",
+                    type: .memory,
+                    filePath: nil,
+                    lineStart: nil,
+                    lineEnd: nil,
+                    preview: "- \(match.entry.content)",
+                    searchableText: match.entry.content,
+                    qualityScore: nil,
+                    freshness: 0.7 + (normalizedSimilarity * 0.3)
+                )
+            }
         }
 
         guard let longTerm = try? await index.getMemories(tier: .longTerm) else { return [] }
 
         return longTerm
-            .map(\.content)
-            .sorted()
+            .sorted(by: { $0.content < $1.content })
             .prefix(15)
-            .map { "- \($0)" }
+            .enumerated()
+            .map { offset, entry in
+                RAGEvidenceCandidate(
+                    id: "memory|long_term|\(offset)",
+                    type: .memory,
+                    filePath: nil,
+                    lineStart: nil,
+                    lineEnd: nil,
+                    preview: "- \(entry.content)",
+                    searchableText: entry.content,
+                    qualityScore: nil,
+                    freshness: 0.65
+                )
+            }
+    }
+
+    private func retrieveSegmentCandidates(userInput: String) async -> [RAGEvidenceCandidate] {
+        let queryTokens = uniqueOrderedTokens(tokenizeForSymbolSearch(userInput)).prefix(3)
+        guard !queryTokens.isEmpty else { return [] }
+
+        var segments: [RAGEvidenceCandidate] = []
+        for token in queryTokens {
+            guard let matches = try? await index.searchIndexedText(pattern: token, limit: 8) else { continue }
+            for raw in matches {
+                if let candidate = makeSegmentCandidate(rawLine: raw, token: token) {
+                    segments.append(candidate)
+                }
+            }
+        }
+
+        var seen: Set<String> = []
+        var deduplicated: [RAGEvidenceCandidate] = []
+        for segment in segments {
+            if seen.contains(segment.id) { continue }
+            seen.insert(segment.id)
+            deduplicated.append(segment)
+        }
+        return Array(deduplicated.prefix(20))
+    }
+
+    private func makeSegmentCandidate(rawLine: String, token: String) -> RAGEvidenceCandidate? {
+        let components = rawLine.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        guard components.count >= 3 else { return nil }
+
+        let filePath = String(components[0]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let lineText = String(components[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let snippet = String(components[2]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let lineStart = Int(lineText)
+
+        return RAGEvidenceCandidate(
+            id: "segment|\(filePath)|\(lineText)|\(snippet.prefix(80))",
+            type: .segment,
+            filePath: filePath,
+            lineStart: lineStart,
+            lineEnd: lineStart,
+            preview: "- [segment] \(filePath):\(lineText): \(snippet)",
+            searchableText: "\(token) \(filePath) \(snippet)",
+            qualityScore: inferredQualityScore(from: snippet),
+            freshness: 0.75
+        )
+    }
+
+    private func lines(for type: EvidenceType, from cards: [EvidenceCard]) -> [String] {
+        cards
+            .filter { $0.type == type }
+            .map(\.preview)
+    }
+
+    private func reuseCandidateLines(from cards: [EvidenceCard]) -> [String] {
+        cards
+            .filter { card in
+                card.type == .summary || card.type == .symbol || card.type == .segment
+            }
+            .prefix(6)
+            .map { card in
+                var location = card.filePath ?? "(project memory)"
+                if let lineStart = card.lineStart {
+                    location += ":\(lineStart)"
+                }
+                return "- Reuse candidate: \(location) | \(card.whySelected)"
+            }
+    }
+
+    private func confidence(from cards: [EvidenceCard]) -> Double {
+        guard !cards.isEmpty else { return 0 }
+        let total = cards.reduce(0.0) { partialResult, card in
+            partialResult + card.confidence
+        }
+        return total / Double(cards.count)
+    }
+
+    private func inferredQualityScore(from text: String) -> Double? {
+        let normalized = text.lowercased()
+        if normalized.contains("critical") || normalized.contains("warning") || normalized.contains("todo") {
+            return 30
+        }
+        if normalized.contains("deprecated") || normalized.contains("legacy") {
+            return 45
+        }
+        return nil
     }
 
     private func relPath(_ absPath: String, projectRoot: URL) -> String {

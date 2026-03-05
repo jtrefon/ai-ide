@@ -34,6 +34,7 @@ struct DispatcherNode: OrchestrationNode {
             explicitContext: request.explicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
+            conversationId: request.conversationId,
             availableTools: request.availableTools,
             runId: request.runId,
             userInput: request.userInput

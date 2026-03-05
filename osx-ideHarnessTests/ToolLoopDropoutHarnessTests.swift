@@ -220,6 +220,159 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         harnessEqual(planMessages.count, 1, "Plan should be updated in place, not duplicated")
     }
 
+    func testHarnessDeliveryGateRecoversNeedsWorkResponseWithoutToolCalls() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        historyCoordinator.append(ChatMessage(role: .user, content: "Implement role support end-to-end"))
+
+        let firstToolCall = AIToolCall(id: "gate-recovery-1", name: "fake_tool", arguments: [:])
+        let secondToolCall = AIToolCall(id: "gate-recovery-2", name: "fake_tool", arguments: [:])
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "<ide_reasoning>Reflection: Need to start execution.\nPlanning: Run first execution step.\nContinuity: More work remains.\nDelivery: NEEDS_WORK</ide_reasoning>Starting execution now.",
+                toolCalls: [firstToolCall]
+            ),
+            AIServiceResponse(
+                content: "<ide_reasoning>Reflection: First execution step completed.\nPlanning: Continue remaining work.\nContinuity: Pending tasks remain.\nDelivery: NEEDS_WORK</ide_reasoning>Done -> Next -> Path: Continue with remaining implementation.",
+                toolCalls: nil
+            ),
+            AIServiceResponse(
+                content: "Continuing with the next implementation step.",
+                toolCalls: [secondToolCall]
+            ),
+            AIServiceResponse(
+                content: "<ide_reasoning>Reflection: Completed all requested implementation steps.\nPlanning: None.\nContinuity: No remaining execution work.\nDelivery: DONE</ide_reasoning>\n### Final Delivery Summary\n- Objective: Implement role support end-to-end\n- Work Performed: Executed required steps and completed delivery\n- Files Touched: None\n- Verification: Not Run\n- Next Steps / Risks: None\n- Undo / Recovery: N/A\n- Plan Status: No plan on record\n\nDelivery: DONE",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let sendCoordinator = ConversationSendCoordinator(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        try await sendCoordinator.send(SendRequest(
+            userInput: "Implement role support end-to-end",
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            runId: UUID().uuidString,
+            availableTools: [FakeTool(name: "fake_tool")],
+            cancelledToolCallIds: { [] },
+            qaReviewEnabled: false,
+            draftAssistantMessageId: nil
+        ))
+
+        let executedToolMessages = historyCoordinator.messages.filter {
+            $0.isToolExecution && $0.toolStatus == .completed && $0.toolName == "fake_tool"
+        }
+        harnessEqual(executedToolMessages.count, 2, "Delivery gate should recover NEEDS_WORK no-tool dropout and execute the next step")
+
+        let capturedRequests = scriptedService.capturedHistoryRequests()
+        let sawRecoveryFollowup = capturedRequests.contains { request in
+            request.stage == .delivery_gate || request.stage == .tool_loop
+        }
+        harnessTrue(
+            sawRecoveryFollowup,
+            "Expected continuation recovery follow-up when NEEDS_WORK was returned without tool calls"
+        )
+
+        let finalAssistantOutput = historyCoordinator.messages.last(where: {
+            $0.role == .assistant && !$0.isToolExecution
+        })?.content.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        harnessFalse(finalAssistantOutput.isEmpty, "Recovered flow should end with a user-visible assistant response")
+    }
+
+    func testHarnessFinalResponseEnforcesDeliverySummaryScaffold() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        historyCoordinator.append(ChatMessage(role: .user, content: "Implement login page end-to-end"))
+
+        let firstToolCall = AIToolCall(id: "final-summary-1", name: "fake_tool", arguments: [:])
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "<ide_reasoning>Reflection: Start execution.\nPlanning: Implement login page.\nContinuity: Work remains.\nDelivery: NEEDS_WORK</ide_reasoning>Starting implementation.",
+                toolCalls: [firstToolCall]
+            ),
+            AIServiceResponse(
+                content: "Implemented login page and authentication flow updates across the relevant components with validation and logout support integrated for review.",
+                toolCalls: nil
+            ),
+            AIServiceResponse(
+                content: "<ide_reasoning>Reflection: Completed implementation and can summarize.\nPlanning: None.\nContinuity: No remaining execution work.\nDelivery: DONE</ide_reasoning>\n### Final Delivery Summary\n- Objective: Implement login page end-to-end\n- Work Performed: Implemented login page and integrated authentication flow updates\n- Files Touched: None\n- Verification: Not Run\n- Next Steps / Risks: None\n- Undo / Recovery: N/A\n- Plan Status: No plan on record\n\nDelivery: DONE",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let sendCoordinator = ConversationSendCoordinator(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        try await sendCoordinator.send(SendRequest(
+            userInput: "Implement login page end-to-end",
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            runId: UUID().uuidString,
+            availableTools: [FakeTool(name: "fake_tool")],
+            cancelledToolCallIds: { [] },
+            qaReviewEnabled: false,
+            draftAssistantMessageId: nil
+        ))
+
+        let capturedRequests = scriptedService.capturedHistoryRequests()
+        let sawFinalResponseFollowup = capturedRequests.contains { request in
+            request.stage == .final_response
+        }
+        harnessTrue(
+            sawFinalResponseFollowup,
+            "Expected final response follow-up when assistant output was non-empty but missing Final Delivery Summary scaffold"
+        )
+
+        let finalAssistantOutput = historyCoordinator.messages.last(where: {
+            $0.role == .assistant && !$0.isToolExecution
+        })?.content ?? ""
+        harnessTrue(
+            finalAssistantOutput.contains("### Final Delivery Summary"),
+            "Final assistant output should include mandated Final Delivery Summary scaffold"
+        )
+    }
+
     func testHarnessDeduplicatesDuplicateToolCallsInSingleIteration() async throws {
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
