@@ -86,6 +86,10 @@ final class AIInteractionCoordinator {
         )
 
         for attempt in 1...maxAttempts {
+            if Task.isCancelled {
+                return .failure(.aiServiceError("Request cancelled"))
+            }
+
             let retryMessages: [ChatMessage]
             if attempt > 1 {
                 let retryReason = lastError?.localizedDescription ?? "previous attempt failed"
@@ -136,6 +140,9 @@ final class AIInteractionCoordinator {
                         historyRequest, runId: runId)
                     return .success(response)
                 } catch {
+                    if isCancellationError(error) || Task.isCancelled {
+                        return .failure(.aiServiceError("Request cancelled"))
+                    }
                     lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
                     if attempt < maxAttempts {
                         if isRateLimitError(error) {
@@ -144,9 +151,13 @@ final class AIInteractionCoordinator {
                             print(
                                 "[AIInteractionCoordinator] Rate limit hit. Retrying attempt \(attempt+1)/\(maxAttempts) in \(waitSeconds / 1_000_000_000)s..."
                             )
-                            try? await Task.sleep(nanoseconds: waitSeconds)
+                            guard await sleepRespectingCancellation(nanoseconds: waitSeconds) else {
+                                return .failure(.aiServiceError("Request cancelled"))
+                            }
                         } else {
-                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                            guard await sleepRespectingCancellation(nanoseconds: 2_000_000_000) else {
+                                return .failure(.aiServiceError("Request cancelled"))
+                            }
                         }
                     }
                 }
@@ -157,6 +168,9 @@ final class AIInteractionCoordinator {
                 case .success:
                     return result
                 case .failure(let error):
+                    if isCancellationError(error) || Task.isCancelled {
+                        return .failure(.aiServiceError("Request cancelled"))
+                    }
                     lastError = error
                     if attempt < maxAttempts {
                         if isRateLimitError(error) {
@@ -165,9 +179,13 @@ final class AIInteractionCoordinator {
                             print(
                                 "[AIInteractionCoordinator] Rate limit hit. Retrying attempt \(attempt+1)/\(maxAttempts) in \(waitSeconds / 1_000_000_000)s..."
                             )
-                            try? await Task.sleep(nanoseconds: waitSeconds)
+                            guard await sleepRespectingCancellation(nanoseconds: waitSeconds) else {
+                                return .failure(.aiServiceError("Request cancelled"))
+                            }
                         } else {
-                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                            guard await sleepRespectingCancellation(nanoseconds: 2_000_000_000) else {
+                                return .failure(.aiServiceError("Request cancelled"))
+                            }
                         }
                     }
                 }
@@ -182,6 +200,35 @@ final class AIInteractionCoordinator {
             return appError
         }
         return .aiServiceError("AIService.\(operation) failed: \(error.localizedDescription)")
+    }
+
+    private func isCancellationError(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        if let appError = error as? AppError {
+            let normalized = appError.localizedDescription.lowercased()
+            return normalized.contains("cancellationerror")
+                || normalized.contains("request cancelled")
+                || normalized.contains("request canceled")
+                || normalized.contains("cancelled")
+                || normalized.contains("canceled")
+        }
+        let normalized = String(describing: error).lowercased()
+        return normalized.contains("cancellationerror")
+            || normalized.contains("request cancelled")
+            || normalized.contains("request canceled")
+            || normalized.contains("cancelled")
+            || normalized.contains("canceled")
+    }
+
+    private func sleepRespectingCancellation(nanoseconds: UInt64) async -> Bool {
+        do {
+            try await Task.sleep(nanoseconds: nanoseconds)
+            return !Task.isCancelled
+        } catch {
+            return false
+        }
     }
 
     private func shouldUseRAGRetrieval() -> Bool {

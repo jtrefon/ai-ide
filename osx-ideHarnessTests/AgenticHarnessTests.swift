@@ -82,6 +82,9 @@ final class AgenticHarnessTests: XCTestCase {
             }
             try await Task.sleep(nanoseconds: 200_000_000)
         }
+        if !manager.isSending {
+            return
+        }
         print("[HARNESS][warning] Timed out waiting for conversation manager to finish send task")
     }
 

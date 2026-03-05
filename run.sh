@@ -114,6 +114,10 @@ show_help() {
     echo "         Examples: ./run.sh test | ./run.sh test JSONHighlighterTests | ./run.sh test json"
     echo "  harness Run headless harness tests (separate from CI test)"
     echo "         Examples: ./run.sh harness | ./run.sh harness ConversationSendCoordinatorTests"
+    echo "  harness-online Run online production-parity harness suites"
+    echo "         Examples: ./run.sh harness-online | ./run.sh harness-online AgenticHarnessTests"
+    echo "  harness-offline Run offline-only harness suites"
+    echo "         Examples: ./run.sh harness-offline | ./run.sh harness-offline OfflineModeHarnessTests"
     echo "  e2e    Run UI (end-to-end) tests [optional suite]"
     echo "         Examples: ./run.sh e2e | ./run.sh e2e TerminalEchoUITests | ./run.sh e2e json"
     echo "  clean  Clean build artifacts"
@@ -234,6 +238,32 @@ run_harness() {
     fi
 }
 
+run_harness_online() {
+    local suite=$1
+    if [ -n "$suite" ]; then
+        run_harness "$suite"
+    else
+        echo "Running online harness suites..."
+        run_harness "AgenticHarnessTests"
+        run_harness "RealServiceToolLoopTests"
+        run_harness "TelemetryValidationTests"
+        run_harness "EdgeCaseScenariosTests"
+        run_harness "ToolLoopDropoutHarnessTests"
+        run_harness "OrchestrationSnapshotHarnessTests"
+        run_harness "IndexScopeHarnessTests"
+    fi
+}
+
+run_harness_offline() {
+    local suite=$1
+    if [ -n "$suite" ]; then
+        run_harness "$suite"
+    else
+        echo "Running offline harness suites..."
+        run_harness "OfflineModeHarnessTests"
+    fi
+}
+
 run_e2e() {
     local suite=$1
     echo "Running UI tests..."
@@ -283,6 +313,12 @@ case "$COMMAND" in
         ;;
     harness)
         run_harness "$2"
+        ;;
+    harness-online)
+        run_harness_online "$2"
+        ;;
+    harness-offline)
+        run_harness_offline "$2"
         ;;
     e2e)
         run_e2e "$2"

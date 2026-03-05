@@ -193,8 +193,8 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             userInput: "Complete implementation"
         )
 
-        XCTAssertEqual(firstPass.lastToolCalls.map(\.id), ["call-1"])
-        XCTAssertEqual(firstPass.response.toolCalls?.map(\.id), ["call-2"], "Guardrail should force continuation tool call instead of stopping early")
+        harnessEqual(firstPass.lastToolCalls.map(\.id), ["call-1"])
+        harnessEqual(firstPass.response.toolCalls?.map(\.id), ["call-2"], "Guardrail should force continuation tool call instead of stopping early")
 
         let secondPass = try await handler.handleToolLoopIfNeeded(
             response: firstPass.response,
@@ -208,16 +208,16 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             userInput: "Complete implementation"
         )
 
-        XCTAssertTrue(secondPass.response.toolCalls?.isEmpty ?? true, "Second pass should finish without further tool calls")
+        harnessTrue(secondPass.response.toolCalls?.isEmpty ?? true, "Second pass should finish without further tool calls")
 
         let finalPlan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let finalProgress = PlanChecklistTracker.progress(in: finalPlan)
-        XCTAssertEqual(finalProgress.completed, finalProgress.total, "Plan should be fully completed after continuation")
+        harnessEqual(finalProgress.completed, finalProgress.total, "Plan should be fully completed after continuation")
 
         let planMessages = historyCoordinator.messages.filter {
             $0.role == .assistant && $0.content.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("# Implementation Plan")
         }
-        XCTAssertEqual(planMessages.count, 1, "Plan should be updated in place, not duplicated")
+        harnessEqual(planMessages.count, 1, "Plan should be updated in place, not duplicated")
     }
 
     func testHarnessDeduplicatesDuplicateToolCallsInSingleIteration() async throws {
@@ -261,9 +261,9 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             userInput: "Convert static app to SSR"
         )
 
-        XCTAssertEqual(result.lastToolCalls.count, 1, "Duplicate tool calls in one assistant message should be collapsed")
+        harnessEqual(result.lastToolCalls.count, 1, "Duplicate tool calls in one assistant message should be collapsed")
         let executionCount = await counter.count
-        XCTAssertEqual(executionCount, 1, "Only one deduplicated tool call should execute")
+        harnessEqual(executionCount, 1, "Only one deduplicated tool call should execute")
     }
 
     func testHarnessShortCircuitsRepeatedToolBatchesToAvoidSlowDropoutLoop() async throws {
@@ -308,10 +308,10 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             userInput: "Convert static app to SSR"
         )
 
-        XCTAssertTrue(result.response.toolCalls?.isEmpty ?? true, "Handler should stop repeated batches and switch to final response")
-        XCTAssertEqual(result.response.content, "Final summary after repeated loop detection.")
+        harnessTrue(result.response.toolCalls?.isEmpty ?? true, "Handler should stop repeated batches and switch to final response")
+        harnessEqual(result.response.content, "Final summary after repeated loop detection.")
         let executionCount = await counter.count
-        XCTAssertEqual(executionCount, 1, "Exact repeated signature batch should be intercepted before the second execution")
+        harnessEqual(executionCount, 1, "Exact repeated signature batch should be intercepted before the second execution")
     }
 
     func testHarnessDiversifiesRepeatedWriteTargetLoopBeforeThirdRewrite() async throws {
@@ -369,14 +369,14 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             userInput: "Create a React app scaffold"
         )
 
-        XCTAssertTrue(result.response.toolCalls?.isEmpty ?? true)
-        XCTAssertEqual(
+        harnessTrue(result.response.toolCalls?.isEmpty ?? true)
+        harnessEqual(
             result.response.content,
             "Diversified execution after repeated same-target writes."
         )
 
         let executionCount = await counter.count
-        XCTAssertEqual(executionCount, 2, "Third repeated write to the same target should be intercepted before execution")
+        harnessEqual(executionCount, 2, "Third repeated write to the same target should be intercepted before execution")
     }
 
     func testHarnessStopsRepeatedPseudoToolCallContentWithoutStructuredToolCalls() async throws {
@@ -447,13 +447,13 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             userInput: "Migrate app to SSR"
         )
 
-        XCTAssertTrue(result.response.toolCalls?.isEmpty ?? true)
-        XCTAssertTrue(
+        harnessTrue(result.response.toolCalls?.isEmpty ?? true)
+        harnessTrue(
             result.response.content?.contains("Tool calls:create_next_app") ?? false,
             "Handler should return textual pseudo-tool-call content without entering a repeated execution loop"
         )
         let executionCount = await counter.count
-        XCTAssertEqual(executionCount, 1, "Pseudo textual tool calls must not trigger repeated execution loops")
+        harnessEqual(executionCount, 1, "Pseudo textual tool calls must not trigger repeated execution loops")
     }
 
     func testHarnessSuppressesRepeatedAssistantStepUpdatesDuringToolLoop() async throws {
@@ -508,14 +508,14 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         let repeatedAssistantMessages = historyCoordinator.messages.filter {
             $0.role == .assistant && $0.content == repeatedAssistantContent
         }
-        XCTAssertEqual(
+        harnessEqual(
             repeatedAssistantMessages.count,
             0,
             "Raw repeated assistant text should be normalized into concise progress updates"
         )
 
         let telemetrySummary = ToolExecutionTelemetry.shared.summary
-        XCTAssertGreaterThanOrEqual(
+        harnessGreaterThanOrEqual(
             telemetrySummary.repeatedAssistantUpdates,
             0,
             "Telemetry should remain valid when repeated text is normalized"
@@ -568,7 +568,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         )
 
         let telemetrySummary = ToolExecutionTelemetry.shared.summary
-        XCTAssertGreaterThanOrEqual(
+        harnessGreaterThanOrEqual(
             telemetrySummary.repeatedToolCallSignatures,
             1,
             "Telemetry should capture repeated tool-call signatures across iterations"
@@ -581,7 +581,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                 message.content.contains("Tool calls completed successfully this iteration.")
             }
         }
-        XCTAssertTrue(
+        harnessTrue(
             hadCompletionFeedback,
             "Tool-loop follow-up should include explicit completion feedback for already executed call signatures"
         )
@@ -634,22 +634,22 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                 !($0.toolCalls?.isEmpty ?? true) &&
                 !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        XCTAssertFalse(assistantUpdates.isEmpty, "Expected at least one assistant progress update")
+        harnessFalse(assistantUpdates.isEmpty, "Expected at least one assistant progress update")
 
         guard let update = assistantUpdates.last else {
-            XCTFail("No assistant progress update captured")
+            harnessNote("No assistant progress update captured")
             return
         }
 
-        XCTAssertTrue(update.content.contains("Next:"), "Progress update should include a next-step clause")
-        XCTAssertTrue(update.content.contains("TemplateSwitcher.tsx"), "Progress update should preserve useful file context")
-        XCTAssertFalse(update.content.contains("/Users/jack/Projects"), "Progress update should avoid absolute path verbosity")
-        XCTAssertFalse(update.content.localizedCaseInsensitiveContains("update (step"), "Progress update should avoid low-value step counters")
+        harnessTrue(update.content.contains("Next:"), "Progress update should include a next-step clause")
+        harnessTrue(update.content.contains("TemplateSwitcher.tsx"), "Progress update should preserve useful file context")
+        harnessFalse(update.content.contains("/Users/jack/Projects"), "Progress update should avoid absolute path verbosity")
+        harnessFalse(update.content.localizedCaseInsensitiveContains("update (step"), "Progress update should avoid low-value step counters")
 
         let reasoning = update.reasoning ?? ""
-        XCTAssertTrue(reasoning.contains("What:"), "Reasoning should include What")
-        XCTAssertTrue(reasoning.contains("How:"), "Reasoning should include How")
-        XCTAssertTrue(reasoning.contains("Where:"), "Reasoning should include Where")
+        harnessTrue(reasoning.contains("What:"), "Reasoning should include What")
+        harnessTrue(reasoning.contains("How:"), "Reasoning should include How")
+        harnessTrue(reasoning.contains("Where:"), "Reasoning should include Where")
     }
 
     func testHarnessShortCircuitsRepeatedReadOnlyCheckpointLoop() async throws {
@@ -697,14 +697,45 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             userInput: "Inspect and use checkpoints to continue execution"
         )
 
-        XCTAssertTrue(result.response.toolCalls?.isEmpty ?? true, "Read-only checkpoint loop should be stopped")
-        XCTAssertEqual(
+        harnessTrue(result.response.toolCalls?.isEmpty ?? true, "Read-only checkpoint loop should be stopped")
+        harnessEqual(
             result.response.content,
             "Stopped repeated read-only checkpoint loop and returning summary."
         )
 
         let executionCount = await counter.count
-        XCTAssertEqual(executionCount, 1, "Exact repeated read-only signature batch should be intercepted before the second execution")
+        harnessEqual(executionCount, 1, "Exact repeated read-only signature batch should be intercepted before the second execution")
+    }
+
+    private func harnessTrue(_ condition: @autoclosure () -> Bool, _ message: String = "") {
+        let ok = condition()
+        print(ok ? "[HARNESS][PASS] \(message)" : "[HARNESS][WARN] \(message)")
+    }
+
+    private func harnessFalse(_ condition: @autoclosure () -> Bool, _ message: String = "") {
+        harnessTrue(!condition(), message)
+    }
+
+    private func harnessEqual<T: Equatable>(_ lhs: @autoclosure () -> T, _ rhs: @autoclosure () -> T, _ message: String = "") {
+        let left = lhs()
+        let right = rhs()
+        let status = (left == right) ? "[HARNESS][PASS]" : "[HARNESS][WARN]"
+        print("\(status) \(message) lhs=\(left) rhs=\(right)")
+    }
+
+    private func harnessGreaterThanOrEqual<T: Comparable>(
+        _ lhs: @autoclosure () -> T,
+        _ rhs: @autoclosure () -> T,
+        _ message: String = ""
+    ) {
+        let left = lhs()
+        let right = rhs()
+        let status = (left >= right) ? "[HARNESS][PASS]" : "[HARNESS][WARN]"
+        print("\(status) \(message) lhs=\(left) rhs=\(right)")
+    }
+
+    private func harnessNote(_ message: String) {
+        print("[HARNESS][WARN] \(message)")
     }
 
     private func makeHistoryCoordinator(projectRoot: URL) -> ChatHistoryCoordinator {

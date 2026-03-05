@@ -24,6 +24,20 @@ extension AIToolExecutor {
         let targetFile: String?
         let toolCallId: String
         let preview: String?
+        let argumentKeys: [String]?
+        let argumentPreview: String?
+        let recoveryHint: String?
+    }
+
+    struct ToolExecutionContextError: LocalizedError {
+        let underlying: Error
+        let argumentKeys: [String]
+        let argumentPreview: String?
+        let recoveryHint: String?
+
+        var errorDescription: String? {
+            underlying.localizedDescription
+        }
     }
 
     struct ToolProgressSnapshotContext {
@@ -77,7 +91,10 @@ extension AIToolExecutor {
             preview: context.preview,
             toolName: context.toolName,
             toolCallId: context.toolCallId,
-            targetFile: context.targetFile
+            targetFile: context.targetFile,
+            argumentKeys: context.argumentKeys,
+            argumentPreview: context.argumentPreview,
+            recoveryHint: context.recoveryHint
         )
 
         return ChatMessage(
@@ -108,7 +125,10 @@ extension AIToolExecutor {
                         status: .executing,
                         targetFile: context.targetFile,
                         toolCallId: context.toolCallId,
-                        preview: nil
+                        preview: nil,
+                        argumentKeys: nil,
+                        argumentPreview: nil,
+                        recoveryHint: nil
                     )
                 )
             )
@@ -293,11 +313,15 @@ extension AIToolExecutor {
                     status: .completed,
                     targetFile: targetFile,
                     toolCallId: toolCall.id,
-                    preview: preview
+                    preview: preview,
+                    argumentKeys: nil,
+                    argumentPreview: nil,
+                    recoveryHint: nil
                 )
             )
         case .failure(let error):
             let errorContent = Self.formatError(error, toolName: toolCall.name)
+            let contextError = error as? ToolExecutionContextError
             return Self.makeToolExecutionMessage(
                 content: errorContent,
                 context: ToolExecutionMessageContext(
@@ -305,7 +329,10 @@ extension AIToolExecutor {
                     status: .failed,
                     targetFile: targetFile,
                     toolCallId: toolCall.id,
-                    preview: preview
+                    preview: preview,
+                    argumentKeys: contextError?.argumentKeys,
+                    argumentPreview: contextError?.argumentPreview,
+                    recoveryHint: contextError?.recoveryHint
                 )
             )
         }
@@ -415,8 +442,10 @@ extension AIToolExecutor {
                 ToolTimeoutCenter.shared.finish(toolCallId: request.toolCall.id)
             }
         }
+        var mergedArguments: [String: Any] = [:]
+
         do {
-            let mergedArguments = await buildMergedArguments(
+            mergedArguments = await buildMergedArguments(
                 toolCall: request.toolCall,
                 conversationId: request.conversationId
             )
@@ -430,19 +459,6 @@ extension AIToolExecutor {
                 onProgress: request.onProgress,
                 timeoutSeconds: timeoutSeconds
             )
-            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                let error = ToolExecutionCrashError(
-                    message: "Tool returned an empty response. Treat this as a crash."
-                )
-                await logToolExecuteError(
-                    conversationId: request.conversationId,
-                    toolCall: request.toolCall,
-                    error: error
-                )
-                return .failure(error)
-            }
-
             await logToolExecuteSuccess(
                 conversationId: request.conversationId,
                 toolCall: request.toolCall,
@@ -450,12 +466,19 @@ extension AIToolExecutor {
             )
             return .success(content)
         } catch {
+            let enriched = Self.enrichError(
+                error,
+                toolName: request.toolCall.name,
+                arguments: mergedArguments,
+                originalArguments: request.toolCall.arguments,
+                targetFile: request.targetFile
+            )
             await logToolExecuteError(
                 conversationId: request.conversationId,
                 toolCall: request.toolCall,
-                error: error
+                error: enriched
             )
-            return .failure(error)
+            return .failure(enriched)
         }
     }
 
@@ -538,8 +561,74 @@ extension AIToolExecutor {
                 status: .failed,
                 targetFile: request.targetFile,
                 toolCallId: request.toolCall.id,
-                preview: nil
+                preview: nil,
+                argumentKeys: Array(request.toolCall.arguments.keys).sorted(),
+                argumentPreview: Self.argumentPreview(for: request.toolCall.arguments),
+                recoveryHint: "Verify tool name and required arguments before retrying."
             )
         )
+    }
+
+    nonisolated private static func enrichError(
+        _ error: Error,
+        toolName: String,
+        arguments: [String: Any],
+        originalArguments: [String: Any],
+        targetFile: String?
+    ) -> Error {
+        if error is ToolExecutionContextError {
+            return error
+        }
+
+        let sourceArguments = arguments.isEmpty ? originalArguments : arguments
+        let argumentKeys = Array(sourceArguments.keys).sorted()
+        let invocationPreview = buildInvocationPreview(
+            toolName: toolName,
+            targetFile: targetFile,
+            arguments: sourceArguments
+        )
+        let argumentPreview = invocationPreview ?? argumentPreview(for: sourceArguments)
+        let recoveryHint = recoveryHintForError(error)
+
+        return ToolExecutionContextError(
+            underlying: error,
+            argumentKeys: argumentKeys,
+            argumentPreview: argumentPreview,
+            recoveryHint: recoveryHint
+        )
+    }
+
+    nonisolated private static func argumentPreview(for arguments: [String: Any]) -> String? {
+        guard !arguments.isEmpty else { return nil }
+        let filtered = arguments.filter { key, _ in
+            !key.hasPrefix("_")
+        }
+        guard !filtered.isEmpty else { return nil }
+        guard JSONSerialization.isValidJSONObject(filtered),
+              let data = try? JSONSerialization.data(withJSONObject: filtered, options: [.sortedKeys]),
+              var text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        if text.count > 1200 {
+            text = String(text.prefix(1200)) + "\n…"
+        }
+        return text
+    }
+
+    nonisolated private static func recoveryHintForError(_ error: Error) -> String? {
+        let text = error.localizedDescription.lowercased()
+        if text.contains("missing") || text.contains("required") || text.contains("argument") {
+            return "Retry with corrected arguments. Ensure all required fields are present and non-empty."
+        }
+        if text.contains("file not found") || text.contains("no such file") {
+            return "Discover the correct path first, then retry the tool call with that exact path."
+        }
+        if text.contains("permission denied") || text.contains("not permitted") {
+            return "Choose a writable target path and avoid protected/system directories."
+        }
+        if text.contains("timed out") || text.contains("cancelled") || text.contains("canceled") {
+            return "Use a finite, non-interactive command or a smaller scoped operation before retrying."
+        }
+        return "Change parameters or strategy before retrying this tool call."
     }
 }

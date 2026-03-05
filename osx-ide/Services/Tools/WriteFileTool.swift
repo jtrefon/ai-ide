@@ -53,7 +53,11 @@ struct WriteFileTool: AITool {
             )
         }
         guard let content = arguments["content"] as? String else {
-            throw AppError.aiServiceError("Missing 'content' argument for write_file")
+            let keys = arguments.keys.sorted().joined(separator: ", ")
+            throw AppError.aiServiceError(
+                "Missing 'content' argument for write_file. Provided keys: [\(keys)]. "
+                    + "Fix: include a 'content' string with the file body."
+            )
         }
 
         let context = ToolInvocationContext.from(arguments: arguments)

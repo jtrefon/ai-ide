@@ -113,7 +113,10 @@ extension AIToolExecutor {
                 status: .failed,
                 targetFile: targetFile,
                 toolCallId: toolCall.id,
-                preview: nil
+                preview: nil,
+                argumentKeys: nil,
+                argumentPreview: nil,
+                recoveryHint: nil
             )
         )
     }
@@ -129,7 +132,10 @@ extension AIToolExecutor {
                 status: .failed,
                 targetFile: targetFile,
                 toolCallId: toolCall.id,
-                preview: nil
+                preview: nil,
+                argumentKeys: nil,
+                argumentPreview: nil,
+                recoveryHint: nil
             )
         )
     }
@@ -151,7 +157,10 @@ extension AIToolExecutor {
                 status: .executing,
                 targetFile: targetFile,
                 toolCallId: toolCall.id,
-                preview: preview
+                preview: preview,
+                argumentKeys: nil,
+                argumentPreview: nil,
+                recoveryHint: nil
             )
         )
         onProgress(executingMsg)

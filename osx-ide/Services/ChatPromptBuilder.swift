@@ -353,7 +353,38 @@ class ChatPromptBuilder {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
 
-        return true
+        let lower = trimmed.lowercased()
+
+        if indicatesWorkWasPerformed(content: trimmed) {
+            return false
+        }
+
+        let completionSignals = [
+            "done",
+            "completed",
+            "finished",
+            "all set",
+            "resolved"
+        ]
+        if completionSignals.contains(where: { lower.contains($0) }) {
+            return false
+        }
+
+        let pendingExecutionSignals = [
+            "i will",
+            "i'll",
+            "i am going to",
+            "i'm going to",
+            "next i will",
+            "now i will",
+            "let me",
+            "i can"
+        ]
+        if pendingExecutionSignals.contains(where: { lower.contains($0) }) {
+            return true
+        }
+
+        return false
     }
 
     static func indicatesWorkWasPerformed(content: String) -> Bool {
@@ -434,12 +465,35 @@ class ChatPromptBuilder {
             "build",
             "compile",
             "deploy",
+            "write ",
+            "create ",
+            "generate ",
+            "scaffold",
+            "set up",
+            "setup",
+            "process ",
             "create file",
             "edit file",
             "apply patch"
         ]
 
         if executionTriggers.contains(where: { text.contains($0) }) {
+            return true
+        }
+
+        let executionPatterns = [
+            #"\b(create|write|generate|make|update|modify|delete|remove|process)\b.{0,80}\b(file|files|folder|directory|project|script|report|summary)\b"#,
+            #"\b(read|analyze)\b.{0,80}\b(file|files)\b.{0,80}\b(create|write|generate|produce)\b"#,
+            #"\b(run|execute)\b.{0,80}\b(command|commands|test|tests|build)\b"#
+        ]
+
+        if executionPatterns.contains(where: { pattern in
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                return false
+            }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            return regex.firstMatch(in: text, options: [], range: range) != nil
+        }) {
             return true
         }
 

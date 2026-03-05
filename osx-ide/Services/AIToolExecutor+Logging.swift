@@ -112,7 +112,6 @@ extension AIToolExecutor {
     }
 
     func logToolExecuteError(conversationId: String?, toolCall: AIToolCall, error: Error) async {
-        print(">>> TOOL EXECUTE ERROR: \(error)")
         await AppLogger.shared.error(
             category: .tool,
             message: "tool.execute_error",
@@ -183,6 +182,27 @@ extension AIToolExecutor {
     }
 
     nonisolated static func formatError(_ error: Error, toolName: String) -> String {
+        if let contextError = error as? ToolExecutionContextError {
+            let base = formatError(contextError.underlying, toolName: toolName)
+            var lines: [String] = [base]
+            if !contextError.argumentKeys.isEmpty {
+                lines.append("")
+                lines.append("Argument keys seen: \(contextError.argumentKeys.joined(separator: ", "))")
+            }
+            if let argumentPreview = contextError.argumentPreview,
+               !argumentPreview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                lines.append("")
+                lines.append("Invocation context:")
+                lines.append(argumentPreview)
+            }
+            if let recoveryHint = contextError.recoveryHint,
+               !recoveryHint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                lines.append("")
+                lines.append("Recovery hint: \(recoveryHint)")
+            }
+            return lines.joined(separator: "\n")
+        }
+
         if let timeoutError = error as? ToolExecutionTimedOutError {
             return [
                 "Error: Tool execution timed out after \(timeoutError.timeoutSeconds)s.",

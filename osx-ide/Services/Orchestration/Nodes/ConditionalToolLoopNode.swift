@@ -20,31 +20,34 @@ struct ConditionalToolLoopNode: OrchestrationNode {
         let request = state.request
         let response = try requireResponse(from: state)
 
-        if request.mode == .agent {
-            let followupToolLoopResult = try await handler.handleToolLoopIfNeeded(
-                response: response,
-                explicitContext: request.explicitContext,
-                mode: request.mode,
-                projectRoot: request.projectRoot,
-                conversationId: request.conversationId,
-                availableTools: request.availableTools,
-                cancelledToolCallIds: request.cancelledToolCallIds,
-                runId: request.runId,
-                userInput: request.userInput
-            )
-
+        // This node exists only to consume newly-emitted tool calls from prior gates.
+        // If there are no tool calls, do not re-enter ToolLoopHandler (it can force
+        // execution followups and create redundant cycles across orchestration phases).
+        guard request.mode == .agent, response.toolCalls?.isEmpty == false else {
             return OrchestrationState(
                 request: request,
-                response: followupToolLoopResult.response,
-                lastToolResults: followupToolLoopResult.lastToolResults,
+                response: response,
+                lastToolResults: state.lastToolResults,
                 transition: .next(nextNodeId)
             )
         }
 
+        let followupToolLoopResult = try await handler.handleToolLoopIfNeeded(
+            response: response,
+            explicitContext: request.explicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            conversationId: request.conversationId,
+            availableTools: request.availableTools,
+            cancelledToolCallIds: request.cancelledToolCallIds,
+            runId: request.runId,
+            userInput: request.userInput
+        )
+
         return OrchestrationState(
             request: request,
-            response: response,
-            lastToolResults: state.lastToolResults,
+            response: followupToolLoopResult.response,
+            lastToolResults: followupToolLoopResult.lastToolResults,
             transition: .next(nextNodeId)
         )
     }

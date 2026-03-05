@@ -592,7 +592,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     self.historyCoordinator.removeDraftMessage(id: draftId)
                 }
                 self.resetStreamingDraftState()
-                if error is CancellationError {
+                if error is CancellationError || Task.isCancelled || self.isLikelyCancellation(error) {
                     self.setLiveModelPreview("Generation cancelled.")
                     self.appendToLiveModelStatusPreview("Run cancelled.")
                     self.isSending = false
@@ -622,6 +622,15 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             self.error = "Failed to get AI response: \(error.localizedDescription)"
             isSending = false
         }
+    }
+
+    private func isLikelyCancellation(_ error: Error) -> Bool {
+        let normalized = String(describing: error).lowercased()
+        return normalized.contains("cancellationerror")
+            || normalized.contains("request cancelled")
+            || normalized.contains("request canceled")
+            || normalized.contains("cancelled")
+            || normalized.contains("canceled")
     }
 
     func clearConversation() {

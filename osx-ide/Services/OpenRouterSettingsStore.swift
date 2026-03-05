@@ -13,6 +13,7 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading, @unchecked Senda
     private let reasoningEnabledKey = "OpenRouterReasoningEnabled"
     private let toolPromptModeKey = "OpenRouterToolPromptMode"
     private let ragEnabledDuringToolLoopKey = "OpenRouterRAGEnabledDuringToolLoop"
+    private let environment = ProcessInfo.processInfo.environment
 
     init(settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)) {
         self.settingsStore = settingsStore
@@ -25,14 +26,29 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading, @unchecked Senda
         let apiKey: String
         if includeApiKey {
             // Simple UserDefaults storage - no keychain prompts
-            apiKey = settingsStore.string(forKey: apiKeyKey) ?? ""
+            apiKey = environment["TEST_RUNNER_ENV_HARNESS_OPENROUTER_API_KEY"]
+                ?? environment["HARNESS_OPENROUTER_API_KEY"]
+                ?? settingsStore.string(forKey: apiKeyKey)
+                ?? ""
         } else {
             apiKey = ""
         }
+
+        let model = harnessOverrideValue(
+            testRunnerKey: "TEST_RUNNER_ENV_HARNESS_MODEL_ID",
+            fallbackKey: "HARNESS_MODEL_ID",
+            defaultValue: settingsStore.string(forKey: modelKey) ?? ""
+        )
+        let baseURL = harnessOverrideValue(
+            testRunnerKey: "TEST_RUNNER_ENV_HARNESS_OPENROUTER_BASE_URL",
+            fallbackKey: "HARNESS_OPENROUTER_BASE_URL",
+            defaultValue: settingsStore.string(forKey: baseURLKey) ?? OpenRouterSettings.empty.baseURL
+        )
+
         return OpenRouterSettings(
             apiKey: apiKey,
-            model: settingsStore.string(forKey: modelKey) ?? "",
-            baseURL: settingsStore.string(forKey: baseURLKey) ?? OpenRouterSettings.empty.baseURL,
+            model: model,
+            baseURL: baseURL,
             systemPrompt: settingsStore.string(forKey: systemPromptKey) ?? "",
             reasoningEnabled: settingsStore.bool(forKey: reasoningEnabledKey, default: true),
             toolPromptMode: ToolPromptMode(
@@ -43,6 +59,22 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading, @unchecked Senda
                 default: OpenRouterSettings.empty.ragEnabledDuringToolLoop
             )
         )
+    }
+
+    private func harnessOverrideValue(
+        testRunnerKey: String,
+        fallbackKey: String,
+        defaultValue: String
+    ) -> String {
+        if let value = environment[testRunnerKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !value.isEmpty {
+            return value
+        }
+        if let value = environment[fallbackKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !value.isEmpty {
+            return value
+        }
+        return defaultValue
     }
 
     func save(_ settings: OpenRouterSettings) {

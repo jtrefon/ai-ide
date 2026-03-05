@@ -47,12 +47,16 @@ struct WriteFilesTool: AITool {
         from entry: [String: Any]
     ) throws -> WriteFileEntry {
         guard let path = entry["path"] as? String else {
+            let keys = entry.keys.sorted().joined(separator: ", ")
             throw AppError.aiServiceError(
-                "Missing 'path' in a write_files entry"
+                "Missing 'path' in a write_files entry. Entry keys: [\(keys)]"
             )
         }
         guard let content = entry["content"] as? String else {
-            throw AppError.aiServiceError("Missing 'content' in a write_files entry")
+            let keys = entry.keys.sorted().joined(separator: ", ")
+            throw AppError.aiServiceError(
+                "Missing 'content' in a write_files entry. Entry keys: [\(keys)]"
+            )
         }
 
         let url = try pathValidator.validateAndResolve(path)
@@ -92,13 +96,21 @@ struct WriteFilesTool: AITool {
 
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
-        print(">>> WRITE FILES ARGUMENTS: \(arguments)")
         
         // Support both "files" array (preferred) and direct "path"/"content" (for compatibility with write_file)
         let files: [[String: Any]]
-        
+
         if let filesArray = arguments["files"] as? [[String: Any]] {
             files = filesArray
+        } else if let filesAnyArray = arguments["files"] as? [Any] {
+            // Some models emit mixed/invalid array entries; salvage valid entries instead of failing the whole batch.
+            let normalized = filesAnyArray.compactMap { value -> [String: Any]? in
+                guard let entry = value as? [String: Any] else {
+                    return nil
+                }
+                return entry
+            }
+            files = normalized
         } else if let path = arguments["path"] as? String, let content = arguments["content"] as? String {
             // Allow single file via path/content for compatibility
             files = [["path": path, "content": content]]

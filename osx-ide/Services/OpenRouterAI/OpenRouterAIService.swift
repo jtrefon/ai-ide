@@ -390,27 +390,24 @@ actor OpenRouterAIService: AIService {
         }
         
         let now = Date()
-        
-        // Use async-safe locking
-        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            rateLimitLock.lock()
-            defer { rateLimitLock.unlock() }
-            
+        let effectiveInterval = max(minRequestInterval, config.minAPIRequestInterval)
+
+        // Compute wait and reserve the next request slot under lock.
+        let waitTime: TimeInterval = rateLimitLock.withLock {
             let timeSinceLastRequest = now.timeIntervalSince(lastRequestTime)
-            let effectiveInterval = max(minRequestInterval, config.minAPIRequestInterval)
-            
             if timeSinceLastRequest < effectiveInterval {
-                let waitTime = effectiveInterval - timeSinceLastRequest
-                Task {
-                    try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
-                    continuation.resume()
-                }
+                let computedWait = effectiveInterval - timeSinceLastRequest
+                lastRequestTime = now.addingTimeInterval(computedWait)
+                return computedWait
             } else {
-                continuation.resume()
+                lastRequestTime = now
+                return 0
             }
         }
-        
-        lastRequestTime = Date()
+
+        if waitTime > 0 {
+            try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
+        }
     }
 
     private func decodeResponse(data: Data, requestId: String) async throws -> OpenRouterChatResponse {
@@ -485,8 +482,8 @@ actor OpenRouterAIService: AIService {
     private func outputTokenBudget(stage: AIRequestStage?, hasTools: Bool) -> Int {
         switch stage {
         case .tool_loop:
-            // Tool loop responses should stay compact and action-oriented.
-            return hasTools ? 320 : 420
+            // Keep tool-loop outputs compact, but leave enough room for full JSON arguments.
+            return hasTools ? 520 : 420
         case .final_response:
             return 500
         case .delivery_gate:
