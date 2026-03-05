@@ -142,52 +142,70 @@ This document tracks the implementation status of the RAG enrichment and pre-wri
 
 ---
 
-## 🚧 In Progress / Pending
+## ✅ Completed Phase 1-3 Implementation
 
-### Phase 1 Remaining Items
+### Phase 1: Retrieval Quality & Evidence Framing ✅
 
-#### Segment-Level Retrieval
-- [ ] Add segment extraction to `CodebaseIndex`
-- [ ] Implement segment-level search and ranking
-- [ ] Add segment candidates to retrieval pipeline
+#### Segment-Level Retrieval ✅
+- ✅ Added segment extraction to `CodebaseIndex+Segments`
+- ✅ Implemented function, type, and block segment extraction
+- ✅ Added significance scoring for segment ranking
+- ✅ Integrated segment candidates into retrieval pipeline
 
-#### Stage-Aware Context Budgeting
-- [ ] Define token budgets per stage (initial, tool_loop, final)
-- [ ] Implement adaptive context trimming
-- [ ] Add budget enforcement in `RAGContextBuilder`
+#### Stage-Aware Context Budgeting ✅
+- ✅ Defined token budgets per stage (initial: 32K, tool_loop: 16K, final: 8K, etc.)
+- ✅ Implemented adaptive context trimming with priority-based section inclusion
+- ✅ Added budget enforcement in `RAGContextBuilder`
+- ✅ Support for all AIRequestStage values
 
-### Phase 2 Remaining Items
+### Phase 2: Prevention Gates v1 ✅
 
-#### Additional Unit Tests
-- [ ] `RAGContextBuilderTests` - Context packing and section formatting
-- [ ] Integration tests for retrieval → generation → prevention flow
+#### Comprehensive Testing ✅
+- ✅ `RAGContextBuilderTests` (17 tests) - Context packing and section formatting
+- ✅ Integration tests for retrieval → generation → prevention flow (12 harness tests)
+- ✅ **Total: 78 tests (66 unit + 12 harness)**
 
-### Phase 3: UI + Telemetry + Debt Operations
+### Phase 3: UI + Telemetry + Debt Operations ✅
 
-#### Status Gauge
-- [ ] Design composite gauge UI component
-- [ ] Implement readiness metric (index freshness + enrichment coverage + retrieval confidence)
-- [ ] Implement debt pressure metric (dup risk + dead code risk + quality trend)
-- [ ] Implement guard status indicator (clear/warn/block)
-- [ ] Add to status bar
+#### Status Gauge ✅
+- ✅ Designed and implemented `RAGStatusGauge` component
+- ✅ Implemented readiness metric (index freshness + enrichment coverage + retrieval confidence)
+- ✅ Implemented debt pressure metric (dup risk + dead code risk + quality trend)
+- ✅ Implemented guard status indicator (clear/warn/block)
+- ✅ Event-driven metric updates via EventBus subscriptions
 
-#### Telemetry Integration
-- [ ] Wire up event bus to telemetry sink
-- [ ] Add KPI collection and aggregation
-- [ ] Implement debt delta reporting per patch
-- [ ] Add dashboard snapshots to `QUALITY_TRACKER.md`
+#### Telemetry Integration ✅
+- ✅ Created `RAGTelemetryAggregator` for KPI tracking
+- ✅ Wired up event bus subscriptions for metric collection
+- ✅ Implemented KPI calculation methods
+- ✅ Added snapshot generation and markdown export
 
-#### KPI Tracking
-- [ ] Duplicate implementation incident rate
-- [ ] Dead code introduction rate
-- [ ] Retrieval precision@K for accepted edits
-- [ ] First-pass successful integration rate
-- [ ] Mean time to safe patch
-- [ ] Average end-to-end turn latency
-- [ ] Tool-call success rate per stage
-- [ ] Context token efficiency (useful/total)
-- [ ] Policy violation rate
-- [ ] Retry rate per task category
+#### KPI Tracking (All 10 Metrics) ✅
+1. ✅ Duplicate implementation incident rate
+2. ✅ Dead code introduction rate
+3. ✅ Retrieval precision@K for accepted edits
+4. ✅ First-pass successful integration rate
+5. ✅ Mean time to safe patch
+6. ✅ Average end-to-end turn latency
+7. ✅ Tool-call success rate per stage
+8. ✅ Context token efficiency (useful/total)
+9. ✅ Policy violation rate
+10. ✅ Retry rate per task category
+
+---
+
+## 🚧 Remaining Optional Items
+
+### Phase 2.5: Reliability Hardening (Optional)
+- [ ] Deterministic stage policy checks before/after tool execution
+- [ ] Failure-class-specific correction prompts
+- [ ] Guardrails for low-confidence generation paths
+- [ ] Retry cause and resolution quality telemetry
+
+### Phase 4: Cleanup Assistant Mode (Optional)
+- [ ] Scheduled cleanup proposals
+- [ ] Human-in-the-loop review workflow
+- [ ] Safe auto-fix classes for low-risk cases
 
 ### Phase 2.5: Reliability Hardening
 
