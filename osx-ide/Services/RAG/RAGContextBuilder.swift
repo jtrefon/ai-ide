@@ -1,6 +1,20 @@
 import Foundation
 
 public enum RAGContextBuilder {
+    /// Stage-aware token budgets (approximate character limits)
+    private static let stageBudgets: [AIRequestStage: Int] = [
+        .initial_response: 32_000,      // 8K tokens * 4 chars/token
+        .tool_loop: 16_000,             // 4K tokens * 4 chars/token
+        .final_response: 8_000,         // 2K tokens * 4 chars/token
+        .warmup: 32_000,
+        .strategic_planning: 24_000,
+        .tactical_planning: 24_000,
+        .delivery_gate: 16_000,
+        .qa_tool_output_review: 16_000,
+        .qa_quality_review: 16_000,
+        .other: 32_000
+    ]
+    
     public static func buildContext(
         userInput: String,
         explicitContext: String?,
@@ -22,6 +36,9 @@ public enum RAGContextBuilder {
         guard let retriever else {
             return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
         }
+        
+        // Get budget for current stage
+        let budget = stage.flatMap { stageBudgets[$0] } ?? 32_000
 
         // Publish retrieval started event
         eventBus?.publish(RAGRetrievalStartedEvent(userInputPreview: userInput))
@@ -37,7 +54,7 @@ public enum RAGContextBuilder {
                 )
             )
         }
-        let ragBlock = formatRAGBlock(retrieval)
+        var ragBlock = formatRAGBlock(retrieval)
 
         eventBus?.publish(
             RetrievalEvidencePreparedEvent(
@@ -46,6 +63,15 @@ public enum RAGContextBuilder {
                 retrievalConfidence: retrieval.retrievalConfidence
             )
         )
+
+        // Apply budget trimming if needed
+        let explicitContextSize = parts.joined(separator: "\n\n").count
+        let availableBudget = budget - explicitContextSize
+        
+        if let trimmedBlock = ragBlock, trimmedBlock.count > availableBudget {
+            ragBlock = trimContextToBudget(trimmedBlock, budget: availableBudget, retrieval: retrieval)
+            print("[RAGContext] Trimmed RAG context from \(trimmedBlock.count) to \(ragBlock?.count ?? 0) chars to fit budget \(budget)")
+        }
 
         // Publish retrieval completed event
         eventBus?.publish(RAGRetrievalCompletedEvent(
@@ -67,9 +93,57 @@ public enum RAGContextBuilder {
 
         let result = parts.isEmpty ? nil : parts.joined(separator: "\n\n")
         if let result {
-            print("[RAGContext] Total context size: \(result.count) chars")
+            print("[RAGContext] Total context size: \(result.count) chars (budget: \(budget))")
         }
         return result
+    }
+    
+    private static func trimContextToBudget(_ context: String, budget: Int, retrieval: RAGRetrievalResult) -> String? {
+        guard budget > 0 else { return nil }
+        
+        // Priority order: memory > overview > symbols > segments > reuse
+        var sections: [(priority: Int, content: String)] = []
+        
+        if !retrieval.memoryLines.isEmpty {
+            sections.append((priority: 1, content: "PROJECT MEMORY (long-term rules):\n" + retrieval.memoryLines.joined(separator: "\n")))
+        }
+        
+        if !retrieval.projectOverviewLines.isEmpty {
+            sections.append((priority: 2, content: "PROJECT OVERVIEW (Key Files):\n" + retrieval.projectOverviewLines.joined(separator: "\n")))
+        }
+        
+        if !retrieval.symbolLines.isEmpty {
+            sections.append((priority: 3, content: "CODEBASE INDEX (matching symbols):\n" + retrieval.symbolLines.joined(separator: "\n")))
+        }
+        
+        if !retrieval.segmentLines.isEmpty {
+            sections.append((priority: 4, content: "CODE SEGMENTS (high-signal snippets):\n" + retrieval.segmentLines.joined(separator: "\n")))
+        }
+        
+        if !retrieval.reuseCandidateLines.isEmpty {
+            sections.append((priority: 5, content: "REUSE CANDIDATES (must consider before new implementation):\n" + retrieval.reuseCandidateLines.joined(separator: "\n")))
+        }
+        
+        // Build context within budget
+        var result = "RAG CONTEXT:\n"
+        var remainingBudget = budget - result.count
+        
+        for section in sections.sorted(by: { $0.priority < $1.priority }) {
+            let sectionWithSeparator = section.content + "\n\n"
+            if sectionWithSeparator.count <= remainingBudget {
+                result += sectionWithSeparator
+                remainingBudget -= sectionWithSeparator.count
+            } else if remainingBudget > 100 {
+                // Include partial section if we have room
+                let truncated = String(section.content.prefix(remainingBudget - 20)) + "...\n\n"
+                result += truncated
+                break
+            } else {
+                break
+            }
+        }
+        
+        return result.isEmpty ? nil : result
     }
 
     private static func formatRAGBlock(_ retrieval: RAGRetrievalResult) -> String? {
