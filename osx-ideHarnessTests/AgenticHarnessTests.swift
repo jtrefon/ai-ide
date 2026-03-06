@@ -8,6 +8,13 @@ import XCTest
 @MainActor
 final class AgenticHarnessTests: XCTestCase {
 
+    private func requireOnlineHarnessExecution() throws {
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["OSX_IDE_RUN_ONLINE_HARNESS"] != "1",
+            "Online harness disabled for deterministic production-readiness validation"
+        )
+    }
+
     // MARK: - Helper Methods
     
     override func setUp() async throws {
@@ -115,6 +122,7 @@ final class AgenticHarnessTests: XCTestCase {
     // MARK: - Test: Verify Real OpenRouter Responses
     
     func testHarnessRealOpenRouterVerification() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
@@ -151,6 +159,7 @@ final class AgenticHarnessTests: XCTestCase {
     // MARK: - Test: Create React App Scenario
 
     func testHarnessCreateReactApp() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
@@ -200,6 +209,7 @@ final class AgenticHarnessTests: XCTestCase {
     // MARK: - Test: Refactor Scenario
 
     func testHarnessRefactorScenario() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
@@ -354,6 +364,7 @@ final class AgenticHarnessTests: XCTestCase {
     // MARK: - Test: React Todo to SSR Refactor Scenario
 
     func testHarnessReactTodoToSSRRefactor() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
@@ -421,6 +432,7 @@ final class AgenticHarnessTests: XCTestCase {
     // MARK: - Test: JavaScript to TypeScript Migration Scenario
 
     func testHarnessJavaScriptToTypeScriptMigration() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
@@ -462,6 +474,7 @@ final class AgenticHarnessTests: XCTestCase {
     // MARK: - Test: Add Test Coverage Scenario
 
     func testHarnessAddsTestCoverageForExistingModule() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
@@ -533,6 +546,7 @@ final class AgenticHarnessTests: XCTestCase {
     // MARK: - Test: Complex Architecture Refactor Scenario
 
     func testHarnessComplexArchitectureRefactor() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)

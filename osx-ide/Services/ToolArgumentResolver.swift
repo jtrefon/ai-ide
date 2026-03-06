@@ -136,6 +136,9 @@ final class ToolArgumentResolver {
     ) -> [String: Any] {
         var normalized = arguments
         let rawChunk = normalized["_raw_args_chunk"] as? String
+        let hasRawChunkOnlyPayload = rawChunk != nil && normalized.keys.allSatisfy {
+            $0 == "_raw_args_chunk" || $0 == "_tool_call_id" || $0 == "_conversation_id"
+        }
 
         if let rawChunk,
            let parsed = parseJSONObject(from: rawChunk) {
@@ -146,6 +149,9 @@ final class ToolArgumentResolver {
 
         switch toolName {
         case "write_file", "create_file":
+            if hasRawChunkOnlyPayload && !hasCompleteWriteArguments(normalized) {
+                return normalized
+            }
             if (normalized["path"] as? String)?.isEmpty != false {
                 copyFirstString(from: ["path", "file", "target", "target_path", "file_path"], to: "path", in: &normalized)
             }
@@ -170,19 +176,59 @@ final class ToolArgumentResolver {
                 }
             }
         case "replace_in_file":
+            if hasRawChunkOnlyPayload && !hasCompleteReplaceArguments(normalized) {
+                return normalized
+            }
             copyFirstString(from: ["oldText", "find", "search", "old"], to: "old_text", in: &normalized)
             copyFirstString(from: ["newText", "replacement", "replace", "to", "content"], to: "new_text", in: &normalized)
         case "write_files":
+            if hasRawChunkOnlyPayload && !hasCompleteWriteFilesArguments(normalized) {
+                return normalized
+            }
             normalizeWriteFilesArguments(in: &normalized)
         default:
             break
         }
 
         if let rawChunk {
+            if hasRawChunkOnlyPayload && isWriteMutationTool(toolName) {
+                return normalized
+            }
             fillMissingFieldsFromRawChunk(rawChunk, toolName: toolName, into: &normalized)
         }
 
         return normalized
+    }
+
+    private static func isWriteMutationTool(_ toolName: String) -> Bool {
+        switch toolName {
+        case "write_file", "write_files", "create_file", "replace_in_file":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func hasCompleteWriteArguments(_ arguments: [String: Any]) -> Bool {
+        guard let path = arguments["path"] as? String,
+              let content = arguments["content"] as? String else { return false }
+        return !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !content.isEmpty
+    }
+
+    private static func hasCompleteReplaceArguments(_ arguments: [String: Any]) -> Bool {
+        guard let path = arguments["path"] as? String,
+              let oldText = arguments["old_text"] as? String,
+              let newText = arguments["new_text"] as? String else { return false }
+        return !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !oldText.isEmpty && !newText.isEmpty
+    }
+
+    private static func hasCompleteWriteFilesArguments(_ arguments: [String: Any]) -> Bool {
+        guard let files = arguments["files"] as? [[String: Any]], !files.isEmpty else { return false }
+        return files.allSatisfy { entry in
+            guard let path = entry["path"] as? String,
+                  let content = entry["content"] as? String else { return false }
+            return !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !content.isEmpty
+        }
     }
 
     private static func normalizeCommonPathAliases(in arguments: inout [String: Any]) {

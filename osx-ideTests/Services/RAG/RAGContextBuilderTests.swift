@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import osx_ide
 
 final class RAGContextBuilderTests: XCTestCase {
@@ -243,7 +244,7 @@ final class RAGContextBuilderTests: XCTestCase {
             explicitContext: nil,
             retriever: mockRetriever,
             projectRoot: URL(fileURLWithPath: "/test"),
-            stage: .toolLoop,
+            stage: .tool_loop,
             conversationId: nil
         )
         
@@ -351,7 +352,7 @@ final class RAGContextBuilderTests: XCTestCase {
 
 // MARK: - Mock Implementations
 
-private class MockRAGRetriever: RAGRetriever {
+private final class MockRAGRetriever: RAGRetriever, @unchecked Sendable {
     let symbolLines: [String]
     let overviewLines: [String]
     let memoryLines: [String]
@@ -388,20 +389,24 @@ private class MockRAGRetriever: RAGRetriever {
             segmentLines: segmentLines,
             reuseCandidateLines: reuseCandidateLines,
             evidenceCards: Array(repeating: EvidenceCard(
+                evidenceId: "test-id",
+                type: .symbol,
                 filePath: "test.swift",
-                evidenceType: .symbol,
                 lineStart: 1,
                 lineEnd: 10,
-                preview: "test",
-                totalScore: 0.5,
+                scoreTotal: 0.5,
                 scoreComponents: EvidenceScoreComponents(
                     semanticSimilarity: 0.5,
                     intentWeight: 0.0,
                     architectureProximity: 0.0,
-                    qualityBoost: 0.0,
-                    recency: 0.0,
+                    qualityHotspotBoost: 0.0,
+                    recencyBoost: 0.0,
                     stalenessPenalty: 0.0
-                )
+                ),
+                confidence: 0.5,
+                freshness: 0.8,
+                whySelected: "test",
+                preview: "test"
             ), count: evidenceCount),
             intent: .other,
             retrievalConfidence: retrievalConfidence
@@ -409,14 +414,14 @@ private class MockRAGRetriever: RAGRetriever {
     }
 }
 
-private class MockEventBus: EventBusProtocol {
-    var publishedEvents: [any AppEvent] = []
+private final class MockEventBus: EventBusProtocol, @unchecked Sendable {
+    var publishedEvents: [any Event] = []
     
-    func publish(_ event: any AppEvent) {
+    func publish<E: Event>(_ event: E) {
         publishedEvents.append(event)
     }
     
-    func subscribe<T: AppEvent>(_ eventType: T.Type, handler: @escaping (T) -> Void) -> EventSubscription {
-        return EventSubscription(id: UUID(), unsubscribe: {})
+    func subscribe<E: Event>(to eventType: E.Type, handler: @escaping (E) -> Void) -> AnyCancellable {
+        return AnyCancellable {}
     }
 }

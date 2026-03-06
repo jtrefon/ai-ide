@@ -66,6 +66,7 @@ class DependencyContainer: ObservableObject {
             eventBus: _eventBus
         )
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
+        _ragTelemetryAggregator = RAGTelemetryAggregator(eventBus: _eventBus)
         _unifiedLintingFramework = UnifiedLintingFramework(
             eventBus: _eventBus,
             diagnosticsStore: _diagnosticsStore,
@@ -277,6 +278,10 @@ class DependencyContainer: ObservableObject {
         return _diagnosticsStore
     }
 
+    var ragTelemetryAggregator: RAGTelemetryAggregator {
+        return _ragTelemetryAggregator
+    }
+
     /// File editor service instance
     var fileEditorService: FileEditorServiceProtocol {
         return _fileEditorService
@@ -409,6 +414,7 @@ class DependencyContainer: ObservableObject {
     private let _commandRegistry: CommandRegistry
     private let _uiRegistry: UIRegistry
     private let _diagnosticsStore: DiagnosticsStore
+    private let _ragTelemetryAggregator: RAGTelemetryAggregator
     private let _uiService: UIServiceProtocol
     private let _workspaceService: WorkspaceServiceProtocol
     private let _fileEditorService: FileEditorServiceProtocol

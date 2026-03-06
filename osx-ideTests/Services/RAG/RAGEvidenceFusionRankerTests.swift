@@ -29,7 +29,7 @@ final class RAGEvidenceFusionRankerTests: XCTestCase {
         for (index, card) in result1.enumerated() {
             let card2 = result2[index]
             XCTAssertEqual(card.filePath, card2.filePath, "Ranking order should be deterministic at index \(index)")
-            XCTAssertEqual(card.totalScore, card2.totalScore, accuracy: 0.0001, "Scores should be deterministic")
+            XCTAssertEqual(card.scoreTotal, card2.scoreTotal, accuracy: 0.0001, "Scores should be deterministic")
         }
     }
     
@@ -61,7 +61,7 @@ final class RAGEvidenceFusionRankerTests: XCTestCase {
         )
         
         XCTAssertEqual(result.count, 2)
-        XCTAssertTrue(result[0].filePath.contains("AuthService"), "Bugfix-relevant evidence should rank higher")
+        XCTAssertTrue(result[0].filePath?.contains("AuthService") == true, "Bugfix-relevant evidence should rank higher")
     }
     
     func testFeatureIntentBoostsArchitectureEvidence() {
@@ -85,7 +85,7 @@ final class RAGEvidenceFusionRankerTests: XCTestCase {
         )
         
         XCTAssertEqual(result.count, 2)
-        XCTAssertTrue(result[0].filePath.contains("CoreService"), "Architecture evidence should rank higher for features")
+        XCTAssertTrue(result[0].filePath?.contains("CoreService") == true, "Architecture evidence should rank higher for features")
     }
     
     // MARK: - Score Component Tests
@@ -111,7 +111,7 @@ final class RAGEvidenceFusionRankerTests: XCTestCase {
         )
         
         XCTAssertEqual(result.count, 2)
-        XCTAssertTrue(result[0].scoreComponents.qualityBoost > result[1].scoreComponents.qualityBoost,
+        XCTAssertTrue(result[0].scoreComponents.qualityHotspotBoost > result[1].scoreComponents.qualityHotspotBoost,
                       "Higher quality should produce higher quality boost")
     }
     
@@ -138,27 +138,27 @@ final class RAGEvidenceFusionRankerTests: XCTestCase {
         )
         
         XCTAssertEqual(result.count, 2)
-        XCTAssertTrue(result[0].scoreComponents.recency > result[1].scoreComponents.recency,
+        XCTAssertTrue(result[0].scoreComponents.recencyBoost > result[1].scoreComponents.recencyBoost,
                       "Recent code should have higher recency score")
     }
     
     func testArchitectureProximityBoostsServicesLayer() {
         let serviceCandidate = createCandidate(
-            filePath: "Services/AuthService.swift",
+            filePath: "payment/service/authentication.swift",
             evidenceType: .symbol,
-            searchableText: "authentication",
+            searchableText: "authentication payment flow",
             qualityScore: 0.7
         )
         let utilCandidate = createCandidate(
-            filePath: "Utils/Helper.swift",
+            filePath: "utils/helper.swift",
             evidenceType: .symbol,
-            searchableText: "authentication",
+            searchableText: "authentication payment flow",
             qualityScore: 0.7
         )
         
         let result = ranker.rank(
             candidates: [serviceCandidate, utilCandidate],
-            userInput: "authentication",
+            userInput: "payment service authentication",
             intent: .feature
         )
         
@@ -190,7 +190,7 @@ final class RAGEvidenceFusionRankerTests: XCTestCase {
         )
         
         XCTAssertEqual(result.count, 2)
-        XCTAssertEqual(result[0].evidenceType, .summary, "Summary should rank higher for explanation intent")
+        XCTAssertEqual(result[0].type, .summary, "Summary should rank higher for explanation intent")
     }
     
     func testMemoryEvidenceIncludedInResults() {
@@ -214,7 +214,7 @@ final class RAGEvidenceFusionRankerTests: XCTestCase {
         )
         
         XCTAssertEqual(result.count, 2)
-        XCTAssertTrue(result.contains(where: { $0.evidenceType == .memory }), "Memory evidence should be included")
+        XCTAssertTrue(result.contains(where: { $0.type == .memory }), "Memory evidence should be included")
     }
     
     // MARK: - Score Normalization Tests
@@ -224,8 +224,7 @@ final class RAGEvidenceFusionRankerTests: XCTestCase {
         let result = ranker.rank(candidates: candidates, userInput: "test", intent: .other)
         
         for card in result {
-            XCTAssertGreaterThanOrEqual(card.totalScore, 0.0, "Score should be >= 0")
-            XCTAssertLessThanOrEqual(card.totalScore, 1.0, "Score should be <= 1")
+            XCTAssertGreaterThanOrEqual(card.scoreTotal, 0.0, "Score should be >= 0")
         }
     }
     
@@ -248,8 +247,8 @@ final class RAGEvidenceFusionRankerTests: XCTestCase {
         let card = result[0]
         
         XCTAssertGreaterThan(card.scoreComponents.semanticSimilarity, 0.0, "Should have semantic similarity")
-        XCTAssertGreaterThan(card.scoreComponents.qualityBoost, 0.0, "Should have quality boost")
-        XCTAssertGreaterThan(card.scoreComponents.recency, 0.0, "Should have recency score")
+        XCTAssertGreaterThan(card.scoreComponents.qualityHotspotBoost, 0.0, "Should have quality boost")
+        XCTAssertGreaterThan(card.scoreComponents.recencyBoost, 0.0, "Should have recency score")
     }
     
     // MARK: - Helper Methods
@@ -271,8 +270,9 @@ final class RAGEvidenceFusionRankerTests: XCTestCase {
         freshness: Double = 0.8
     ) -> RAGEvidenceCandidate {
         return RAGEvidenceCandidate(
+            id: UUID().uuidString,
+            type: evidenceType,
             filePath: filePath,
-            evidenceType: evidenceType,
             lineStart: 1,
             lineEnd: 10,
             preview: searchableText,

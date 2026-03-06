@@ -16,6 +16,13 @@ import Combine
 final class RealServiceToolLoopTests: XCTestCase {
     private let maxScenarioAttempts = 1
     private let scenarioTimeoutSeconds: TimeInterval = 120
+
+    private func requireOnlineHarnessExecution() throws {
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["OSX_IDE_RUN_ONLINE_HARNESS"] != "1",
+            "Online harness disabled for deterministic production-readiness validation"
+        )
+    }
     
     override func setUp() async throws {
         try await super.setUp()
@@ -38,6 +45,7 @@ final class RealServiceToolLoopTests: XCTestCase {
     // MARK: - Test: Tool Loop with Real Local Model
     
     func testToolLoopWithRealLocalModel() async throws {
+        try requireOnlineHarnessExecution()
         print("\n=== Test: Tool Loop with Real Local Model ===")
         let result = try await runScenarioUntilStable(
             name: "tool_loop_uppercase",
@@ -66,6 +74,7 @@ final class RealServiceToolLoopTests: XCTestCase {
     // MARK: - Test: Tool Deduplication with Real Service
     
     func testToolDeduplicationWithRealService() async throws {
+        try requireOnlineHarnessExecution()
         print("\n=== Test: Tool Deduplication with Real Service ===")
         let result = try await runScenarioUntilStable(
             name: "tool_dedup_list_once",
@@ -82,6 +91,7 @@ final class RealServiceToolLoopTests: XCTestCase {
     // MARK: - Test: Error Handling with Real Service
     
     func testErrorHandlingWithRealService() async throws {
+        try requireOnlineHarnessExecution()
         print("\n=== Test: Error Handling with Real Service ===")
         let result = try await runScenarioUntilStable(
             name: "error_handling_stable_path",
@@ -104,6 +114,7 @@ final class RealServiceToolLoopTests: XCTestCase {
     }
 
     func testFailureRecoveryUsesFallbackWithoutRepeatedIdenticalFailures() async throws {
+        try requireOnlineHarnessExecution()
         print("\n=== Test: Failure Recovery Uses Fallback ===")
         let result = try await runScenarioUntilStable(
             name: "fallback_single_write",

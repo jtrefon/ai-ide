@@ -28,6 +28,10 @@ final class FinalResponseHandler {
             return response
         }
 
+        if isIntermediateExecutionHandoffResponse(draft) {
+            return response
+        }
+
         // In Agent mode, always request a final response to ensure proper completion message
         // The model may return generic status text but we want a summary
         if mode == .agent && !draft.isEmpty {
@@ -93,6 +97,22 @@ final class FinalResponseHandler {
         return genericPatterns.contains { lowercased.contains($0) }
     }
 
+    private func containsUnfinishedWorkSignals(_ content: String) -> Bool {
+        let normalized = content.lowercased()
+        let unfinishedSignals = [
+            "needs_work",
+            "needs work",
+            "pending tasks remain",
+            "continue with remaining",
+            "continuing with the next",
+            "unfinished",
+            "remaining implementation",
+            "next steps / risks: checklist items remain",
+            "next steps/risks: checklist items remain"
+        ]
+        return unfinishedSignals.contains { normalized.contains($0) }
+    }
+
     private func hasRequiredFinalDeliverySummary(_ content: String) -> Bool {
         let normalized = content.lowercased()
         let hasHeading = normalized.contains("### final delivery summary")
@@ -119,6 +139,23 @@ final class FinalResponseHandler {
     private func isDeterministicFallbackResponse(_ content: String) -> Bool {
         let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
         return normalized.hasPrefix("I wasn't able to generate a final response")
+    }
+
+    private func isIntermediateExecutionHandoffResponse(_ content: String) -> Bool {
+        let normalized = content
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty else { return false }
+        guard !hasRequiredFinalDeliverySummary(content) else { return false }
+
+        let handoffSignals = [
+            "done -> next -> path:",
+            "continue with remaining",
+            "continuing with the next",
+            "starting execution now",
+            "pending tasks remain"
+        ]
+        return handoffSignals.contains { normalized.contains($0) }
     }
 
     private func requestFinalResponse(
@@ -172,6 +209,9 @@ final class FinalResponseHandler {
             .get()
 
         let firstFollowupContent = followup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let firstFollowupContent, isIntermediateExecutionHandoffResponse(firstFollowupContent) {
+            return AIServiceResponse(content: followup.content, toolCalls: nil)
+        }
         if let firstFollowupContent, !firstFollowupContent.isEmpty,
             hasRequiredFinalDeliverySummary(firstFollowupContent)
         {
@@ -200,6 +240,9 @@ final class FinalResponseHandler {
             .get()
 
         let retryFollowupContent = retryFollowup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let retryFollowupContent, isIntermediateExecutionHandoffResponse(retryFollowupContent) {
+            return AIServiceResponse(content: retryFollowup.content, toolCalls: nil)
+        }
         if let retryFollowupContent, !retryFollowupContent.isEmpty,
             hasRequiredFinalDeliverySummary(retryFollowupContent)
         {
@@ -231,7 +274,8 @@ final class FinalResponseHandler {
         let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let planProgress = formatPlanProgress(planMarkdown: planMarkdown)
         let checklist = PlanChecklistTracker.progress(in: planMarkdown)
-        let deliveryStatus = (checklist.total > 0 && !checklist.isComplete) ? "NEEDS_WORK" : "DONE"
+        let inferredNeedsWork = checklist.total > 0 && !checklist.isComplete
+        let deliveryStatus = inferredNeedsWork ? "NEEDS_WORK" : "DONE"
         let workPerformed = toolSummary.isEmpty
             ? "None (explanation-only)."
             : "Summarized executed tool outputs from this run."
@@ -367,7 +411,14 @@ Rules:
                 )
             )
         }
-        let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: response.content ?? "")
+        let responseContent = response.content ?? ""
+        let parsedDeliveryStatus = ChatPromptBuilder.deliveryStatus(from: responseContent)
+        let deliveryStatus: ChatPromptBuilder.DeliveryStatus?
+        if containsUnfinishedWorkSignals(responseContent) {
+            deliveryStatus = .needsWork
+        } else {
+            deliveryStatus = parsedDeliveryStatus
+        }
         let deliveryStatusText: String
         switch deliveryStatus {
         case .done:

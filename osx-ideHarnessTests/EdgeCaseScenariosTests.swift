@@ -11,6 +11,13 @@ import XCTest
 /// Tests for edge cases and error handling in the agentic system
 @MainActor
 final class EdgeCaseScenariosTests: XCTestCase {
+
+    private func requireOnlineHarnessExecution() throws {
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["OSX_IDE_RUN_ONLINE_HARNESS"] != "1",
+            "Online harness disabled for deterministic production-readiness validation"
+        )
+    }
     
     override func setUp() async throws {
         try await super.setUp()
@@ -36,6 +43,7 @@ final class EdgeCaseScenariosTests: XCTestCase {
     // MARK: - Test: Empty Project Directory
     
     func testEmptyProjectDirectory() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
         
@@ -65,6 +73,7 @@ final class EdgeCaseScenariosTests: XCTestCase {
     // MARK: - Test: Large File Handling
     
     func testLargeFileHandling() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
         
@@ -103,6 +112,7 @@ final class EdgeCaseScenariosTests: XCTestCase {
     // MARK: - Test: Malformed File Handling
     
     func testMalformedFileHandling() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
         
@@ -151,6 +161,7 @@ final class EdgeCaseScenariosTests: XCTestCase {
     // MARK: - Test: Network Error Simulation
     
     func testNetworkErrorSimulation() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
         
@@ -180,6 +191,7 @@ final class EdgeCaseScenariosTests: XCTestCase {
     // MARK: - Test: Concurrent File Operations
     
     func testConcurrentFileOperations() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
         
@@ -215,6 +227,7 @@ final class EdgeCaseScenariosTests: XCTestCase {
     // MARK: - Test: Memory Pressure Simulation
     
     func testMemoryPressureSimulation() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
         
@@ -272,6 +285,7 @@ final class EdgeCaseScenariosTests: XCTestCase {
     // MARK: - Test: Tool Timeout Handling
     
     func testToolTimeoutHandling() async throws {
+        try requireOnlineHarnessExecution()
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
         

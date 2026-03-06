@@ -61,18 +61,13 @@ struct PlannerTool: AITool {
                 throw AppError.aiServiceError("Missing 'plan' for planner.update")
             }
             let existing = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
-            let merged: String
-            if existing.isEmpty {
-                merged = plan
-            } else {
-                merged = existing + "\n\n" + plan
-            }
+            let merged = normalizedUpdatedPlan(existingPlan: existing, incomingPlan: plan)
             await ConversationPlanStore.shared.set(conversationId: conversationId, plan: merged)
             await ConversationLogStore.shared.append(
                 conversationId: conversationId,
                 type: "planner.update",
                 data: [
-                    "appendLength": plan.count,
+                    "incomingLength": plan.count,
                     "totalLength": merged.count
                 ]
             )
@@ -93,5 +88,23 @@ struct PlannerTool: AITool {
                     "Must be one of: get, set, update, clear"
             )
         }
+    }
+
+    private func normalizedUpdatedPlan(existingPlan: String, incomingPlan: String) -> String {
+        let trimmedIncomingPlan = incomingPlan.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedIncomingPlan.isEmpty else {
+            return existingPlan.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let trimmedExistingPlan = existingPlan.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedExistingPlan.isEmpty else {
+            return trimmedIncomingPlan
+        }
+
+        if trimmedIncomingPlan == trimmedExistingPlan {
+            return trimmedExistingPlan
+        }
+
+        return trimmedIncomingPlan
     }
 }

@@ -482,8 +482,7 @@ actor OpenRouterAIService: AIService {
     private func outputTokenBudget(stage: AIRequestStage?, hasTools: Bool) -> Int {
         switch stage {
         case .tool_loop:
-            // Keep tool-loop outputs compact, but leave enough room for full JSON arguments.
-            return hasTools ? 520 : 420
+            return hasTools ? 2048 : 420
         case .final_response:
             return 500
         case .delivery_gate:

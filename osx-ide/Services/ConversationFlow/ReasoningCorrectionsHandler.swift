@@ -54,6 +54,10 @@ final class ReasoningCorrectionsHandler {
         let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
         let planIsIncomplete = planProgress.total > 0 && !planProgress.isComplete
 
+        if isIntermediateExecutionHandoffResponse(content) {
+            return response
+        }
+
         if status == .needsWork, !hasToolCalls, (requiresExecution || planIsIncomplete) {
             let deliveryPrompt = try PromptRepository.shared.prompt(
                 key: "ConversationFlow/DeliveryGate/enforce_delivery_completion",
@@ -95,5 +99,20 @@ final class ReasoningCorrectionsHandler {
         // Default path: keep current response. Additional follow-up is only injected for
         // explicit NEEDS_WORK no-tool dropout scenarios handled above.
         return response
+    }
+
+    private func isIntermediateExecutionHandoffResponse(_ content: String) -> Bool {
+        let normalized = content
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        let handoffSignals = [
+            "done -> next -> path:",
+            "continue with remaining",
+            "continuing with the next",
+            "pending tasks remain"
+        ]
+        return handoffSignals.contains { normalized.contains($0) }
     }
 }

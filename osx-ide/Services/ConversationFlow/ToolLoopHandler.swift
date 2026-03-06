@@ -519,6 +519,7 @@ final class ToolLoopHandler {
             if mode == .agent,
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
+               !isLikelyContinuationOrRecoverySummary(content),
                ChatPromptBuilder.deliveryStatus(from: content) != .done,
                (
                     ChatPromptBuilder.shouldForceToolFollowup(content: content)
@@ -1475,9 +1476,16 @@ final class ToolLoopHandler {
         guard currentResponse.toolCalls?.isEmpty ?? true else { return currentResponse }
         guard !availableTools.isEmpty else { return currentResponse }
 
-        let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: currentResponse.content ?? "")
+        let currentContent = currentResponse.content ?? ""
+        let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: currentContent)
         let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
+        let hasMeaningfulAssistantResponse = !currentContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let likelyRecoverySummary = isLikelyContinuationOrRecoverySummary(currentContent)
+
+        if hasMeaningfulAssistantResponse && likelyRecoverySummary {
+            return currentResponse
+        }
 
         let shouldContinueForNeedsWork = deliveryStatus == .needsWork
         let shouldContinueForPlan = planProgress.total > 0 && !planProgress.isComplete && deliveryStatus != .done
@@ -1519,6 +1527,26 @@ final class ToolLoopHandler {
                 stage: AIRequestStage.tool_loop
             ))
             .get()
+    }
+
+    private func isLikelyContinuationOrRecoverySummary(_ content: String) -> Bool {
+        let normalized = content
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        if normalized.contains("### final delivery summary") {
+            return true
+        }
+
+        let recoverySignals = [
+            "done -> next -> path:",
+            "continue with remaining",
+            "continuing with the next",
+            "all checklist items are complete",
+            "completed all requested implementation steps"
+        ]
+        return recoverySignals.contains { normalized.contains($0) }
     }
 
     private func isMutationToolName(_ toolName: String) -> Bool {

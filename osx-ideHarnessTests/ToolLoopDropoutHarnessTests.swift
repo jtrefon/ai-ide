@@ -68,6 +68,12 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                 historyRequests
             }
         }
+
+        func remainingResponsesCount() -> Int {
+            lock.withLock {
+                responses.count
+            }
+        }
     }
 
     private actor ToolExecutionCounter {
@@ -371,6 +377,266 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             finalAssistantOutput.contains("### Final Delivery Summary"),
             "Final assistant output should include mandated Final Delivery Summary scaffold"
         )
+    }
+
+    func testHarnessMalformedRawWriteFilesArgumentsFailClosedWithoutFileCorruption() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let appFile = projectRoot.appendingPathComponent("src/App.tsx")
+        try FileManager.default.createDirectory(at: appFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "export default function App() { return null }\n".write(to: appFile, atomically: true, encoding: .utf8)
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        historyCoordinator.append(ChatMessage(role: .user, content: "could you add dashboard with demo charts ?"))
+
+        let malformedRawWrite = AIServiceResponse(
+            content: "<ide_reasoning>Reflection: Need to write dashboard files.\nPlanning: Create Dashboard.tsx and update App.tsx.\nContinuity: Work remains.\nDelivery: NEEDS_WORK</ide_reasoning>Applying targeted code changes now.",
+            toolCalls: [
+                AIToolCall(
+                    id: "malformed-write-files-1",
+                    name: "write_files",
+                    arguments: [
+                        "_raw_args_chunk": "{\"files\":[{\"weekly\":[1,2],\"categoryData\":[3,4]}],\"path\":\"src/App.tsx\"}"
+                    ]
+                )
+            ]
+        )
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "<ide_reasoning>Reflection: Malformed write arguments failed and no files were changed.\nPlanning: Stop destructive retries.\nContinuity: Dashboard work remains unfinished.\nDelivery: NEEDS_WORK</ide_reasoning>Done → Next → Path: write_files arguments were invalid, so no changes were applied.",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let sendCoordinator = ConversationSendCoordinator(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        try await sendCoordinator.send(SendRequest(
+            userInput: "could you add dashboard with demo charts ?",
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            runId: UUID().uuidString,
+            availableTools: [
+                WriteFilesTool(
+                    fileSystemService: FileSystemService(),
+                    pathValidator: PathValidator(projectRoot: projectRoot),
+                    eventBus: MockEventBus()
+                )
+            ],
+            cancelledToolCallIds: { [] },
+            qaReviewEnabled: false,
+            draftAssistantMessageId: nil
+        ))
+
+        let finalAppContent = try String(contentsOf: appFile, encoding: .utf8)
+        harnessEqual(
+            finalAppContent,
+            "export default function App() { return null }\n",
+            "Malformed raw write_files arguments must not partially overwrite an existing file"
+        )
+
+        let toolFailureMessages = historyCoordinator.messages.filter {
+            $0.isToolExecution && $0.toolStatus == .failed && $0.toolName == "write_files"
+        }
+        harnessEqual(toolFailureMessages.count, 1, "Malformed raw write_files payload should fail once and stop")
+
+        let finalAssistantOutput = historyCoordinator.messages.last(where: {
+            $0.role == .assistant && !$0.isToolExecution
+        })?.content ?? ""
+        harnessTrue(finalAssistantOutput.contains("NEEDS_WORK") || finalAssistantOutput.contains("Done → Next → Path"), "Final assistant output should report unfinished work instead of fabricated completion")
+    }
+
+    func testHarnessReproducesPlannerOverreachForSimpleInformationalAgentRequest() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "<ide_reasoning>Analyze: User is asking about TypeScript migration completion status.\nResearch: Check remaining JavaScript files and typing gaps.\nPlan: Identify remaining files and continue migration.\nReflect: Migration is incomplete.\nAction: Check for remaining JavaScript files and convert them.\nDelivery: NEEDS_WORK</ide_reasoning>TypeScript migration is incomplete. I found several JavaScript files that still need conversion to TypeScript, and some components lack proper type definitions. I'll continue the migration to ensure full TypeScript coverage.",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let sendCoordinator = ConversationSendCoordinator(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        try await sendCoordinator.send(SendRequest(
+            userInput: "what about typescript migration, is that finished, complete?",
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            runId: UUID().uuidString,
+            availableTools: [],
+            cancelledToolCallIds: { [] },
+            qaReviewEnabled: false,
+            draftAssistantMessageId: nil
+        ))
+
+        let planMessages = historyCoordinator.messages.filter {
+            $0.role == .assistant && $0.content.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("# Implementation Plan")
+        }
+        harnessEqual(planMessages.count, 1, "Current production path reproduces plan overhead by emitting an implementation plan even for a simple informational agent request")
+
+        let assistantMessages = historyCoordinator.messages.filter {
+            $0.role == .assistant && !$0.isToolExecution
+        }
+        let finalAssistantOutput = assistantMessages.last?.content ?? ""
+        harnessTrue(finalAssistantOutput.localizedCaseInsensitiveContains("TypeScript migration is incomplete"), "Current production path should preserve the informational answer content")
+        harnessTrue(finalAssistantOutput.contains("I'll continue the migration") || finalAssistantOutput.contains("Delivery: NEEDS_WORK"), "Current production path should reproduce the over-eager execution framing on a simple status question")
+    }
+
+    func testHarnessReproducesRepeatedMalformedDashboardMutationFailureLoop() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let dashboardFile = projectRoot.appendingPathComponent("src/components/Dashboard.tsx")
+        try FileManager.default.createDirectory(at: dashboardFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "import React\n".write(to: dashboardFile, atomically: true, encoding: .utf8)
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+
+        let malformedWriteOne = AIToolCall(
+            id: "dashboard-write-1",
+            name: "write_file",
+            arguments: [
+                "path": "src/components/Dashboard.tsx",
+                "_raw_args_chunk": "{\"weekly\":[1,2],\"categoryData\":[3,4]",
+                "_tool_call_id": "dashboard-write-1",
+                "_conversation_id": conversationId
+            ]
+        )
+        let malformedWriteTwo = AIToolCall(
+            id: "dashboard-write-2",
+            name: "write_file",
+            arguments: [
+                "path": "src/components/Dashboard.tsx",
+                "_raw_args_chunk": "{\"stats\":[{\"label\":\"Done\"}]",
+                "_tool_call_id": "dashboard-write-2",
+                "_conversation_id": conversationId
+            ]
+        )
+        let malformedEdit = AIToolCall(
+            id: "dashboard-edit-1",
+            name: "replace_in_file",
+            arguments: [
+                "path": "src/components/Dashboard.tsx",
+                "_raw_args_chunk": "{\"content\":\"replace dashboard body\"",
+                "_tool_call_id": "dashboard-edit-1",
+                "_conversation_id": conversationId
+            ]
+        )
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "Done → Creating complete Dashboard component with bar/pie charts and stats cards using proper write_file parameters. Next: applying targeted code changes in project files.",
+                toolCalls: [malformedWriteOne]
+            ),
+            AIServiceResponse(
+                content: "Done → Completing Dashboard.tsx with charts and stats cards using targeted edits instead of full overwrite. Next: applying targeted code changes in project files.",
+                toolCalls: [malformedEdit]
+            ),
+            AIServiceResponse(
+                content: "Done → Creating complete dashboard with bar/pie charts and statistics using correct write_file format. Next: applying targeted code changes in project files.",
+                toolCalls: [malformedWriteTwo]
+            ),
+            AIServiceResponse(
+                content: "<ide_reasoning>plan_delta: Will create full Dashboard.tsx with bar/pie charts using Chart.js and react-chartjs-2. next_action: known_risks: File structure exists in src/components/, need to verify package.json has chart dependencies. delivery_state: needs_work</ide_reasoning>",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let sendCoordinator = ConversationSendCoordinator(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        try await sendCoordinator.send(SendRequest(
+            userInput: "could you add dashboard with demo charts ?",
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            runId: UUID().uuidString,
+            availableTools: [
+                WriteFileTool(
+                    fileSystemService: FileSystemService(),
+                    pathValidator: PathValidator(projectRoot: projectRoot),
+                    eventBus: MockEventBus()
+                ),
+                ReplaceInFileTool(
+                    fileSystemService: FileSystemService(),
+                    pathValidator: PathValidator(projectRoot: projectRoot),
+                    eventBus: MockEventBus()
+                )
+            ],
+            cancelledToolCallIds: { [] },
+            qaReviewEnabled: false,
+            draftAssistantMessageId: nil
+        ))
+
+        let failedToolMessages = historyCoordinator.messages.filter {
+            $0.isToolExecution && $0.toolStatus == .failed && ($0.toolName == "write_file" || $0.toolName == "replace_in_file")
+        }
+        harnessEqual(failedToolMessages.count, 3, "Current production path should reproduce repeated malformed Dashboard mutation failures before final needs_work exit")
+
+        let dashboardContent = try String(contentsOf: dashboardFile, encoding: .utf8)
+        harnessEqual(dashboardContent, "import React\n", "Current production path should reproduce repeated failures without successfully repairing Dashboard.tsx")
+
+        let finalAssistantOutput = historyCoordinator.messages.last(where: {
+            $0.role == .assistant && !$0.isToolExecution
+        })?.content ?? ""
+        harnessTrue(finalAssistantOutput.localizedCaseInsensitiveContains("needs_work") || finalAssistantOutput.localizedCaseInsensitiveContains("delivery_state: needs_work"), "Current production path should end this failure loop in an unfinished state")
+        harnessEqual(scriptedService.remainingResponsesCount(), 0, "Harness should consume the full scripted failure sequence from the real sandbox pattern")
     }
 
     func testHarnessDeduplicatesDuplicateToolCallsInSingleIteration() async throws {

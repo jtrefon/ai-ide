@@ -63,6 +63,14 @@ extension AIToolExecutor {
         let targetFile: String?
     }
 
+    struct MalformedMutationArgumentsError: LocalizedError {
+        let toolName: String
+
+        var errorDescription: String? {
+            "Malformed arguments for \(toolName). Refusing to execute mutation with incomplete raw payload. Provide complete structured arguments before retrying."
+        }
+    }
+
     nonisolated static func makeToolExecutionMessage(
         content: String,
         context: ToolExecutionMessageContext
@@ -450,6 +458,11 @@ extension AIToolExecutor {
                 conversationId: request.conversationId
             )
 
+            try validateMutationArgumentsBeforeExecution(
+                toolCall: request.toolCall,
+                mergedArguments: mergedArguments
+            )
+
             try runPreWritePreventionIfNeeded(
                 toolCall: request.toolCall,
                 mergedArguments: mergedArguments
@@ -484,6 +497,46 @@ extension AIToolExecutor {
                 error: enriched
             )
             return .failure(enriched)
+        }
+    }
+
+    private func validateMutationArgumentsBeforeExecution(
+        toolCall: AIToolCall,
+        mergedArguments: [String: Any]
+    ) throws {
+        guard mergedArguments["_raw_args_chunk"] != nil else { return }
+
+        switch toolCall.name {
+        case "write_file", "create_file":
+            guard let path = mergedArguments["path"] as? String,
+                  let content = mergedArguments["content"] as? String,
+                  !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !content.isEmpty else {
+                throw MalformedMutationArgumentsError(toolName: toolCall.name)
+            }
+        case "replace_in_file":
+            guard let path = mergedArguments["path"] as? String,
+                  let oldText = mergedArguments["old_text"] as? String,
+                  let newText = mergedArguments["new_text"] as? String,
+                  !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !oldText.isEmpty,
+                  !newText.isEmpty else {
+                throw MalformedMutationArgumentsError(toolName: toolCall.name)
+            }
+        case "write_files":
+            guard let files = mergedArguments["files"] as? [[String: Any]], !files.isEmpty else {
+                throw MalformedMutationArgumentsError(toolName: toolCall.name)
+            }
+            let allEntriesValid = files.allSatisfy { entry in
+                guard let path = entry["path"] as? String,
+                      let content = entry["content"] as? String else { return false }
+                return !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !content.isEmpty
+            }
+            guard allEntriesValid else {
+                throw MalformedMutationArgumentsError(toolName: toolCall.name)
+            }
+        default:
+            break
         }
     }
 
