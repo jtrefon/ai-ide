@@ -54,6 +54,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published private(set) var liveModelOutputStatusPreview: String = ""
     @Published private(set) var isLiveModelOutputPreviewVisible: Bool = true
     @Published private(set) var conversationTabs: [ConversationTabItem] = []
+    @Published private(set) var providerIssue: ConversationProviderIssueState?
 
     private let historyManager: ChatHistoryManager
     private let historyCoordinator: ChatHistoryCoordinator
@@ -231,6 +232,34 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 self.handleLocalModelStreamingStatus(event)
             }
             .store(in: &cancellables)
+
+        eventBus
+            .subscribe(to: ProviderIssueStatusEvent.self) { [weak self] event in
+                guard let self else { return }
+                self.providerIssue = ConversationProviderIssueState(
+                    providerName: event.providerName,
+                    issueType: self.providerIssueTypeLabel(for: event.statusKind),
+                    statusCode: event.statusCode,
+                    message: event.message,
+                    cooldownUntil: event.cooldownUntil
+                )
+            }
+            .store(in: &cancellables)
+    }
+
+    private func providerIssueTypeLabel(for statusKind: ProviderIssueStatusEvent.StatusKind) -> String {
+        switch statusKind {
+        case .rateLimited:
+            return "Rate limit"
+        case .unavailable:
+            return "Provider unavailable"
+        case .authentication:
+            return "Authentication"
+        case .transport:
+            return "Connection"
+        case .unknown:
+            return "Provider issue"
+        }
     }
 
     private func handleLocalModelStreamingChunk(_ event: LocalModelStreamingChunkEvent) {
@@ -390,6 +419,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         }
 
         projectRoot = newRoot
+        toolExecutor.updateProjectRoot(newRoot)
+        configureLoggingStores(root: newRoot)
 
         saveCurrentSessionSnapshot()
 
@@ -420,6 +451,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         refreshConversationTabs()
 
         conversationLogger.initializeProjectRoot(newRoot)
+        startTraceLogging()
         conversationLogger.logConversationStart(
             conversationId: self.conversationId,
             mode: self.currentMode.rawValue,
@@ -475,6 +507,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         currentInput = ""
         isSending = true
         error = nil
+        providerIssue = nil
     }
 
     private func appendToLiveModelPreview(_ chunk: String) {
@@ -529,6 +562,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         resetStreamingDraftState()
         isSending = false
         error = nil
+        providerIssue = nil
     }
 
     private func cancelActiveSendTask() {

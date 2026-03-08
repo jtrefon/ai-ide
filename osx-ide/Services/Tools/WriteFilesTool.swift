@@ -64,7 +64,12 @@ struct WriteFilesTool: AITool {
         return WriteFileEntry(url: url, relativePath: relativePath, content: content)
     }
 
-    private func applyWrite(url: URL, relativePath: String, content: String) async throws {
+    private func applyWrite(
+        url: URL,
+        relativePath: String,
+        content: String,
+        conversationId: String?
+    ) async throws {
         try await FileToolWriteApplier.applyWrite(
             FileToolWriteApplier.ApplyWriteRequest(
                 fileSystemService: fileSystemService,
@@ -72,7 +77,8 @@ struct WriteFilesTool: AITool {
                 url: url,
                 relativePath: relativePath,
                 content: content,
-                traceType: "fs.write_files_entry"
+                traceType: "fs.write_files_entry",
+                conversationId: conversationId
             )
         )
     }
@@ -155,7 +161,12 @@ struct WriteFilesTool: AITool {
                 continue
             }
 
-            try await applyWrite(url: resolved.url, relativePath: resolved.relativePath, content: resolved.content)
+            try await applyWrite(
+                url: resolved.url,
+                relativePath: resolved.relativePath,
+                content: resolved.content,
+                conversationId: context.conversationId
+            )
             results.append(resolved.relativePath)
         }
 

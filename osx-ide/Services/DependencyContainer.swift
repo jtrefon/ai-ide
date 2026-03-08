@@ -90,9 +90,10 @@ class DependencyContainer: ObservableObject {
             testConfigurationProvider: TestConfigurationProvider.shared
         )
         let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
+        let localModelEventBus: EventBusProtocol? = launchContext.isTesting ? nil : _eventBus
         let localModelService = LocalModelProcessAIService(
             selectionStore: selectionStore,
-            eventBus: _eventBus,
+            eventBus: localModelEventBus,
             activityCoordinator: _activityCoordinator
         )
         _aiService = ModelRoutingAIService(

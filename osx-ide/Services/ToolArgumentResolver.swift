@@ -11,7 +11,7 @@ import Foundation
 @MainActor
 final class ToolArgumentResolver {
     private let fileSystemService: FileSystemService
-    private let projectRoot: URL
+    private var projectRoot: URL
     private let defaultFilePathProvider: (@MainActor () -> String?)?
 
     init(
@@ -22,6 +22,10 @@ final class ToolArgumentResolver {
         self.fileSystemService = fileSystemService
         self.projectRoot = projectRoot
         self.defaultFilePathProvider = defaultFilePathProvider
+    }
+
+    func updateProjectRoot(_ newRoot: URL) {
+        projectRoot = newRoot
     }
 
     /// Resolves the target file for a tool call
@@ -149,6 +153,9 @@ final class ToolArgumentResolver {
 
         switch toolName {
         case "write_file", "create_file":
+            if let rawChunk {
+                fillMissingFieldsFromRawChunk(rawChunk, toolName: toolName, into: &normalized)
+            }
             if hasRawChunkOnlyPayload && !hasCompleteWriteArguments(normalized) {
                 return normalized
             }
@@ -176,12 +183,16 @@ final class ToolArgumentResolver {
                 }
             }
         case "replace_in_file":
+            if let rawChunk {
+                fillMissingFieldsFromRawChunk(rawChunk, toolName: toolName, into: &normalized)
+            }
             if hasRawChunkOnlyPayload && !hasCompleteReplaceArguments(normalized) {
                 return normalized
             }
             copyFirstString(from: ["oldText", "find", "search", "old"], to: "old_text", in: &normalized)
             copyFirstString(from: ["newText", "replacement", "replace", "to", "content"], to: "new_text", in: &normalized)
         case "write_files":
+            normalizeWriteFilesArguments(in: &normalized)
             if hasRawChunkOnlyPayload && !hasCompleteWriteFilesArguments(normalized) {
                 return normalized
             }
@@ -333,6 +344,12 @@ final class ToolArgumentResolver {
     }
 
     private static func extractStringValue(from raw: String, keys: [String]) -> String? {
+        if let decodedRaw = decodeJSONStringFragment(raw), decodedRaw != raw {
+            if let decodedValue = extractStringValue(from: decodedRaw, keys: keys) {
+                return decodedValue
+            }
+        }
+
         for key in keys {
             let pattern = #""\#(key)"\s*:\s*"((?:\\.|[^"\\])*)""#
             guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
@@ -355,7 +372,7 @@ final class ToolArgumentResolver {
     private static func decodeJSONStringFragment(_ raw: String) -> String? {
         let wrapped = "\"\(raw)\""
         guard let data = wrapped.data(using: .utf8),
-              let decoded = try? JSONSerialization.jsonObject(with: data) as? String else {
+              let decoded = try? JSONDecoder().decode(String.self, from: data) else {
             return nil
         }
         return decoded
@@ -402,6 +419,12 @@ final class ToolArgumentResolver {
             return direct
         }
 
+        if let decodedRaw = decodeJSONStringFragment(raw), decodedRaw != raw {
+            if let decoded = parse(decodedRaw) {
+                return decoded
+            }
+        }
+
         if let start = raw.firstIndex(of: "{"),
            let end = raw.lastIndex(of: "}"),
            start < end {
@@ -409,10 +432,22 @@ final class ToolArgumentResolver {
             if let parsed = parse(bounded) {
                 return parsed
             }
+            if let decodedBounded = decodeJSONStringFragment(bounded), decodedBounded != bounded,
+               let parsed = parse(decodedBounded) {
+                return parsed
+            }
         }
 
         let wrapped = "{\(raw)}"
-        return parse(wrapped)
+        if let parsed = parse(wrapped) {
+            return parsed
+        }
+
+        if let decodedWrapped = decodeJSONStringFragment(wrapped), decodedWrapped != wrapped {
+            return parse(decodedWrapped)
+        }
+
+        return nil
     }
 
     private static func parseJSONArray(from raw: String) -> [Any]? {
@@ -429,11 +464,22 @@ final class ToolArgumentResolver {
             return direct
         }
 
+        if let decodedRaw = decodeJSONStringFragment(raw), decodedRaw != raw {
+            if let decoded = parse(decodedRaw) {
+                return decoded
+            }
+        }
+
         if let start = raw.firstIndex(of: "["),
            let end = raw.lastIndex(of: "]"),
            start < end {
             let bounded = String(raw[start...end])
-            return parse(bounded)
+            if let parsed = parse(bounded) {
+                return parsed
+            }
+            if let decodedBounded = decodeJSONStringFragment(bounded), decodedBounded != bounded {
+                return parse(decodedBounded)
+            }
         }
 
         return nil

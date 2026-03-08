@@ -181,6 +181,12 @@ run_harness() {
     test_profile_dir="${HARNESS_TEST_PROFILE_DIR:-$(pwd)/.build-tests/harness-test-profile}"
     mkdir -p "$test_profile_dir"
     echo "Harness test profile dir: $test_profile_dir"
+    local online_harness_marker="$test_profile_dir/online-harness-enabled"
+    if [ -n "$OSX_IDE_RUN_ONLINE_HARNESS" ]; then
+        : > "$online_harness_marker"
+    else
+        rm -f "$online_harness_marker"
+    fi
     local prompts_root_default
     prompts_root_default="$(pwd)/Prompts"
     local resolved_prompts_root=""
@@ -201,6 +207,12 @@ run_harness() {
         echo "Using OpenRouter: $HARNESS_USE_OPENROUTER"
     fi
     env_args+=("TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR=$test_profile_dir")
+    local runtime_env_args=("OSX_IDE_PROMPTS_ROOT=$resolved_prompts_root" "OSXIDE_TEST_PROFILE_DIR=$test_profile_dir")
+    if [ -n "$OSX_IDE_RUN_ONLINE_HARNESS" ]; then
+        env_args+=("TEST_RUNNER_ENV_OSX_IDE_RUN_ONLINE_HARNESS=$OSX_IDE_RUN_ONLINE_HARNESS")
+        runtime_env_args+=("OSX_IDE_RUN_ONLINE_HARNESS=$OSX_IDE_RUN_ONLINE_HARNESS")
+        echo "Online harness runtime enabled"
+    fi
     if [ -n "$OSX_IDE_PROMPTS_ROOT" ]; then
         env_args+=("TEST_RUNNER_ENV_OSX_IDE_PROMPTS_ROOT=$OSX_IDE_PROMPTS_ROOT")
         resolved_prompts_root="$OSX_IDE_PROMPTS_ROOT"
@@ -213,24 +225,37 @@ run_harness() {
     
     if [ -n "$suite" ]; then
         echo "Filtering by suite: $suite"
+        # Do not change this to YES for online/provider-backed harnesses.
+        # Parallel test execution floods the provider, triggers 429s, and risks account bans.
         run_with_memory_guard "$harness_memory_limit_gb" \
-            env OSX_IDE_PROMPTS_ROOT="$resolved_prompts_root" OSXIDE_TEST_PROFILE_DIR="$test_profile_dir" xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+            env "${runtime_env_args[@]}" xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                   -scheme "$SCHEME" \
                   -configuration Debug \
                   -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                   -destination 'platform=macOS' \
+                  -parallel-testing-enabled NO \
                   ENABLE_PREVIEWS=NO \
                   "${env_args[@]}" \
                   test -only-testing:osx-ideHarnessTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideTests
     else
+        local skip_online_args=()
+        if [ -z "$OSX_IDE_RUN_ONLINE_HARNESS" ]; then
+            skip_online_args+=("-skip-testing:osx-ideHarnessTests/AgenticHarnessTests")
+            skip_online_args+=("-skip-testing:osx-ideHarnessTests/RealServiceToolLoopTests")
+            skip_online_args+=("-skip-testing:osx-ideHarnessTests/EdgeCaseScenariosTests")
+        fi
+        # Do not change this to YES for online/provider-backed harnesses.
+        # Parallel test execution floods the provider, triggers 429s, and risks account bans.
         run_with_memory_guard "$harness_memory_limit_gb" \
-            env OSX_IDE_PROMPTS_ROOT="$resolved_prompts_root" OSXIDE_TEST_PROFILE_DIR="$test_profile_dir" xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+            env "${runtime_env_args[@]}" xcodebuild -project "$PROJECT_NAME.xcodeproj" \
                   -scheme "$SCHEME" \
                   -configuration Debug \
                   -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                   -destination 'platform=macOS' \
+                  -parallel-testing-enabled NO \
                   ENABLE_PREVIEWS=NO \
                   "${env_args[@]}" \
+                  "${skip_online_args[@]}" \
                   test \
                   -only-testing:osx-ideHarnessTests \
                   -skip-testing:osx-ideUITests \
@@ -241,16 +266,16 @@ run_harness() {
 run_harness_online() {
     local suite=$1
     if [ -n "$suite" ]; then
-        run_harness "$suite"
+        OSX_IDE_RUN_ONLINE_HARNESS=1 run_harness "$suite"
     else
         echo "Running online harness suites..."
-        run_harness "AgenticHarnessTests"
-        run_harness "RealServiceToolLoopTests"
-        run_harness "TelemetryValidationTests"
-        run_harness "EdgeCaseScenariosTests"
-        run_harness "ToolLoopDropoutHarnessTests"
-        run_harness "OrchestrationSnapshotHarnessTests"
-        run_harness "IndexScopeHarnessTests"
+        OSX_IDE_RUN_ONLINE_HARNESS=1 run_harness "AgenticHarnessTests"
+        OSX_IDE_RUN_ONLINE_HARNESS=1 run_harness "RealServiceToolLoopTests"
+        OSX_IDE_RUN_ONLINE_HARNESS=1 run_harness "TelemetryValidationTests"
+        OSX_IDE_RUN_ONLINE_HARNESS=1 run_harness "EdgeCaseScenariosTests"
+        OSX_IDE_RUN_ONLINE_HARNESS=1 run_harness "ToolLoopDropoutHarnessTests"
+        OSX_IDE_RUN_ONLINE_HARNESS=1 run_harness "OrchestrationSnapshotHarnessTests"
+        OSX_IDE_RUN_ONLINE_HARNESS=1 run_harness "IndexScopeHarnessTests"
     fi
 }
 

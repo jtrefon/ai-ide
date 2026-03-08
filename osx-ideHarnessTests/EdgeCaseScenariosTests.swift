@@ -12,15 +12,13 @@ import XCTest
 @MainActor
 final class EdgeCaseScenariosTests: XCTestCase {
 
-    private func requireOnlineHarnessExecution() throws {
-        try XCTSkipIf(
-            ProcessInfo.processInfo.environment["OSX_IDE_RUN_ONLINE_HARNESS"] != "1",
-            "Online harness disabled for deterministic production-readiness validation"
-        )
-    }
+    private func requireOnlineHarnessExecution() throws {}
     
     override func setUp() async throws {
         try await super.setUp()
+        // Do not remove this gate or allow these online harness tests to run in parallel.
+        // Parallel provider traffic has triggered upstream 429 floods and can get the account banned.
+        await OnlineHarnessExecutionGate.shared.acquire()
         // Online production-parity harness configuration.
         let config = TestConfiguration(
             allowExternalAPIs: true,
@@ -37,6 +35,7 @@ final class EdgeCaseScenariosTests: XCTestCase {
     
     override func tearDown() async throws {
         await TestConfigurationProvider.shared.resetToDefault()
+        await OnlineHarnessExecutionGate.shared.release()
         try await super.tearDown()
     }
     

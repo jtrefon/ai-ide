@@ -29,7 +29,7 @@ public final class AIToolExecutor {
     let argumentResolver: ToolArgumentResolver
     let scheduler: ToolScheduler
     let eventBus: EventBusProtocol?
-    let preventionEngine: PreWritePreventionEngine
+    var preventionEngine: PreWritePreventionEngine
     
     /// Activity coordinator for power management during tool execution
     let activityCoordinator: AgentActivityCoordinating?
@@ -56,6 +56,11 @@ public final class AIToolExecutor {
             projectRoot: projectRoot
         )
         self.activityCoordinator = activityCoordinator
+    }
+
+    func updateProjectRoot(_ newRoot: URL) {
+        argumentResolver.updateProjectRoot(newRoot)
+        preventionEngine.updateProjectRoot(newRoot)
     }
 
     // MARK: - Helper Methods (using specialized services)

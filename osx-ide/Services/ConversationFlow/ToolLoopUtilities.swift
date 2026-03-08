@@ -93,6 +93,208 @@ enum ToolLoopUtilities {
         }
         return summary.joined(separator: "\n")
     }
+
+    static func buildFocusedExecutionMessages(
+        userInput: String,
+        conversationId: String,
+        projectRoot: URL
+    ) async throws -> [ChatMessage] {
+        let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+
+        var parts: [String] = [
+            try PromptRepository.shared.prompt(
+                key: "ConversationFlow/Corrections/tool_loop_focused_execution",
+                projectRoot: projectRoot
+            )
+        ]
+
+        if !plan.isEmpty {
+            parts.append("Plan:\n\(plan)")
+        }
+
+        return [
+            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
+            ChatMessage(role: .user, content: userInput)
+        ]
+    }
+
+    static func buildStalledExecutionTransitionMessages(
+        userInput: String,
+        conversationId: String,
+        projectRoot: URL,
+        toolSummary: String
+    ) async throws -> [ChatMessage] {
+        let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+
+        var parts: [String] = [
+            try PromptRepository.shared.prompt(
+                key: "ConversationFlow/Corrections/tool_loop_focused_execution",
+                projectRoot: projectRoot
+            ),
+            "The tool loop stalled after read-only or non-executing progress.",
+            "Use concrete execution tools now. Do not repeat read-only exploration unless it is strictly required to unblock execution.",
+            "Observed tool results:\n\(toolSummary)"
+        ]
+
+        if !plan.isEmpty {
+            parts.append("Plan:\n\(plan)")
+        }
+
+        return [
+            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
+            ChatMessage(role: .user, content: userInput)
+        ]
+    }
+
+    static func buildAutonomousNoUserInputMessages(
+        userInput: String,
+        conversationId: String?,
+        projectRoot: URL,
+        existingAssistantContent: String,
+        toolsAvailable: Bool
+    ) async throws -> [ChatMessage] {
+        let plan: String
+        if let conversationId {
+            plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        } else {
+            plan = ""
+        }
+
+        var parts: [String] = []
+        if toolsAvailable {
+            parts.append(try PromptRepository.shared.prompt(
+                key: "ConversationFlow/Corrections/tool_loop_focused_execution",
+                projectRoot: projectRoot
+            ))
+            parts.append("The assistant asked the user for the next step or extra input. In agent mode, continue autonomously with the safest reasonable assumptions.")
+            parts.append("Do not ask the user for confirmation, file selection, or implementation choices. Return concrete tool calls now.")
+        } else {
+            parts.append("You are finalizing an agent response without tool access.")
+            parts.append("The assistant asked the user for the next step or extra input. In agent mode, do not hand work back to the user when a safe default can be chosen.")
+            parts.append("Choose the safest reasonable assumption, explain it briefly, and provide a clear user-visible response in plain text with no tool calls.")
+        }
+        parts.append("Current assistant draft:\n\(existingAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines))")
+
+        if !plan.isEmpty {
+            parts.append("Plan:\n\(plan)")
+        }
+
+        return [
+            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
+            ChatMessage(role: .user, content: userInput)
+        ]
+    }
+
+    static func buildRepeatedSignatureDiversionMessages(
+        userInput: String,
+        conversationId: String,
+        projectRoot: URL,
+        repeatedSignatures: [String]
+    ) async throws -> [ChatMessage] {
+        let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+
+        var parts: [String] = [
+            try PromptRepository.shared.prompt(
+                key: "ConversationFlow/Corrections/tool_loop_focused_execution",
+                projectRoot: projectRoot
+            ),
+            "The previous iteration repeated the same tool-call signatures.",
+            "Pivot to a different execution sequence that advances completion. If execution is complete, return a concise plain-text final response instead of more tool calls.",
+            "Repeated signatures:\n\(repeatedSignatures.map { "- \($0)" }.joined(separator: "\n"))"
+        ]
+
+        if !plan.isEmpty {
+            parts.append("Plan:\n\(plan)")
+        }
+
+        return [
+            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
+            ChatMessage(role: .user, content: userInput)
+        ]
+    }
+
+    static func buildRepeatedWriteTargetDiversionMessages(
+        userInput: String,
+        conversationId: String,
+        projectRoot: URL,
+        writeTargetSignature: String
+    ) async throws -> [ChatMessage] {
+        let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+
+        var parts: [String] = [
+            try PromptRepository.shared.prompt(
+                key: "ConversationFlow/Corrections/tool_loop_focused_execution",
+                projectRoot: projectRoot
+            ),
+            "The tool loop is repeatedly targeting the same files without finishing the request.",
+            "Progress remaining work before revisiting the same write target. Return concrete tool calls that move the implementation forward.",
+            "Repeated write targets:\n\(writeTargetSignature)"
+        ]
+
+        if !plan.isEmpty {
+            parts.append("Plan:\n\(plan)")
+        }
+
+        return [
+            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
+            ChatMessage(role: .user, content: userInput)
+        ]
+    }
+
+    static func buildPlanContinuationMessages(
+        userInput: String,
+        conversationId: String,
+        projectRoot: URL,
+        currentAssistantContent: String,
+        planMarkdown: String,
+        completedCount: Int,
+        totalCount: Int
+    ) async throws -> [ChatMessage] {
+        var parts: [String] = [
+            try PromptRepository.shared.prompt(
+                key: "ConversationFlow/Corrections/tool_loop_focused_execution",
+                projectRoot: projectRoot
+            ),
+            "The implementation plan is not complete yet. Continue with the next unfinished checklist item instead of stopping.",
+            "Progress: \(completedCount)/\(totalCount)",
+            "Current assistant draft:\n\(currentAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines))",
+            "Plan:\n\(planMarkdown)"
+        ]
+
+        if let nextPendingLine = planMarkdown
+            .components(separatedBy: .newlines)
+            .first(where: { $0.contains("- [ ]") })?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !nextPendingLine.isEmpty {
+            parts.append("Next unfinished item:\n\(nextPendingLine)")
+        }
+
+        return [
+            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
+            ChatMessage(role: .user, content: userInput)
+        ]
+    }
+
+    static func buildStalledFinalResponseMessages(
+        userInput: String,
+        toolSummary: String
+    ) -> [ChatMessage] {
+        let systemContent = [
+            "Tool-loop progress has stalled for this branch.",
+            "Stop calling tools and provide a clear final user-visible response in plain text.",
+            "Summarize what was completed, what remains uncertain, and any concise next steps without asking the user to restate the task."
+        ].joined(separator: "\n\n")
+        let userContent = [
+            "User request:\n\(userInput)",
+            "Tool outputs:\n\(toolSummary)",
+            "Provide the final response now."
+        ].joined(separator: "\n\n")
+
+        return [
+            ChatMessage(role: .system, content: systemContent),
+            ChatMessage(role: .user, content: userContent)
+        ]
+    }
     
     // MARK: - Snapshot Persistence
     

@@ -70,11 +70,15 @@ public struct PreventionCheckResult: Sendable {
 
 struct PreWritePreventionEngine {
     private let fileSystemService: FileSystemService
-    private let projectRoot: URL
+    private var projectRoot: URL
 
     init(fileSystemService: FileSystemService, projectRoot: URL) {
         self.fileSystemService = fileSystemService
         self.projectRoot = projectRoot
+    }
+
+    mutating func updateProjectRoot(_ newRoot: URL) {
+        projectRoot = newRoot
     }
 
     func check(
@@ -139,14 +143,17 @@ struct PreWritePreventionEngine {
             }
 
             if !exactDuplicatePaths.isEmpty {
+                let shouldBlockExactDuplicate = shouldBlockExactDuplicateWrite(write: write)
                 findings.append(
                     PreventionFinding(
                         findingType: .duplicateImpl,
-                        severity: .critical,
+                        severity: shouldBlockExactDuplicate ? .critical : .warning,
                         candidateFileSpan: write.relativePath,
                         existingFileSpans: exactDuplicatePaths,
-                        explanation: "Generated content is an exact duplicate of existing implementation. Extend existing code instead.",
-                        blockRecommended: true
+                        explanation: shouldBlockExactDuplicate
+                            ? "Generated content is an exact duplicate of existing implementation. Extend existing code instead."
+                            : "Generated content matches an existing non-implementation artifact. Confirm whether a duplicated output file is intentional.",
+                        blockRecommended: shouldBlockExactDuplicate
                     )
                 )
                 continue
@@ -366,6 +373,19 @@ struct PreWritePreventionEngine {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
             .lowercased()
+    }
+
+    private func shouldBlockExactDuplicateWrite(write: CandidateWrite) -> Bool {
+        let implementationExtensions: Set<String> = [
+            "swift", "js", "jsx", "ts", "tsx", "mjs", "cjs",
+            "py", "rb", "java", "kt", "go", "rs", "php",
+            "c", "cc", "cpp", "cxx", "h", "hpp", "hh",
+            "cs", "scala", "sh", "bash", "zsh",
+            "css", "scss", "sass", "less", "html", "htm",
+            "vue", "svelte"
+        ]
+
+        return implementationExtensions.contains(write.fileURL.pathExtension.lowercased())
     }
 }
 

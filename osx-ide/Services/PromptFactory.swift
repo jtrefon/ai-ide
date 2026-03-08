@@ -136,10 +136,14 @@ public actor PromptFactory {
         stage: AIRequestStage?,
         projectRoot: URL?
     ) async throws -> PromptComponent? {
-        guard enabled, mode == .agent else { return nil }
-        if stage == .initial_response { return nil }
-        
-        let reasoningPrompt = try loadReasoningPrompt(stage: stage, projectRoot: projectRoot)
+        guard let reasoningPrompt = try AIRequestStage.reasoningPromptIfNeeded(
+            reasoningEnabled: enabled,
+            mode: mode,
+            stage: stage,
+            projectRoot: projectRoot
+        ) else {
+            return nil
+        }
         return PromptComponent(
             type: .reasoning,
             content: reasoningPrompt,
@@ -173,18 +177,6 @@ public actor PromptFactory {
         }
         
         return sections.joined(separator: "\n")
-    }
-    
-    // MARK: - Helper Methods
-    
-    private func loadReasoningPrompt(stage: AIRequestStage?, projectRoot: URL?) throws -> String {
-        let key: String = {
-            if stage == .tool_loop {
-                return "ConversationFlow/Corrections/reasoning_optional_tool_loop"
-            }
-            return "ConversationFlow/Corrections/reasoning_optional_general"
-        }()
-        return try PromptRepository.shared.prompt(key: key, projectRoot: projectRoot)
     }
 }
 

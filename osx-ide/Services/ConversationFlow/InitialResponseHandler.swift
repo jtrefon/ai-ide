@@ -45,96 +45,85 @@ final class InitialResponseHandler {
                     content: content,
                     hasToolCalls: false
                 )
+                || ChatPromptBuilder.hasMissingClaimedFileArtifacts(
+                    content: content,
+                    projectRoot: projectRoot
+                )
            ),
-           let lastUserMessage = historyCoordinator.messages.last(where: { $0.role == .user }) {
-            await AIToolTraceLogger.shared.log(type: "chat.force_execution_followup.initial", data: [
-                "runId": runId,
-                "hasToolCalls": false,
-                "contentLength": content.count
-            ])
-            let promptText = try PromptRepository.shared.prompt(
-                key: "ConversationFlow/Corrections/force_tool_followup",
-                projectRoot: projectRoot
-            )
-            let followupSystem = ChatMessage(
-                role: .system,
-                content: promptText
-            )
+           !availableTools.isEmpty {
+             await AIToolTraceLogger.shared.log(type: "chat.force_execution_followup.initial", data: [
+                 "runId": runId,
+                 "hasToolCalls": false,
+                 "contentLength": content.count
+             ])
+             let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
+                 userInput: userInput,
+                 conversationId: conversationId,
+                 projectRoot: projectRoot
+             )
+             response = try await aiInteractionCoordinator
+                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                     messages: focusedMessages,
+                     explicitContext: explicitContext,
+                     tools: availableTools,
+                     mode: mode,
+                     projectRoot: projectRoot,
+                     runId: runId,
+                     stage: AIRequestStage.tool_loop,
+                     conversationId: conversationId
+                 ))
+                 .get()
+         }
 
-            response = try await aiInteractionCoordinator
-                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                    messages: historyCoordinator.messages + [followupSystem, lastUserMessage],
-                    explicitContext: explicitContext,
-                    tools: availableTools,
-                    mode: mode,
-                    projectRoot: projectRoot,
-                    runId: runId,
-                    stage: AIRequestStage.initial_response,
-                    conversationId: conversationId
-                ))
-                .get()
-        }
+         if mode == .agent,
+            response.toolCalls?.isEmpty ?? true,
+            let content = response.content,
+            ChatPromptBuilder.isRequestingUserInputForNextStep(content: content),
+            !availableTools.isEmpty {
+             let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
+                 userInput: userInput,
+                 conversationId: conversationId,
+                 projectRoot: projectRoot
+             )
+             response = try await aiInteractionCoordinator
+                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                     messages: focusedMessages,
+                     explicitContext: explicitContext,
+                     tools: availableTools,
+                     mode: mode,
+                     projectRoot: projectRoot,
+                     runId: runId,
+                     stage: AIRequestStage.tool_loop,
+                     conversationId: conversationId
+                 ))
+                 .get()
+         }
 
-        if mode == .agent,
-           response.toolCalls?.isEmpty ?? true,
-           let content = response.content,
-           ChatPromptBuilder.isRequestingUserInputForNextStep(content: content) {
-            let promptText = try PromptRepository.shared.prompt(
-                key: "ConversationFlow/Corrections/no_user_input_next_step",
-                projectRoot: projectRoot
-            )
-            let followupSystem = ChatMessage(
-                role: .system,
-                content: promptText
-            )
-
-            response = try await aiInteractionCoordinator
-                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                    messages: historyCoordinator.messages + [followupSystem],
-                    explicitContext: explicitContext,
-                    tools: availableTools,
-                    mode: mode,
-                    projectRoot: projectRoot,
-                    runId: runId,
-                    stage: AIRequestStage.initial_response,
-                    conversationId: conversationId
-                ))
-                .get()
-        }
-
-        // Retry if response contains only reasoning without actual content
-        if mode == .agent,
-           response.toolCalls?.isEmpty ?? true,
-           let content = response.content,
-           ChatPromptBuilder.isReasoningOnly(content: content),
-           let lastUserMessage = historyCoordinator.messages.last(where: { $0.role == .user }) {
-            await AIToolTraceLogger.shared.log(type: "chat.force_retry.reasoning_only.initial", data: [
-                "runId": runId,
-                "hasToolCalls": false,
-                "contentLength": content.count
-            ])
-            let promptText = try PromptRepository.shared.prompt(
-                key: "ConversationFlow/Corrections/reasoning_only_retry",
-                projectRoot: projectRoot
-            )
-            let followupSystem = ChatMessage(
-                role: .system,
-                content: promptText
-            )
-
-            response = try await aiInteractionCoordinator
-                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                    messages: historyCoordinator.messages + [followupSystem, lastUserMessage],
-                    explicitContext: explicitContext,
-                    tools: availableTools,
-                    mode: mode,
-                    projectRoot: projectRoot,
-                    runId: runId,
-                    stage: AIRequestStage.initial_response,
-                    conversationId: conversationId
-                ))
-                .get()
-        }
+         if mode == .agent,
+            response.toolCalls?.isEmpty ?? true,
+            let content = response.content,
+            ChatPromptBuilder.isRequestingUserInputForNextStep(content: content),
+            availableTools.isEmpty {
+             let autonomousMessages = try await ToolLoopUtilities.buildAutonomousNoUserInputMessages(
+                 userInput: userInput,
+                 conversationId: conversationId,
+                 projectRoot: projectRoot,
+                 existingAssistantContent: content,
+                 toolsAvailable: false
+             )
+             response = try await aiInteractionCoordinator
+                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                     messages: autonomousMessages,
+                     explicitContext: explicitContext,
+                     tools: availableTools,
+                     mode: mode,
+                     projectRoot: projectRoot,
+                     runId: runId,
+                     stage: AIRequestStage.initial_response,
+                     conversationId: conversationId
+                 ))
+                 .get()
+         }
 
         return response
     }

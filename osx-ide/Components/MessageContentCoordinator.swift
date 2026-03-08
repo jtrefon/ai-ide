@@ -45,12 +45,6 @@ struct MessageContentCoordinator {
                     message: message,
                     fontSize: fontSize
                 )
-            } else if isPlanMessage {
-                PlanMessageView(
-                    content: message.content,
-                    fontSize: fontSize,
-                    fontFamily: fontFamily
-                )
             } else if hasReasoning {
                 ReasoningMessageView(
                     message: message,
@@ -125,12 +119,6 @@ struct MessageContentCoordinator {
     private var assistantDisplayContent: String {
         let cleaned = ChatPromptBuilder.contentForDisplay(from: message.content)
         return cleaned.isEmpty ? message.content : cleaned
-    }
-
-    private var isPlanMessage: Bool {
-        guard message.role == .assistant else { return false }
-        let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return trimmed.hasPrefix("# implementation plan")
     }
 
     private var isReasoningOutcomeMessage: Bool {

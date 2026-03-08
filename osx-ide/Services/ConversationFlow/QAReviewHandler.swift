@@ -34,10 +34,6 @@ final class QAReviewHandler {
 
         let toolOutputReviewSystemPrompt = try PromptRepository.shared.prompt(
             key: "ConversationFlow/QA/tool_output_review_system",
-            defaultValue: "You are the QA reviewer for tool execution results. Validate the assistant draft against " +
-                "the tool outputs and user request. Identify mistakes, omissions, and risk. " +
-                "Return a QA report only (do not rewrite the assistant draft). " +
-                "Do not call tools.",
             projectRoot: projectRoot
         )
         let qaSystem = ChatMessage(
@@ -119,9 +115,6 @@ final class QAReviewHandler {
 
         let qualityReviewSystemPrompt = try PromptRepository.shared.prompt(
             key: "ConversationFlow/QA/quality_review_system",
-            defaultValue: "You are the QA reviewer. Review the assistant draft response for correctness, completeness, " +
-                "and adherence to the user request. Return a QA report only (do not rewrite the response). " +
-                "Do not call tools.",
             projectRoot: projectRoot
         )
         let qaSystem = ChatMessage(

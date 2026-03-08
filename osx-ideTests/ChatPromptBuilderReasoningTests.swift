@@ -1,4 +1,5 @@
 import XCTest
+import Foundation
 @testable import osx_ide
 
 final class ChatPromptBuilderReasoningTests: XCTestCase {
@@ -112,5 +113,42 @@ final class ChatPromptBuilderReasoningTests: XCTestCase {
         </tool_call>
         """
         XCTAssertTrue(ChatPromptBuilder.isControlMarkupOnly(input))
+    }
+
+    func testHasMissingClaimedFileArtifactsDetectsMissingFiles() throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("chat_prompt_builder_missing_artifact_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let content = "Created React Todo app with package.json, index.html, src/main.jsx, and src/App.jsx."
+        try "{}".write(to: tempRoot.appendingPathComponent("package.json"), atomically: true, encoding: .utf8)
+
+        XCTAssertTrue(
+            ChatPromptBuilder.hasMissingClaimedFileArtifacts(content: content, projectRoot: tempRoot),
+            "Expected claimed scaffold files missing on disk to be detected"
+        )
+    }
+
+    func testHasMissingClaimedFileArtifactsReturnsFalseWhenClaimedFilesExist() throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("chat_prompt_builder_existing_artifact_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        try FileManager.default.createDirectory(
+            at: tempRoot.appendingPathComponent("src"),
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        try "{}".write(to: tempRoot.appendingPathComponent("package.json"), atomically: true, encoding: .utf8)
+        try "<html></html>".write(to: tempRoot.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+        try "console.log('main')".write(to: tempRoot.appendingPathComponent("src/main.jsx"), atomically: true, encoding: .utf8)
+        try "export default function App() {}".write(to: tempRoot.appendingPathComponent("src/App.jsx"), atomically: true, encoding: .utf8)
+
+        let content = "Created React Todo app with package.json, index.html, src/main.jsx, and src/App.jsx."
+
+        XCTAssertFalse(
+            ChatPromptBuilder.hasMissingClaimedFileArtifacts(content: content, projectRoot: tempRoot),
+            "Expected no missing artifacts when all claimed files exist"
+        )
     }
 }

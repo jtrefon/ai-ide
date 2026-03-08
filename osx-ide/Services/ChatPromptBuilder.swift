@@ -387,6 +387,17 @@ class ChatPromptBuilder {
         return false
     }
 
+    static func hasMissingClaimedFileArtifacts(content: String, projectRoot: URL) -> Bool {
+        guard indicatesWorkWasPerformed(content: content) else { return false }
+
+        let claimedArtifacts = claimedFileArtifacts(in: content)
+        guard !claimedArtifacts.isEmpty else { return false }
+
+        return claimedArtifacts.contains { artifact in
+            !projectContainsClaimedArtifact(artifact, projectRoot: projectRoot)
+        }
+    }
+
     static func indicatesWorkWasPerformed(content: String) -> Bool {
         let text = content.lowercased()
         if text.isEmpty { return false }
@@ -395,30 +406,39 @@ class ChatPromptBuilder {
             "i implemented",
             "i've implemented",
             "i have implemented",
+            "implemented ",
             "i updated",
             "i've updated",
             "i have updated",
+            "updated ",
             "i patched",
             "i've patched",
             "i have patched",
+            "patched ",
             "i fixed",
             "i've fixed",
             "i have fixed",
+            "fixed ",
             "i changed",
             "i've changed",
             "i have changed",
+            "changed ",
             "i added",
             "i've added",
             "i have added",
+            "added ",
             "i created",
             "i've created",
             "i have created",
+            "created ",
             "i removed",
             "i've removed",
             "i have removed",
+            "removed ",
             "i refactored",
             "i've refactored",
-            "i have refactored"
+            "i have refactored",
+            "refactored "
         ]
 
         if directClaims.contains(where: { text.contains($0) }) {
@@ -440,6 +460,66 @@ class ChatPromptBuilder {
         ]
 
         return artifactClaims.contains(where: { text.contains($0) })
+    }
+
+    private static func claimedFileArtifacts(in content: String) -> [String] {
+        let pattern = #"(?<![A-Za-z0-9_./-])([A-Za-z0-9_./-]+\.[A-Za-z0-9]{1,8})(?![A-Za-z0-9_./-])"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(content.startIndex..<content.endIndex, in: content)
+
+        var results: [String] = []
+        var seen: Set<String> = []
+        for match in regex.matches(in: content, options: [], range: range) {
+            guard let tokenRange = Range(match.range(at: 1), in: content) else { continue }
+            let rawToken = String(content[tokenRange])
+            let token = rawToken.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`[](){}<>.,;:"))
+            guard isLikelyProjectArtifactToken(token) else { continue }
+            if seen.insert(token).inserted {
+                results.append(token)
+            }
+        }
+
+        return results
+    }
+
+    private static func isLikelyProjectArtifactToken(_ token: String) -> Bool {
+        let lowered = token.lowercased()
+        guard !lowered.hasPrefix("http://"), !lowered.hasPrefix("https://") else { return false }
+        guard lowered.contains(".") else { return false }
+        return true
+    }
+
+    private static func projectContainsClaimedArtifact(_ artifact: String, projectRoot: URL) -> Bool {
+        let normalizedArtifact = NSString(string: artifact).standardizingPath
+        let directURL = projectRoot.appendingPathComponent(normalizedArtifact).standardizedFileURL
+        if FileManager.default.fileExists(atPath: directURL.path) {
+            return true
+        }
+
+        guard !normalizedArtifact.contains("/") else {
+            return false
+        }
+
+        let enumerator = FileManager.default.enumerator(
+            at: projectRoot,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles],
+            errorHandler: nil
+        )
+
+        while let next = enumerator?.nextObject() as? URL {
+            if next.path.contains("/.ide/") {
+                enumerator?.skipDescendants()
+                continue
+            }
+            guard next.lastPathComponent == normalizedArtifact else { continue }
+            let isRegularFile = (try? next.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile ?? false
+            if isRegularFile {
+                return true
+            }
+        }
+
+        return false
     }
 
     static func userRequestRequiresExecution(userInput: String) -> Bool {

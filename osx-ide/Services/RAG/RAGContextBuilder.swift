@@ -9,7 +9,6 @@ public enum RAGContextBuilder {
         .warmup: 32_000,
         .strategic_planning: 24_000,
         .tactical_planning: 24_000,
-        .delivery_gate: 16_000,
         .qa_tool_output_review: 16_000,
         .qa_quality_review: 16_000,
         .other: 32_000

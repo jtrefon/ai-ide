@@ -33,6 +33,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
         private(set) var lastToolCallFormat: ToolCallFormat?
         private(set) var lastRunId: String?
         private(set) var lastContextLength: Int?
+        private(set) var lastMaxOutputTokens: Int?
         private(set) var lastConversationId: String?
         private let response: AIServiceResponse
 
@@ -40,19 +41,20 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             self.response = response
         }
 
-        func generate(modelDirectory: URL, messages: sending [Chat.Message], tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, contextLength: Int, conversationId: String?) async throws -> AIServiceResponse {
+        func generate(modelDirectory: URL, messages: sending [Chat.Message], tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, contextLength: Int, maxOutputTokens: Int, conversationId: String?) async throws -> AIServiceResponse {
             lastModelDirectory = modelDirectory
             lastCapturedMessages = messages.map { CapturedMessage(role: $0.role, content: $0.content) }
             lastTools = tools
             lastToolCallFormat = toolCallFormat
             lastRunId = runId
             lastContextLength = contextLength
+            lastMaxOutputTokens = maxOutputTokens
             lastConversationId = conversationId
             return response
         }
 
-        func snapshot() -> (URL?, [CapturedMessage]?, [ToolSpec]?, ToolCallFormat?, String?, Int?, String?) {
-            (lastModelDirectory, lastCapturedMessages, lastTools, lastToolCallFormat, lastRunId, lastContextLength, lastConversationId)
+        func snapshot() -> (URL?, [CapturedMessage]?, [ToolSpec]?, ToolCallFormat?, String?, Int?, Int?, String?) {
+            (lastModelDirectory, lastCapturedMessages, lastTools, lastToolCallFormat, lastRunId, lastContextLength, lastMaxOutputTokens, lastConversationId)
         }
     }
 
@@ -115,10 +117,11 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
 
         XCTAssertEqual(response.content, "local-response")
 
-        let (capturedDirectory, capturedMessages, capturedTools, capturedToolCallFormat, capturedRunId, capturedContextLength, _) = generator.snapshot()
+        let (capturedDirectory, capturedMessages, capturedTools, capturedToolCallFormat, capturedRunId, capturedContextLength, capturedMaxOutputTokens, _) = generator.snapshot()
         XCTAssertEqual(capturedDirectory, modelDirectory)
         XCTAssertEqual(capturedRunId, runId)
-        XCTAssertEqual(capturedContextLength, LocalModelFileStore.contextLength(for: model))
+        XCTAssertEqual(capturedContextLength, min(LocalModelFileStore.contextLength(for: model), 2048))
+        XCTAssertEqual(capturedMaxOutputTokens, min(768, max(384, (capturedContextLength ?? 0) / 3)))
         
         // Verify tools were passed
         XCTAssertNotNil(capturedTools)
@@ -181,7 +184,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             projectRoot: modelDirectory
         ))
 
-        let (_, capturedMessages, _, _, _, _, _) = generator.snapshot()
+        let (_, capturedMessages, _, _, _, _, _, _) = generator.snapshot()
         let messages = try XCTUnwrap(capturedMessages)
         XCTAssertEqual(messages[0].role, .system)
         XCTAssertTrue(messages[0].content.contains("CUSTOM_SYSTEM_PROMPT"))

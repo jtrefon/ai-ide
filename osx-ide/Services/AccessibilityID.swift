@@ -11,6 +11,7 @@ enum AccessibilityID {
     static let aiChatInputTextView = "AIChatInputTextView"
     static let aiChatSendButton = "AIChatSendButton"
     static let aiChatNewConversationButton = "AIChatNewConversationButton"
+    static let aiChatProviderIssueBanner = "AIChatProviderIssueBanner"
 
     static let terminalTextView = "TerminalTextView"
     static let fileExplorerOutline = "FileExplorerOutline"

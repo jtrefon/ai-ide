@@ -14,18 +14,16 @@ import Combine
 /// Only uses mocks where absolutely necessary for test isolation
 @MainActor
 final class RealServiceToolLoopTests: XCTestCase {
-    private let maxScenarioAttempts = 1
-    private let scenarioTimeoutSeconds: TimeInterval = 120
+    private let maxScenarioAttempts = 2
+    private let scenarioTimeoutSeconds: TimeInterval = 180
 
-    private func requireOnlineHarnessExecution() throws {
-        try XCTSkipIf(
-            ProcessInfo.processInfo.environment["OSX_IDE_RUN_ONLINE_HARNESS"] != "1",
-            "Online harness disabled for deterministic production-readiness validation"
-        )
-    }
-    
+    private func requireOnlineHarnessExecution() throws {}
+
     override func setUp() async throws {
         try await super.setUp()
+        // Do not remove this gate or allow these online harness tests to run in parallel.
+        // Parallel provider traffic has triggered upstream 429 floods and can get the account banned.
+        await OnlineHarnessExecutionGate.shared.acquire()
         // Online production-parity harness configuration.
         let config = TestConfiguration(
             allowExternalAPIs: true,
@@ -39,14 +37,15 @@ final class RealServiceToolLoopTests: XCTestCase {
     
     override func tearDown() async throws {
         await TestConfigurationProvider.shared.resetToDefault()
+        await OnlineHarnessExecutionGate.shared.release()
         try await super.tearDown()
     }
     
-    // MARK: - Test: Tool Loop with Real Local Model
+    // MARK: - Test: Tool Loop with Real OpenRouter Service
     
-    func testToolLoopWithRealLocalModel() async throws {
+    func testToolLoopWithRealOpenRouterService() async throws {
         try requireOnlineHarnessExecution()
-        print("\n=== Test: Tool Loop with Real Local Model ===")
+        print("\n=== Test: Tool Loop with Real OpenRouter Service ===")
         let result = try await runScenarioUntilStable(
             name: "tool_loop_uppercase",
             prepare: { root in
@@ -169,11 +168,11 @@ final class RealServiceToolLoopTests: XCTestCase {
     }
     
     private func makeProductionRuntime(projectRoot: URL) async throws -> ProductionRuntime {
-        // Use real DependencyContainer but force local model usage
+        // Use the real DependencyContainer with production-parity online routing.
         let container = DependencyContainer(launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false, testProfilePath: nil, disableHeavyInit: false))
         container.settingsStore.set(false, forKey: AppConstantsStorage.agentQAReviewEnabledKey)
         
-        // Production-parity harness: keep agent mode online-capable.
+        // Production-parity harness: keep agent mode online-capable so routing uses OpenRouter.
         let selectionStore = LocalModelSelectionStore(settingsStore: container.settingsStore)
         await selectionStore.setOfflineModeEnabled(false)
         let isOfflineModeEnabled = await selectionStore.isOfflineModeEnabled()
@@ -256,7 +255,11 @@ final class RealServiceToolLoopTests: XCTestCase {
         guard let fallback = lastResult else {
             throw NSError(domain: "RealServiceToolLoopTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "No scenario attempts executed for \(name)"])
         }
-        harnessNote("Scenario \(name) did not reach clean gate after \(maxScenarioAttempts) attempts")
+        XCTFail(
+            "Scenario \(name) did not reach clean gate after \(maxScenarioAttempts) attempts. " +
+            "timedOut=\(fallback.gate.timedOut) failedToolExecutions=\(fallback.gate.failedToolExecutions) " +
+            "repeatedToolCallSignatures=\(fallback.gate.repeatedToolCallSignatures)"
+        )
         return fallback
     }
 
@@ -356,17 +359,21 @@ final class RealServiceToolLoopTests: XCTestCase {
     private func harnessTrue(_ condition: @autoclosure () -> Bool, _ message: String = "") {
         let ok = condition()
         print(ok ? "[HARNESS][PASS] \(message)" : "[HARNESS][WARN] \(message)")
+        XCTAssertTrue(ok, message)
     }
 
     private func harnessFalse(_ condition: @autoclosure () -> Bool, _ message: String = "") {
-        harnessTrue(!condition(), message)
+        let value = condition()
+        print(!value ? "[HARNESS][PASS] \(message)" : "[HARNESS][WARN] \(message)")
+        XCTAssertFalse(value, message)
     }
 
-    private func harnessEqual<T: Equatable>(_ lhs: @autoclosure () -> T, _ rhs: @autoclosure () -> T, _ message: String = "") {
+    private func harnessEqual<T: Equatable & Sendable>(_ lhs: @autoclosure () -> T, _ rhs: @autoclosure () -> T, _ message: String = "") {
         let left = lhs()
         let right = rhs()
         let status = (left == right) ? "[HARNESS][PASS]" : "[HARNESS][WARN]"
         print("\(status) \(message) lhs=\(left) rhs=\(right)")
+        XCTAssertEqual(left, right, message)
     }
 
     private func harnessNote(_ message: String) {

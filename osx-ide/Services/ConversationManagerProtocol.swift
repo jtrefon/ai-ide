@@ -10,6 +10,28 @@ public struct ConversationTabItem: Identifiable, Equatable {
     }
 }
 
+public struct ConversationProviderIssueState: Equatable {
+    public let providerName: String
+    public let issueType: String
+    public let statusCode: Int?
+    public let message: String
+    public let cooldownUntil: Date?
+
+    public init(
+        providerName: String,
+        issueType: String,
+        statusCode: Int?,
+        message: String,
+        cooldownUntil: Date?
+    ) {
+        self.providerName = providerName
+        self.issueType = issueType
+        self.statusCode = statusCode
+        self.message = message
+        self.cooldownUntil = cooldownUntil
+    }
+}
+
 @MainActor
 public protocol ConversationManagerProtocol: AnyObject, StatePublisherProtocol {
     var messages: [ChatMessage] { get }
@@ -22,6 +44,7 @@ public protocol ConversationManagerProtocol: AnyObject, StatePublisherProtocol {
     var liveModelOutputPreview: String { get }
     var liveModelOutputStatusPreview: String { get }
     var isLiveModelOutputPreviewVisible: Bool { get }
+    var providerIssue: ConversationProviderIssueState? { get }
 
     func sendMessage()
     func sendMessage(context: String?)

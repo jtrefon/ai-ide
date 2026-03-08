@@ -88,15 +88,6 @@ struct AIChatPanel: View {
                 alignment: .bottom
             )
 
-            ConversationPlanProgressView(
-                messages: conversationManager.messages,
-                isSending: conversationManager.isSending,
-                onStopGenerating: {
-                    conversationManager.stopGeneration()
-                },
-                fontSize: ui.fontSize
-            )
-
             MessageListView(
                 messages: conversationManager.messages,
                 isSending: conversationManager.isSending,
@@ -106,6 +97,10 @@ struct AIChatPanel: View {
             .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             .layoutPriority(1)
             .clipped()
+
+            if let providerIssue = conversationManager.providerIssue {
+                providerIssueBanner(providerIssue)
+            }
 
             // Error display
             if let error = conversationManager.error {
@@ -180,6 +175,73 @@ struct AIChatPanel: View {
             get: { conversationManager.currentMode },
             set: { conversationManager.currentMode = $0 }
         )
+    }
+
+    @ViewBuilder
+    private func providerIssueBanner(_ issue: ConversationProviderIssueState) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let countdownText = providerIssueCountdownText(issue, now: context.date)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: issue.cooldownUntil == nil ? "exclamationmark.triangle.fill" : "clock.badge.exclamationmark")
+                        .foregroundColor(.orange)
+                    Text(providerIssueHeadline(issue))
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.primary)
+                    Spacer(minLength: 0)
+                    if let countdownText {
+                        Text(countdownText)
+                            .font(.caption.monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Text(issue.message)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.orange.opacity(0.12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+            )
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier(AccessibilityID.aiChatProviderIssueBanner)
+        }
+    }
+
+    private func providerIssueHeadline(_ issue: ConversationProviderIssueState) -> String {
+        if let statusCode = issue.statusCode {
+            return "\(issue.providerName) \(issue.issueType) (HTTP \(statusCode))"
+        }
+
+        return "\(issue.providerName) \(issue.issueType)"
+    }
+
+    private func providerIssueCountdownText(
+        _ issue: ConversationProviderIssueState,
+        now: Date
+    ) -> String? {
+        guard let cooldownUntil = issue.cooldownUntil else {
+            return nil
+        }
+
+        let remainingSeconds = max(0, Int(ceil(cooldownUntil.timeIntervalSince(now))))
+        guard remainingSeconds > 0 else {
+            return "Retrying now"
+        }
+
+        let minutes = remainingSeconds / 60
+        let seconds = remainingSeconds % 60
+        return String(format: "Retry in %02d:%02d", minutes, seconds)
     }
 
     private func sendMessage() {

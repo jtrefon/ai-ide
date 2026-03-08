@@ -6,11 +6,49 @@ public enum AIRequestStage: String, Codable, Sendable {
     case strategic_planning
     case tactical_planning
     case tool_loop
-    case delivery_gate
     case final_response
     case qa_tool_output_review
     case qa_quality_review
     case other
+
+    var reasoningPromptKey: String {
+        switch self {
+        case .tool_loop:
+            return "ConversationFlow/Corrections/reasoning_optional_tool_loop"
+        default:
+            return "ConversationFlow/Corrections/reasoning_optional_general"
+        }
+    }
+
+    static func reasoningPromptKey(for stage: AIRequestStage?) -> String {
+        stage?.reasoningPromptKey ?? AIRequestStage.other.reasoningPromptKey
+    }
+
+    static func reasoningPromptKeyIfNeeded(
+        reasoningEnabled: Bool,
+        mode: AIMode?,
+        stage: AIRequestStage?
+    ) -> String? {
+        guard reasoningEnabled, mode == .agent else { return nil }
+        guard stage != .initial_response else { return nil }
+        return reasoningPromptKey(for: stage)
+    }
+
+    static func reasoningPromptIfNeeded(
+        reasoningEnabled: Bool,
+        mode: AIMode?,
+        stage: AIRequestStage?,
+        projectRoot: URL?
+    ) throws -> String? {
+        guard let promptKey = reasoningPromptKeyIfNeeded(
+            reasoningEnabled: reasoningEnabled,
+            mode: mode,
+            stage: stage
+        ) else {
+            return nil
+        }
+        return try PromptRepository.shared.prompt(key: promptKey, projectRoot: projectRoot)
+    }
 }
 
 public struct AIServiceHistoryRequest: Sendable {

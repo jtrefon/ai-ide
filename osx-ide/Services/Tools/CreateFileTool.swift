@@ -3,7 +3,7 @@ import Foundation
 /// Create a new empty file
 struct CreateFileTool: AITool {
     let name = "create_file"
-    let description = "Create a new empty file at the specified path."
+    let description = "Reserve a new file path and ensure parent directories exist. Prefer write_file when creating a file with content."
     var parameters: [String: Any] {
         FileToolParameterSchemaBuilder.objectSchema(
             properties: [
@@ -55,10 +55,9 @@ struct CreateFileTool: AITool {
 
         let parent = url.deletingLastPathComponent()
         try fileManager.createDirectory(at: parent, withIntermediateDirectories: true, attributes: nil)
-        try "".write(to: url, atomically: true, encoding: .utf8)
-        Task { @MainActor in
-            eventBus.publish(FileCreatedEvent(url: url))
-        }
-        return "Successfully created file at \(pathValidator.relativePath(for: url))"
+        await AIToolTraceLogger.shared.log(type: "fs.create_file_reserved", data: [
+            "path": pathValidator.relativePath(for: url)
+        ])
+        return "Reserved file path at \(pathValidator.relativePath(for: url)). Use write_file to add content."
     }
 }

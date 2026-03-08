@@ -32,23 +32,16 @@ final class FinalResponseHandler {
             return response
         }
 
-        // In Agent mode, always request a final response to ensure proper completion message
-        // The model may return generic status text but we want a summary
         if mode == .agent && !draft.isEmpty {
             let hasUnresolvedToolCalls = response.toolCalls?.isEmpty == false
-            let missingFinalDeliverySummary = !hasRequiredFinalDeliverySummary(draft)
-            // Check if content is too generic (short or contains generic patterns)
             let isGenericContent = isGenericStatusMessage(draft)
-            if hasUnresolvedToolCalls || missingFinalDeliverySummary || isGenericContent {
+            if hasUnresolvedToolCalls || isGenericContent {
                 let followupReason: String
                 if hasUnresolvedToolCalls {
-                    followupReason = "Your previous response still included tool calls at finalization. Do not call tools now. Return only the mandated Final Delivery Summary scaffold."
-                } else if missingFinalDeliverySummary {
-                    followupReason = "Your previous response did not include the mandated Final Delivery Summary scaffold. Provide it now using the exact structure."
+                    followupReason = "Your previous response still included tool calls at finalization. Do not call tools now. Return only the final user-facing summary."
                 } else {
-                    followupReason = "Your previous response was too generic and did not include the required Final Delivery Summary. Provide the mandated summary now."
+                    followupReason = "Your previous response was too generic. Return a concise final user-facing summary grounded in completed work."
                 }
-                // Force final response generation for generic content
                 return try await requestFinalResponse(
                     response: response,
                     explicitContext: explicitContext,
@@ -61,8 +54,6 @@ final class FinalResponseHandler {
                 )
             }
         }
-
-        guard draft.isEmpty else { return response }
 
         return try await requestFinalResponse(
             response: response,
@@ -89,7 +80,6 @@ final class FinalResponseHandler {
             "gathering context",
         ]
 
-        // If content is short or matches generic patterns
         if content.count < 50 {
             return true
         }
@@ -113,29 +103,6 @@ final class FinalResponseHandler {
         return unfinishedSignals.contains { normalized.contains($0) }
     }
 
-    private func hasRequiredFinalDeliverySummary(_ content: String) -> Bool {
-        let normalized = content.lowercased()
-        let hasHeading = normalized.contains("### final delivery summary")
-        let hasObjective = normalized.contains("- objective:")
-        let hasWorkPerformed = normalized.contains("- work performed:")
-        let hasFilesTouched = normalized.contains("- files touched:")
-        let hasVerification = normalized.contains("- verification:")
-        let hasNextSteps = normalized.contains("- next steps / risks:") || normalized.contains("- next steps/risks:")
-        let hasUndo = normalized.contains("- undo / recovery:") || normalized.contains("- undo/recovery:")
-        let hasPlanStatus = normalized.contains("- plan status:")
-        let hasDelivery = normalized.contains("delivery:")
-
-        return hasHeading
-            && hasObjective
-            && hasWorkPerformed
-            && hasFilesTouched
-            && hasVerification
-            && hasNextSteps
-            && hasUndo
-            && hasPlanStatus
-            && hasDelivery
-    }
-
     private func isDeterministicFallbackResponse(_ content: String) -> Bool {
         let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
         return normalized.hasPrefix("I wasn't able to generate a final response")
@@ -146,7 +113,6 @@ final class FinalResponseHandler {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         guard !normalized.isEmpty else { return false }
-        guard !hasRequiredFinalDeliverySummary(content) else { return false }
 
         let handoffSignals = [
             "done -> next -> path:",
@@ -174,12 +140,12 @@ final class FinalResponseHandler {
         if let followupReason {
             resolvedReason = followupReason
         } else if toolResults.isEmpty {
-            resolvedReason = "You returned no user-visible response. Provide the mandated Final Delivery Summary now without calling tools."
+            resolvedReason = "You returned no user-visible response. Provide the final user-facing summary now without calling tools."
         } else {
-            resolvedReason = "You returned no user-visible response after executing tools. Summarize the work using the Final Delivery Summary scaffold without calling tools."
+            resolvedReason = "You returned no user-visible response after executing tools. Summarize the completed work now without calling tools."
         }
 
-        let summaryPrompt = try await buildFinalDeliveryPrompt(
+        let summaryPrompt = try await buildFinalResponsePrompt(
             followupReason: resolvedReason,
             toolSummary: toolSummary,
             projectRoot: projectRoot,
@@ -209,17 +175,12 @@ final class FinalResponseHandler {
             .get()
 
         let firstFollowupContent = followup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let firstFollowupContent, isIntermediateExecutionHandoffResponse(firstFollowupContent) {
-            return AIServiceResponse(content: followup.content, toolCalls: nil)
-        }
-        if let firstFollowupContent, !firstFollowupContent.isEmpty,
-            hasRequiredFinalDeliverySummary(firstFollowupContent)
-        {
+        if let firstFollowupContent, !firstFollowupContent.isEmpty, !isGenericStatusMessage(firstFollowupContent) {
             return AIServiceResponse(content: followup.content, toolCalls: nil)
         }
 
-        let retryPrompt = try await buildFinalDeliveryPrompt(
-            followupReason: "Your previous final response still missed the mandated Final Delivery Summary scaffold. Return the exact scaffold now and do not call tools.",
+        let retryPrompt = try await buildFinalResponsePrompt(
+            followupReason: "Your previous final response still was not a usable final summary. Return a concise final user-facing summary grounded in completed work.",
             toolSummary: toolSummary,
             projectRoot: projectRoot,
             conversationId: conversationId
@@ -240,12 +201,7 @@ final class FinalResponseHandler {
             .get()
 
         let retryFollowupContent = retryFollowup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let retryFollowupContent, isIntermediateExecutionHandoffResponse(retryFollowupContent) {
-            return AIServiceResponse(content: retryFollowup.content, toolCalls: nil)
-        }
-        if let retryFollowupContent, !retryFollowupContent.isEmpty,
-            hasRequiredFinalDeliverySummary(retryFollowupContent)
-        {
+        if let retryFollowupContent, !retryFollowupContent.isEmpty, !isGenericStatusMessage(retryFollowupContent) {
             return AIServiceResponse(content: retryFollowup.content, toolCalls: nil)
         }
 
@@ -254,6 +210,29 @@ final class FinalResponseHandler {
             conversationId: conversationId
         )
         return AIServiceResponse(content: deterministicSummary, toolCalls: nil)
+    }
+
+    private func buildFinalResponsePrompt(
+        followupReason: String,
+        toolSummary: String,
+        projectRoot: URL,
+        conversationId: String
+    ) async throws -> String {
+        let template = try PromptRepository.shared.prompt(
+            key: "ConversationFlow/FinalResponse/final_response_summary",
+            projectRoot: projectRoot
+        )
+
+        let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let progress = formatPlanProgress(planMarkdown: planMarkdown)
+        let sanitizedPlan = planMarkdown.isEmpty ? "None" : planMarkdown
+        let sanitizedToolSummary = toolSummary.isEmpty ? "No tool outputs recorded." : toolSummary
+
+        return template
+            .replacingOccurrences(of: "{{followup_reason}}", with: followupReason)
+            .replacingOccurrences(of: "{{tool_summary}}", with: sanitizedToolSummary)
+            .replacingOccurrences(of: "{{plan_markdown}}", with: sanitizedPlan)
+            .replacingOccurrences(of: "{{plan_progress}}", with: progress)
     }
 
     private func buildDeterministicFinalSummaryFallback(
@@ -275,51 +254,24 @@ final class FinalResponseHandler {
         let planProgress = formatPlanProgress(planMarkdown: planMarkdown)
         let checklist = PlanChecklistTracker.progress(in: planMarkdown)
         let inferredNeedsWork = checklist.total > 0 && !checklist.isComplete
-        let deliveryStatus = inferredNeedsWork ? "NEEDS_WORK" : "DONE"
+        let completionStatus = inferredNeedsWork ? "NEEDS_WORK" : "DONE"
         let workPerformed = toolSummary.isEmpty
             ? "None (explanation-only)."
             : "Summarized executed tool outputs from this run."
         let filesTouched = toolSummary.isEmpty ? "None" : "See tool recap in run logs"
-        let nextSteps = deliveryStatus == "NEEDS_WORK"
+        let nextSteps = completionStatus == "NEEDS_WORK"
             ? "Checklist items remain; continue execution for unfinished plan steps."
             : "None noted."
 
         return """
-        ### Final Delivery Summary
-        - Objective: \(oneLineObjective.isEmpty ? "Summarize current request" : oneLineObjective)
-        - Work Performed: \(workPerformed)
-        - Files Touched: \(filesTouched)
-        - Verification: Not Run
-        - Next Steps / Risks: \(nextSteps)
-        - Undo / Recovery: Use version control to revert affected files if needed.
-        - Plan Status: \(planProgress)
-
-        Delivery: \(deliveryStatus)
+        Objective: \(oneLineObjective.isEmpty ? "Summarize current request" : oneLineObjective)
+        Work performed: \(workPerformed)
+        Files touched: \(filesTouched)
+        Verification: Not Run
+        Plan status: \(planProgress)
+        Status: \(completionStatus)
+        Next steps: \(nextSteps)
         """
-    }
-
-    private func buildFinalDeliveryPrompt(
-        followupReason: String,
-        toolSummary: String,
-        projectRoot: URL,
-        conversationId: String
-    ) async throws -> String {
-        let template = try PromptRepository.shared.prompt(
-            key: "ConversationFlow/FinalResponse/final_delivery_summary",
-            defaultValue: Self.defaultFinalDeliveryPrompt,
-            projectRoot: projectRoot
-        )
-
-        let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
-        let progress = formatPlanProgress(planMarkdown: planMarkdown)
-        let sanitizedPlan = planMarkdown.isEmpty ? "None" : planMarkdown
-        let sanitizedToolSummary = toolSummary.isEmpty ? "No tool outputs recorded." : toolSummary
-
-        return template
-            .replacingOccurrences(of: "{{followup_reason}}", with: followupReason)
-            .replacingOccurrences(of: "{{tool_summary}}", with: sanitizedToolSummary)
-            .replacingOccurrences(of: "{{plan_markdown}}", with: sanitizedPlan)
-            .replacingOccurrences(of: "{{plan_progress}}", with: progress)
     }
 
     private func formatPlanProgress(planMarkdown: String) -> String {
@@ -333,53 +285,6 @@ final class FinalResponseHandler {
         }
         return "\(progress.completed)/\(progress.total) (\(progress.percentage)% complete)"
     }
-
-    private static let defaultFinalDeliveryPrompt = """
-# Final Delivery Contract
-
-{{followup_reason}}
-
-Before returning the final answer:
-
-1. Emit the standard `<ide_reasoning>` block using the Reflection/Planning/Continuity schema (single-clause What/Where/How bullets; mention concrete files, commands, or tests). Keep it terse—this is still engineer-to-engineer pairing.
-2. Immediately follow with **one** sentence covering `Done → Next → Path` so the user sees the closing state at a glance.
-3. Do **not** call tools during this stage. This is a summary only.
-
-After the reasoning block, output the final user-visible summary using the exact scaffold below:
-
-```text
-### Final Delivery Summary
-- Objective: <restate the user objective in one clause>
-- Work Performed: <concise bullet or clause describing the key changes>
-- Files Touched: <comma-separated list of files or `None`>
-- Verification: <tests/commands run, or `Not Run` + why>
-- Next Steps / Risks: <what remains or any open risks>
-- Undo / Recovery: <how to roll back (e.g., git checkout, revert instructions)>
-- Plan Status: {{plan_progress}}
-
-Delivery: <DONE or NEEDS_WORK>
-```
-
-Context you can reference (do **not** rewrite verbatim):
-
-- **Tool recap**:
-
-{{tool_summary}}
-
-- **Plan markdown (read-only)**:
-
-{{plan_markdown}}
-
-Rules:
-
-- If the plan is incomplete, be explicit about which checklist items remain.
-
-- If no tools ran, say “Work Performed: None (explanation-only).”
-
-- Never claim edits/tests that did not actually happen earlier in this run.
-
-- Keep the entire response under 400 tokens—prioritize signal over fluff.
-"""
 
     func appendFinalMessageAndLog(
         response: AIServiceResponse,
@@ -412,24 +317,24 @@ Rules:
             )
         }
         let responseContent = response.content ?? ""
-        let parsedDeliveryStatus = ChatPromptBuilder.deliveryStatus(from: responseContent)
-        let deliveryStatus: ChatPromptBuilder.DeliveryStatus?
+        let parsedCompletionStatus = ChatPromptBuilder.deliveryStatus(from: responseContent)
+        let completionStatus: ChatPromptBuilder.DeliveryStatus?
         if containsUnfinishedWorkSignals(responseContent) {
-            deliveryStatus = .needsWork
+            completionStatus = .needsWork
         } else {
-            deliveryStatus = parsedDeliveryStatus
+            completionStatus = parsedCompletionStatus
         }
-        let deliveryStatusText: String
-        switch deliveryStatus {
+        let completionStatusText: String
+        switch completionStatus {
         case .done:
-            deliveryStatusText = "done"
+            completionStatusText = "done"
             Task {
                 await completeRemainingPlanItems(conversationId: conversationId)
             }
         case .needsWork:
-            deliveryStatusText = "needs_work"
+            completionStatusText = "needs_work"
         case .none:
-            deliveryStatusText = "missing"
+            completionStatusText = "missing"
         }
 
         // Finalize the draft message if it exists, otherwise append a new one
@@ -463,7 +368,7 @@ Rules:
                     "conversationId": conversationId,
                     "contentLength": contentLength,
                     "hasReasoning": hasReasoning,
-                    "deliveryStatus": deliveryStatusText,
+                    "deliveryStatus": completionStatusText,
                 ])
             )
             await ConversationLogStore.shared.append(
@@ -472,7 +377,7 @@ Rules:
                 data: [
                     "content": displayContent,
                     "reasoning": reasoningText as Any,
-                    "deliveryStatus": deliveryStatusText,
+                    "deliveryStatus": completionStatusText,
                 ]
             )
         }

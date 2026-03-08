@@ -35,8 +35,14 @@ struct IndexReadFileTool: AITool {
         guard let path = arguments["path"] as? String else {
             throw AppError.aiServiceError("Missing 'path' argument for index_read_file")
         }
+        let context = ToolInvocationContext.from(arguments: arguments)
         let startLine = arguments["start_line"] as? Int
         let endLine = arguments["end_line"] as? Int
+
+        await ToolFileAccessLedger.shared.recordRead(
+            relativePath: path,
+            conversationId: context.conversationId
+        )
 
         return try await index.readIndexedFile(path: path, startLine: startLine, endLine: endLine)
     }

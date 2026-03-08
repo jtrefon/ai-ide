@@ -19,7 +19,7 @@ struct InitialResponseNode: OrchestrationNode {
     func run(state: OrchestrationState) async throws -> OrchestrationState {
         let request = state.request
         let response = try await handler.sendInitialResponse(
-            explicitContext: request.explicitContext,
+            explicitContext: state.effectiveExplicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
             conversationId: request.conversationId,
@@ -39,6 +39,7 @@ struct InitialResponseNode: OrchestrationNode {
                     request: request,
                     response: response,
                     lastToolResults: [],
+                    branchExecution: state.branchExecution,
                     transition: .next(nextNodeId)
                 )
             }
@@ -53,6 +54,7 @@ struct InitialResponseNode: OrchestrationNode {
             request: request,
             response: response,
             lastToolResults: [],
+            branchExecution: state.branchExecution,
             transition: .next(nextNodeId)
         )
     }

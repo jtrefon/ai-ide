@@ -196,4 +196,25 @@ final class AIToolExecutorSchedulerTests: XCTestCase {
         XCTAssertTrue(executingEnvelope.preview?.contains("/tmp/preview.swift") == true)
         XCTAssertTrue(executingEnvelope.preview?.contains("Lines: 10-30") == true)
     }
+
+    func testWriteFileRecoversStructuredArgumentsFromRawChunk() async {
+        let resolver = ToolArgumentResolver(
+            fileSystemService: FileSystemService(),
+            projectRoot: URL(fileURLWithPath: "/tmp")
+        )
+        let rawArguments = #"{\"path\":\"src/components/Dashboard.tsx\",\"content\":\"export default function Dashboard() {}\"}"#
+        let toolCall = AIToolCall(
+            id: UUID().uuidString,
+            name: "write_file",
+            arguments: ["_raw_args_chunk": rawArguments]
+        )
+
+        let mergedArguments = await resolver.buildMergedArguments(
+            toolCall: toolCall,
+            conversationId: nil
+        )
+
+        XCTAssertEqual(mergedArguments["path"] as? String, "src/components/Dashboard.tsx")
+        XCTAssertEqual(mergedArguments["content"] as? String, "export default function Dashboard() {}")
+    }
 }

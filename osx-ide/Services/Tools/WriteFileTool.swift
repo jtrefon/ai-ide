@@ -93,7 +93,8 @@ struct WriteFileTool: AITool {
                 url: url,
                 relativePath: relativePath,
                 content: content,
-                traceType: "fs.write_file"
+                traceType: "fs.write_file",
+                conversationId: context.conversationId
             )
         )
         return "Successfully wrote to \(relativePath)"

@@ -149,17 +149,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             """
         )
 
-        historyCoordinator.append(ChatMessage(
-            role: .assistant,
-            content: """
-            # Implementation Plan
-
-            ## Strategy
-            - [ ] Step one
-            - [ ] Step two
-            """
-        ))
-
         let firstToolCall = AIToolCall(id: "call-1", name: "fake_tool", arguments: [:])
         let secondToolCall = AIToolCall(id: "call-2", name: "fake_tool", arguments: [:])
 
@@ -219,14 +208,9 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         let finalPlan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let finalProgress = PlanChecklistTracker.progress(in: finalPlan)
         harnessEqual(finalProgress.completed, finalProgress.total, "Plan should be fully completed after continuation")
-
-        let planMessages = historyCoordinator.messages.filter {
-            $0.role == .assistant && $0.content.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("# Implementation Plan")
-        }
-        harnessEqual(planMessages.count, 1, "Plan should be updated in place, not duplicated")
     }
 
-    func testHarnessDeliveryGateRecoversNeedsWorkResponseWithoutToolCalls() async throws {
+    func testHarnessDoesNotInjectDeliveryGateRecoveryForNeedsWorkResponseWithoutToolCalls() async throws {
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
 
@@ -235,7 +219,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         historyCoordinator.append(ChatMessage(role: .user, content: "Implement role support end-to-end"))
 
         let firstToolCall = AIToolCall(id: "gate-recovery-1", name: "fake_tool", arguments: [:])
-        let secondToolCall = AIToolCall(id: "gate-recovery-2", name: "fake_tool", arguments: [:])
 
         let scriptedService = ScriptedAIService(responses: [
             AIServiceResponse(
@@ -244,14 +227,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             ),
             AIServiceResponse(
                 content: "<ide_reasoning>Reflection: First execution step completed.\nPlanning: Continue remaining work.\nContinuity: Pending tasks remain.\nDelivery: NEEDS_WORK</ide_reasoning>Done -> Next -> Path: Continue with remaining implementation.",
-                toolCalls: nil
-            ),
-            AIServiceResponse(
-                content: "Continuing with the next implementation step.",
-                toolCalls: [secondToolCall]
-            ),
-            AIServiceResponse(
-                content: "<ide_reasoning>Reflection: Completed all requested implementation steps.\nPlanning: None.\nContinuity: No remaining execution work.\nDelivery: DONE</ide_reasoning>\n### Final Delivery Summary\n- Objective: Implement role support end-to-end\n- Work Performed: Executed required steps and completed delivery\n- Files Touched: None\n- Verification: Not Run\n- Next Steps / Risks: None\n- Undo / Recovery: N/A\n- Plan Status: No plan on record\n\nDelivery: DONE",
                 toolCalls: nil
             )
         ])
@@ -289,24 +264,21 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         let executedToolMessages = historyCoordinator.messages.filter {
             $0.isToolExecution && $0.toolStatus == .completed && $0.toolName == "fake_tool"
         }
-        harnessEqual(executedToolMessages.count, 2, "Delivery gate should recover NEEDS_WORK no-tool dropout and execute the next step")
+        harnessEqual(executedToolMessages.count, 1, "Main path should not inject an additional delivery-gate execution retry")
 
         let capturedRequests = scriptedService.capturedHistoryRequests()
-        let sawRecoveryFollowup = capturedRequests.contains { request in
-            request.stage == .delivery_gate || request.stage == .tool_loop
-        }
-        harnessTrue(
-            sawRecoveryFollowup,
-            "Expected continuation recovery follow-up when NEEDS_WORK was returned without tool calls"
-        )
+        let requestStages = capturedRequests.map { $0.stage?.rawValue ?? "nil" }.joined(separator: ",")
+        harnessEqual(capturedRequests.count, 2, "Main path should stop after the first tool-loop handoff when no incomplete plan exists")
+        harnessEqual(requestStages, "initial_response,tool_loop", "Main path should not invoke any delivery-driven follow-up stage")
 
         let finalAssistantOutput = historyCoordinator.messages.last(where: {
             $0.role == .assistant && !$0.isToolExecution
         })?.content.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         harnessFalse(finalAssistantOutput.isEmpty, "Recovered flow should end with a user-visible assistant response")
+        harnessTrue(finalAssistantOutput.contains("Done -> Next -> Path: Continue with remaining implementation."), "Without prompt-driven correction stages, the flow should preserve the existing handoff response")
     }
 
-    func testHarnessFinalResponseEnforcesDeliverySummaryScaffold() async throws {
+    func testHarnessFinalResponseRequestsConciseSummaryForGenericStatusMessage() async throws {
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
 
@@ -326,7 +298,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                 toolCalls: nil
             ),
             AIServiceResponse(
-                content: "<ide_reasoning>Reflection: Completed implementation and can summarize.\nPlanning: None.\nContinuity: No remaining execution work.\nDelivery: DONE</ide_reasoning>\n### Final Delivery Summary\n- Objective: Implement login page end-to-end\n- Work Performed: Implemented login page and integrated authentication flow updates\n- Files Touched: None\n- Verification: Not Run\n- Next Steps / Risks: None\n- Undo / Recovery: N/A\n- Plan Status: No plan on record\n\nDelivery: DONE",
+                content: "<ide_reasoning>Reflection: Completed implementation and can summarize.\nPlanning: None.\nContinuity: No remaining execution work.\nDelivery: DONE</ide_reasoning>Implemented the login page and authentication flow updates. Verification was not run. Status: DONE.",
                 toolCalls: nil
             )
         ])
@@ -365,17 +337,386 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         let sawFinalResponseFollowup = capturedRequests.contains { request in
             request.stage == .final_response
         }
+        let requestStages = capturedRequests.map { $0.stage?.rawValue ?? "nil" }
         harnessTrue(
             sawFinalResponseFollowup,
-            "Expected final response follow-up when assistant output was non-empty but missing Final Delivery Summary scaffold"
+            "Expected final response follow-up when assistant output was generic"
         )
+        harnessFalse(requestStages.contains("qa_tool_output_review"), "QA tool-output review stage should be omitted when qaReviewEnabled is false")
+        harnessFalse(requestStages.contains("qa_quality_review"), "QA quality review stage should be omitted when qaReviewEnabled is false")
 
         let finalAssistantOutput = historyCoordinator.messages.last(where: {
             $0.role == .assistant && !$0.isToolExecution
         })?.content ?? ""
         harnessTrue(
-            finalAssistantOutput.contains("### Final Delivery Summary"),
-            "Final assistant output should include mandated Final Delivery Summary scaffold"
+            finalAssistantOutput.contains("Implemented the login page and authentication flow updates."),
+            "Final assistant output should contain the concise final summary"
+        )
+        harnessFalse(finalAssistantOutput.contains("### Final Delivery Summary"), "Final assistant output should no longer require the old oversized scaffold")
+    }
+
+    func testHarnessRetriesWhenModelRequestsUserInputInsteadOfProceeding() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        historyCoordinator.append(ChatMessage(role: .user, content: "Implement login page end-to-end"))
+
+        let firstToolCall = AIToolCall(id: "request-user-input-1", name: "fake_tool", arguments: [:])
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "Can you provide the diff or confirm which login variant you want?",
+                toolCalls: nil
+            ),
+            AIServiceResponse(
+                content: "Proceeding with the safest default login flow implementation now.",
+                toolCalls: [firstToolCall]
+            ),
+            AIServiceResponse(
+                content: "Implemented the login page with a safe default email/password flow and no additional user input was required.",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let sendCoordinator = ConversationSendCoordinator(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        try await sendCoordinator.send(SendRequest(
+            userInput: "Implement login page end-to-end",
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            runId: UUID().uuidString,
+            availableTools: [FakeTool(name: "fake_tool")],
+            cancelledToolCallIds: { [] },
+            qaReviewEnabled: false,
+            draftAssistantMessageId: nil
+        ))
+
+        let capturedRequests = scriptedService.capturedHistoryRequests()
+        let initialResponseRequestCount = capturedRequests.filter { request in
+            request.stage == .initial_response
+        }.count
+        let focusedExecutionRetryCount = capturedRequests.filter { request in
+            request.stage == .tool_loop && request.messages.contains(where: {
+                $0.role == .system && $0.content.contains("You are a coding assistant in focused execution mode.")
+            })
+        }.count
+        harnessEqual(initialResponseRequestCount, 1, "Expected only the original initial-response request before controller-owned execution takeover")
+        harnessEqual(focusedExecutionRetryCount, 1, "Expected exactly one focused execution retry when the model asked the user for input")
+
+        let executedToolMessages = historyCoordinator.messages.filter {
+            $0.isToolExecution && $0.toolStatus == .completed && $0.toolName == "fake_tool"
+        }
+        harnessEqual(executedToolMessages.count, 1, "Autonomous retry should proceed into tool execution")
+
+        let finalAssistantOutput = historyCoordinator.messages.last(where: {
+            $0.role == .assistant && !$0.isToolExecution
+        })?.content ?? ""
+        harnessTrue(
+            finalAssistantOutput.contains("safe default email/password flow"),
+            "Final assistant output should reflect autonomous completion after rejecting the user-input handoff"
+        )
+    }
+
+    func testRepeatedCompletedSignatureStallRecoversIntoContinuedExecution() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        let runId = UUID().uuidString
+
+        await ConversationPlanStore.shared.setProjectRoot(projectRoot)
+        await ConversationPlanStore.shared.set(
+            conversationId: conversationId,
+            plan: """
+            # Implementation Plan
+
+            - [x] Inspect current file
+            - [x] Apply first edit
+            - [ ] Finish remaining task
+            """
+        )
+
+        let readCall = AIToolCall(id: "repeat-stall-read", name: "fake_tool", arguments: ["step": "read"])
+        let writeCall = AIToolCall(id: "repeat-stall-write", name: "fake_tool", arguments: ["step": "write"])
+        let finishCall = AIToolCall(id: "repeat-stall-finish", name: "fake_tool", arguments: ["step": "finish"])
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(content: "Read complete.", toolCalls: [writeCall]),
+            AIServiceResponse(content: "Accidentally repeating the previous write step.", toolCalls: [writeCall]),
+            AIServiceResponse(content: "Continuing with the remaining task now.", toolCalls: [finishCall]),
+            AIServiceResponse(content: "<ide_reasoning>Analyze: done\nPlan: done\nAction: none\nDelivery: DONE</ide_reasoning>Completed all requested implementation steps.", toolCalls: nil)
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let handler = ToolLoopHandler(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        let availableTools: [AITool] = [FakeTool(name: "fake_tool")]
+
+        let result = try await handler.handleToolLoopIfNeeded(
+            response: AIServiceResponse(content: "Starting execution.", toolCalls: [readCall]),
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: availableTools,
+            cancelledToolCallIds: { [] },
+            runId: runId,
+            userInput: "Complete the task"
+        )
+
+        harnessTrue(result.response.toolCalls?.isEmpty ?? true, "Recovered execution should finish without dangling tool calls")
+        harnessEqual(result.lastToolCalls.map(\.id), ["repeat-stall-finish"], "Tool loop should recover past the repeated completed signature and execute a new step")
+
+        let followupRequests = scriptedService.capturedHistoryRequests()
+        let requestStages = followupRequests.map { $0.stage?.rawValue ?? "nil" }
+        harnessTrue(requestStages.filter { $0 == "tool_loop" }.count >= 3, "Expected repeated-signature recovery to stay in tool_loop instead of dropping directly to final_response")
+    }
+
+    func testHarnessTakesFocusedExecutionWhenModelPromisesImplementationWithoutToolCalls() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        historyCoordinator.append(ChatMessage(role: .user, content: "Implement login page end-to-end"))
+
+        let firstToolCall = AIToolCall(id: "force-tool-followup-1", name: "fake_tool", arguments: [:])
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "I will implement the login page now.",
+                toolCalls: nil
+            ),
+            AIServiceResponse(
+                content: "Proceeding with focused execution now.",
+                toolCalls: [firstToolCall]
+            ),
+            AIServiceResponse(
+                content: "Implemented the login page with the expected focused execution follow-up.",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let sendCoordinator = ConversationSendCoordinator(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        try await sendCoordinator.send(SendRequest(
+            userInput: "Implement login page end-to-end",
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            runId: UUID().uuidString,
+            availableTools: [FakeTool(name: "fake_tool")],
+            cancelledToolCallIds: { [] },
+            qaReviewEnabled: false,
+            draftAssistantMessageId: nil
+        ))
+
+        let capturedRequests = scriptedService.capturedHistoryRequests()
+        let initialResponseRequestCount = capturedRequests.filter { request in
+            request.stage == .initial_response
+        }.count
+        let focusedExecutionRetryCount = capturedRequests.filter { request in
+            request.stage == .tool_loop && request.messages.contains(where: {
+                $0.role == .system && $0.content.contains("You are a coding assistant in focused execution mode.")
+            })
+        }.count
+        harnessEqual(initialResponseRequestCount, 1, "Expected only the original initial-response request before focused execution takeover for implementation promises")
+        harnessEqual(focusedExecutionRetryCount, 1, "Expected exactly one focused execution retry when the model promised implementation without tool calls")
+
+        let executedToolMessages = historyCoordinator.messages.filter {
+            $0.isToolExecution && $0.toolStatus == .completed && $0.toolName == "fake_tool"
+        }
+        harnessEqual(executedToolMessages.count, 1, "Focused execution takeover should proceed into tool execution for implementation promises")
+    }
+
+    func testHarnessTakesFocusedExecutionWhenModelSignalsPendingExecutionWithoutToolCalls() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        historyCoordinator.append(ChatMessage(role: .user, content: "Implement login page end-to-end"))
+
+        let firstToolCall = AIToolCall(id: "missing-tool-followup-1", name: "fake_tool", arguments: [:])
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "Let me start with the safest first execution step.",
+                toolCalls: nil
+            ),
+            AIServiceResponse(
+                content: "Proceeding with focused execution now.",
+                toolCalls: [firstToolCall]
+            ),
+            AIServiceResponse(
+                content: "Implemented the login page after the missing-tool-call recovery path.",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let sendCoordinator = ConversationSendCoordinator(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        try await sendCoordinator.send(SendRequest(
+            userInput: "Implement login page end-to-end",
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            runId: UUID().uuidString,
+            availableTools: [FakeTool(name: "fake_tool")],
+            cancelledToolCallIds: { [] },
+            qaReviewEnabled: false,
+            draftAssistantMessageId: nil
+        ))
+
+        let capturedRequests = scriptedService.capturedHistoryRequests()
+        let initialResponseRequestCount = capturedRequests.filter { request in
+            request.stage == .initial_response
+        }.count
+        let focusedExecutionRetryCount = capturedRequests.filter { request in
+            request.stage == .tool_loop && request.messages.contains(where: {
+                $0.role == .system && $0.content.contains("You are a coding assistant in focused execution mode.")
+            })
+        }.count
+        harnessEqual(initialResponseRequestCount, 1, "Expected only the original initial-response request before focused execution takeover for pending execution signals")
+        harnessEqual(focusedExecutionRetryCount, 1, "Expected exactly one focused execution retry when the model signaled pending execution without tool calls")
+
+        let executedToolMessages = historyCoordinator.messages.filter {
+            $0.isToolExecution && $0.toolStatus == .completed && $0.toolName == "fake_tool"
+        }
+        harnessEqual(executedToolMessages.count, 1, "Focused execution takeover should proceed into tool execution for missing-tool-call recovery")
+    }
+
+    func testHarnessRetriesWhenModelReturnsReasoningOnly() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        historyCoordinator.append(ChatMessage(role: .user, content: "Implement login page end-to-end"))
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "<ide_reasoning>Reflection: Need to implement login page.\nPlanning: Start with the safest default flow.\nContinuity: Work remains.</ide_reasoning>",
+                toolCalls: nil
+            ),
+            AIServiceResponse(
+                content: "Implemented the login page using the default flow assumptions and no extra user input was required.",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let sendCoordinator = ConversationSendCoordinator(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        try await sendCoordinator.send(SendRequest(
+            userInput: "Implement login page end-to-end",
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            runId: UUID().uuidString,
+            availableTools: [FakeTool(name: "fake_tool")],
+            cancelledToolCallIds: { [] },
+            qaReviewEnabled: false,
+            draftAssistantMessageId: nil
+        ))
+
+        let capturedRequests = scriptedService.capturedHistoryRequests()
+        let initialResponseRetryCount = capturedRequests.filter { request in
+            request.stage == .initial_response && request.messages.count > historyCoordinator.messages.filter { $0.role == .user }.count
+        }.count
+        let finalResponseRetryCount = capturedRequests.filter { request in
+            request.stage == .final_response
+        }.count
+        harnessEqual(initialResponseRetryCount, 1, "Expected only the original initial-response request when the model returned only reasoning")
+        harnessTrue(finalResponseRetryCount >= 1, "Expected deterministic final-response recovery for a reasoning-only initial reply")
+
+        let finalAssistantOutput = historyCoordinator.messages.last(where: {
+            $0.role == .assistant && !$0.isToolExecution
+        })?.content ?? ""
+        harnessTrue(
+            finalAssistantOutput.contains("default flow assumptions"),
+            "Final assistant output should come from the post-retry non-reasoning response"
         )
     }
 
@@ -465,7 +806,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         harnessTrue(finalAssistantOutput.contains("NEEDS_WORK") || finalAssistantOutput.contains("Done → Next → Path"), "Final assistant output should report unfinished work instead of fabricated completion")
     }
 
-    func testHarnessReproducesPlannerOverreachForSimpleInformationalAgentRequest() async throws {
+    func testHarnessSkipsPlanningForSimpleInformationalAgentRequest() async throws {
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
 
@@ -512,14 +853,14 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         let planMessages = historyCoordinator.messages.filter {
             $0.role == .assistant && $0.content.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("# Implementation Plan")
         }
-        harnessEqual(planMessages.count, 1, "Current production path reproduces plan overhead by emitting an implementation plan even for a simple informational agent request")
+        harnessEqual(planMessages.count, 0, "Simple informational agent requests should not emit an implementation plan")
 
         let assistantMessages = historyCoordinator.messages.filter {
             $0.role == .assistant && !$0.isToolExecution
         }
         let finalAssistantOutput = assistantMessages.last?.content ?? ""
         harnessTrue(finalAssistantOutput.localizedCaseInsensitiveContains("TypeScript migration is incomplete"), "Current production path should preserve the informational answer content")
-        harnessTrue(finalAssistantOutput.contains("I'll continue the migration") || finalAssistantOutput.contains("Delivery: NEEDS_WORK"), "Current production path should reproduce the over-eager execution framing on a simple status question")
+        harnessTrue(finalAssistantOutput.contains("I'll continue the migration") || finalAssistantOutput.contains("Delivery: NEEDS_WORK"), "Current production path should preserve the scripted assistant answer while skipping planning")
     }
 
     func testHarnessReproducesRepeatedMalformedDashboardMutationFailureLoop() async throws {
@@ -574,10 +915,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                 toolCalls: [malformedEdit]
             ),
             AIServiceResponse(
-                content: "Done → Creating complete dashboard with bar/pie charts and statistics using correct write_file format. Next: applying targeted code changes in project files.",
-                toolCalls: [malformedWriteTwo]
-            ),
-            AIServiceResponse(
                 content: "<ide_reasoning>plan_delta: Will create full Dashboard.tsx with bar/pie charts using Chart.js and react-chartjs-2. next_action: known_risks: File structure exists in src/components/, need to verify package.json has chart dependencies. delivery_state: needs_work</ide_reasoning>",
                 toolCalls: nil
             )
@@ -627,15 +964,15 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         let failedToolMessages = historyCoordinator.messages.filter {
             $0.isToolExecution && $0.toolStatus == .failed && ($0.toolName == "write_file" || $0.toolName == "replace_in_file")
         }
-        harnessEqual(failedToolMessages.count, 3, "Current production path should reproduce repeated malformed Dashboard mutation failures before final needs_work exit")
+        harnessEqual(failedToolMessages.count, 2, "Production path should stop after two consecutive non-recoverable Dashboard mutation failures")
 
         let dashboardContent = try String(contentsOf: dashboardFile, encoding: .utf8)
-        harnessEqual(dashboardContent, "import React\n", "Current production path should reproduce repeated failures without successfully repairing Dashboard.tsx")
+        harnessEqual(dashboardContent, "import React\n", "Production path should preserve the original Dashboard.tsx content when malformed mutations are rejected")
 
         let finalAssistantOutput = historyCoordinator.messages.last(where: {
             $0.role == .assistant && !$0.isToolExecution
         })?.content ?? ""
-        harnessTrue(finalAssistantOutput.localizedCaseInsensitiveContains("needs_work") || finalAssistantOutput.localizedCaseInsensitiveContains("delivery_state: needs_work"), "Current production path should end this failure loop in an unfinished state")
+        harnessTrue(finalAssistantOutput.localizedCaseInsensitiveContains("needs_work") || finalAssistantOutput.localizedCaseInsensitiveContains("delivery_state: needs_work"), "Production path should end repeated malformed mutation failures in an unfinished state")
         harnessEqual(scriptedService.remainingResponsesCount(), 0, "Harness should consume the full scripted failure sequence from the real sandbox pattern")
     }
 
@@ -815,15 +1152,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             - [ ] Migrate app to SSR
             """
         )
-
-        historyCoordinator.append(ChatMessage(
-            role: .assistant,
-            content: """
-            # Implementation Plan
-
-            - [ ] Migrate app to SSR
-            """
-        ))
 
         let loopCall = AIToolCall(id: "loop-pseudo-1", name: "counting_tool", arguments: ["query": "src"])
         let pseudoToolCallContent = """
@@ -1124,6 +1452,187 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         let executionCount = await counter.count
         harnessEqual(executionCount, 1, "Exact repeated read-only signature batch should be intercepted before the second execution")
+    }
+
+    func testHarnessTransitionsStalledReadOnlyLoopIntoFocusedExecution() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        let runId = UUID().uuidString
+
+        var scriptedResponses: [AIServiceResponse] = (2...10).map { iteration in
+            AIServiceResponse(
+                content: "Checking checkpoints pass \(iteration).",
+                toolCalls: [AIToolCall(
+                    id: "checkpoint-loop-\(iteration)",
+                    name: "checkpoint_list",
+                    arguments: ["page": iteration]
+                )]
+            )
+        }
+        scriptedResponses.append(contentsOf: [
+            AIServiceResponse(content: "Proceeding with concrete execution now.", toolCalls: [
+                AIToolCall(id: "write-after-stall-1", name: "write_file", arguments: [
+                    "path": "src/App.tsx",
+                    "content": "updated"
+                ])
+            ]),
+            AIServiceResponse(content: "Completed execution after stalled read-only recovery.", toolCalls: nil)
+        ])
+
+        let scriptedService = ScriptedAIService(responses: scriptedResponses)
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let handler = ToolLoopHandler(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        let counter = ToolExecutionCounter()
+        let firstLoopCall = AIToolCall(id: "checkpoint-loop-1", name: "checkpoint_list", arguments: [:])
+
+        let result = try await handler.handleToolLoopIfNeeded(
+            response: AIServiceResponse(content: "Start checkpoint scan.", toolCalls: [firstLoopCall]),
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: [
+                CountingTool(name: "checkpoint_list", counter: counter),
+                CountingTool(name: "write_file", counter: counter)
+            ],
+            cancelledToolCallIds: { [] },
+            runId: runId,
+            userInput: "Inspect checkpoints, then implement the missing dashboard fix"
+        )
+
+        harnessTrue(result.response.toolCalls?.isEmpty ?? true, "Stalled read-only loop should end after focused execution recovery completes")
+        harnessEqual(result.response.content, "Completed execution after stalled read-only recovery.")
+
+        let capturedRequests = scriptedService.capturedHistoryRequests()
+        let focusedExecutionRetryCount = capturedRequests.filter { request in
+            request.stage == .tool_loop && request.messages.contains(where: {
+                $0.role == .system
+                    && $0.content.contains("You are a coding assistant in focused execution mode.")
+                    && $0.content.contains("The tool loop stalled after read-only or non-executing progress.")
+            })
+        }.count
+        harnessEqual(focusedExecutionRetryCount, 1, "Expected a single controller-owned focused execution retry for stalled read-only loops")
+
+        let executionCount = await counter.count
+        harnessEqual(executionCount, 10, "Read-only loop should execute until the read-only stall threshold, then recover into one concrete execution step")
+    }
+
+    func testHarnessEscalatesRecoveredReadOnlyContinuationIntoMutationRecovery() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        let runId = UUID().uuidString
+
+        await ConversationPlanStore.shared.setProjectRoot(projectRoot)
+        await ConversationPlanStore.shared.set(
+            conversationId: conversationId,
+            plan: """
+            # Implementation Plan
+
+            - [x] Inspect project structure
+            - [ ] Add SSR server entrypoint
+            - [ ] Update package metadata
+            """
+        )
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "<ide_reasoning>Reflection: structure inspected.\nPlanning: continue remaining implementation.\nContinuity: work remains.\nDelivery: NEEDS_WORK</ide_reasoning>Done -> Next -> Path: continue with SSR implementation.",
+                toolCalls: nil
+            ),
+            AIServiceResponse(
+                content: "Need another quick check before editing.",
+                toolCalls: [
+                    AIToolCall(id: "recovered-read-only-1", name: "index_read_file", arguments: ["path": "package.json"])
+                ]
+            ),
+            AIServiceResponse(
+                content: "Proceeding with concrete mutation now.",
+                toolCalls: [
+                    AIToolCall(id: "recovered-write-1", name: "write_file", arguments: [
+                        "path": "server.js",
+                        "content": "export const server = true"
+                    ])
+                ]
+            ),
+            AIServiceResponse(
+                content: "<ide_reasoning>Reflection: completed remaining implementation.\nPlanning: done.\nContinuity: none.\nDelivery: DONE</ide_reasoning>All checklist items are complete.",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let handler = ToolLoopHandler(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        let result = try await handler.handleToolLoopIfNeeded(
+            response: AIServiceResponse(content: "Initial execution completed.", toolCalls: [
+                AIToolCall(id: "initial-write-1", name: "write_file", arguments: [
+                    "path": "index.html",
+                    "content": "<html></html>"
+                ])
+            ]),
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: [
+                FakeTool(name: "write_file"),
+                FakeTool(name: "index_read_file")
+            ],
+            cancelledToolCallIds: { [] },
+            runId: runId,
+            userInput: "Finish the SSR migration"
+        )
+
+        harnessTrue(result.response.toolCalls?.isEmpty ?? true, "Recovered read-only continuation should finish after escalated mutation recovery")
+        harnessTrue(
+            result.response.content?.contains("All checklist items are complete.") ?? false,
+            "Recovered read-only continuation should preserve the final completion message"
+        )
+
+        let capturedRequests = scriptedService.capturedHistoryRequests()
+        let focusedExecutionRequests = capturedRequests.filter { request in
+            request.stage == .tool_loop && request.messages.contains(where: {
+                $0.role == .system &&
+                    $0.content.contains("You are a coding assistant in focused execution mode.")
+            })
+        }
+        harnessGreaterThanOrEqual(
+            focusedExecutionRequests.count,
+            2,
+            "Incomplete-plan continuation with recovered read-only tools should trigger focused execution recovery and then escalation"
+        )
+
+        let finalPlan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let finalProgress = PlanChecklistTracker.progress(in: finalPlan)
+        harnessEqual(finalProgress.completed, finalProgress.total, "Escalated mutation recovery should complete remaining plan items")
     }
 
     private func harnessTrue(_ condition: @autoclosure () -> Bool, _ message: String = "") {

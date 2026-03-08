@@ -36,9 +36,10 @@ private actor ToolExecutionMockAIService: AIService {
                 toolCalls: [
                     AIToolCall(
                         id: "toolcall_1",
-                        name: "create_file",
+                        name: "write_file",
                         arguments: [
-                            "path": "hello_from_test.txt"
+                            "path": "hello_from_test.txt",
+                            "content": "Hello from nucleus test"
                         ])
                 ])
         }

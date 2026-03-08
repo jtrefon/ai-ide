@@ -18,7 +18,7 @@ struct QAQualityReviewNode: OrchestrationNode {
 
         let reviewed = try await handler.performQualityReviewIfNeeded(
             response: response,
-            explicitContext: request.explicitContext,
+            explicitContext: state.effectiveExplicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
             qaReviewEnabled: request.qaReviewEnabled,
@@ -32,6 +32,7 @@ struct QAQualityReviewNode: OrchestrationNode {
             request: request,
             response: reviewed,
             lastToolResults: state.lastToolResults,
+            branchExecution: state.branchExecution,
             transition: .end
         )
     }

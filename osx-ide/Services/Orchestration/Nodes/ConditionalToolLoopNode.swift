@@ -28,13 +28,14 @@ struct ConditionalToolLoopNode: OrchestrationNode {
                 request: request,
                 response: response,
                 lastToolResults: state.lastToolResults,
+                branchExecution: state.branchExecution,
                 transition: .next(nextNodeId)
             )
         }
 
         let followupToolLoopResult = try await handler.handleToolLoopIfNeeded(
             response: response,
-            explicitContext: request.explicitContext,
+            explicitContext: state.effectiveExplicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
             conversationId: request.conversationId,
@@ -48,6 +49,7 @@ struct ConditionalToolLoopNode: OrchestrationNode {
             request: request,
             response: followupToolLoopResult.response,
             lastToolResults: followupToolLoopResult.lastToolResults,
+            branchExecution: state.branchExecution,
             transition: .next(nextNodeId)
         )
     }

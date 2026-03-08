@@ -59,6 +59,25 @@ final class PreWritePreventionEngineTests: XCTestCase {
         XCTAssertTrue(finding?.explanation.contains("exact duplicate") ?? false)
     }
     
+    func testAllowsExactDuplicatePlainTextOutputsWithoutBlocking() {
+        let existingPath = tempProjectRoot.appendingPathComponent("source.txt")
+        let duplicateContent = "STABLE INPUT"
+        try? fileSystemService.writeFile(content: duplicateContent, to: existingPath)
+
+        let result = engine.check(
+            toolName: "write_file",
+            arguments: ["path": "processed.txt", "content": duplicateContent],
+            allowOverride: false
+        )
+
+        XCTAssertNotEqual(result.outcome, .block, "Plain-text output duplication should not be hard blocked")
+        XCTAssertGreaterThan(result.duplicateRiskCount, 0)
+        let finding = result.findings.first(where: { $0.findingType == .duplicateImpl })
+        XCTAssertNotNil(finding)
+        XCTAssertEqual(finding?.severity, .warning)
+        XCTAssertFalse(finding?.blockRecommended ?? true)
+    }
+    
     func testDetectsSymbolCollisions() {
         let existingPath = tempProjectRoot.appendingPathComponent("Service.swift")
         try? fileSystemService.writeFile(content: "class AuthService { }", to: existingPath)

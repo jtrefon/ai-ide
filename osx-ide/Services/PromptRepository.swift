@@ -1,27 +1,7 @@
 import Foundation
 
-protocol PromptRepositoryProtocol {
-    func prompt(
-        key: String,
-        projectRoot: URL?
-    ) throws -> String
-
-    func prompt(
-        key: String,
-        defaultValue: String,
-        projectRoot: URL?
-    ) throws -> String
-}
-
-final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
+final class PromptRepository: @unchecked Sendable {
     static let shared = PromptRepository()
-
-    /// Controls whether fallback to inline default values is allowed when prompt files cannot be found.
-    /// When `false` (default), the app will crash if a prompt file cannot be loaded.
-    /// This ensures prompt optimization efforts are not undermined by silent fallbacks.
-    /// - Note: This is intentionally mutable global state for runtime configuration.
-    ///         Access is expected to be infrequent (typically at app startup).
-    nonisolated(unsafe) static var allowFallback: Bool = false
 
     private let fileManager: FileManager
 
@@ -33,16 +13,31 @@ final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
         key: String,
         projectRoot: URL?
     ) throws -> String {
-        try prompt(key: key, defaultValue: "", projectRoot: projectRoot)
+        guard let url = resolvePromptURL(key: key, projectRoot: projectRoot) else {
+            let environment = ProcessInfo.processInfo.environment
+            let promptRoot = environment["OSX_IDE_PROMPTS_ROOT"] ?? "<unset>"
+            let testRunnerPromptRoot = environment["TEST_RUNNER_ENV_OSX_IDE_PROMPTS_ROOT"] ?? "<unset>"
+            let projectRootPath = projectRoot?.path ?? "<nil>"
+            let currentDirectory = fileManager.currentDirectoryPath
+            throw AppError.promptLoadingFailed(
+                "Prompt file not found for key '\(key)'. Expected path segment: Prompts/\(key).md. " +
+                "projectRoot=\(projectRootPath), cwd=\(currentDirectory), " +
+                "OSX_IDE_PROMPTS_ROOT=\(promptRoot), " +
+                "TEST_RUNNER_ENV_OSX_IDE_PROMPTS_ROOT=\(testRunnerPromptRoot)"
+            )
+        }
+
+        return try loadPromptText(from: url, key: key)
     }
 
-    func prompt(
+    func fallbackPrompt(
         key: String,
         defaultValue: String,
+        allowFallback: Bool,
         projectRoot: URL?
     ) throws -> String {
         guard let url = resolvePromptURL(key: key, projectRoot: projectRoot) else {
-            if Self.allowFallback {
+            if allowFallback {
                 return defaultValue
             }
             let environment = ProcessInfo.processInfo.environment
@@ -58,25 +53,31 @@ final class PromptRepository: PromptRepositoryProtocol, @unchecked Sendable {
             )
         }
 
-        guard let data = try? Data(contentsOf: url),
-              let text = String(data: data, encoding: .utf8) else {
-            if Self.allowFallback {
+        do {
+            return try loadPromptText(from: url, key: key)
+        } catch {
+            if allowFallback {
                 return defaultValue
             }
+            throw error
+        }
+    }
+
+    private func loadPromptText(from url: URL, key: String) throws -> String {
+        guard let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: .utf8) else {
             throw AppError.promptLoadingFailed(
                 "Failed to read prompt file for key '\(key)' at path '\(url.path)'"
             )
         }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            if Self.allowFallback {
-                return defaultValue
-            }
+        guard !trimmed.isEmpty else {
             throw AppError.promptLoadingFailed(
                 "Prompt file is empty for key '\(key)' at path '\(url.path)'"
             )
         }
+
         return trimmed
     }
 

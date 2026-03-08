@@ -64,13 +64,17 @@ final class AIInteractionCoordinator {
     func sendMessageWithRetry(
         _ request: SendMessageWithRetryRequest
     ) async -> Result<AIServiceResponse, AppError> {
+        let isUnitTestRun = isRunningUnitTests()
         let sanitizedMessages = sanitizeMessagesForModel(request.messages)
         let filteredTools = conversationPolicy.allowedTools(
             for: request.stage,
             mode: request.mode,
             from: request.tools
         )
-        let maxAttempts = 7
+        let maxAttempts = maxAttemptsForRequestStage(
+            request.stage,
+            isRunningUnitTests: isUnitTestRun
+        )
         var lastError: AppError?
         let settings = settingsStore.load(includeApiKey: false)
         let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
@@ -102,7 +106,6 @@ final class AIInteractionCoordinator {
                 do {
                     retryPromptTemplate = try PromptRepository.shared.prompt(
                         key: "ConversationFlow/Corrections/retry_context_message",
-                        defaultValue: "Retry context:\n- Attempt: {{attempt}}/{{max_attempts}}\n- Reason for retry: {{retry_reason}}\n- Keep the same user goal and conversation context.\n- Do not repeat the same failed action unchanged.\n- If tools are needed, provide a concise progress update (completed step + next step + how), then return tool calls.",
                         projectRoot: request.projectRoot
                     )
                 } catch {
@@ -137,7 +140,11 @@ final class AIInteractionCoordinator {
                     || errStr.contains("rate_limit")
             }
 
-            let shouldUseStreaming = request.runId != nil && !isRunningUnitTests()
+            let shouldUseStreaming = shouldUseStreamingForRequest(
+                runId: request.runId,
+                stage: request.stage,
+                isRunningUnitTests: isUnitTestRun
+            )
 
             // Use streaming in app runtime; disable in tests for deterministic harness telemetry
             if shouldUseStreaming, let runId = request.runId {
@@ -152,8 +159,12 @@ final class AIInteractionCoordinator {
                     lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
                     if attempt < maxAttempts {
                         if isRateLimitError(error) {
-                            let waitSeconds = min(
-                                UInt64(pow(2.0, Double(attempt))) * 2_000_000_000, 60_000_000_000)
+                            let waitSeconds = retryDelayNanoseconds(
+                                forAttempt: attempt,
+                                stage: request.stage,
+                                isRateLimitError: true,
+                                isRunningUnitTests: isUnitTestRun
+                            )
                             print(
                                 "[AIInteractionCoordinator] Rate limit hit. Retrying attempt \(attempt+1)/\(maxAttempts) in \(waitSeconds / 1_000_000_000)s..."
                             )
@@ -161,7 +172,13 @@ final class AIInteractionCoordinator {
                                 return .failure(.aiServiceError("Request cancelled"))
                             }
                         } else {
-                            guard await sleepRespectingCancellation(nanoseconds: 2_000_000_000) else {
+                            let waitSeconds = retryDelayNanoseconds(
+                                forAttempt: attempt,
+                                stage: request.stage,
+                                isRateLimitError: false,
+                                isRunningUnitTests: isUnitTestRun
+                            )
+                            guard await sleepRespectingCancellation(nanoseconds: waitSeconds) else {
                                 return .failure(.aiServiceError("Request cancelled"))
                             }
                         }
@@ -180,8 +197,12 @@ final class AIInteractionCoordinator {
                     lastError = error
                     if attempt < maxAttempts {
                         if isRateLimitError(error) {
-                            let waitSeconds = min(
-                                UInt64(pow(2.0, Double(attempt))) * 2_000_000_000, 60_000_000_000)
+                            let waitSeconds = retryDelayNanoseconds(
+                                forAttempt: attempt,
+                                stage: request.stage,
+                                isRateLimitError: true,
+                                isRunningUnitTests: isUnitTestRun
+                            )
                             print(
                                 "[AIInteractionCoordinator] Rate limit hit. Retrying attempt \(attempt+1)/\(maxAttempts) in \(waitSeconds / 1_000_000_000)s..."
                             )
@@ -189,7 +210,13 @@ final class AIInteractionCoordinator {
                                 return .failure(.aiServiceError("Request cancelled"))
                             }
                         } else {
-                            guard await sleepRespectingCancellation(nanoseconds: 2_000_000_000) else {
+                            let waitSeconds = retryDelayNanoseconds(
+                                forAttempt: attempt,
+                                stage: request.stage,
+                                isRateLimitError: false,
+                                isRunningUnitTests: isUnitTestRun
+                            )
+                            guard await sleepRespectingCancellation(nanoseconds: waitSeconds) else {
                                 return .failure(.aiServiceError("Request cancelled"))
                             }
                         }
@@ -237,8 +264,74 @@ final class AIInteractionCoordinator {
         }
     }
 
+    func maxAttemptsForRequestStage(
+        _ stage: AIRequestStage?,
+        isRunningUnitTests: Bool = false
+    ) -> Int {
+        if isRunningUnitTests {
+            switch stage {
+            case .final_response:
+                return 2
+            case .tool_loop:
+                return 3
+            default:
+                return 3
+            }
+        }
+
+        switch stage {
+        case .final_response:
+            return 3
+        case .tool_loop:
+            return 5
+        default:
+            return 7
+        }
+    }
+
+    func retryDelayNanoseconds(
+        forAttempt attempt: Int,
+        stage: AIRequestStage?,
+        isRateLimitError: Bool,
+        isRunningUnitTests: Bool = false
+    ) -> UInt64 {
+        guard isRateLimitError else {
+            if isRunningUnitTests {
+                return 1_000_000_000
+            }
+            return 2_000_000_000
+        }
+
+        let baseDelay = UInt64(pow(2.0, Double(attempt))) * 2_000_000_000
+        let maxDelay: UInt64
+        switch stage {
+        case .final_response:
+            maxDelay = 8_000_000_000
+        case .tool_loop:
+            maxDelay = 16_000_000_000
+        default:
+            maxDelay = 60_000_000_000
+        }
+
+        if isRunningUnitTests {
+            return min(baseDelay, min(maxDelay, 4_000_000_000))
+        }
+
+        return min(baseDelay, maxDelay)
+    }
+
     private func shouldUseRAGRetrieval() -> Bool {
         return true
+    }
+
+    func shouldUseStreamingForRequest(
+        runId: String?,
+        stage: AIRequestStage?,
+        isRunningUnitTests: Bool
+    ) -> Bool {
+        runId != nil
+            && !isRunningUnitTests
+            && stage != .final_response
     }
 
     private func sanitizeMessagesForModel(_ messages: [ChatMessage]) -> [ChatMessage] {

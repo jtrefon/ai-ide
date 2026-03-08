@@ -77,7 +77,7 @@ extension OpenRouterAIService {
             components.append(projectRootContext)
         }
 
-        if let reasoningPrompt = try buildReasoningPromptIfNeeded(
+        if let reasoningPrompt = try AIRequestStage.reasoningPromptIfNeeded(
             reasoningEnabled: input.reasoningEnabled,
             mode: input.mode,
             stage: input.stage,
@@ -121,30 +121,6 @@ extension OpenRouterAIService {
         All file paths must be relative to the project root or validated absolute paths within it.
         Never use Linux-style paths like /home.
         """
-    }
-
-    internal func buildReasoningPromptIfNeeded(
-        reasoningEnabled: Bool,
-        mode: AIMode?,
-        stage: AIRequestStage?,
-        projectRoot: URL?
-    ) throws -> String? {
-        guard let mode else { return nil }
-        if mode != .agent || !reasoningEnabled { return nil }
-        if stage == .initial_response { return nil }
-
-        let promptKey: String = {
-            if stage == .tool_loop {
-                return "ConversationFlow/Corrections/reasoning_optional_tool_loop"
-            }
-            return "ConversationFlow/Corrections/reasoning_optional_general"
-        }()
-
-        let prompt = try PromptRepository.shared.prompt(
-            key: promptKey,
-            projectRoot: projectRoot
-        )
-        return prompt
     }
 
     internal func buildFinalMessages(

@@ -7,9 +7,9 @@ struct FinalResponseNode: OrchestrationNode {
     let id: String = Self.idValue
 
     private let handler: FinalResponseHandler
-    private let nextNodeId: String
+    private let nextNodeId: String?
 
-    init(handler: FinalResponseHandler, nextNodeId: String) {
+    init(handler: FinalResponseHandler, nextNodeId: String?) {
         self.handler = handler
         self.nextNodeId = nextNodeId
     }
@@ -20,7 +20,7 @@ struct FinalResponseNode: OrchestrationNode {
 
         let final = try await handler.requestFinalResponseIfNeeded(
             response: response,
-            explicitContext: request.explicitContext,
+            explicitContext: state.effectiveExplicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
             toolResults: state.lastToolResults,
@@ -32,7 +32,8 @@ struct FinalResponseNode: OrchestrationNode {
             request: request,
             response: final,
             lastToolResults: state.lastToolResults,
-            transition: .next(nextNodeId)
+            branchExecution: state.branchExecution,
+            transition: nextNodeId.map { .next($0) } ?? .end
         )
     }
 

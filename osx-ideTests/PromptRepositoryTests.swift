@@ -5,15 +5,13 @@ import XCTest
 final class PromptRepositoryTests: XCTestCase {
     
     func testPromptRepositoryFallbackDisabled() async {
-        // Test with fallback disabled (default)
-        PromptRepository.allowFallback = false
-        
         // This should succeed since the file exists
         let content: String
         do {
-            content = try PromptRepository.shared.prompt(
-                key: "ConversationFlow/Corrections/force_tool_followup",
+            content = try PromptRepository.shared.fallbackPrompt(
+                key: "ConversationFlow/Corrections/tool_loop_focused_execution",
                 defaultValue: "default value",
+                allowFallback: false,
                 projectRoot: URL(fileURLWithPath: "/Users/jack/Projects/osx/osx-ide")
             )
         } catch {
@@ -23,19 +21,17 @@ final class PromptRepositoryTests: XCTestCase {
         
         // Should get the actual file content, not the default
         XCTAssertNotEqual(content, "default value")
-        XCTAssertTrue(content.contains("implement changes"))
+        XCTAssertTrue(content.contains("focused execution mode"))
     }
     
     func testPromptRepositoryFallbackEnabled() async {
-        // Test with fallback enabled
-        PromptRepository.allowFallback = true
-        
         // This should return the default value since file doesn't exist but fallback is enabled
         let content: String
         do {
-            content = try PromptRepository.shared.prompt(
+            content = try PromptRepository.shared.fallbackPrompt(
                 key: "NonExistent/file",
                 defaultValue: "default value",
+                allowFallback: true,
                 projectRoot: URL(fileURLWithPath: "/Users/jack/Projects/osx/osx-ide")
             )
         } catch {
@@ -47,15 +43,13 @@ final class PromptRepositoryTests: XCTestCase {
     }
     
     func testPromptRepositoryExistingFileWithFallbackEnabled() async {
-        // Test with fallback enabled
-        PromptRepository.allowFallback = true
-        
         // This should still return the actual file content even with fallback enabled
         let content: String
         do {
-            content = try PromptRepository.shared.prompt(
-                key: "ConversationFlow/Corrections/force_tool_followup",
+            content = try PromptRepository.shared.fallbackPrompt(
+                key: "ConversationFlow/Corrections/tool_loop_focused_execution",
                 defaultValue: "default value",
+                allowFallback: true,
                 projectRoot: URL(fileURLWithPath: "/Users/jack/Projects/osx/osx-ide")
             )
         } catch {
@@ -64,29 +58,24 @@ final class PromptRepositoryTests: XCTestCase {
         }
         
         XCTAssertNotEqual(content, "default value")
-        XCTAssertTrue(content.contains("implement changes"))
+        XCTAssertTrue(content.contains("focused execution mode"))
     }
     
-    func testPromptRepositoryFeatureFlagToggle() async {
-        // Test that the feature flag can be toggled
-        let originalValue = PromptRepository.allowFallback
-        
-        // Set to false
-        PromptRepository.allowFallback = false
-        XCTAssertEqual(PromptRepository.allowFallback, false)
-        
-        // Set to true
-        PromptRepository.allowFallback = true
-        XCTAssertEqual(PromptRepository.allowFallback, true)
-        
-        // Restore original value
-        PromptRepository.allowFallback = originalValue
+    func testPromptRepositoryPromptRemainsStrictWhenExplicitFallbackIsAllowed() async {
+        XCTAssertThrowsError(
+            try PromptRepository.shared.prompt(
+                key: "NonExistent/file",
+                projectRoot: URL(fileURLWithPath: "/Users/jack/Projects/osx/osx-ide")
+            )
+        ) { error in
+            guard case AppError.promptLoadingFailed = error else {
+                XCTFail("Expected AppError.promptLoadingFailed, got: \(error)")
+                return
+            }
+        }
     }
     
     func testPromptRepositoryEmptyFileWithFallbackEnabled() async {
-        // Test with fallback enabled
-        PromptRepository.allowFallback = true
-        
         // Create a temporary empty file
         let tempDir = FileManager.default.temporaryDirectory
         let tempFile = tempDir.appendingPathComponent("empty_prompt.md")
@@ -96,9 +85,10 @@ final class PromptRepositoryTests: XCTestCase {
         // This should return the default value since file is empty but fallback is enabled
         let content: String
         do {
-            content = try PromptRepository.shared.prompt(
+            content = try PromptRepository.shared.fallbackPrompt(
                 key: "empty_prompt",
                 defaultValue: "default value",
+                allowFallback: true,
                 projectRoot: tempDir
             )
         } catch {
@@ -113,12 +103,11 @@ final class PromptRepositoryTests: XCTestCase {
     }
 
     func testPromptRepositoryMissingPromptThrowsWhenFallbackDisabled() async {
-        PromptRepository.allowFallback = false
-
         XCTAssertThrowsError(
-            try PromptRepository.shared.prompt(
+            try PromptRepository.shared.fallbackPrompt(
                 key: "NonExistent/file",
                 defaultValue: "default value",
+                allowFallback: false,
                 projectRoot: URL(fileURLWithPath: "/Users/jack/Projects/osx/osx-ide")
             )
         ) { error in

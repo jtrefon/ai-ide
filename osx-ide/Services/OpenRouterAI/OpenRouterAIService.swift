@@ -1,5 +1,69 @@
 import Foundation
 
+actor OpenRouterProviderRateLimiter {
+    private var lastRequestTime: Date = Date.distantPast
+    private var providerCooldownUntil: Date = Date.distantPast
+    private var consecutiveRateLimitCount: Int = 0
+
+    func reserveWaitTime(minimumInterval: TimeInterval, now: Date = Date()) -> TimeInterval {
+        let nextRequestTime = max(
+            lastRequestTime.addingTimeInterval(minimumInterval),
+            providerCooldownUntil
+        )
+        let computedWait = max(0, nextRequestTime.timeIntervalSince(now))
+
+        if computedWait > 0 {
+            lastRequestTime = nextRequestTime
+            return computedWait
+        }
+
+        lastRequestTime = now
+        return 0
+    }
+
+    func registerRateLimit(statusCode: Int, now: Date = Date()) -> TimeInterval {
+        consecutiveRateLimitCount += 1
+        let cooldownDuration = cooldownDuration(
+            forStatusCode: statusCode,
+            consecutiveRateLimitCount: consecutiveRateLimitCount
+        )
+        let cooldownUntil = now.addingTimeInterval(cooldownDuration)
+
+        if cooldownUntil > providerCooldownUntil {
+            providerCooldownUntil = cooldownUntil
+        }
+
+        return cooldownDuration
+    }
+
+    func registerSuccess(now: Date = Date()) {
+        consecutiveRateLimitCount = 0
+        if providerCooldownUntil < now {
+            providerCooldownUntil = .distantPast
+        }
+        lastRequestTime = max(lastRequestTime, now)
+    }
+
+    func cooldownDuration(
+        forStatusCode statusCode: Int,
+        consecutiveRateLimitCount: Int
+    ) -> TimeInterval {
+        let baseDuration: TimeInterval
+        switch statusCode {
+        case 429:
+            baseDuration = 20
+        case 421:
+            baseDuration = 10
+        default:
+            baseDuration = 0
+        }
+
+        guard baseDuration > 0 else { return 0 }
+        let escalationMultiplier = min(max(consecutiveRateLimitCount - 1, 0), 3)
+        return baseDuration * Double(1 + escalationMultiplier)
+    }
+}
+
 actor OpenRouterAIService: AIService {
     internal let settingsStore: OpenRouterSettingsStore
     internal let client: OpenRouterAPIClient
@@ -7,9 +71,8 @@ actor OpenRouterAIService: AIService {
     private var contextLengthByModelId: [String: Int] = [:]
     
     // Rate limiting to prevent 421 errors
-    private var lastRequestTime: Date = Date.distantPast
     private var minRequestInterval: TimeInterval = 0.5 // 500ms between requests
-    private let rateLimitLock = NSLock()
+    private static let providerRateLimiter = OpenRouterProviderRateLimiter()
     
     // Test configuration support
     private let testConfigurationProvider: TestConfigurationProvider
@@ -140,32 +203,37 @@ actor OpenRouterAIService: AIService {
             referer: ""
         )
 
-        try await client.chatCompletionStreaming(
-            apiKey: preparation.settings.apiKey,
-            context: requestContext,
-            body: body
-        ) { [weak self] chunkJson in
-            guard let self = self else { return }
+        do {
+            try await client.chatCompletionStreaming(
+                apiKey: preparation.settings.apiKey,
+                context: requestContext,
+                body: body
+            ) { [weak self] chunkJson in
+                guard let self = self else { return }
 
-            // Parse the chunk
-            if let chunkData = chunkJson.data(using: .utf8),
-               let chunk = try? JSONDecoder().decode(OpenRouterChatResponseChunk.self, from: chunkData) {
-                if let delta = chunk.choices.first?.delta {
-                    if let content = delta.content {
-                        collector.appendChunk(content)
-                        // Publish streaming chunk event
-                        Task { @MainActor in
-                            self.eventBus.publish(LocalModelStreamingChunkEvent(
-                                runId: runId,
-                                chunk: content
-                            ))
+                // Parse the chunk
+                if let chunkData = chunkJson.data(using: .utf8),
+                   let chunk = try? JSONDecoder().decode(OpenRouterChatResponseChunk.self, from: chunkData) {
+                    if let delta = chunk.choices.first?.delta {
+                        if let content = delta.content {
+                            collector.appendChunk(content)
+                            // Publish streaming chunk event
+                            Task { @MainActor in
+                                self.eventBus.publish(LocalModelStreamingChunkEvent(
+                                    runId: runId,
+                                    chunk: content
+                                ))
+                            }
                         }
-                    }
-                    if let newToolCalls = delta.toolCalls, !newToolCalls.isEmpty {
-                        collector.appendToolCalls(newToolCalls)
+                        if let newToolCalls = delta.toolCalls, !newToolCalls.isEmpty {
+                            collector.appendToolCalls(newToolCalls)
+                        }
                     }
                 }
             }
+        } catch {
+            try await handlePotentialRateLimit(error, requestId: preparation.requestId)
+            throw error
         }
 
         // Get collected results
@@ -180,6 +248,8 @@ actor OpenRouterAIService: AIService {
             toolCalls: toolCalls?.count ?? 0,
             responseBytes: 0
         )
+
+        await Self.providerRateLimiter.registerSuccess()
 
         return AIServiceResponse(
             content: fullContent,
@@ -307,6 +377,8 @@ actor OpenRouterAIService: AIService {
             responseBytes: data.count
         )
 
+        await Self.providerRateLimiter.registerSuccess()
+
         let resolvedToolCalls = request.tools?.isEmpty == false
             ? choice.message.toolCalls
             : nil
@@ -344,6 +416,7 @@ actor OpenRouterAIService: AIService {
     ) async throws -> Data {
         // Apply rate limiting to prevent 421 errors
         try await enforceRateLimit()
+        let config = await testConfigurationProvider.configuration
         
         do {
             let requestContext = OpenRouterAPIClient.RequestContext(
@@ -351,32 +424,55 @@ actor OpenRouterAIService: AIService {
                 appName: "OSX IDE",
                 referer: ""
             )
-            return try await client.chatCompletion(
-                apiKey: apiKey,
-                context: requestContext,
-                body: body
-            )
+            return try await executeChatCompletionWithTimeout(
+                timeoutSeconds: config.externalAPITimeout,
+                requestId: requestId
+            ) {
+                try await self.client.chatCompletion(
+                    apiKey: apiKey,
+                    context: requestContext,
+                    body: body
+                )
+            }
         } catch {
             if let openRouterError = error as? OpenRouterServiceError {
                 if case let .serverError(code, body) = openRouterError {
                     let snippet = (body ?? "").prefix(2000)
                     await logRequestError(requestId: requestId, status: code, bodySnippet: String(snippet))
-                    
-                    // Special handling for 421 rate limit errors
-                    if code == 421 {
-                        await AppLogger.shared.error(
-                            category: .ai,
-                            message: "openrouter.rate_limit_hit",
-                            context: AppLogger.LogCallContext(metadata: [
-                                "requestId": requestId,
-                                "statusCode": code,
-                                "retrySuggested": true
-                            ])
-                        )
-                    }
                 }
             }
+            try await handlePotentialRateLimit(error, requestId: requestId)
+            await publishProviderFailureIfNeeded(error)
             throw error
+        }
+    }
+
+    private func executeChatCompletionWithTimeout<T: Sendable>(
+        timeoutSeconds: TimeInterval,
+        requestId: String,
+        operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        let effectiveTimeoutSeconds = max(timeoutSeconds, 1)
+
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(effectiveTimeoutSeconds * 1_000_000_000))
+                throw AppError.aiServiceError(
+                    "OpenRouter request timed out after \(Int(effectiveTimeoutSeconds))s (requestId: \(requestId))"
+                )
+            }
+
+            defer {
+                group.cancelAll()
+            }
+
+            guard let result = try await group.next() else {
+                throw AppError.aiServiceError("OpenRouter request ended without a result (requestId: \(requestId))")
+            }
+            return result
         }
     }
     
@@ -391,22 +487,118 @@ actor OpenRouterAIService: AIService {
         
         let now = Date()
         let effectiveInterval = max(minRequestInterval, config.minAPIRequestInterval)
-
-        // Compute wait and reserve the next request slot under lock.
-        let waitTime: TimeInterval = rateLimitLock.withLock {
-            let timeSinceLastRequest = now.timeIntervalSince(lastRequestTime)
-            if timeSinceLastRequest < effectiveInterval {
-                let computedWait = effectiveInterval - timeSinceLastRequest
-                lastRequestTime = now.addingTimeInterval(computedWait)
-                return computedWait
-            } else {
-                lastRequestTime = now
-                return 0
-            }
-        }
+        let waitTime = await Self.providerRateLimiter.reserveWaitTime(
+            minimumInterval: effectiveInterval,
+            now: now
+        )
 
         if waitTime > 0 {
+            let cooldownUntil = now.addingTimeInterval(waitTime)
+            eventBus.publish(ProviderIssueStatusEvent(
+                providerName: "OpenRouter",
+                statusKind: .rateLimited,
+                statusCode: nil,
+                message: "Provider cooldown active. Waiting before the next request.",
+                cooldownUntil: cooldownUntil
+            ))
             try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
+        }
+    }
+
+    private func handlePotentialRateLimit(_ error: Error, requestId: String) async throws {
+        guard let openRouterError = error as? OpenRouterServiceError,
+              case let .serverError(code, _) = openRouterError,
+              isProviderRateLimitStatus(code)
+        else {
+            return
+        }
+
+        let cooldownDuration = await Self.providerRateLimiter.registerRateLimit(statusCode: code)
+
+        await AppLogger.shared.error(
+            category: .ai,
+            message: "openrouter.rate_limit_hit",
+            context: AppLogger.LogCallContext(metadata: [
+                "requestId": requestId,
+                "statusCode": code,
+                "retrySuggested": true,
+                "providerCooldownSeconds": Int(cooldownDuration)
+            ])
+        )
+
+        let cooldownUntil = Date().addingTimeInterval(cooldownDuration)
+        let issueMessage = providerIssueMessage(
+            for: openRouterError,
+            fallback: "Provider rate limit hit. Retrying when cooldown ends."
+        )
+        eventBus.publish(ProviderIssueStatusEvent(
+            providerName: "OpenRouter",
+            statusKind: .rateLimited,
+            statusCode: code,
+            message: issueMessage,
+            cooldownUntil: cooldownUntil
+        ))
+    }
+
+    private func isProviderRateLimitStatus(_ statusCode: Int) -> Bool {
+        statusCode == 421 || statusCode == 429
+    }
+
+    private func publishProviderFailureIfNeeded(_ error: Error) async {
+        guard let openRouterError = error as? OpenRouterServiceError else {
+            return
+        }
+
+        let resolvedIssueStatus = providerIssueStatus(for: openRouterError)
+        let issueKind = resolvedIssueStatus.kind
+        let issueStatusCode = resolvedIssueStatus.statusCode
+        let issueMessage = providerIssueMessage(
+            for: openRouterError,
+            fallback: error.localizedDescription
+        )
+
+        eventBus.publish(ProviderIssueStatusEvent(
+            providerName: "OpenRouter",
+            statusKind: issueKind,
+            statusCode: issueStatusCode,
+            message: issueMessage,
+            cooldownUntil: nil
+        ))
+    }
+
+    private func providerIssueStatus(
+        for error: OpenRouterServiceError
+    ) -> (kind: ProviderIssueStatusEvent.StatusKind, statusCode: Int?) {
+        switch error {
+        case let .serverError(code, _):
+            switch code {
+            case 401, 403:
+                return (.authentication, code)
+            case 421, 429:
+                return (.rateLimited, code)
+            case 500...599:
+                return (.unavailable, code)
+            default:
+                return (.unknown, code)
+            }
+        default:
+            return (.transport, nil)
+        }
+    }
+
+    private func providerIssueMessage(
+        for error: OpenRouterServiceError,
+        fallback: String
+    ) -> String {
+        switch error {
+        case let .serverError(_, body):
+            let trimmedBody = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmedBody.isEmpty {
+                return trimmedBody
+            }
+            return fallback
+        default:
+            return fallback
         }
     }
 
@@ -436,6 +628,13 @@ actor OpenRouterAIService: AIService {
                     "bodySnippet": bodySnippet
                 ])
             )
+            eventBus.publish(ProviderIssueStatusEvent(
+                providerName: "OpenRouter",
+                statusKind: .unknown,
+                statusCode: nil,
+                message: "Failed to decode provider response.",
+                cooldownUntil: nil
+            ))
             throw AppError.aiServiceError("Failed to decode OpenRouter response: \(error.localizedDescription)")
         }
     }
@@ -485,8 +684,6 @@ actor OpenRouterAIService: AIService {
             return hasTools ? 2048 : 420
         case .final_response:
             return 500
-        case .delivery_gate:
-            return 380
         case .initial_response, .strategic_planning, .tactical_planning:
             return hasTools ? 420 : 640
         case .qa_tool_output_review, .qa_quality_review:

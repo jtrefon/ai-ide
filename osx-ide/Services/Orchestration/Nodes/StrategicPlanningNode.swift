@@ -15,6 +15,21 @@ struct StrategicPlanningNode: OrchestrationNode {
     }
 
     func run(state: OrchestrationState) async throws -> OrchestrationState {
+        let planningMode = AgentPlanningPolicy().planningMode(
+            userInput: state.request.userInput,
+            mode: state.request.mode,
+            availableToolsCount: state.request.availableTools.count
+        )
+        guard planningMode == .requirePlanning else {
+            return OrchestrationState(
+                request: state.request,
+                response: state.response,
+                lastToolResults: state.lastToolResults,
+                branchExecution: state.branchExecution,
+                transition: .next(nextNodeId)
+            )
+        }
+
         let existingPlan = await ConversationPlanStore.shared.get(conversationId: state.request.conversationId) ?? ""
         let progress = PlanChecklistTracker.progress(in: existingPlan)
         let shouldReuseExistingPlan = !existingPlan.isEmpty && progress.total > 0 && !progress.isComplete
@@ -27,31 +42,13 @@ struct StrategicPlanningNode: OrchestrationNode {
         }
 
         await ConversationPlanStore.shared.set(conversationId: state.request.conversationId, plan: plan)
-        upsertLatestPlanMessage(plan)
 
         return OrchestrationState(
             request: state.request,
             response: state.response,
             lastToolResults: state.lastToolResults,
+            branchExecution: state.branchExecution,
             transition: .next(nextNodeId)
         )
-    }
-
-    private func upsertLatestPlanMessage(_ plan: String) {
-        let messages = historyCoordinator.messages
-        if let lastPlanIndex = messages.lastIndex(where: {
-            $0.role == .assistant && $0.content.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("# Implementation Plan")
-        }) {
-            historyCoordinator.replaceMessage(at: lastPlanIndex, with: ChatMessage(
-                role: .assistant,
-                content: plan
-            ))
-            return
-        }
-
-        historyCoordinator.append(ChatMessage(
-            role: .assistant,
-            content: plan
-        ))
     }
 }

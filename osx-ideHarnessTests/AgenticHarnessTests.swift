@@ -8,17 +8,15 @@ import XCTest
 @MainActor
 final class AgenticHarnessTests: XCTestCase {
 
-    private func requireOnlineHarnessExecution() throws {
-        try XCTSkipIf(
-            ProcessInfo.processInfo.environment["OSX_IDE_RUN_ONLINE_HARNESS"] != "1",
-            "Online harness disabled for deterministic production-readiness validation"
-        )
-    }
+    private func requireOnlineHarnessExecution() throws {}
 
     // MARK: - Helper Methods
     
     override func setUp() async throws {
         try await super.setUp()
+        // Do not remove this gate or allow these online harness tests to run in parallel.
+        // Parallel provider traffic has triggered upstream 429 floods and can get the account banned.
+        await OnlineHarnessExecutionGate.shared.acquire()
         // Set up test configuration for isolated testing with real services
         let config = TestConfiguration(
             allowExternalAPIs: true,
@@ -37,6 +35,7 @@ final class AgenticHarnessTests: XCTestCase {
     
     override func tearDown() async throws {
         await TestConfigurationProvider.shared.resetToDefault()
+        await OnlineHarnessExecutionGate.shared.release()
         try await super.tearDown()
     }
 
@@ -73,26 +72,46 @@ final class AgenticHarnessTests: XCTestCase {
     ) async throws {
         manager.currentInput = text
         manager.sendMessage()
-        try await waitForConversationToFinish(manager, timeoutSeconds: timeoutSeconds)
+        let timedOut = try await waitForConversationToFinish(manager, timeoutSeconds: timeoutSeconds)
         if let error = manager.error {
             print("[HARNESS][warning] Conversation manager reported error: \(error)")
         }
+        if timedOut {
+            XCTFail("Timed out waiting for conversation to finish after \(Int(timeoutSeconds))s of inactivity")
+        }
     }
 
+    @discardableResult
     private func waitForConversationToFinish(
         _ manager: ConversationManager, timeoutSeconds: TimeInterval = 180
-    ) async throws {
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        while Date() < deadline {
+    ) async throws -> Bool {
+        var lastProgressAt = Date()
+        var lastMessageCount = manager.messages.count
+
+        while true {
             if !manager.isSending {
-                return
+                return false
             }
+
+            let currentMessageCount = manager.messages.count
+            if currentMessageCount != lastMessageCount {
+                lastMessageCount = currentMessageCount
+                lastProgressAt = Date()
+            }
+
             try await Task.sleep(nanoseconds: 200_000_000)
+            if Date().timeIntervalSince(lastProgressAt) < timeoutSeconds {
+                continue
+            }
+            break
         }
+
         if !manager.isSending {
-            return
+            return false
         }
-        print("[HARNESS][warning] Timed out waiting for conversation manager to finish send task")
+
+        print("[HARNESS][warning] Timed out waiting for conversation manager to finish send task (idle for \(Int(timeoutSeconds))s)")
+        return true
     }
 
     private func listAllFiles(under directory: URL) -> [String] {

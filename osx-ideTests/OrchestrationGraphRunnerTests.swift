@@ -42,6 +42,7 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
                 request: state.request,
                 response: state.response,
                 lastToolResults: state.lastToolResults,
+                branchExecution: state.branchExecution,
                 transition: nextId.map { .next($0) } ?? .end
             )
         }
@@ -91,6 +92,39 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         }
     }
 
+    func testBranchReviewNodeAdvancesThroughRemainingBranchesThenFinishes() async throws {
+        let branchExecution = OrchestrationState.BranchExecution(
+            plan: "1. [ ] First\n2. [ ] Second",
+            globalInvariants: ["Keep edits focused"],
+            branches: [
+                .init(id: "branch_1", title: "First", checklistItems: ["Inspect files"]),
+                .init(id: "branch_2", title: "Second", checklistItems: ["Verify output"])
+            ],
+            activeBranchIndex: 0
+        )
+
+        let graph = OrchestrationGraph(
+            entryNodeId: "branch_review",
+            nodes: [
+                BranchReviewNode(executionNodeId: "execute", finalNodeId: "final"),
+                BranchStatePreservingNode(id: "execute", nextId: "branch_review"),
+                BranchStatePreservingNode(id: "final", nextId: nil)
+            ]
+        )
+
+        let runner = OrchestrationGraphRunner(graph: graph, maxTransitions: 10)
+        let finalState = try await runner.run(initialState: OrchestrationState(
+            request: makeSendRequest(),
+            response: AIServiceResponse(content: "Done", toolCalls: nil),
+            lastToolResults: [],
+            branchExecution: branchExecution,
+            transition: .next("branch_review")
+        ))
+
+        XCTAssertEqual(finalState.branchExecution?.activeBranchIndex, 1)
+        XCTAssertEqual(finalState.transition.nextNodeId, nil)
+    }
+
     @MainActor
     private struct LoopNode: OrchestrationNode {
         let id: String
@@ -100,7 +134,24 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
                 request: state.request,
                 response: state.response,
                 lastToolResults: state.lastToolResults,
+                branchExecution: state.branchExecution,
                 transition: .next(id)
+            )
+        }
+    }
+
+    @MainActor
+    private struct BranchStatePreservingNode: OrchestrationNode {
+        let id: String
+        let nextId: String?
+
+        func run(state: OrchestrationState) async throws -> OrchestrationState {
+            OrchestrationState(
+                request: state.request,
+                response: state.response,
+                lastToolResults: state.lastToolResults,
+                branchExecution: state.branchExecution,
+                transition: nextId.map { .next($0) } ?? .end
             )
         }
     }
