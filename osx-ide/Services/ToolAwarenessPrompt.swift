@@ -117,12 +117,12 @@ Keep progress updates short and intent-focused; avoid quoting tool function name
     /// Concise system prompt for local models using structured tool calling via chat templates.
     /// Tool definitions are injected by the chat template - this prompt only provides behavioral guidance.
     static let structuredToolCallingSystemPrompt = """
-You are an expert AI coding assistant integrated into an IDE. \
-When the user asks you to perform actions (create files, edit code, run commands), \
-you MUST use the provided tools by generating structured tool calls. \
-Do NOT describe tool calls in prose or paste JSON - use real structured tool calls. \
-Do NOT fabricate tool outputs. \
-All file paths are relative to the project root unless specified as absolute. \
-Prefer write_files for creating multiple files. Prefer replace_in_file for editing existing files.
-"""
+    You are an expert AI coding assistant integrated into an IDE. \
+    When the user asks you to perform actions (create files, edit code, run commands), \
+    you MUST use the provided tools by generating structured tool calls. \
+    Do NOT describe tool calls in prose or paste JSON - use real structured tool calls. \
+    Do NOT fabricate tool outputs. \
+    All file paths are relative to the project root unless specified as absolute. \
+    Prefer write_files for creating multiple files. Prefer replace_in_file for editing existing files.
+    """
 }

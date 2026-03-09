@@ -13,11 +13,11 @@ public actor PromptFactory {
     // MARK: - Main Assembly Method
     
     /// Assembles a complete system prompt from all components
-    public func assembleSystemPrompt(
+    func assembleSystemPrompt(
         tools: [EnhancedAITool]?,
         mode: AIMode?,
         projectRoot: URL?,
-        reasoningEnabled: Bool,
+        reasoningMode: ReasoningMode,
         stage: AIRequestStage?
     ) async throws -> String {
         var components: [PromptComponent] = []
@@ -42,7 +42,7 @@ public actor PromptFactory {
         
         // 5. Reasoning instructions
         if let reasoningComponent = try await buildReasoningComponent(
-            enabled: reasoningEnabled,
+            reasoningMode: reasoningMode,
             mode: mode,
             stage: stage,
             projectRoot: projectRoot
@@ -131,13 +131,13 @@ public actor PromptFactory {
     }
     
     private func buildReasoningComponent(
-        enabled: Bool,
+        reasoningMode: ReasoningMode,
         mode: AIMode?,
         stage: AIRequestStage?,
         projectRoot: URL?
     ) async throws -> PromptComponent? {
         guard let reasoningPrompt = try AIRequestStage.reasoningPromptIfNeeded(
-            reasoningEnabled: enabled,
+            reasoningMode: reasoningMode,
             mode: mode,
             stage: stage,
             projectRoot: projectRoot

@@ -19,6 +19,11 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             _ = modelId
             return directory
         }
+
+        func runtimeModelDirectory(for model: LocalModelDefinition) throws -> URL {
+            _ = model
+            return directory
+        }
     }
 
     private final class SpyGenerator: LocalModelProcessAIService.LocalModelGenerating, @unchecked Sendable {
@@ -138,7 +143,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
         // First message should be system
         XCTAssertEqual(messages[0].role, .system)
         XCTAssertTrue(messages[0].content.contains("CURRENT MODE: AGENT"))
-        XCTAssertTrue(messages[0].content.contains("<ide_reasoning>"))
+        XCTAssertTrue(messages[0].content.contains("Native model reasoning is allowed"))
         
         // Second message should be context
         XCTAssertEqual(messages[1].role, .system)
@@ -163,7 +168,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             model: "",
             baseURL: OpenRouterSettings.empty.baseURL,
             systemPrompt: "CUSTOM_SYSTEM_PROMPT",
-            reasoningEnabled: true,
+            reasoningMode: .modelAndAgent,
             toolPromptMode: .fullStatic,
             ragEnabledDuringToolLoop: true
         ))
@@ -188,6 +193,39 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
         let messages = try XCTUnwrap(capturedMessages)
         XCTAssertEqual(messages[0].role, .system)
         XCTAssertTrue(messages[0].content.contains("CUSTOM_SYSTEM_PROMPT"))
+    }
+
+    func testSendMessageDoesNotInjectReasoningPromptDuringToolLoop() async throws {
+        let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
+        let selectionStore = LocalModelSelectionStore()
+        await selectionStore.setSelectedModelId(selectedModelId)
+
+        let modelDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileStore = FakeFileStore(installed: true, directory: modelDirectory)
+        let generator = SpyGenerator()
+        let settingsLoader = StubSettingsLoader(settings: .empty)
+
+        let service = LocalModelProcessAIService(
+            selectionStore: selectionStore,
+            fileStore: fileStore,
+            generator: generator,
+            settingsStore: settingsLoader,
+            memoryPressureObserverFactory: { _ in nil }
+        )
+
+        _ = try await service.sendMessage(AIServiceHistoryRequest(
+            messages: [ChatMessage(role: .user, content: "Create file")],
+            context: nil,
+            tools: [NoopTool(name: "write_file")],
+            mode: .agent,
+            projectRoot: modelDirectory,
+            stage: .tool_loop
+        ))
+
+        let (_, capturedMessages, _, _, _, _, _, _) = generator.snapshot()
+        let messages = try XCTUnwrap(capturedMessages)
+        XCTAssertEqual(messages[0].role, .system)
+        XCTAssertFalse(messages[0].content.contains("<ide_reasoning>"))
     }
 
     func testSendMessageReturnsToolCallsFromGenerator() async throws {
@@ -223,8 +261,14 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
         XCTAssertEqual(response.toolCalls?.first?.name, "write_file")
     }
 
-    func testRecoverTextualToolCallsParsesToolCallsEnvelope() {
-        let content = """
+    func testSendMessageDoesNotConvertTextualToolCallLookingOutputIntoToolCalls() async throws {
+        let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
+        let selectionStore = LocalModelSelectionStore()
+        await selectionStore.setSelectedModelId(selectedModelId)
+
+        let modelDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileStore = FakeFileStore(installed: true, directory: modelDirectory)
+        let textualToolLikeOutput = """
         ```json
         {
           "tool_calls": [
@@ -243,18 +287,26 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
         }
         ```
         """
+        let generator = SpyGenerator(response: AIServiceResponse(content: textualToolLikeOutput, toolCalls: nil))
+        let settingsLoader = StubSettingsLoader(settings: .empty)
 
-        let calls = LocalModelProcessAIService.NativeMLXGenerator.recoverTextualToolCalls(from: content)
+        let service = LocalModelProcessAIService(
+            selectionStore: selectionStore,
+            fileStore: fileStore,
+            generator: generator,
+            settingsStore: settingsLoader,
+            memoryPressureObserverFactory: { _ in nil }
+        )
 
-        XCTAssertEqual(calls.count, 1)
-        XCTAssertEqual(calls.first?.id, "call_1")
-        XCTAssertEqual(calls.first?.name, "write_file")
-        XCTAssertEqual(calls.first?.arguments["path"] as? String, "Sources/App.swift")
-    }
+        let response = try await service.sendMessage(AIServiceHistoryRequest(
+            messages: [ChatMessage(role: .user, content: "Create file")],
+            context: nil,
+            tools: [NoopTool(name: "write_file")],
+            mode: .agent,
+            projectRoot: modelDirectory
+        ))
 
-    func testRecoverTextualToolCallsReturnsEmptyForNonJsonText() {
-        let content = "I'll update files now using tools."
-        let calls = LocalModelProcessAIService.NativeMLXGenerator.recoverTextualToolCalls(from: content)
-        XCTAssertTrue(calls.isEmpty)
+        XCTAssertEqual(response.content, textualToolLikeOutput)
+        XCTAssertNil(response.toolCalls)
     }
 }

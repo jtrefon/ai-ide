@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		6D2E6F7F2C2F4A7F00A1B2C3 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */; };
+		6E8A1B012F9A000100ABC123 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6E8A1B002F9A000100ABC123 /* MLXVLM */; };
+		6E8A1B032F9A000100ABC123 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6E8A1B022F9A000100ABC123 /* MLXVLM */; };
 		6D2E6F822C2F4A7F00A1B2C6 /* MLXStructured in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */; };
 		6D2E6F852C2F4A7F00A1B2C9 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F842C2F4A7F00A1B2C8 /* MLX */; };
 /* End PBXBuildFile section */
@@ -72,6 +74,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6D2E6F7F2C2F4A7F00A1B2C3 /* MLXLLM in Frameworks */,
+				6E8A1B012F9A000100ABC123 /* MLXVLM in Frameworks */,
 				6D2E6F822C2F4A7F00A1B2C6 /* MLXStructured in Frameworks */,
 				6D2E6F852C2F4A7F00A1B2C9 /* MLX in Frameworks */,
 			);
@@ -95,6 +98,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6E8A1B032F9A000100ABC123 /* MLXVLM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -152,6 +156,7 @@
 			name = "osx-ide";
 			packageProductDependencies = (
 				6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */,
+				6E8A1B002F9A000100ABC123 /* MLXVLM */,
 				6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */,
 				6D2E6F842C2F4A7F00A1B2C8 /* MLX */,
 			);
@@ -223,6 +228,7 @@
 			);
 			name = "osx-ideHarnessTests";
 			packageProductDependencies = (
+				6E8A1B022F9A000100ABC123 /* MLXVLM */,
 			);
 			productName = "osx-ideHarnessTests";
 			productReference = 7A11AA032F90000100C0DE01 /* osx-ideHarnessTests.xctest */;
@@ -731,6 +737,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLLM;
+		};
+		6E8A1B002F9A000100ABC123 /* MLXVLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXVLM;
+		};
+		6E8A1B022F9A000100ABC123 /* MLXVLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXVLM;
 		};
 		6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */ = {
 			isa = XCSwiftPackageProductDependency;

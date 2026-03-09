@@ -24,6 +24,16 @@ struct BranchReviewNode: OrchestrationNode {
             )
         }
 
+        if await shouldResumeExecution(from: state, branchExecution: branchExecution) {
+            return OrchestrationState(
+                request: state.request,
+                response: state.response,
+                lastToolResults: state.lastToolResults,
+                branchExecution: state.branchExecution,
+                transition: .next(executionNodeId)
+            )
+        }
+
         guard branchExecution.hasAdditionalBranches else {
             return OrchestrationState(
                 request: state.request,
@@ -41,5 +51,40 @@ struct BranchReviewNode: OrchestrationNode {
             branchExecution: branchExecution.advanced(),
             transition: .next(executionNodeId)
         )
+    }
+
+    private func shouldResumeExecution(
+        from state: OrchestrationState,
+        branchExecution: OrchestrationState.BranchExecution
+    ) async -> Bool {
+        guard state.request.mode == .agent else { return false }
+        guard !branchExecution.hasAdditionalBranches else { return false }
+        guard let response = state.response else { return false }
+
+        let planMarkdown = await ConversationPlanStore.shared.get(
+            conversationId: state.request.conversationId
+        ) ?? ""
+        let progress = PlanChecklistTracker.progress(in: planMarkdown)
+        guard progress.total > 0, !progress.isComplete else { return false }
+
+        let content = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !content.isEmpty else { return false }
+
+        let normalized = content.lowercased()
+        let unfinishedSignals = [
+            "needs_work",
+            "needs work",
+            "pending tasks remain",
+            "continue with remaining",
+            "continuing with the next",
+            "remaining implementation",
+            "done -> next -> path:"
+        ]
+
+        if unfinishedSignals.contains(where: { normalized.contains($0) }) {
+            return true
+        }
+
+        return ChatPromptBuilder.deliveryStatus(from: content) == .needsWork
     }
 }

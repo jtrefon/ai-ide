@@ -7,7 +7,7 @@ extension OpenRouterAIService {
         let toolPromptMode: ToolPromptMode
         let mode: AIMode?
         let projectRoot: URL?
-        let reasoningEnabled: Bool
+        let reasoningMode: ReasoningMode
         let stage: AIRequestStage?
     }
 
@@ -45,7 +45,7 @@ extension OpenRouterAIService {
         let model: String
         let systemPrompt: String
         let baseURL: String
-        let reasoningEnabled: Bool
+        let reasoningMode: ReasoningMode
         let toolPromptMode: ToolPromptMode
     }
 

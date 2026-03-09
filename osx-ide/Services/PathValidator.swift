@@ -27,23 +27,43 @@ struct PathValidator {
         return Array(resolvedPathComponents.prefix(rootPathComponents.count)) == rootPathComponents
     }
 
+    private func normalizePseudoRootPath(_ path: String) -> String {
+        let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPath.isEmpty else { return path }
+
+        if trimmedPath == "/project" || trimmedPath == "project" {
+            return "."
+        }
+
+        if trimmedPath.hasPrefix("/project/") {
+            return String(trimmedPath.dropFirst("/project/".count))
+        }
+
+        if trimmedPath.hasPrefix("project/") {
+            return String(trimmedPath.dropFirst("project/".count))
+        }
+
+        return trimmedPath
+    }
+
     /// Validates and resolves a path, ensuring it's within the project root
     func validateAndResolve(_ path: String) throws -> URL {
+        let normalizedPath = normalizePseudoRootPath(path)
         let url: URL
 
         // Handle absolute vs relative paths
-        if path.hasPrefix("/") {
+        if normalizedPath.hasPrefix("/") {
             // If the absolute path is already within the project root, use it as is
-            let candidateURL = URL(fileURLWithPath: path).standardizedFileURL
+            let candidateURL = URL(fileURLWithPath: normalizedPath).standardizedFileURL
             if isWithinProjectRoot(candidateURL) {
                 url = candidateURL
             } else {
                 // Otherwise, strip the leading slash and treat it as relative to project root
-                let relativePath = String(path.dropFirst())
+                let relativePath = String(normalizedPath.dropFirst())
                 url = projectRoot.appendingPathComponent(relativePath)
             }
         } else {
-            url = projectRoot.appendingPathComponent(path)
+            url = projectRoot.appendingPathComponent(normalizedPath)
         }
 
         // Resolve to canonical path

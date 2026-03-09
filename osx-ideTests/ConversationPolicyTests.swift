@@ -36,6 +36,18 @@ final class ConversationPolicyTests: XCTestCase {
         "list_files",
         "conversation_fold"
     ]
+    private let expectedToolLoopExecution: Set<String> = [
+        "index_find_files",
+        "index_list_files",
+        "index_search_text",
+        "index_read_file",
+        "index_search_symbols",
+        "read_file",
+        "list_files",
+        "write_file",
+        "replace_in_file",
+        "run_command"
+    ]
 
     // MARK: - Chat mode
 
@@ -59,9 +71,10 @@ final class ConversationPolicyTests: XCTestCase {
         XCTAssertEqual(result.count, allTools.count, "initial_response should preserve tools for agent execution")
     }
 
-    func testAgentModeToolLoopReturnsAllTools() {
+    func testAgentModeToolLoopReturnsExecutionToolsOnly() {
         let result = policy.allowedTools(for: .tool_loop, mode: .agent, from: allTools)
-        XCTAssertEqual(result.count, allTools.count)
+        let names = Set(result.map(\.name))
+        XCTAssertEqual(names, expectedToolLoopExecution)
     }
 
     func testReasoningPromptKeyUsesToolLoopSpecificPromptOnlyForToolLoopStage() {
@@ -81,31 +94,30 @@ final class ConversationPolicyTests: XCTestCase {
             AIRequestStage.reasoningPromptKey(for: nil),
             "ConversationFlow/Corrections/reasoning_optional_general"
         )
-        XCTAssertEqual(
-            AIRequestStage.reasoningPromptKeyIfNeeded(
-                reasoningEnabled: true,
-                mode: .agent,
-                stage: .tool_loop
-            ),
-            "ConversationFlow/Corrections/reasoning_optional_tool_loop"
-        )
         XCTAssertNil(
             AIRequestStage.reasoningPromptKeyIfNeeded(
-                reasoningEnabled: false,
+                reasoningMode: .modelAndAgent,
                 mode: .agent,
                 stage: .tool_loop
             )
         )
         XCTAssertNil(
             AIRequestStage.reasoningPromptKeyIfNeeded(
-                reasoningEnabled: true,
+                reasoningMode: .none,
+                mode: .agent,
+                stage: .tool_loop
+            )
+        )
+        XCTAssertNil(
+            AIRequestStage.reasoningPromptKeyIfNeeded(
+                reasoningMode: .modelAndAgent,
                 mode: .chat,
                 stage: .tool_loop
             )
         )
         XCTAssertNil(
             AIRequestStage.reasoningPromptKeyIfNeeded(
-                reasoningEnabled: true,
+                reasoningMode: .modelAndAgent,
                 mode: .agent,
                 stage: .initial_response
             )

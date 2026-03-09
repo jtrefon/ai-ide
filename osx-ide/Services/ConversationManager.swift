@@ -294,7 +294,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 let displayText = ChatPromptBuilder.contentForDisplay(from: self.draftAssistantText)
                 let draftTimestamp = self.historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date()
 
-                self.historyCoordinator.upsertMessage(
+                self.historyCoordinator.upsertDraftMessage(
                     ChatMessage(
                         id: draftId,
                         role: .assistant,
@@ -331,7 +331,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         pendingStreamingBuffer = ""
         let displayText = ChatPromptBuilder.contentForDisplay(from: draftAssistantText)
         let draftTimestamp = historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date()
-        historyCoordinator.upsertMessage(
+        historyCoordinator.upsertDraftMessage(
             ChatMessage(
                 id: draftId,
                 role: .assistant,

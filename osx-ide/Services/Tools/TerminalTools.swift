@@ -194,7 +194,7 @@ struct RunCommandTool: AIToolProgressReporting {
     }
 
     private func resolveTimeoutSeconds(arguments: [String: Any]) throws -> Double {
-        let timeoutSecondsRaw = arguments["timeout_seconds"] as? Double
+        let timeoutSecondsRaw = parseTimeoutSeconds(arguments["timeout_seconds"])
         let timeoutSeconds: Double = {
             if let timeoutSecondsRaw {
                 return timeoutSecondsRaw
@@ -209,6 +209,25 @@ struct RunCommandTool: AIToolProgressReporting {
             )
         }
         return timeoutSeconds
+    }
+
+    private func parseTimeoutSeconds(_ value: Any?) -> Double? {
+        switch value {
+        case let number as Double:
+            return number
+        case let number as Int:
+            return Double(number)
+        case let number as Int32:
+            return Double(number)
+        case let number as Int64:
+            return Double(number)
+        case let number as NSNumber:
+            return number.doubleValue
+        case let string as String:
+            return Double(string)
+        default:
+            return nil
+        }
     }
 
     private func resolveWorkingDirectory(arguments: [String: Any]) throws -> URL {
@@ -230,13 +249,14 @@ struct RunCommandTool: AIToolProgressReporting {
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.currentDirectoryURL = request.workingDirectoryURL
 
-        pipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            request.collector.append(data)
-            if let onProgress = request.onProgress,
-               let chunk = String(data: data, encoding: .utf8),
-               !chunk.isEmpty {
+        if let onProgress = request.onProgress {
+            pipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty else { return }
+                request.collector.append(data)
+                guard let chunk = String(data: data, encoding: .utf8), !chunk.isEmpty else {
+                    return
+                }
                 onProgress(chunk)
             }
         }
@@ -251,31 +271,8 @@ struct RunCommandTool: AIToolProgressReporting {
     ) async -> Bool {
         await withTaskGroup(of: Bool.self) { group in
             group.addTask {
-                final class OneShot: @unchecked Sendable {
-                    private let lock = NSLock()
-                    private var fired = false
-
-                    func fire(_ action: () -> Void) {
-                        lock.lock()
-                        defer { lock.unlock() }
-                        guard !fired else { return }
-                        fired = true
-                        action()
-                    }
-                }
-
-                let oneShot = OneShot()
-                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                    if !process.isRunning {
-                        continuation.resume()
-                        return
-                    }
-
-                    process.terminationHandler = { _ in
-                        oneShot.fire {
-                            continuation.resume()
-                        }
-                    }
+                while process.isRunning {
+                    try? await Task.sleep(nanoseconds: 50_000_000)
                 }
                 return true
             }

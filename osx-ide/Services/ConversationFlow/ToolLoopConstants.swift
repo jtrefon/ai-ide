@@ -48,7 +48,7 @@ enum ToolLoopConstants {
     static let repeatedReadOnlyBatchStallThreshold = 2
 
     /// Number of non-mutating iterations allowed after at least one successful write/mutation.
-    static let postWriteNonMutationStallThreshold = 3
+    static let postWriteNonMutationStallThreshold = 2
 
     /// Number of repeated content occurrences for textual tool call patterns
     static let textualPatternRepeatedThreshold = 3

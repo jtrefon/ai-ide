@@ -25,23 +25,23 @@ public enum AIRequestStage: String, Codable, Sendable {
     }
 
     static func reasoningPromptKeyIfNeeded(
-        reasoningEnabled: Bool,
+        reasoningMode: ReasoningMode,
         mode: AIMode?,
         stage: AIRequestStage?
     ) -> String? {
-        guard reasoningEnabled, mode == .agent else { return nil }
-        guard stage != .initial_response else { return nil }
+        guard reasoningMode.includesAgentReasoning, mode == .agent else { return nil }
+        guard stage != .initial_response, stage != .tool_loop else { return nil }
         return reasoningPromptKey(for: stage)
     }
 
     static func reasoningPromptIfNeeded(
-        reasoningEnabled: Bool,
+        reasoningMode: ReasoningMode,
         mode: AIMode?,
         stage: AIRequestStage?,
         projectRoot: URL?
     ) throws -> String? {
         guard let promptKey = reasoningPromptKeyIfNeeded(
-            reasoningEnabled: reasoningEnabled,
+            reasoningMode: reasoningMode,
             mode: mode,
             stage: stage
         ) else {

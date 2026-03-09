@@ -5,6 +5,7 @@ enum LocalModelCatalog {
     static func allModels() -> [LocalModelDefinition] {
         [
             qwen3_4B_Instruct_2507(),
+            qwen3_5_4B_MLX_4bit(),
             granite_4_0_h_micro_4bit()
         ]
     }
@@ -66,6 +67,33 @@ enum LocalModelCatalog {
                 artifact("vocab.json")
             ],
             defaultContextLength: 4096,
+            toolCallFormat: .json
+        )
+    }
+
+    private static func qwen3_5_4B_MLX_4bit() -> LocalModelDefinition {
+        let base = "https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit/resolve/main/"
+
+        func artifact(_ fileName: String) -> LocalModelArtifact {
+            LocalModelArtifact(fileName: fileName, url: URL(string: base + fileName)!)
+        }
+
+        return LocalModelDefinition(
+            id: "mlx-community/Qwen3.5-4B-MLX-4bit@main",
+            displayName: "Qwen3.5-4B-MLX-4bit (experimental)",
+            artifacts: [
+                artifact("chat_template.jinja"),
+                artifact("config.json"),
+                artifact("model.safetensors"),
+                artifact("model.safetensors.index.json"),
+                artifact("preprocessor_config.json"),
+                artifact("processor_config.json"),
+                artifact("tokenizer.json"),
+                artifact("tokenizer_config.json"),
+                artifact("video_preprocessor_config.json"),
+                artifact("vocab.json")
+            ],
+            defaultContextLength: 32768,
             toolCallFormat: .json
         )
     }

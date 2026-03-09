@@ -131,7 +131,7 @@ final class ChatPromptBuilderReasoningTests: XCTestCase {
 
     func testHasMissingClaimedFileArtifactsReturnsFalseWhenClaimedFilesExist() throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("chat_prompt_builder_existing_artifact_\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         try FileManager.default.createDirectory(
@@ -149,6 +149,28 @@ final class ChatPromptBuilderReasoningTests: XCTestCase {
         XCTAssertFalse(
             ChatPromptBuilder.hasMissingClaimedFileArtifacts(content: content, projectRoot: tempRoot),
             "Expected no missing artifacts when all claimed files exist"
+        )
+    }
+
+    func testShouldForceExecutionFollowupForDoneNextPendingWorkResponse() {
+        let shouldForce = ChatPromptBuilder.shouldForceExecutionFollowup(
+            userInput: "Create package.json, index.html, src/main.jsx, and src/App.jsx using tools.",
+            content: "Done → Next: Create index.html, src/main.jsx, src/App.jsx → Path: write_files",
+            hasToolCalls: false
+        )
+
+        XCTAssertTrue(
+            shouldForce,
+            "Expected Done → Next pending-work responses to continue forcing execution followup"
+        )
+    }
+
+    func testIndicatesWorkWasPerformedForScaffoldCompletionSummary() {
+        let content = "Done. All required files have been created and the React Todo application structure is now in place."
+
+        XCTAssertTrue(
+            ChatPromptBuilder.indicatesWorkWasPerformed(content: content),
+            "Expected scaffold completion summaries to count as performed work"
         )
     }
 }

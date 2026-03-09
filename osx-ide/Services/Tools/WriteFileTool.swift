@@ -86,6 +86,12 @@ struct WriteFileTool: AITool {
             )
         }
 
+        if FileManager.default.fileExists(atPath: url.path),
+           let existingContent = try? fileSystemService.readFile(at: url),
+           existingContent == content {
+            return "No-op: content already matches for \(relativePath)"
+        }
+
         try await FileToolWriteApplier.applyWrite(
             FileToolWriteApplier.ApplyWriteRequest(
                 fileSystemService: fileSystemService,

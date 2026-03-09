@@ -99,6 +99,7 @@ enum ToolLoopUtilities {
         conversationId: String,
         projectRoot: URL
     ) async throws -> [ChatMessage] {
+        await ConversationPlanStore.shared.setProjectRoot(projectRoot)
         let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
 
         var parts: [String] = [

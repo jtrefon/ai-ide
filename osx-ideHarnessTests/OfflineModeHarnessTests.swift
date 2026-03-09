@@ -1,4 +1,5 @@
 import XCTest
+import MLXVLM
 @testable import osx_ide
 
 /// Dedicated offline harness tests.
@@ -6,6 +7,24 @@ import XCTest
 /// from production-parity online harness suites.
 @MainActor
 final class OfflineModeHarnessTests: XCTestCase {
+    private final class NoopErrorManager: ObservableObject, ErrorManagerProtocol {
+        @Published var currentError: AppError?
+        @Published var showErrorAlert: Bool = false
+
+        func handle(_ error: AppError) {
+            currentError = error
+        }
+
+        func handle(_ error: Error, context: String) {
+            currentError = .unknown("\(context): \(error.localizedDescription)")
+        }
+
+        func dismissError() {
+            currentError = nil
+            showErrorAlert = false
+        }
+    }
+
     private var temporaryDirectories: [URL] = []
     private let maxScenarioAttempts = 2
 
@@ -38,7 +57,8 @@ final class OfflineModeHarnessTests: XCTestCase {
             in: manager,
             timeoutSeconds: 30
         )
-        try await finishOrCancelGeneration(manager, gracefulWaitSeconds: 5)
+        let timedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 30)
+        XCTAssertFalse(timedOut, "Expected offline local agent run to finish after create_file execution")
 
         XCTAssertTrue(
             completedCreateFileMessage.content.contains("Reserved file path at")
@@ -64,11 +84,15 @@ final class OfflineModeHarnessTests: XCTestCase {
         manager.sendMessage()
 
         let completedToolMessages = try await waitForCompletedToolExecutions(
-            minimumCount: 2,
+            requiredToolNames: [
+                ["read_file", "list_files", "index_read_file", "index_search_symbols", "index_search_text", "index_list_files"],
+                ["write_file", "create_file", "write_files", "replace_in_file"]
+            ],
             in: manager,
-            timeoutSeconds: 45
+            timeoutSeconds: 60
         )
-        try await finishOrCancelGeneration(manager, gracefulWaitSeconds: 8)
+        let timedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 60)
+        XCTAssertFalse(timedOut, "Expected offline local multi-step tool flow to finish after completing required tool categories")
 
         let executedToolNames = completedToolMessages.compactMap(\ .toolName)
         XCTAssertTrue(
@@ -78,6 +102,119 @@ final class OfflineModeHarnessTests: XCTestCase {
         XCTAssertTrue(
             executedToolNames.contains("write_file") || executedToolNames.contains("create_file"),
             "Expected offline local agent to perform a file mutation step. Tools: \(executedToolNames)"
+        )
+    }
+
+    func testOfflineHarnessMinimalToolSubsetCanCreateFileThroughLocalMLX() async throws {
+        let projectRoot = makeTempDir(prefix: "offline_minimal_tools")
+        let container = try await makeOfflineContainer(projectRoot: projectRoot)
+        let sendCoordinator = makeMinimalSendCoordinator(projectRoot: projectRoot, container: container)
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        let fileName = "minimal-offline-\(UUID().uuidString).txt"
+
+        let minimalTools = makeMinimalOfflineTools(projectRoot: projectRoot, eventBus: container.eventBus)
+
+        try await sendCoordinator.send(
+            SendRequest(
+                userInput: "Create a file named \(fileName) using the create_file tool, then finish.",
+                explicitContext: nil,
+                mode: .agent,
+                projectRoot: projectRoot,
+                conversationId: conversationId,
+                runId: UUID().uuidString,
+                availableTools: minimalTools,
+                cancelledToolCallIds: { [] },
+                qaReviewEnabled: false,
+                draftAssistantMessageId: nil
+            )
+        )
+
+        let completedToolMessages = historyCoordinator.messages.filter {
+            $0.isToolExecution && $0.toolStatus == .completed
+        }
+        let executedToolNames = completedToolMessages.compactMap(\.toolName)
+
+        XCTAssertTrue(
+            executedToolNames.contains("create_file"),
+            "Expected minimal local MLX tool subset to execute create_file. Tools: \(executedToolNames)"
+        )
+
+        let listedFiles = listAllFiles(under: projectRoot)
+        XCTAssertTrue(
+            listedFiles.contains(fileName),
+            "Expected minimal local MLX tool subset to create \(fileName). Files: \(listedFiles)"
+        )
+    }
+
+    func testOfflineHarnessDirectMinimalToolCallProducesAndExecutesCreateFile() async throws {
+        let projectRoot = makeTempDir(prefix: "offline_direct_minimal_tools")
+        let container = try await makeOfflineContainer(projectRoot: projectRoot)
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let minimalTools = makeMinimalOfflineTools(projectRoot: projectRoot, eventBus: container.eventBus)
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: container.aiService,
+            codebaseIndex: nil,
+            settingsStore: OpenRouterSettingsStore(settingsStore: container.settingsStore),
+            eventBus: container.eventBus
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: container.fileSystemService,
+            errorManager: NoopErrorManager(),
+            projectRoot: projectRoot,
+            eventBus: container.eventBus,
+            activityCoordinator: container.activityCoordinator
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let fileName = "direct-minimal-offline-\(UUID().uuidString).txt"
+
+        historyCoordinator.append(ChatMessage(
+            role: .user,
+            content: "Create a file named \(fileName) using the create_file tool, then stop."
+        ))
+
+        let responseResult = await aiInteractionCoordinator.sendMessageWithRetry(
+            AIInteractionCoordinator.SendMessageWithRetryRequest(
+                messages: historyCoordinator.messages,
+                explicitContext: nil,
+                tools: minimalTools,
+                mode: .agent,
+                projectRoot: projectRoot,
+                runId: UUID().uuidString,
+                stage: .tool_loop,
+                conversationId: historyCoordinator.currentConversationId
+            )
+        )
+
+        let response = try responseResult.get()
+        let toolCalls = try XCTUnwrap(response.toolCalls)
+        XCTAssertFalse(toolCalls.isEmpty, "Expected local MLX to emit at least one structured tool call")
+        XCTAssertEqual(toolCalls.first?.name, "create_file")
+
+        let toolMessages = await toolExecutionCoordinator.executeToolCalls(
+            toolCalls,
+            availableTools: minimalTools,
+            conversationId: historyCoordinator.currentConversationId
+        ) { message in
+            historyCoordinator.upsertToolExecutionMessage(message)
+        }
+
+        let completedToolNames = toolMessages
+            .filter { $0.isToolExecution && $0.toolStatus == .completed }
+            .compactMap(\.toolName)
+        XCTAssertTrue(
+            completedToolNames.contains("create_file"),
+            "Expected executed tool results to include create_file. Results: \(completedToolNames)"
+        )
+
+        let completedCreateFileMessages = toolMessages.filter {
+            $0.isToolExecution && $0.toolStatus == .completed && $0.toolName == "create_file"
+        }
+        XCTAssertTrue(
+            completedCreateFileMessages.contains(where: {
+                $0.content.contains("Reserved file path at") || $0.content.contains(fileName)
+            }),
+            "Expected direct minimal local MLX tool call to reserve \(fileName). Messages: \(completedCreateFileMessages.map(\.content))"
         )
     }
 
@@ -277,27 +414,66 @@ final class OfflineModeHarnessTests: XCTestCase {
         let telemetry: ToolExecutionTelemetrySummary
     }
 
-    private func makeRuntime(offlineModeEnabled: Bool, projectRoot: URL? = nil) async throws -> Runtime {
-        let container = DependencyContainer(
-            launchContext: AppLaunchContext(
-                mode: .unitTest,
-                isTesting: true,
-                isUITesting: false,
-                testProfilePath: nil,
-                disableHeavyInit: false
-            )
-        )
-
-        let selectionStore = LocalModelSelectionStore(settingsStore: container.settingsStore)
-        await selectionStore.setOfflineModeEnabled(offlineModeEnabled)
-        let effectiveOfflineMode = await selectionStore.isOfflineModeEnabled()
-        XCTAssertEqual(effectiveOfflineMode, offlineModeEnabled)
-
-        if let projectRoot {
-            container.workspaceService.currentDirectory = projectRoot
-            container.projectCoordinator.configureProject(root: projectRoot)
-            try await Task.sleep(nanoseconds: 500_000_000)
+    private func resolveOfflineHarnessModelId(preferredModelId: String?) throws -> String {
+        let environment = ProcessInfo.processInfo.environment
+        let candidateModelIds = [
+            preferredModelId,
+            environment["TEST_RUNNER_ENV_HARNESS_MODEL_ID"],
+            environment["HARNESS_MODEL_ID"]
+        ]
+        .compactMap { value -> String? in
+            guard let value else { return nil }
+            let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedValue.isEmpty ? nil : trimmedValue
         }
+ 
+        if let requestedModelId = candidateModelIds.first(where: { LocalModelCatalog.model(id: $0) != nil }) {
+            guard let requestedModel = LocalModelCatalog.model(id: requestedModelId) else {
+                throw NSError(
+                    domain: "OfflineModeHarnessTests",
+                    code: 3,
+                    userInfo: [NSLocalizedDescriptionKey: "Requested harness model is not in LocalModelCatalog: \(requestedModelId)"]
+                )
+            }
+            guard LocalModelFileStore.isModelInstalled(requestedModel) else {
+                throw NSError(
+                    domain: "OfflineModeHarnessTests",
+                    code: 4,
+                    userInfo: [NSLocalizedDescriptionKey: "Requested harness model is not installed locally: \(requestedModelId)"]
+                )
+            }
+            return requestedModelId
+        }
+
+        if let installedModel = LocalModelCatalog.allModels().first(where: { LocalModelFileStore.isModelInstalled($0) }) {
+            return installedModel.id
+        }
+
+        throw NSError(
+            domain: "OfflineModeHarnessTests",
+            code: 5,
+            userInfo: [NSLocalizedDescriptionKey: "No installed local MLX model is available for offline harness execution"]
+        )
+    }
+
+    private func preferredOfflineHarnessModelId(settingsStore: SettingsStore) -> String? {
+        let selectedLocalModelId = settingsStore.string(forKey: "LocalModel.SelectedId")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let selectedLocalModelId, !selectedLocalModelId.isEmpty {
+            return selectedLocalModelId
+        }
+
+        let openRouterSettings = OpenRouterSettingsStore(settingsStore: settingsStore).load(includeApiKey: true)
+        let openRouterModelId = openRouterSettings.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return openRouterModelId.isEmpty ? nil : openRouterModelId
+    }
+
+    private func makeRuntime(offlineModeEnabled: Bool, projectRoot: URL? = nil) async throws -> Runtime {
+        let container = try await makeConfiguredContainer(
+            offlineModeEnabled: offlineModeEnabled,
+            projectRoot: projectRoot
+        )
 
         guard let manager = container.conversationManager as? ConversationManager else {
             throw NSError(
@@ -308,6 +484,103 @@ final class OfflineModeHarnessTests: XCTestCase {
         }
 
         return Runtime(manager: manager)
+    }
+
+    private func makeOfflineContainer(projectRoot: URL? = nil) async throws -> DependencyContainer {
+        try await makeConfiguredContainer(offlineModeEnabled: true, projectRoot: projectRoot)
+    }
+
+    private func makeConfiguredContainer(
+        offlineModeEnabled: Bool,
+        projectRoot: URL?
+    ) async throws -> DependencyContainer {
+        let container = DependencyContainer(
+            launchContext: AppLaunchContext(
+                mode: .unitTest,
+                isTesting: true,
+                isUITesting: false,
+                testProfilePath: nil,
+                disableHeavyInit: false
+            )
+        )
+
+        let openRouterSettingsStore = OpenRouterSettingsStore(settingsStore: container.settingsStore)
+        let currentSettings = openRouterSettingsStore.load(includeApiKey: true)
+        openRouterSettingsStore.save(OpenRouterSettings(
+            apiKey: currentSettings.apiKey,
+            model: currentSettings.model,
+            baseURL: currentSettings.baseURL,
+            systemPrompt: currentSettings.systemPrompt,
+            reasoningMode: currentSettings.reasoningMode,
+            toolPromptMode: currentSettings.toolPromptMode,
+            ragEnabledDuringToolLoop: false
+        ))
+
+        let selectionStore = LocalModelSelectionStore(settingsStore: container.settingsStore)
+        await selectionStore.setOfflineModeEnabled(offlineModeEnabled)
+        if offlineModeEnabled {
+            let modelId = try resolveOfflineHarnessModelId(
+                preferredModelId: preferredOfflineHarnessModelId(settingsStore: container.settingsStore)
+            )
+            await selectionStore.setSelectedModelId(modelId)
+            let effectiveModelId = await selectionStore.selectedModelId()
+            XCTAssertEqual(effectiveModelId, modelId)
+        }
+        let effectiveOfflineMode = await selectionStore.isOfflineModeEnabled()
+        XCTAssertEqual(effectiveOfflineMode, offlineModeEnabled)
+
+        if let projectRoot {
+            container.workspaceService.currentDirectory = projectRoot
+            container.projectCoordinator.configureProject(root: projectRoot)
+            try await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        return container
+    }
+
+    private func makeMinimalSendCoordinator(
+        projectRoot: URL,
+        container: DependencyContainer
+    ) -> ConversationSendCoordinator {
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: container.aiService,
+            codebaseIndex: nil,
+            settingsStore: OpenRouterSettingsStore(settingsStore: container.settingsStore),
+            eventBus: container.eventBus
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: container.fileSystemService,
+            errorManager: NoopErrorManager(),
+            projectRoot: projectRoot,
+            eventBus: container.eventBus,
+            activityCoordinator: container.activityCoordinator
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        return ConversationSendCoordinator(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+    }
+
+    private func makeHistoryCoordinator(projectRoot: URL) -> ChatHistoryCoordinator {
+        let historyCoordinator = ChatHistoryCoordinator(
+            historyManager: ChatHistoryManager(),
+            projectRoot: projectRoot
+        )
+        historyCoordinator.append(ChatMessage(role: .user, content: "Hello"))
+        return historyCoordinator
+    }
+
+    private func makeMinimalOfflineTools(projectRoot: URL, eventBus: EventBusProtocol) -> [AITool] {
+        let pathValidator = PathValidator(projectRoot: projectRoot)
+        let fileSystemService = FileSystemService()
+        return [
+            CreateFileTool(pathValidator: pathValidator, eventBus: eventBus),
+            ListFilesTool(pathValidator: pathValidator),
+            ReadFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator)
+        ]
     }
 
     private func runOfflineScenarioUntilStable(
@@ -374,7 +647,32 @@ final class OfflineModeHarnessTests: XCTestCase {
         if !manager.isSending {
             return false
         }
-        XCTFail("Timed out waiting for conversation manager to finish send task")
+
+        let observedExecutionStatuses = manager.messages
+            .filter { $0.isToolExecution }
+            .map { message in
+                let toolName = message.toolName ?? "unknown_tool"
+                let status = message.toolStatus?.rawValue ?? "nil"
+                return "\(toolName)[\(status)]"
+            }
+        let failedSummaries = manager.messages
+            .filter { $0.isToolExecution && $0.toolStatus == .failed }
+            .map { message in
+                let toolName = message.toolName ?? "unknown_tool"
+                return "\(toolName): \(message.content.prefix(160))"
+            }
+        let recentMessageSummaries = manager.messages.suffix(6).map { message in
+            let toolName = message.toolName ?? "-"
+            let status = message.toolStatus?.rawValue ?? "-"
+            return "\(message.role.rawValue):\(toolName):\(status): \(message.content.prefix(160))"
+        }
+
+        XCTFail(
+            "Timed out waiting for conversation manager to finish send task. "
+                + "Observed tool statuses: \(observedExecutionStatuses). "
+                + "Failed tool summaries: \(failedSummaries). "
+                + "Recent messages: \(recentMessageSummaries)"
+        )
         return true
     }
 
@@ -399,7 +697,7 @@ final class OfflineModeHarnessTests: XCTestCase {
     }
 
     private func waitForCompletedToolExecutions(
-        minimumCount: Int,
+        requiredToolNames: [[String]],
         in manager: ConversationManager,
         timeoutSeconds: TimeInterval
     ) async throws -> [ChatMessage] {
@@ -408,12 +706,40 @@ final class OfflineModeHarnessTests: XCTestCase {
             let completedMessages = manager.messages.filter {
                 $0.isToolExecution && $0.toolStatus == .completed
             }
-            if completedMessages.count >= minimumCount {
+            let completedToolNames = Set(completedMessages.compactMap(\.toolName))
+            let hasSatisfiedRequirements = requiredToolNames.allSatisfy { requiredNames in
+                !Set(requiredNames).intersection(completedToolNames).isEmpty
+            }
+            if hasSatisfiedRequirements {
                 return completedMessages
             }
             try await Task.sleep(nanoseconds: 200_000_000)
         }
-        XCTFail("Timed out waiting for local MLX agent to complete at least \(minimumCount) tool executions")
+
+        let completedSummaries = manager.messages
+            .filter { $0.isToolExecution && $0.toolStatus == .completed }
+            .map { message in
+                let toolName = message.toolName ?? "unknown_tool"
+                return "\(toolName): \(message.content.prefix(120))"
+            }
+        let failedSummaries = manager.messages
+            .filter { $0.isToolExecution && $0.toolStatus == .failed }
+            .map { message in
+                let toolName = message.toolName ?? "unknown_tool"
+                return "\(toolName): \(message.content.prefix(120))"
+            }
+        let observedExecutionStatuses = manager.messages
+            .filter { $0.isToolExecution }
+            .map { message in
+                let toolName = message.toolName ?? "unknown_tool"
+                let status = message.toolStatus?.rawValue ?? "nil"
+                return "\(toolName)[\(status)]"
+            }
+
+        XCTFail(
+            "Timed out waiting for local MLX agent to complete required tool categories \(requiredToolNames). "
+                + "Completed: \(completedSummaries). Failed: \(failedSummaries). Observed: \(observedExecutionStatuses)"
+        )
         return []
     }
 

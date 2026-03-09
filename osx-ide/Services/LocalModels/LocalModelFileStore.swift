@@ -5,15 +5,36 @@ public enum LocalModelFileStore {
         let maxPositionEmbeddings: Int?
         let maxSequenceLength: Int?
         let modelType: String?
+        let textConfig: TextConfig?
+
+        struct TextConfig: Codable {
+            let maxPositionEmbeddings: Int?
+            let maxSequenceLength: Int?
+            let modelType: String?
+
+            enum CodingKeys: String, CodingKey {
+                case maxPositionEmbeddings = "max_position_embeddings"
+                case maxSequenceLength = "max_sequence_length"
+                case modelType = "model_type"
+            }
+        }
 
         enum CodingKeys: String, CodingKey {
             case maxPositionEmbeddings = "max_position_embeddings"
             case maxSequenceLength = "max_sequence_length"
             case modelType = "model_type"
+            case textConfig = "text_config"
         }
 
         var contextLength: Int? {
-            maxPositionEmbeddings ?? maxSequenceLength
+            maxPositionEmbeddings
+                ?? maxSequenceLength
+                ?? textConfig?.maxPositionEmbeddings
+                ?? textConfig?.maxSequenceLength
+        }
+
+        var effectiveModelType: String? {
+            modelType ?? textConfig?.modelType
         }
     }
 
@@ -41,6 +62,18 @@ public enum LocalModelFileStore {
 
     static func artifactURL(modelId: String, fileName: String) throws -> URL {
         try modelDirectory(modelId: modelId).appendingPathComponent(fileName, isDirectory: false)
+    }
+
+    static func runtimeModelDirectory(for model: LocalModelDefinition) throws -> URL {
+        let installedDirectory = try modelDirectory(modelId: model.id)
+        guard requiresRuntimeCompatibilityDirectory(model: model) else {
+            return installedDirectory
+        }
+
+        return try prepareRuntimeCompatibilityDirectory(
+            sourceDirectory: installedDirectory,
+            model: model
+        )
     }
 
     static func isModelInstalled(_ model: LocalModelDefinition) -> Bool {
@@ -82,6 +115,71 @@ public enum LocalModelFileStore {
         }
         // Fall back to definition default
         return model.defaultContextLength
+    }
+
+    private static func requiresRuntimeCompatibilityDirectory(model: LocalModelDefinition) -> Bool {
+        guard let config = loadModelConfig(modelId: model.id) else {
+            return false
+        }
+        return config.effectiveModelType == "qwen3_5"
+    }
+
+    private static func prepareRuntimeCompatibilityDirectory(
+        sourceDirectory: URL,
+        model: LocalModelDefinition
+    ) throws -> URL {
+        let runtimeDirectory = sourceDirectory.appendingPathComponent("osx-ide-runtime", isDirectory: true)
+        let normalizedConfigData = try normalizedRuntimeConfigData(for: model)
+
+        if FileManager.default.fileExists(atPath: runtimeDirectory.path) {
+            try FileManager.default.removeItem(at: runtimeDirectory)
+        }
+        try FileManager.default.createDirectory(at: runtimeDirectory, withIntermediateDirectories: true)
+
+        let fileManager = FileManager.default
+        let sourceContents = try fileManager.contentsOfDirectory(
+            at: sourceDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+
+        for sourceItem in sourceContents {
+            guard sourceItem.lastPathComponent != runtimeDirectory.lastPathComponent else {
+                continue
+            }
+            guard sourceItem.lastPathComponent != "config.json" else {
+                continue
+            }
+
+            let destinationItem = runtimeDirectory.appendingPathComponent(sourceItem.lastPathComponent)
+            try fileManager.createSymbolicLink(at: destinationItem, withDestinationURL: sourceItem)
+        }
+
+        try normalizedConfigData.write(
+            to: runtimeDirectory.appendingPathComponent("config.json"),
+            options: Data.WritingOptions.atomic
+        )
+        return runtimeDirectory
+    }
+
+    private static func normalizedRuntimeConfigData(for model: LocalModelDefinition) throws -> Data {
+        let configURL = try artifactURL(modelId: model.id, fileName: "config.json")
+        let configData = try Data(contentsOf: configURL)
+        guard var rootObject = try JSONSerialization.jsonObject(with: configData) as? [String: Any] else {
+            return configData
+        }
+
+        guard rootObject["model_type"] as? String == "qwen3_5",
+              let textConfig = rootObject["text_config"] as? [String: Any] else {
+            return configData
+        }
+
+        if rootObject["vocab_size"] == nil,
+           let vocabSize = textConfig["vocab_size"] {
+            rootObject["vocab_size"] = vocabSize
+        }
+
+        return try JSONSerialization.data(withJSONObject: rootObject, options: [.prettyPrinted, .sortedKeys])
     }
 
     private static func sanitizeModelId(_ modelId: String) -> String {

@@ -40,6 +40,13 @@ struct ListFilesTool: AITool {
         let limit = max(1, min(1000, arguments["limit"] as? Int ?? 200))
 
         let url = try pathValidator.validateAndResolve(resolvedPath)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            return ""
+        }
+        guard isDirectory.boolValue else {
+            return url.lastPathComponent
+        }
         var contents = try FileManager.default.contentsOfDirectory(
             at: url,
             includingPropertiesForKeys: [.isDirectoryKey],

@@ -27,6 +27,13 @@ final class AllowlistedRunCommandToolTests: XCTestCase {
         }
     }
 
+    private func makeTempDir(prefix: String) -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)_\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
     func testRejectsNonAllowlistedCommand() async {
         let tool = AllowlistedRunCommandTool(base: FakeRunCommandTool(), allowedPrefixes: ["echo ", "xcodebuild "])
 
@@ -43,5 +50,22 @@ final class AllowlistedRunCommandToolTests: XCTestCase {
 
         let output = try await tool.execute(arguments: ToolArguments(["command": "echo ok"]))
         XCTAssertEqual(output, "FAKE: echo ok")
+    }
+
+    func testRealRunCommandToolExecutesSimpleCommandWithIntegerTimeout() async throws {
+        let projectRoot = makeTempDir(prefix: "run_command_unit")
+        defer { try? FileManager.default.removeItem(at: projectRoot) }
+
+        let pathValidator = PathValidator(projectRoot: projectRoot)
+        let tool = RunCommandTool(projectRoot: projectRoot, pathValidator: pathValidator)
+
+        let output = try await tool.execute(arguments: ToolArguments([
+            "command": "printf 'unit-run-command-ok'",
+            "timeout_seconds": 5
+        ]))
+
+        XCTAssertTrue(output.contains("Exit Code: 0"))
+        XCTAssertTrue(output.contains("Timed Out: false"))
+        XCTAssertTrue(output.contains("unit-run-command-ok"))
     }
 }

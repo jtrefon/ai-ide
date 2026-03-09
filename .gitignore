@@ -29,6 +29,7 @@ old_*.swift
 # Xcode build artifacts - IMPORTANT (no leading dot!)
 build/
 DerivedData/
+DerivedData-test/
 
 # Xcode module caches
 build/ModuleCache.noindex/
@@ -72,3 +73,4 @@ Carthage/Checkouts/
 sandbox/
 scripts/
 venv*/
+.venv*/

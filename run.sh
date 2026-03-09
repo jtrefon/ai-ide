@@ -194,12 +194,14 @@ run_harness() {
     # Build environment variables to pass to test runner
     # Using TEST_RUNNER_ENV_ prefix to pass env vars through xcodebuild to the test process
     local env_args=()
+    local runtime_env_args=("OSX_IDE_PROMPTS_ROOT=$resolved_prompts_root" "OSXIDE_TEST_PROFILE_DIR=$test_profile_dir")
     if [ -n "$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS" ]; then
         env_args+=("TEST_RUNNER_ENV_OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS=$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS")
         echo "Production parity harness enabled"
     fi
     if [ -n "$HARNESS_MODEL_ID" ]; then
         env_args+=("TEST_RUNNER_ENV_HARNESS_MODEL_ID=$HARNESS_MODEL_ID")
+        runtime_env_args+=("HARNESS_MODEL_ID=$HARNESS_MODEL_ID")
         echo "Using model: $HARNESS_MODEL_ID"
     fi
     if [ -n "$HARNESS_USE_OPENROUTER" ]; then
@@ -207,7 +209,6 @@ run_harness() {
         echo "Using OpenRouter: $HARNESS_USE_OPENROUTER"
     fi
     env_args+=("TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR=$test_profile_dir")
-    local runtime_env_args=("OSX_IDE_PROMPTS_ROOT=$resolved_prompts_root" "OSXIDE_TEST_PROFILE_DIR=$test_profile_dir")
     if [ -n "$OSX_IDE_RUN_ONLINE_HARNESS" ]; then
         env_args+=("TEST_RUNNER_ENV_OSX_IDE_RUN_ONLINE_HARNESS=$OSX_IDE_RUN_ONLINE_HARNESS")
         runtime_env_args+=("OSX_IDE_RUN_ONLINE_HARNESS=$OSX_IDE_RUN_ONLINE_HARNESS")

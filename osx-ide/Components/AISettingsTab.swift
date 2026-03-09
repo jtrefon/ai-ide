@@ -154,8 +154,14 @@ struct AISettingsTab: View {
                         subtitle: localized("settings.ai.reasoning.subtitle"),
                         systemImage: "brain"
                     ) {
-                        Toggle("", isOn: $viewModel.reasoningEnabled)
-                            .toggleStyle(.switch)
+                        Picker("", selection: $viewModel.reasoningMode) {
+                            Text("None").tag(ReasoningMode.none)
+                            Text("Model").tag(ReasoningMode.model)
+                            Text("Agent").tag(ReasoningMode.agent)
+                            Text("Model + Agent").tag(ReasoningMode.modelAndAgent)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 340)
                     }
 
                     SettingsRow(

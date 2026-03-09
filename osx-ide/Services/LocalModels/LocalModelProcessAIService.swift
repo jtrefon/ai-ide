@@ -3,20 +3,28 @@ import Combine
 import MLX
 @preconcurrency import MLXLMCommon
 import MLXLLM
+import MLXVLM
 import Tokenizers
 
 protocol MemoryPressureObserving: Sendable {}
 
 private struct LocalModelTestBudget {
+    static let maximumOperationalContextLength = 8192
+    static let maximumOperationalOutputTokens = 1024
+
     let contextLength: Int
     let retainedMessages: [ChatMessage]
     let maxOutputTokens: Int
 
     static func applyIfNeeded(to request: AIServiceHistoryRequest, contextLength: Int) -> LocalModelTestBudget {
         guard AppRuntimeEnvironment.launchContext.isTesting else {
-            let defaultMaxOutputTokens = max(2048, Int(Double(contextLength) * 0.6))
+            let clampedContextLength = min(contextLength, maximumOperationalContextLength)
+            let defaultMaxOutputTokens = min(
+                maximumOperationalOutputTokens,
+                max(512, clampedContextLength / 4)
+            )
             return LocalModelTestBudget(
-                contextLength: contextLength,
+                contextLength: clampedContextLength,
                 retainedMessages: request.messages,
                 maxOutputTokens: defaultMaxOutputTokens
             )
@@ -78,6 +86,7 @@ actor LocalModelProcessAIService: AIService {
     protocol ModelFileStoring: Sendable {
         func isModelInstalled(_ model: LocalModelDefinition) -> Bool
         func modelDirectory(modelId: String) throws -> URL
+        func runtimeModelDirectory(for model: LocalModelDefinition) throws -> URL
     }
 
     struct LocalModelFileStoreAdapter: ModelFileStoring {
@@ -87,6 +96,10 @@ actor LocalModelProcessAIService: AIService {
 
         func modelDirectory(modelId: String) throws -> URL {
             try LocalModelFileStore.modelDirectory(modelId: modelId)
+        }
+
+        func runtimeModelDirectory(for model: LocalModelDefinition) throws -> URL {
+            try LocalModelFileStore.runtimeModelDirectory(for: model)
         }
     }
 
@@ -108,12 +121,6 @@ actor LocalModelProcessAIService: AIService {
         }
 
         private func performInference<R>(_ body: @escaping @Sendable () async throws -> R) async throws -> R {
-            if AppRuntimeEnvironment.launchContext.isTesting {
-                return try await Device.withDefaultDevice(.cpu) {
-                    try await body()
-                }
-            }
-
             return try await body()
         }
 
@@ -168,15 +175,6 @@ actor LocalModelProcessAIService: AIService {
                         }
                     }
                     let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if collectedToolCalls.isEmpty, !trimmedOutput.isEmpty {
-                        let recoveredToolCalls = Self.recoverTextualToolCalls(from: trimmedOutput)
-                        if !recoveredToolCalls.isEmpty {
-                            collectedToolCalls = recoveredToolCalls
-                            await publishStatus("Recovered \(recoveredToolCalls.count) textual tool call(s) from model output.")
-                        } else if Self.containsTextualToolCallSignal(in: trimmedOutput) {
-                            await publishStatus("Model emitted textual tool-call pattern, but parsing recovered 0 tool calls.")
-                        }
-                    }
                     return AIServiceResponse(
                         content: trimmedOutput.isEmpty ? nil : trimmedOutput,
                         toolCalls: collectedToolCalls.isEmpty ? nil : collectedToolCalls
@@ -210,117 +208,6 @@ actor LocalModelProcessAIService: AIService {
                 name: toolCall.function.name,
                 arguments: arguments
             )
-        }
-
-        nonisolated internal static func recoverTextualToolCalls(from content: String) -> [AIToolCall] {
-            let candidates = jsonCandidates(from: content)
-            for candidate in candidates {
-                guard let data = candidate.data(using: .utf8) else { continue }
-                guard let object = try? JSONSerialization.jsonObject(with: data) else { continue }
-                let calls = parseToolCalls(fromJSONObject: object)
-                if !calls.isEmpty {
-                    return calls
-                }
-            }
-            return []
-        }
-
-        nonisolated private static func containsTextualToolCallSignal(in content: String) -> Bool {
-            let lowered = content.lowercased()
-            return lowered.contains("tool_calls") || lowered.contains("tool call")
-        }
-
-        nonisolated private static func jsonCandidates(from content: String) -> [String] {
-            var candidates: [String] = []
-
-            if let regex = try? NSRegularExpression(pattern: "```(?:json)?\\s*([\\s\\S]*?)```", options: [.caseInsensitive]) {
-                let range = NSRange(content.startIndex..<content.endIndex, in: content)
-                for match in regex.matches(in: content, options: [], range: range) {
-                    guard match.numberOfRanges > 1,
-                          let blockRange = Range(match.range(at: 1), in: content) else { continue }
-                    let block = String(content[blockRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !block.isEmpty {
-                        candidates.append(block)
-                    }
-                }
-            }
-
-            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                candidates.append(trimmed)
-            }
-
-            if let start = content.firstIndex(of: "{"),
-               let end = content.lastIndex(of: "}"),
-               start <= end {
-                let slice = String(content[start...end]).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !slice.isEmpty {
-                    candidates.append(slice)
-                }
-            }
-
-            if let start = content.firstIndex(of: "["),
-               let end = content.lastIndex(of: "]"),
-               start <= end {
-                let slice = String(content[start...end]).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !slice.isEmpty {
-                    candidates.append(slice)
-                }
-            }
-
-            return candidates
-        }
-
-        nonisolated private static func parseToolCalls(fromJSONObject object: Any) -> [AIToolCall] {
-            if let dict = object as? [String: Any], let toolCalls = dict["tool_calls"] {
-                return parseToolCallsArray(toolCalls)
-            }
-
-            if let dict = object as? [String: Any], let toolCalls = dict["toolCalls"] {
-                return parseToolCallsArray(toolCalls)
-            }
-
-            if let array = object as? [Any] {
-                return parseToolCallsArray(array)
-            }
-
-            return []
-        }
-
-        nonisolated private static func parseToolCallsArray(_ value: Any) -> [AIToolCall] {
-            guard let rawCalls = value as? [[String: Any]] else { return [] }
-            return rawCalls.compactMap { parseToolCall($0) }
-        }
-
-        nonisolated private static func parseToolCall(_ payload: [String: Any]) -> AIToolCall? {
-            if let functionPayload = payload["function"] as? [String: Any],
-               let name = functionPayload["name"] as? String {
-                let arguments = parseArguments(functionPayload["arguments"])
-                let id = (payload["id"] as? String) ?? UUID().uuidString
-                return AIToolCall(id: id, name: name, arguments: arguments)
-            }
-
-            if let name = payload["name"] as? String {
-                let arguments = parseArguments(payload["arguments"])
-                let id = (payload["id"] as? String) ?? UUID().uuidString
-                return AIToolCall(id: id, name: name, arguments: arguments)
-            }
-
-            return nil
-        }
-
-        nonisolated private static func parseArguments(_ value: Any?) -> [String: Any] {
-            if let dictionary = value as? [String: Any] {
-                return dictionary
-            }
-
-            if let string = value as? String,
-               let data = string.data(using: .utf8),
-               let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                return decoded
-            }
-
-            return [:]
         }
 
         /// Unload all cached models to free memory
@@ -358,10 +245,54 @@ actor LocalModelProcessAIService: AIService {
                 directory: cacheKey,
                 toolCallFormat: toolCallFormat
             )
-            let container = try await MLXLMCommon.loadModelContainer(configuration: configuration)
+            let container = try await loadModelContainer(
+                configuration: configuration,
+                modelDirectory: cacheKey
+            )
             containersByModelDirectory[cacheKey] = container
             accessOrder.append(cacheKey)
             return container
+        }
+
+        private func loadModelContainer(
+            configuration: ModelConfiguration,
+            modelDirectory: URL
+        ) async throws -> ModelContainer {
+            if try shouldUseVLMFactory(modelDirectory: modelDirectory) {
+                return try await VLMModelFactory.shared.loadContainer(configuration: configuration)
+            }
+            return try await MLXLMCommon.loadModelContainer(configuration: configuration)
+        }
+
+        private func shouldUseVLMFactory(modelDirectory: URL) throws -> Bool {
+            let configURL = modelDirectory.appendingPathComponent("config.json")
+            let configData = try Data(contentsOf: configURL)
+            guard let configObject = try JSONSerialization.jsonObject(with: configData) as? [String: Any] else {
+                return false
+            }
+
+            if let modelType = configObject["model_type"] as? String,
+               modelType == "qwen3_vl" || modelType == "qwen3_5" {
+                return true
+            }
+
+            if let textConfig = configObject["text_config"] as? [String: Any],
+               textConfig["model_type"] as? String == "qwen3_5_text" {
+                return true
+            }
+
+            if let processorConfigURL = [
+                modelDirectory.appendingPathComponent("preprocessor_config.json"),
+                modelDirectory.appendingPathComponent("processor_config.json")
+            ].first(where: { FileManager.default.fileExists(atPath: $0.path) }),
+               let processorData = try? Data(contentsOf: processorConfigURL),
+               let processorObject = try? JSONSerialization.jsonObject(with: processorData) as? [String: Any],
+               let processorClass = processorObject["processor_class"] as? String,
+               processorClass == "Qwen3VLProcessor" {
+                return true
+            }
+
+            return false
         }
     }
 
@@ -428,7 +359,7 @@ actor LocalModelProcessAIService: AIService {
             throw AppError.aiServiceError("Local model is not downloaded: \(model.displayName)")
         }
 
-        let modelDirectory = try fileStore.modelDirectory(modelId: model.id)
+        let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
         let testBudget = LocalModelTestBudget.applyIfNeeded(
             to: request,
             contextLength: LocalModelFileStore.contextLength(for: model)
@@ -619,8 +550,15 @@ actor LocalModelProcessAIService: AIService {
             parts.append("\n\n\(mode.systemPromptAddition)")
         }
 
+        if let modelReasoningPrompt = try buildModelReasoningPrompt(
+            reasoningMode: settings.reasoningMode,
+            projectRoot: projectRoot
+        ) {
+            parts.append(modelReasoningPrompt)
+        }
+
         if let reasoningPrompt = try AIRequestStage.reasoningPromptIfNeeded(
-            reasoningEnabled: settings.reasoningEnabled,
+            reasoningMode: settings.reasoningMode,
             mode: mode,
             stage: stage,
             projectRoot: projectRoot
@@ -629,6 +567,16 @@ actor LocalModelProcessAIService: AIService {
         }
 
         return parts.joined(separator: "\n")
+    }
+
+    private func buildModelReasoningPrompt(
+        reasoningMode: ReasoningMode,
+        projectRoot: URL?
+    ) throws -> String? {
+        try PromptRepository.shared.prompt(
+            key: reasoningMode.modelReasoningPromptKey,
+            projectRoot: projectRoot
+        )
     }
 
     private func convertToToolSpec(_ tools: [AITool]?) -> [ToolSpec]? {

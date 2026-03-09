@@ -15,7 +15,7 @@ extension OpenRouterAIService {
                 toolPromptMode: settings.toolPromptMode,
                 mode: request.mode,
                 projectRoot: request.projectRoot,
-                reasoningEnabled: settings.reasoningEnabled,
+                reasoningMode: settings.reasoningMode,
                 stage: request.stage
             )
         )
@@ -45,7 +45,7 @@ extension OpenRouterAIService {
             model: settings.model.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
             systemPrompt: settings.systemPrompt.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
             baseURL: settings.baseURL,
-            reasoningEnabled: settings.reasoningEnabled,
+            reasoningMode: settings.reasoningMode,
             toolPromptMode: settings.toolPromptMode
         )
     }
@@ -77,8 +77,15 @@ extension OpenRouterAIService {
             components.append(projectRootContext)
         }
 
+        if let modelReasoningPrompt = try buildModelReasoningPrompt(
+            reasoningMode: input.reasoningMode,
+            projectRoot: input.projectRoot
+        ) {
+            components.append(modelReasoningPrompt)
+        }
+
         if let reasoningPrompt = try AIRequestStage.reasoningPromptIfNeeded(
-            reasoningEnabled: input.reasoningEnabled,
+            reasoningMode: input.reasoningMode,
             mode: input.mode,
             stage: input.stage,
             projectRoot: input.projectRoot
@@ -121,6 +128,16 @@ extension OpenRouterAIService {
         All file paths must be relative to the project root or validated absolute paths within it.
         Never use Linux-style paths like /home.
         """
+    }
+
+    internal func buildModelReasoningPrompt(
+        reasoningMode: ReasoningMode,
+        projectRoot: URL?
+    ) throws -> String? {
+        try PromptRepository.shared.prompt(
+            key: reasoningMode.modelReasoningPromptKey,
+            projectRoot: projectRoot
+        )
     }
 
     internal func buildFinalMessages(

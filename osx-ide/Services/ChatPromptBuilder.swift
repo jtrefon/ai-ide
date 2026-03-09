@@ -355,6 +355,23 @@ class ChatPromptBuilder {
 
         let lower = trimmed.lowercased()
 
+        let pendingExecutionSignals = [
+            "i will",
+            "i'll",
+            "i am going to",
+            "i'm going to",
+            "next i will",
+            "now i will",
+            "let me",
+            "i can",
+            "next:",
+            "next →",
+            "→ next:",
+            "path:"
+        ]
+
+        let hasPendingExecutionSignal = pendingExecutionSignals.contains(where: { lower.contains($0) })
+
         if indicatesWorkWasPerformed(content: trimmed) {
             return false
         }
@@ -366,21 +383,11 @@ class ChatPromptBuilder {
             "all set",
             "resolved"
         ]
-        if completionSignals.contains(where: { lower.contains($0) }) {
+        if completionSignals.contains(where: { lower.contains($0) }) && !hasPendingExecutionSignal {
             return false
         }
 
-        let pendingExecutionSignals = [
-            "i will",
-            "i'll",
-            "i am going to",
-            "i'm going to",
-            "next i will",
-            "now i will",
-            "let me",
-            "i can"
-        ]
-        if pendingExecutionSignals.contains(where: { lower.contains($0) }) {
+        if hasPendingExecutionSignal {
             return true
         }
 
@@ -456,7 +463,12 @@ class ChatPromptBuilder {
             "modified file",
             "created file",
             "changed file",
-            "applied patch"
+            "applied patch",
+            "all required files have been created",
+            "all requested files have been created",
+            "application structure is now in place",
+            "todo application structure is now in place",
+            "task complete."
         ]
 
         return artifactClaims.contains(where: { text.contains($0) })

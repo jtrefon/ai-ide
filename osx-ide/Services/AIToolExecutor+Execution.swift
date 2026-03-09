@@ -725,8 +725,12 @@ extension AIToolExecutor {
     private func makeToolNotFoundMessage(
         _ request: ExecuteToolCallRequest
     ) -> ChatMessage {
-        Self.makeToolExecutionMessage(
-            content: "Tool not found",
+        let availableToolNames = request.availableTools.map(\.name).sorted()
+        let availableToolsSummary = availableToolNames.isEmpty
+            ? "none"
+            : availableToolNames.joined(separator: ", ")
+        return Self.makeToolExecutionMessage(
+            content: "Tool not found in current turn",
             context: ToolExecutionMessageContext(
                 toolName: request.toolCall.name,
                 status: .failed,
@@ -735,7 +739,7 @@ extension AIToolExecutor {
                 preview: nil,
                 argumentKeys: Array(request.toolCall.arguments.keys).sorted(),
                 argumentPreview: Self.argumentPreview(for: request.toolCall.arguments),
-                recoveryHint: "Verify tool name and required arguments before retrying."
+                recoveryHint: "Available tools in this turn: \(availableToolsSummary). Choose one of those tools before retrying."
             )
         )
     }

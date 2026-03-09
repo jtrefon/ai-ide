@@ -10,6 +10,7 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading, @unchecked Senda
     private let modelKey = "OpenRouterModel"
     private let baseURLKey = "OpenRouterBaseURL"
     private let systemPromptKey = "OpenRouterSystemPrompt"
+    private let reasoningModeKey = "OpenRouterReasoningMode"
     private let reasoningEnabledKey = "OpenRouterReasoningEnabled"
     private let toolPromptModeKey = "OpenRouterToolPromptMode"
     private let ragEnabledDuringToolLoopKey = "OpenRouterRAGEnabledDuringToolLoop"
@@ -50,7 +51,7 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading, @unchecked Senda
             model: model,
             baseURL: baseURL,
             systemPrompt: settingsStore.string(forKey: systemPromptKey) ?? "",
-            reasoningEnabled: settingsStore.bool(forKey: reasoningEnabledKey, default: true),
+            reasoningMode: loadReasoningMode(),
             toolPromptMode: ToolPromptMode(
                 rawValue: settingsStore.string(forKey: toolPromptModeKey) ?? ""
             ) ?? .fullStatic,
@@ -83,8 +84,19 @@ final class OpenRouterSettingsStore: OpenRouterSettingsLoading, @unchecked Senda
         settingsStore.set(settings.model, forKey: modelKey)
         settingsStore.set(settings.baseURL, forKey: baseURLKey)
         settingsStore.set(settings.systemPrompt, forKey: systemPromptKey)
-        settingsStore.set(settings.reasoningEnabled, forKey: reasoningEnabledKey)
+        settingsStore.set(settings.reasoningMode.rawValue, forKey: reasoningModeKey)
+        settingsStore.set(settings.reasoningMode.includesAgentReasoning, forKey: reasoningEnabledKey)
         settingsStore.set(settings.toolPromptMode.rawValue, forKey: toolPromptModeKey)
         settingsStore.set(settings.ragEnabledDuringToolLoop, forKey: ragEnabledDuringToolLoopKey)
+    }
+
+    private func loadReasoningMode() -> ReasoningMode {
+        if let storedMode = settingsStore.string(forKey: reasoningModeKey),
+           let reasoningMode = ReasoningMode(rawValue: storedMode) {
+            return reasoningMode
+        }
+
+        let legacyReasoningEnabled = settingsStore.bool(forKey: reasoningEnabledKey, default: true)
+        return legacyReasoningEnabled ? .modelAndAgent : .none
     }
 }

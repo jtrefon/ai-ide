@@ -37,7 +37,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
     @Published var systemPrompt: String {
         didSet { persist() }
     }
-    @Published var reasoningEnabled: Bool {
+    @Published var reasoningMode: ReasoningMode {
         didSet { persist() }
     }
     @Published var toolPromptMode: ToolPromptMode {
@@ -80,7 +80,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
         self.selectedModel = settings.model
         self.modelQuery = settings.model
         self.systemPrompt = settings.systemPrompt
-        self.reasoningEnabled = settings.reasoningEnabled
+        self.reasoningMode = settings.reasoningMode
         self.toolPromptMode = settings.toolPromptMode
         self.ragEnabledDuringToolLoop = settings.ragEnabledDuringToolLoop
     }
@@ -205,7 +205,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             model: activeModel,
             baseURL: baseURL,
             systemPrompt: systemPrompt,
-            reasoningEnabled: reasoningEnabled,
+            reasoningMode: reasoningMode,
             toolPromptMode: toolPromptMode,
             ragEnabledDuringToolLoop: ragEnabledDuringToolLoop
         )

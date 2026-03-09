@@ -71,6 +71,19 @@ public class ChatHistoryManager: ObservableObject {
             append(message)
         }
     }
+
+    public func upsertDraftMessage(_ message: ChatMessage) {
+        guard message.isDraft else {
+            upsertMessage(message)
+            return
+        }
+
+        if let index = messages.firstIndex(where: { $0.id == message.id }) {
+            messages[index] = message
+        } else {
+            messages.append(message)
+        }
+    }
     
     /// Finalizes a draft message by converting it to a regular message with content
     public func finalizeDraftMessage(id: UUID, content: String, reasoning: String? = nil) {

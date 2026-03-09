@@ -79,7 +79,7 @@ final class AIInteractionCoordinator {
         let settings = settingsStore.load(includeApiKey: false)
         let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
         let retriever: (any RAGRetriever)?
-        if let codebaseIndex, shouldUseRAGRetrieval() {
+        if let codebaseIndex, shouldUseRAGRetrieval(for: request.stage, settings: settings) {
             retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
         } else {
             retriever = nil
@@ -320,7 +320,13 @@ final class AIInteractionCoordinator {
         return min(baseDelay, maxDelay)
     }
 
-    private func shouldUseRAGRetrieval() -> Bool {
+    private func shouldUseRAGRetrieval(
+        for stage: AIRequestStage?,
+        settings: OpenRouterSettings
+    ) -> Bool {
+        guard stage != .tool_loop else {
+            return settings.ragEnabledDuringToolLoop
+        }
         return true
     }
 

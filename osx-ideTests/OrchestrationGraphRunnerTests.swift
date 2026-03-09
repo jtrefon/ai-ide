@@ -125,6 +125,47 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         XCTAssertEqual(finalState.transition.nextNodeId, nil)
     }
 
+    func testBranchReviewNodeResumesExecutionForLastBranchWhenPlanRemainsIncomplete() async throws {
+        let request = makeSendRequest(mode: .agent)
+        let branchExecution = OrchestrationState.BranchExecution(
+            plan: "1. [x] First\n2. [ ] Second",
+            globalInvariants: ["Keep edits focused"],
+            branches: [
+                .init(id: "branch_1", title: "First", checklistItems: ["Inspect files"]),
+                .init(id: "branch_2", title: "Second", checklistItems: ["Verify output"])
+            ],
+            activeBranchIndex: 1
+        )
+
+        await ConversationPlanStore.shared.setProjectRoot(request.projectRoot)
+        await ConversationPlanStore.shared.set(
+            conversationId: request.conversationId,
+            plan: """
+            # Implementation Plan
+
+            - [x] First
+            - [ ] Second
+            """
+        )
+
+        let node = BranchReviewNode(executionNodeId: "execute", finalNodeId: "final")
+        let nextState = try await node.run(state: OrchestrationState(
+            request: request,
+            response: AIServiceResponse(
+                content: "<ide_reasoning>Delivery: NEEDS_WORK</ide_reasoning>Done -> Next -> Path: Continue with remaining implementation.",
+                toolCalls: nil
+            ),
+            lastToolResults: [],
+            branchExecution: branchExecution,
+            transition: .next("branch_review")
+        ))
+
+        XCTAssertEqual(nextState.transition.nextNodeId, "execute")
+        XCTAssertEqual(nextState.branchExecution?.activeBranchIndex, 1)
+
+        await ConversationPlanStore.shared.set(conversationId: request.conversationId, plan: "")
+    }
+
     @MainActor
     private struct LoopNode: OrchestrationNode {
         let id: String
@@ -156,14 +197,14 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         }
     }
 
-    private func makeSendRequest() -> SendRequest {
+    private func makeSendRequest(mode: AIMode = .chat) -> SendRequest {
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
 
         return SendRequest(
             userInput: "Hello",
             explicitContext: nil,
-            mode: .chat,
+            mode: mode,
             projectRoot: projectRoot,
             conversationId: UUID().uuidString,
             runId: UUID().uuidString,

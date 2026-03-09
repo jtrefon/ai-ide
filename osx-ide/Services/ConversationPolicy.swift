@@ -19,6 +19,21 @@ final class ConversationPolicy: ConversationPolicyProtocol {
         "list_files",
         "conversation_fold"
     ]
+    private let toolLoopExecutionToolNames: Set<String> = [
+        "index_find_files",
+        "index_list_files",
+        "index_search_text",
+        "index_read_file",
+        "index_search_symbols",
+        "read_file",
+        "list_files",
+        "write_file",
+        "write_files",
+        "create_file",
+        "delete_file",
+        "replace_in_file",
+        "run_command"
+    ]
 
     func allowedTools(
         for stage: AIRequestStage?,
@@ -43,8 +58,11 @@ final class ConversationPolicy: ConversationPolicyProtocol {
             // Preserve full execution capability for the agent's first response.
             return modeAllowedTools
             
-        case .tool_loop, .final_response:
-            // All tools for execution stages
+        case .tool_loop:
+            return filterToolLoopExecutionTools(from: modeAllowedTools)
+
+        case .final_response:
+            // Preserve full tool visibility for final response handling.
             return modeAllowedTools
             
         case .warmup, .other:
@@ -55,5 +73,9 @@ final class ConversationPolicy: ConversationPolicyProtocol {
 
     private func filterReadOnlyTools(from tools: [AITool]) -> [AITool] {
         tools.filter { readOnlyToolNames.contains($0.name) }
+    }
+
+    private func filterToolLoopExecutionTools(from tools: [AITool]) -> [AITool] {
+        tools.filter { toolLoopExecutionToolNames.contains($0.name) }
     }
 }
