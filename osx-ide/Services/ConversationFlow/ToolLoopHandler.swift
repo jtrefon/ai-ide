@@ -1493,9 +1493,13 @@ final class ToolLoopHandler {
 
     private var contentWriteRecoveryToolNames: Set<String> {
         [
+            "read_file",
+            "index_read_file",
+            "list_files",
             "create_file",
             "write_file",
             "write_files",
+            "replace_in_file",
             "delete_file",
             "run_command"
         ]
@@ -1764,7 +1768,7 @@ final class ToolLoopHandler {
         content: String,
         conversationId: String
     ) async -> Bool {
-        guard isLikelyContinuationOrRecoverySummary(content) else { return false }
+        guard isPureContinuationOrRecoverySummary(content) else { return false }
 
         let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
@@ -1798,7 +1802,7 @@ final class ToolLoopHandler {
         guard recoveredResponse.toolCalls?.isEmpty == false else {
             let recoveredContent = recoveredResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if !recoveredContent.isEmpty,
-               (isLikelyContinuationOrRecoverySummary(recoveredContent)
+               (isPureContinuationOrRecoverySummary(recoveredContent)
                 || ChatPromptBuilder.deliveryStatus(from: recoveredContent) == .needsWork) {
                 return recoveredResponse
             }
@@ -2027,7 +2031,7 @@ final class ToolLoopHandler {
         let shouldContinueForPlan = planProgress.total > 0 && !planProgress.isComplete
         guard shouldContinueForPlan else { return currentResponse }
         guard !hasSatisfiedClaimedArtifacts else { return currentResponse }
-        guard !isLikelyContinuationOrRecoverySummary(currentContent) else { return currentResponse }
+        guard !isPureContinuationOrRecoverySummary(currentContent) else { return currentResponse }
 
         let followupMessages = try await ToolLoopUtilities.buildPlanContinuationMessages(
             userInput: userInput,
@@ -2086,7 +2090,7 @@ final class ToolLoopHandler {
         let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
         guard planProgress.total > 0, !planProgress.isComplete else { return currentResponse }
-        guard !isLikelyContinuationOrRecoverySummary(currentContent) else { return currentResponse }
+        guard !isPureContinuationOrRecoverySummary(currentContent) else { return currentResponse }
 
         let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: currentContent)
         let deliveryStatusLabel: String
@@ -2182,8 +2186,8 @@ final class ToolLoopHandler {
         return mutationSignals.contains { normalized.contains($0) }
     }
 
-    private func isLikelyContinuationOrRecoverySummary(_ content: String) -> Bool {
-        let normalized = content
+    private func isPureContinuationOrRecoverySummary(_ content: String) -> Bool {
+        let normalized = ChatPromptBuilder.contentForDisplay(from: content)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         guard !normalized.isEmpty else { return false }
@@ -2195,7 +2199,7 @@ final class ToolLoopHandler {
             "all checklist items are complete",
             "completed all requested implementation steps"
         ]
-        return recoverySignals.contains { normalized.contains($0) }
+        return recoverySignals.contains { normalized.hasPrefix($0) }
     }
 
     private func isMutationToolName(_ toolName: String) -> Bool {

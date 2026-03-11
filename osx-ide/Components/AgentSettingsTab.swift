@@ -11,14 +11,14 @@ struct AgentSettingsTab: View {
                     subtitle: "Controls for how the agent executes tools and commands."
                 ) {
                     SettingsRow(
-                        title: "CLI timeout",
-                        subtitle: "Terminate run_command after this many seconds (1–300).",
+                        title: "CLI initial wait",
+                        subtitle: "Default first wait window for run_command sessions before control returns (5-120s).",
                         systemImage: "timer"
                     ) {
                         HStack(spacing: 12) {
                             Slider(
                                 value: cliTimeoutBinding,
-                                in: 1...300,
+                                in: 5...120,
                                 step: 1
                             )
                             .frame(width: AppConstants.Settings.sliderWidth)

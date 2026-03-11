@@ -1835,6 +1835,121 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         )
     }
 
+    func testHarnessKeepsReadAndPatchToolsAvailableDuringContentWriteRecovery() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let packageFile = projectRoot.appendingPathComponent("package.json")
+        try """
+        {
+          "name": "todo-app",
+          "scripts": {
+            "lint": "eslint src"
+          }
+        }
+        """.write(to: packageFile, atomically: true, encoding: .utf8)
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        let runId = UUID().uuidString
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "Inspect package.json before updating dependencies.",
+                toolCalls: [
+                    AIToolCall(id: "content-recovery-read-1", name: "read_file", arguments: ["path": "package.json"])
+                ]
+            ),
+            AIServiceResponse(
+                content: "Patch package.json with the additional static analysis dependency.",
+                toolCalls: [
+                    AIToolCall(id: "content-recovery-edit-1", name: "replace_in_file", arguments: [
+                        "path": "package.json",
+                        "old_text": "\"scripts\": {\n    \"lint\": \"eslint src\"\n  }",
+                        "new_text": "\"scripts\": {\n    \"lint\": \"eslint src\"\n  },\n  \"devDependencies\": {\n    \"eslint-plugin-import\": \"^2.31.0\"\n  }"
+                    ])
+                ]
+            ),
+            AIServiceResponse(
+                content: "Completed the static analysis update.",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let handler = ToolLoopHandler(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        let result = try await handler.handleToolLoopIfNeeded(
+            response: AIServiceResponse(content: "Reserve the new ESLint config file path first.", toolCalls: [
+                AIToolCall(id: "content-recovery-create-1", name: "create_file", arguments: [
+                    "path": ".eslintrc.json"
+                ])
+            ]),
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: [
+                ReadFileTool(
+                    fileSystemService: FileSystemService(),
+                    pathValidator: PathValidator(projectRoot: projectRoot)
+                ),
+                CreateFileTool(pathValidator: PathValidator(projectRoot: projectRoot), eventBus: MockEventBus()),
+                ReplaceInFileTool(
+                    fileSystemService: FileSystemService(),
+                    pathValidator: PathValidator(projectRoot: projectRoot),
+                    eventBus: MockEventBus()
+                ),
+                WriteFileTool(
+                    fileSystemService: FileSystemService(),
+                    pathValidator: PathValidator(projectRoot: projectRoot),
+                    eventBus: MockEventBus()
+                )
+            ],
+            cancelledToolCallIds: { [] },
+            runId: runId,
+            userInput: "add static analysis tools to package.json and create eslint config"
+        )
+
+        harnessTrue(result.response.toolCalls?.isEmpty ?? true, "Content-write recovery should finish without dangling tool calls")
+
+        let failedToolMessages = historyCoordinator.messages.filter {
+            $0.isToolExecution && $0.toolStatus == .failed
+        }
+        harnessEqual(failedToolMessages.count, 0, "Content-write recovery should not drop read_file/replace_in_file from the active tool set")
+
+        let capturedRequests = scriptedService.capturedHistoryRequests()
+        let contentRecoveryRequests = capturedRequests.filter { request in
+            request.stage == .tool_loop && Set((request.tools ?? []).map(\.name)).contains("create_file")
+        }
+        harnessGreaterThanOrEqual(
+            contentRecoveryRequests.count,
+            1,
+            "Content-write recovery should issue at least one follow-up tool-loop request"
+        )
+        harnessTrue(
+            contentRecoveryRequests.contains(where: { request in
+                let names = Set((request.tools ?? []).map(\.name))
+                return names.contains("read_file") && names.contains("replace_in_file")
+            }),
+            "Content-write recovery follow-up should keep read_file and replace_in_file available alongside create_file"
+        )
+    }
+
     private func harnessTrue(_ condition: @autoclosure () -> Bool, _ message: String = "") {
         let ok = condition()
         print(ok ? "[HARNESS][PASS] \(message)" : "[HARNESS][WARN] \(message)")

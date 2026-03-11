@@ -1,24 +1,28 @@
 import Foundation
 
 actor OpenRouterProviderRateLimiter {
+    struct WaitReservation {
+        let waitTime: TimeInterval
+        let isProviderCooldown: Bool
+    }
+
     private var lastRequestTime: Date = Date.distantPast
     private var providerCooldownUntil: Date = Date.distantPast
     private var consecutiveRateLimitCount: Int = 0
 
-    func reserveWaitTime(minimumInterval: TimeInterval, now: Date = Date()) -> TimeInterval {
-        let nextRequestTime = max(
-            lastRequestTime.addingTimeInterval(minimumInterval),
-            providerCooldownUntil
-        )
+    func reserveWait(minimumInterval: TimeInterval, now: Date = Date()) -> WaitReservation {
+        let intervalReadyAt = lastRequestTime.addingTimeInterval(minimumInterval)
+        let nextRequestTime = max(intervalReadyAt, providerCooldownUntil)
         let computedWait = max(0, nextRequestTime.timeIntervalSince(now))
+        let isProviderCooldown = providerCooldownUntil > now && providerCooldownUntil >= intervalReadyAt
 
         if computedWait > 0 {
             lastRequestTime = nextRequestTime
-            return computedWait
+            return WaitReservation(waitTime: computedWait, isProviderCooldown: isProviderCooldown)
         }
 
         lastRequestTime = now
-        return 0
+        return WaitReservation(waitTime: 0, isProviderCooldown: false)
     }
 
     func registerRateLimit(statusCode: Int, now: Date = Date()) -> TimeInterval {
@@ -285,6 +289,7 @@ actor OpenRouterAIService: AIService {
         )
 
         await Self.providerRateLimiter.registerSuccess()
+        publishProviderIssueResolved()
 
         return AIServiceResponse(
             content: fullContent,
@@ -414,6 +419,7 @@ actor OpenRouterAIService: AIService {
         )
 
         await Self.providerRateLimiter.registerSuccess()
+        publishProviderIssueResolved()
 
         let resolvedToolCalls = request.tools?.isEmpty == false
             ? choice.message.toolCalls
@@ -523,20 +529,23 @@ actor OpenRouterAIService: AIService {
         
         let now = Date()
         let effectiveInterval = max(minRequestInterval, config.minAPIRequestInterval)
-        let waitTime = await Self.providerRateLimiter.reserveWaitTime(
+        let reservation = await Self.providerRateLimiter.reserveWait(
             minimumInterval: effectiveInterval,
             now: now
         )
+        let waitTime = reservation.waitTime
 
         if waitTime > 0 {
-            let cooldownUntil = now.addingTimeInterval(waitTime)
-            eventBus.publish(ProviderIssueStatusEvent(
-                providerName: "OpenRouter",
-                statusKind: .rateLimited,
-                statusCode: nil,
-                message: "Provider cooldown active. Waiting before the next request.",
-                cooldownUntil: cooldownUntil
-            ))
+            if reservation.isProviderCooldown {
+                let cooldownUntil = now.addingTimeInterval(waitTime)
+                eventBus.publish(ProviderIssueStatusEvent(
+                    providerName: "OpenRouter",
+                    statusKind: .rateLimited,
+                    statusCode: nil,
+                    message: "Provider cooldown active. Waiting before the next request.",
+                    cooldownUntil: cooldownUntil
+                ))
+            }
             try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
         }
     }
@@ -598,6 +607,16 @@ actor OpenRouterAIService: AIService {
             statusKind: issueKind,
             statusCode: issueStatusCode,
             message: issueMessage,
+            cooldownUntil: nil
+        ))
+    }
+
+    private func publishProviderIssueResolved() {
+        eventBus.publish(ProviderIssueStatusEvent(
+            providerName: providerName,
+            statusKind: .resolved,
+            statusCode: nil,
+            message: "",
             cooldownUntil: nil
         ))
     }

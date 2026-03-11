@@ -289,18 +289,25 @@ extension AIToolExecutor {
             return [
                 "Error: \(errorMsg)",
                 "",
-                "The run_command tool requires:",
-                "  - 'command': The shell command to execute (required)",
+                "The run_command tool is session-based.",
                 "",
-                "Optional arguments:",
-                "  - 'working_directory': The directory to run the command in",
-                "  - 'timeout_seconds': Timeout in seconds (1-600, default 120)",
+                "Start a command:",
+                "  - 'action': 'start'",
+                "  - 'command': The shell command to execute",
+                "  - 'working_directory': Optional working directory",
+                "  - 'wait_seconds': Optional short wait window before control returns",
                 "",
-                "IMPORTANT: For npm install, npm create vite, npm build, or any long-running command,",
-                "you MUST set timeout_seconds to at least 300 (5 minutes) or 600 (10 minutes).",
+                "Continue or control a running command:",
+                "  - 'action': 'wait' | 'send_input' | 'stop'",
+                "  - 'session_id': Required for wait/send_input/stop",
+                "  - 'input': Required for send_input",
+                "  - 'append_newline': Optional for send_input",
                 "",
-                "Example for npm install:",
-                "{\"command\": \"npm install\", \"timeout_seconds\": 600, \"working_directory\": \"./my-project\"}"
+                "Examples:",
+                "{\"action\": \"start\", \"command\": \"npm test\", \"wait_seconds\": 10}",
+                "{\"action\": \"wait\", \"session_id\": \"...\", \"wait_seconds\": 30}",
+                "{\"action\": \"send_input\", \"session_id\": \"...\", \"input\": \"y\", \"append_newline\": true, \"wait_seconds\": 10}",
+                "{\"action\": \"stop\", \"session_id\": \"...\"}"
             ].joined(separator: "\n")
             
         case "replace_in_file":

@@ -238,6 +238,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         eventBus
             .subscribe(to: ProviderIssueStatusEvent.self) { [weak self] event in
                 guard let self else { return }
+                if event.statusKind == .resolved {
+                    self.providerIssue = nil
+                    return
+                }
                 self.providerIssue = ConversationProviderIssueState(
                     providerName: event.providerName,
                     issueType: self.providerIssueTypeLabel(for: event.statusKind),
@@ -251,6 +255,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     private func providerIssueTypeLabel(for statusKind: ProviderIssueStatusEvent.StatusKind) -> String {
         switch statusKind {
+        case .resolved:
+            return "Resolved"
         case .rateLimited:
             return "Rate limit"
         case .unavailable:
@@ -627,6 +633,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 }
                 self.appendToLiveModelStatusPreview("Run completed.")
                 self.resetStreamingDraftState()
+                self.providerIssue = nil
                 self.isSending = false
             } catch {
                 // Clean up draft message on error

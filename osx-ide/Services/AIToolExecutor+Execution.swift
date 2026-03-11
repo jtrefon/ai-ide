@@ -208,8 +208,20 @@ extension AIToolExecutor {
             return "Delete file request"
 
         case "run_command":
+            let action = stringArg("action") ?? "start"
+            let sessionId = stringArg("session_id")
             let command = stringArg("command") ?? "(missing command)"
             let workingDirectory = stringArg("working_directory")
+            if action != "start" {
+                var lines = ["Action: \(action)"]
+                if let sessionId {
+                    lines.append("Session: \(sessionId)")
+                }
+                if let input = stringArg("input"), !input.isEmpty {
+                    lines.append("Input: \(trim(input, limit: 120))")
+                }
+                return lines.joined(separator: "\n")
+            }
             if let workingDirectory {
                 return """
                 Command: \(trim(command, limit: 280))
@@ -443,7 +455,10 @@ extension AIToolExecutor {
         _ tool: AITool,
         request: ExecuteToolCallRequest
     ) async -> Result<String, Error> {
-        let timeoutSeconds = resolveToolTimeoutSeconds()
+        let timeoutSeconds = resolveToolTimeoutSeconds(
+            toolName: request.toolCall.name,
+            arguments: request.toolCall.arguments
+        )
         await MainActor.run {
             ToolTimeoutCenter.shared.begin(
                 toolCallId: request.toolCall.id,
@@ -548,11 +563,41 @@ extension AIToolExecutor {
         }
     }
 
-    private func resolveToolTimeoutSeconds() -> TimeInterval {
+    private func resolveToolTimeoutSeconds(
+        toolName: String,
+        arguments: [String: Any]
+    ) -> TimeInterval {
+        if toolName == "run_command" {
+            let explicitWait = parseRunCommandWaitSeconds(arguments)
+            let effectiveWait = explicitWait ?? 30
+            return max(effectiveWait + 5, 15)
+        }
+
         let stored = UserDefaults.standard.double(forKey: AppConstantsStorage.cliTimeoutSecondsKey)
         // Default to 120s for npm operations, up to 600s max
         let normalized = stored == 0 ? 120 : stored
         return max(1, min(600, normalized))
+    }
+
+    private func parseRunCommandWaitSeconds(_ arguments: [String: Any]) -> TimeInterval? {
+        let value = arguments["wait_seconds"] ?? arguments["timeout_seconds"]
+
+        switch value {
+        case let number as Double:
+            return number
+        case let number as Int:
+            return Double(number)
+        case let number as Int32:
+            return Double(number)
+        case let number as Int64:
+            return Double(number)
+        case let number as NSNumber:
+            return number.doubleValue
+        case let string as String:
+            return Double(string)
+        default:
+            return nil
+        }
     }
 
     private func runPreWritePreventionIfNeeded(

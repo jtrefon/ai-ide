@@ -50,7 +50,7 @@ final class UIService: UIServiceProtocol {
     }
 
     func setCliTimeoutSeconds(_ seconds: Double) {
-        let clamped = max(1, min(300, seconds))
+        let clamped = max(5, min(120, seconds))
         settingsStore.set(clamped, forKey: AppConstantsStorage.cliTimeoutSecondsKey)
     }
 
@@ -143,7 +143,7 @@ final class UIService: UIServiceProtocol {
         let indentationStyle = IndentationStyle.current(userDefaults: AppRuntimeEnvironment.userDefaults)
 
         let storedCliTimeout = settingsStore.double(forKey: AppConstantsStorage.cliTimeoutSecondsKey)
-        let cliTimeoutSeconds = storedCliTimeout == 0 ? 30 : storedCliTimeout
+        let cliTimeoutSeconds = storedCliTimeout == 0 ? 15 : storedCliTimeout
 
         let agentMemoryEnabled = settingsStore.bool(forKey: AppConstantsStorage.agentMemoryEnabledKey, default: true)
 
