@@ -38,12 +38,17 @@ struct CodeEditorView: View {
             .overlay(
                 Group {
                     if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
-                        Text(highlightDiagnostics.diagnostics)
-                            .font(.system(size: 1))
-                            .foregroundColor(.clear)
-                            .accessibilityIdentifier("EditorHighlightDiagnostics")
-                            .accessibilityLabel(highlightDiagnostics.diagnostics)
-                            .accessibilityValue(highlightDiagnostics.diagnostics)
+                        let diagnosticsText = highlightDiagnostics.diagnostics.isEmpty ? "pending" : highlightDiagnostics.diagnostics
+                        Text(diagnosticsText)
+                            .font(.system(size: 8))
+                            .foregroundColor(.primary)
+                            .opacity(0.01)
+                            .allowsHitTesting(false)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityHidden(false)
+                            .accessibilityIdentifier(AccessibilityID.editorHighlightDiagnostics)
+                            .accessibilityLabel(diagnosticsText)
+                            .accessibilityValue(diagnosticsText)
                     }
                 }
             )

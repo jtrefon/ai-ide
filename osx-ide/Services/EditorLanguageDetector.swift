@@ -25,7 +25,7 @@ struct DefaultEditorLanguageDetector: EditorLanguageDetecting {
     private let languageByFileExtension: [String: String] = [
         "swift": "swift",
         "js": "javascript",
-        "jsx": "jsx",
+        "jsx": "javascript",
         "ts": "typescript",
         "tsx": "tsx",
         "py": "python",

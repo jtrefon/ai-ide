@@ -3,18 +3,20 @@ import Foundation
 @MainActor
 enum ConversationFlowGraphFactory {
     static func makeGraph(
+        request: SendRequest,
         historyCoordinator: ChatHistoryCoordinator,
         aiInteractionCoordinator: AIInteractionCoordinator,
         initialResponseHandler: InitialResponseHandler,
         toolLoopHandler: ToolLoopHandler,
-        reasoningCorrectionsHandler: ReasoningCorrectionsHandler,
         finalResponseHandler: FinalResponseHandler,
-        qaReviewHandler: QAReviewHandler
+        qaReviewHandler: QAReviewHandler,
+        qaReviewEnabled: Bool
     ) -> OrchestrationGraph {
+        _ = request
         let dispatcherNodeId = DispatcherNode.idValue
-        let toolLoopNodeId = ToolLoopNode.idValue
-        let finalResponseNodeId = FinalResponseNode.idValue
-        let postFinalReasoningCorrectionsNodeId = "post_final_reasoning_corrections"
+        let emptyResponseRecoveryNodeId = "empty_response_recovery"
+        let branchReviewNodeId = BranchReviewNode.idValue
+        let finalResponseNextNodeId = qaReviewEnabled ? QAToolOutputReviewNode.idValue : nil
 
         return OrchestrationGraph(
             entryNodeId: dispatcherNodeId,
@@ -22,23 +24,38 @@ enum ConversationFlowGraphFactory {
                 DispatcherNode(
                     historyCoordinator: historyCoordinator,
                     handler: initialResponseHandler,
-                    toolLoopNodeId: toolLoopNodeId,
-                    finalResponseNodeId: finalResponseNodeId
+                    toolLoopNodeId: ToolLoopNode.idValue,
+                    finalResponseNodeId: FinalResponseNode.idValue
                 ),
                 ToolLoopNode(
                     handler: toolLoopHandler,
-                    nextNodeId: dispatcherNodeId  // Loop back to dispatcher for next turn/eval
+                    nextNodeId: emptyResponseRecoveryNodeId
+                ),
+                EmptyResponseRecoveryNode(
+                    id: emptyResponseRecoveryNodeId,
+                    nextNodeId: branchReviewNodeId,
+                ),
+                BranchReviewNode(
+                    executionNodeId: ToolLoopNode.idValue,
+                    finalNodeId: FinalResponseNode.idValue
                 ),
                 FinalResponseNode(
                     handler: finalResponseHandler,
-                    nextNodeId: postFinalReasoningCorrectionsNodeId
+                    nextNodeId: finalResponseNextNodeId
                 ),
-                PostFinalReasoningCorrectionsNode(
-                    id: postFinalReasoningCorrectionsNodeId,
-                    handler: reasoningCorrectionsHandler,
-                    nextNodeId: nil  // End after corrections for now, or route to QA
-                ),
-            ]
+            ] + qaReviewNodes(handler: qaReviewHandler, enabled: qaReviewEnabled)
         )
+    }
+
+    private static func qaReviewNodes(handler: QAReviewHandler, enabled: Bool) -> [any OrchestrationNode] {
+        guard enabled else { return [] }
+
+        return [
+            QAToolOutputReviewNode(
+                handler: handler,
+                nextNodeId: QAQualityReviewNode.idValue
+            ),
+            QAQualityReviewNode(handler: handler)
+        ]
     }
 }

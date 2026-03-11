@@ -3,9 +3,48 @@ import Combine
 import MLX
 @preconcurrency import MLXLMCommon
 import MLXLLM
+import MLXVLM
 import Tokenizers
+import Darwin
 
 protocol MemoryPressureObserving: Sendable {}
+
+private struct LocalModelTestBudget {
+    static let maximumOperationalContextLength = 8192
+    static let maximumOperationalOutputTokens = 1024
+
+    let contextLength: Int
+    let retainedMessages: [ChatMessage]
+    let maxOutputTokens: Int
+
+    static func applyIfNeeded(to request: AIServiceHistoryRequest, contextLength: Int) -> LocalModelTestBudget {
+        guard AppRuntimeEnvironment.launchContext.isTesting else {
+            let clampedContextLength = min(contextLength, maximumOperationalContextLength)
+            let defaultMaxOutputTokens = min(
+                maximumOperationalOutputTokens,
+                max(512, clampedContextLength / 4)
+            )
+            return LocalModelTestBudget(
+                contextLength: clampedContextLength,
+                retainedMessages: request.messages,
+                maxOutputTokens: defaultMaxOutputTokens
+            )
+        }
+
+        let clampedContextLength = min(contextLength, 2048)
+        let retainedMessages = trimMessages(request.messages, maxMessages: 4)
+        return LocalModelTestBudget(
+            contextLength: clampedContextLength,
+            retainedMessages: retainedMessages,
+            maxOutputTokens: min(768, max(384, clampedContextLength / 3))
+        )
+    }
+
+    private static func trimMessages(_ messages: [ChatMessage], maxMessages: Int) -> [ChatMessage] {
+        guard messages.count > maxMessages else { return messages }
+        return Array(messages.suffix(maxMessages))
+    }
+}
 
 /// Helper class to manage memory pressure observation with a closure callback
 final class MemoryPressureObserver: MemoryPressureObserving, @unchecked Sendable {
@@ -48,6 +87,7 @@ actor LocalModelProcessAIService: AIService {
     protocol ModelFileStoring: Sendable {
         func isModelInstalled(_ model: LocalModelDefinition) -> Bool
         func modelDirectory(modelId: String) throws -> URL
+        func runtimeModelDirectory(for model: LocalModelDefinition) throws -> URL
     }
 
     struct LocalModelFileStoreAdapter: ModelFileStoring {
@@ -58,10 +98,14 @@ actor LocalModelProcessAIService: AIService {
         func modelDirectory(modelId: String) throws -> URL {
             try LocalModelFileStore.modelDirectory(modelId: modelId)
         }
+
+        func runtimeModelDirectory(for model: LocalModelDefinition) throws -> URL {
+            try LocalModelFileStore.runtimeModelDirectory(for: model)
+        }
     }
 
     protocol LocalModelGenerating: Sendable {
-        func generate(modelDirectory: URL, messages: sending [Chat.Message], tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, contextLength: Int, conversationId: String?) async throws -> AIServiceResponse
+        func generate(modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, contextLength: Int, maxOutputTokens: Int, conversationId: String?) async throws -> AIServiceResponse
     }
 
     actor NativeMLXGenerator: LocalModelGenerating {
@@ -71,19 +115,22 @@ actor LocalModelProcessAIService: AIService {
         private let maxCachedModels = 1  // Conservative - one model at a time given memory constraints
         private var generationCount: Int = 0
         private static let mlxCacheLimitBytes = 256 * 1024 * 1024  // 256 MB Metal buffer pool cap
+        private static let defaultTestingRSSLimitMB = 8 * 1024
+        private static let defaultOperationalRSSLimitMB = 10 * 1024
 
         init(eventBus: EventBusProtocol) {
             self.eventBus = eventBus
             Memory.cacheLimit = Self.mlxCacheLimitBytes
         }
 
-        func generate(modelDirectory: URL, messages: sending [Chat.Message], tools: [ToolSpec]?, toolCallFormat: ToolCallFormat? = nil, runId: String?, contextLength: Int, conversationId: String? = nil) async throws -> AIServiceResponse {
-            let container = try await loadContainerCached(modelDirectory: modelDirectory, toolCallFormat: toolCallFormat)
-            let userInput = UserInput(chat: messages, tools: tools)
+        private func performInference<R>(_ body: @escaping @Sendable () async throws -> R) async throws -> R {
+            return try await body()
+        }
 
-            // Calculate max output tokens - reserve ~40% of context for input, rest for output
-            // Minimum 2048 for output to ensure tool calls aren't truncated
-            let maxOutputTokens = max(2048, Int(Double(contextLength) * 0.6))
+        func generate(modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat? = nil, runId: String?, contextLength: Int, maxOutputTokens: Int, conversationId: String? = nil) async throws -> AIServiceResponse {
+            print("[LOCAL-MLX] generate modelDirectory=\(modelDirectory.path) toolCallFormat=\(String(describing: toolCallFormat)) contextLength=\(contextLength) maxOutputTokens=\(maxOutputTokens)")
+            let preparedUserInput = userInput
+            let rssLimitMB = Self.resolvedRSSLimitMB()
 
             // Cap KV cache size to prevent unbounded memory growth during long conversations.
             // Uses RotatingKVCache which overwrites old entries beyond this limit.
@@ -95,88 +142,132 @@ actor LocalModelProcessAIService: AIService {
             )
             let eventBus = self.eventBus
 
-            let response = try await container.perform { context in
-                let input = try await context.processor.prepare(input: userInput)
-                let stream = try MLXLMCommon.generate(
-                    input: input,
-                    parameters: parameters,
-                    context: context
-                )
+            do {
+                let response = try await performInference {
+                    let container = try await self.loadContainerCached(modelDirectory: modelDirectory, toolCallFormat: toolCallFormat)
+                    return try await container.perform { context in
+                        try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "before_generation")
 
-                var output = ""
-                var collectedToolCalls: [AIToolCall] = []
-                var bufferedChunk = ""
-                var lastFlushInstant = ContinuousClock.now
-                let flushInterval = Duration.milliseconds(50)
+                        let input = try await context.processor.prepare(input: preparedUserInput)
+                        let stream = try MLXLMCommon.generate(
+                            input: input,
+                            parameters: parameters,
+                            context: context
+                        )
 
-                func flushBufferedChunkIfNeeded(force: Bool = false) async {
-                    guard let runId else { return }
-                    guard !bufferedChunk.isEmpty else { return }
+                        var output = ""
+                        var collectedToolCalls: [AIToolCall] = []
 
-                    let elapsed = lastFlushInstant.duration(to: ContinuousClock.now)
-                    guard force || elapsed >= flushInterval else { return }
-
-                    let chunkToPublish = bufferedChunk
-                    bufferedChunk = ""
-                    lastFlushInstant = ContinuousClock.now
-
-                    await MainActor.run {
-                        eventBus.publish(LocalModelStreamingChunkEvent(runId: runId, chunk: chunkToPublish))
-                    }
-                }
-
-                func publishStatus(_ message: String) async {
-                    guard let runId else { return }
-                    guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                    await MainActor.run {
-                        eventBus.publish(LocalModelStreamingStatusEvent(runId: runId, message: message))
-                    }
-                }
-
-                for await generation in stream {
-                    switch generation {
-                    case .chunk(let text):
-                        output.append(text)
-                        if let runId, !text.isEmpty {
-                            _ = runId
-                            bufferedChunk.append(text)
-                            await flushBufferedChunkIfNeeded()
+                        func publishStatus(_ message: String) async {
+                            guard let runId else { return }
+                            guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                            await MainActor.run {
+                                eventBus.publish(LocalModelStreamingStatusEvent(runId: runId, message: message))
+                            }
                         }
-                    case .info:
-                        break
-                    case .toolCall(let toolCall):
-                        collectedToolCalls.append(Self.makeAIToolCall(from: toolCall))
-                        await publishStatus("Structured tool call detected: \(toolCall.function.name)")
+
+                        for await generation in stream {
+                            try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "streaming")
+
+                            switch generation {
+                            case .chunk(let text):
+                                output.append(text)
+                                if collectedToolCalls.isEmpty,
+                                   let earlyFallbackToolCalls = Self.extractFallbackToolCalls(
+                                    from: output,
+                                    toolsWereProvided: !(tools?.isEmpty ?? true),
+                                    structuredToolCallsWereDetected: false,
+                                    toolCallFormat: toolCallFormat
+                                   ),
+                                   !earlyFallbackToolCalls.isEmpty {
+                                    collectedToolCalls = earlyFallbackToolCalls
+                                    await publishStatus("Recovered fallback tool call from streamed output")
+                                    break
+                                }
+                                if let runId, !text.isEmpty {
+                                    await MainActor.run {
+                                        eventBus.publish(LocalModelStreamingChunkEvent(runId: runId, chunk: text))
+                                    }
+                                }
+                            case .info:
+                                break
+                            case .toolCall(let toolCall):
+                                collectedToolCalls.append(Self.makeAIToolCall(from: toolCall))
+                                await publishStatus("Structured tool call detected: \(toolCall.function.name)")
+                            }
+                        }
+                        let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let fallbackToolCalls = Self.extractFallbackToolCalls(
+                            from: trimmedOutput,
+                            toolsWereProvided: !(tools?.isEmpty ?? true),
+                            structuredToolCallsWereDetected: !collectedToolCalls.isEmpty,
+                            toolCallFormat: toolCallFormat
+                        )
+                        let resolvedToolCalls = collectedToolCalls.isEmpty ? fallbackToolCalls : collectedToolCalls
+                        let shouldSuppressToolCallPayloadFromContent = !(resolvedToolCalls?.isEmpty ?? true)
+                        return AIServiceResponse(
+                            content: trimmedOutput.isEmpty || shouldSuppressToolCallPayloadFromContent ? nil : trimmedOutput,
+                            toolCalls: resolvedToolCalls
+                        )
                     }
                 }
-                await flushBufferedChunkIfNeeded(force: true)
-                let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                if collectedToolCalls.isEmpty, !trimmedOutput.isEmpty {
-                    let recoveredToolCalls = Self.recoverTextualToolCalls(from: trimmedOutput)
-                    if !recoveredToolCalls.isEmpty {
-                        collectedToolCalls = recoveredToolCalls
-                        await publishStatus("Recovered \(recoveredToolCalls.count) textual tool call(s) from model output.")
-                    } else if Self.containsTextualToolCallSignal(in: trimmedOutput) {
-                        await publishStatus("Model emitted textual tool-call pattern, but parsing recovered 0 tool calls.")
-                    }
+
+                generationCount += 1
+                logMLXMemorySnapshot()
+                if AppRuntimeEnvironment.launchContext.isTesting {
+                    unloadModel(modelDirectory: modelDirectory)
                 }
-                return AIServiceResponse(
-                    content: trimmedOutput.isEmpty ? nil : trimmedOutput,
-                    toolCalls: collectedToolCalls.isEmpty ? nil : collectedToolCalls
-                )
+
+                return response
+            } catch {
+                unloadModel(modelDirectory: modelDirectory)
+                throw error
             }
-
-            generationCount += 1
-            clearMLXCacheAfterGeneration()
-
-            return response
         }
 
-        private func clearMLXCacheAfterGeneration() {
-            Memory.clearCache()
-            // DIAGNOSTIC: Log memory on every generation to track growth
+        private func synchronizeMLXStream() {
+            Stream().synchronize()
+        }
+
+        private func logMLXMemorySnapshot() {
             let snapshot = Memory.snapshot()
             print("[MLXMemory] gen=\(generationCount) active=\(snapshot.activeMemory / (1024*1024))MB cache=\(snapshot.cacheMemory / (1024*1024))MB peak=\(snapshot.peakMemory / (1024*1024))MB")
+        }
+
+        nonisolated private static func resolvedRSSLimitMB() -> Int {
+            let environment = ProcessInfo.processInfo.environment
+            if let configured = environment["OSXIDE_LOCAL_MODEL_MAX_RSS_MB"],
+               let parsed = Int(configured),
+               parsed > 0 {
+                return parsed
+            }
+
+            return AppRuntimeEnvironment.launchContext.isTesting
+                ? defaultTestingRSSLimitMB
+                : defaultOperationalRSSLimitMB
+        }
+
+        nonisolated private static func throwIfProcessRSSExceeded(limitMB: Int, phase: String) throws {
+            let rssMB = currentProcessRSSMB()
+            guard rssMB < limitMB else {
+                throw AppError.aiServiceError(
+                    "Local model memory budget exceeded during \(phase): \(rssMB)MB used with limit \(limitMB)MB"
+                )
+            }
+        }
+
+        nonisolated private static func currentProcessRSSMB() -> Int {
+            var info = mach_task_basic_info()
+            var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info_data_t>.size / MemoryLayout<natural_t>.size)
+
+            let result = withUnsafeMutablePointer(to: &info) { pointer in
+                pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { reboundPointer in
+                    task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), reboundPointer, &count)
+                }
+            }
+
+            guard result == KERN_SUCCESS else { return 0 }
+            return Int(info.resident_size / 1024 / 1024)
         }
 
         nonisolated private static func makeAIToolCall(from toolCall: ToolCall) -> AIToolCall {
@@ -188,135 +279,134 @@ actor LocalModelProcessAIService: AIService {
             )
         }
 
-        nonisolated internal static func recoverTextualToolCalls(from content: String) -> [AIToolCall] {
-            let candidates = jsonCandidates(from: content)
-            for candidate in candidates {
-                guard let data = candidate.data(using: .utf8) else { continue }
-                guard let object = try? JSONSerialization.jsonObject(with: data) else { continue }
-                let calls = parseToolCalls(fromJSONObject: object)
-                if !calls.isEmpty {
-                    return calls
+        nonisolated static func extractFallbackToolCalls(
+            from content: String,
+            toolsWereProvided: Bool,
+            structuredToolCallsWereDetected: Bool,
+            toolCallFormat: ToolCallFormat?
+        ) -> [AIToolCall]? {
+            guard toolsWereProvided, !structuredToolCallsWereDetected else { return nil }
+            guard !content.isEmpty else { return nil }
+
+            if let directCall = decodeFallbackToolCall(from: content) {
+                return [directCall]
+            }
+
+            if let wrappedCalls = decodeFallbackToolCallsEnvelope(from: content), !wrappedCalls.isEmpty {
+                return wrappedCalls
+            }
+
+            if let fencedJSON = extractFirstJSONCodeBlock(from: content) {
+                if let directCall = decodeFallbackToolCall(from: fencedJSON) {
+                    return [directCall]
                 }
-            }
-            return []
-        }
-
-        nonisolated private static func containsTextualToolCallSignal(in content: String) -> Bool {
-            let lowered = content.lowercased()
-            return lowered.contains("tool_calls") || lowered.contains("tool call")
-        }
-
-        nonisolated private static func jsonCandidates(from content: String) -> [String] {
-            var candidates: [String] = []
-
-            if let regex = try? NSRegularExpression(pattern: "```(?:json)?\\s*([\\s\\S]*?)```", options: [.caseInsensitive]) {
-                let range = NSRange(content.startIndex..<content.endIndex, in: content)
-                for match in regex.matches(in: content, options: [], range: range) {
-                    guard match.numberOfRanges > 1,
-                          let blockRange = Range(match.range(at: 1), in: content) else { continue }
-                    let block = String(content[blockRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !block.isEmpty {
-                        candidates.append(block)
-                    }
+                if let wrappedCalls = decodeFallbackToolCallsEnvelope(from: fencedJSON), !wrappedCalls.isEmpty {
+                    return wrappedCalls
                 }
-            }
-
-            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                candidates.append(trimmed)
-            }
-
-            if let start = content.firstIndex(of: "{"),
-               let end = content.lastIndex(of: "}"),
-               start <= end {
-                let slice = String(content[start...end]).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !slice.isEmpty {
-                    candidates.append(slice)
-                }
-            }
-
-            if let start = content.firstIndex(of: "["),
-               let end = content.lastIndex(of: "]"),
-               start <= end {
-                let slice = String(content[start...end]).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !slice.isEmpty {
-                    candidates.append(slice)
-                }
-            }
-
-            return candidates
-        }
-
-        nonisolated private static func parseToolCalls(fromJSONObject object: Any) -> [AIToolCall] {
-            if let dict = object as? [String: Any], let toolCalls = dict["tool_calls"] {
-                return parseToolCallsArray(toolCalls)
-            }
-
-            if let dict = object as? [String: Any], let toolCalls = dict["toolCalls"] {
-                return parseToolCallsArray(toolCalls)
-            }
-
-            if let array = object as? [Any] {
-                return parseToolCallsArray(array)
-            }
-
-            return []
-        }
-
-        nonisolated private static func parseToolCallsArray(_ value: Any) -> [AIToolCall] {
-            guard let rawCalls = value as? [[String: Any]] else { return [] }
-            return rawCalls.compactMap { parseToolCall($0) }
-        }
-
-        nonisolated private static func parseToolCall(_ payload: [String: Any]) -> AIToolCall? {
-            if let functionPayload = payload["function"] as? [String: Any],
-               let name = functionPayload["name"] as? String {
-                let arguments = parseArguments(functionPayload["arguments"])
-                let id = (payload["id"] as? String) ?? UUID().uuidString
-                return AIToolCall(id: id, name: name, arguments: arguments)
-            }
-
-            if let name = payload["name"] as? String {
-                let arguments = parseArguments(payload["arguments"])
-                let id = (payload["id"] as? String) ?? UUID().uuidString
-                return AIToolCall(id: id, name: name, arguments: arguments)
             }
 
             return nil
         }
 
-        nonisolated private static func parseArguments(_ value: Any?) -> [String: Any] {
-            if let dictionary = value as? [String: Any] {
-                return dictionary
+        nonisolated private static func regexMatches(in text: String, pattern: String) -> [String] {
+            guard let expression = try? NSRegularExpression(
+                pattern: pattern,
+                options: [.dotMatchesLineSeparators, .caseInsensitive]
+            ) else {
+                return []
             }
 
-            if let string = value as? String,
-               let data = string.data(using: .utf8),
-               let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                return decoded
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            return expression.matches(in: text, options: [], range: range).compactMap { match in
+                guard let matchRange = Range(match.range, in: text) else { return nil }
+                return String(text[matchRange])
+            }
+        }
+
+        nonisolated private static func regexCaptureGroups(in text: String, pattern: String) -> [[String]] {
+            guard let expression = try? NSRegularExpression(
+                pattern: pattern,
+                options: [.dotMatchesLineSeparators, .caseInsensitive]
+            ) else {
+                return []
             }
 
-            return [:]
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            return expression.matches(in: text, options: [], range: range).map { match in
+                guard match.numberOfRanges > 1 else { return [] }
+                return (1..<match.numberOfRanges).compactMap { index in
+                    let groupRange = match.range(at: index)
+                    guard groupRange.location != NSNotFound,
+                          let swiftRange = Range(groupRange, in: text) else {
+                        return nil
+                    }
+                    return String(text[swiftRange])
+                }
+            }
+        }
+
+        nonisolated private static func decodeFallbackToolCall(from raw: String) -> AIToolCall? {
+            guard let data = raw.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode(AIToolCall.self, from: data) else {
+                return nil
+            }
+            return decoded
+        }
+
+        nonisolated private static func decodeFallbackToolCallsEnvelope(from raw: String) -> [AIToolCall]? {
+            guard let data = raw.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let rawToolCalls = object["tool_calls"] as? [[String: Any]] else {
+                return nil
+            }
+
+            let decodedToolCalls = rawToolCalls.compactMap { rawCall -> AIToolCall? in
+                guard JSONSerialization.isValidJSONObject(rawCall),
+                      let callData = try? JSONSerialization.data(withJSONObject: rawCall),
+                      let call = try? JSONDecoder().decode(AIToolCall.self, from: callData) else {
+                    return nil
+                }
+                return call
+            }
+            return decodedToolCalls.isEmpty ? nil : decodedToolCalls
+        }
+
+        nonisolated private static func extractFirstJSONCodeBlock(from content: String) -> String? {
+            guard let openingRange = content.range(of: "```json") ?? content.range(of: "```") else {
+                return nil
+            }
+            let remainder = content[openingRange.upperBound...]
+            guard let closingRange = remainder.range(of: "```") else {
+                return nil
+            }
+            return remainder[..<closingRange.lowerBound]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         /// Unload all cached models to free memory
         func unloadAllModels() {
+            synchronizeMLXStream()
             containersByModelDirectory.removeAll()
             accessOrder.removeAll()
+            Memory.clearCache()
         }
 
         /// Unload a specific model
         func unloadModel(modelDirectory: URL) {
+            synchronizeMLXStream()
             let cacheKey = modelDirectory.resolvingSymlinksInPath().standardizedFileURL
             containersByModelDirectory.removeValue(forKey: cacheKey)
             accessOrder.removeAll { $0 == cacheKey }
+            Memory.clearCache()
         }
 
         private func loadContainerCached(modelDirectory: URL, toolCallFormat: ToolCallFormat? = nil) async throws -> ModelContainer {
             let cacheKey = modelDirectory.resolvingSymlinksInPath().standardizedFileURL
+            print("[LOCAL-MLX] loadContainerCached cacheKey=\(cacheKey.path) toolCallFormat=\(String(describing: toolCallFormat))")
 
             // Cache hit - update LRU order
             if let existing = containersByModelDirectory[cacheKey] {
+                print("[LOCAL-MLX] loadContainerCached cache hit")
                 accessOrder.removeAll { $0 == cacheKey }
                 accessOrder.append(cacheKey)
                 return existing
@@ -332,10 +422,60 @@ actor LocalModelProcessAIService: AIService {
                 directory: cacheKey,
                 toolCallFormat: toolCallFormat
             )
-            let container = try await MLXLMCommon.loadModelContainer(configuration: configuration)
+            let container = try await loadModelContainer(
+                configuration: configuration,
+                modelDirectory: cacheKey
+            )
             containersByModelDirectory[cacheKey] = container
             accessOrder.append(cacheKey)
             return container
+        }
+
+        private func loadModelContainer(
+            configuration: ModelConfiguration,
+            modelDirectory: URL
+        ) async throws -> ModelContainer {
+            let useVLMFactory = try shouldUseVLMFactory(modelDirectory: modelDirectory)
+            print("[LOCAL-MLX] loadModelContainer directory=\(modelDirectory.path) useVLMFactory=\(useVLMFactory)")
+            if useVLMFactory {
+                return try await VLMModelFactory.shared.loadContainer(configuration: configuration)
+            }
+            return try await MLXLMCommon.loadModelContainer(configuration: configuration)
+        }
+
+        private func shouldUseVLMFactory(modelDirectory: URL) throws -> Bool {
+            let configURL = modelDirectory.appendingPathComponent("config.json")
+            let configData = try Data(contentsOf: configURL)
+            guard let configObject = try JSONSerialization.jsonObject(with: configData) as? [String: Any] else {
+                print("[LOCAL-MLX] shouldUseVLMFactory invalid config object at \(configURL.path)")
+                return false
+            }
+
+            let topLevelModelType = configObject["model_type"] as? String
+            let nestedTextModelType = (configObject["text_config"] as? [String: Any])?["model_type"] as? String
+            print("[LOCAL-MLX] shouldUseVLMFactory config=\(configURL.path) model_type=\(String(describing: topLevelModelType)) text_config.model_type=\(String(describing: nestedTextModelType))")
+
+            if let modelType = topLevelModelType,
+               modelType == "qwen3_vl" || modelType == "qwen3_5" {
+                return true
+            }
+
+            if nestedTextModelType == "qwen3_5_text" {
+                return true
+            }
+
+            if let processorConfigURL = [
+                modelDirectory.appendingPathComponent("preprocessor_config.json"),
+                modelDirectory.appendingPathComponent("processor_config.json")
+            ].first(where: { FileManager.default.fileExists(atPath: $0.path) }),
+               let processorData = try? Data(contentsOf: processorConfigURL),
+               let processorObject = try? JSONSerialization.jsonObject(with: processorData) as? [String: Any],
+               let processorClass = processorObject["processor_class"] as? String,
+               processorClass == "Qwen3VLProcessor" {
+                return true
+            }
+
+            return false
         }
     }
 
@@ -382,7 +522,8 @@ actor LocalModelProcessAIService: AIService {
 
     func sendMessage(_ request: AIServiceMessageWithProjectRootRequest) async throws -> AIServiceResponse {
         try await sendMessage(AIServiceHistoryRequest(
-            messages: [ChatMessage(role: .user, content: request.message)],
+            messages: [ChatMessage(role: .user, content: request.message, mediaAttachments: request.mediaAttachments)],
+            mediaAttachments: request.mediaAttachments,
             context: request.context,
             tools: request.tools,
             mode: request.mode,
@@ -402,11 +543,15 @@ actor LocalModelProcessAIService: AIService {
             throw AppError.aiServiceError("Local model is not downloaded: \(model.displayName)")
         }
 
-        let modelDirectory = try fileStore.modelDirectory(modelId: model.id)
-        let contextLength = LocalModelFileStore.contextLength(for: model)
+        let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
+        let testBudget = LocalModelTestBudget.applyIfNeeded(
+            to: request,
+            contextLength: LocalModelFileStore.contextLength(for: model)
+        )
+        let contextLength = testBudget.contextLength
         
         // Build system content for caching
-        let systemContent = buildSystemContent(tools: request.tools, mode: request.mode, stage: request.stage)
+        let systemContent = try buildSystemContent(tools: request.tools, mode: request.mode, stage: request.stage, projectRoot: request.projectRoot)
         
         // Check prefix cache for this conversation
         let conversationId = request.conversationId
@@ -428,7 +573,7 @@ actor LocalModelProcessAIService: AIService {
         }
         
         let chatMessages = buildChatMessages(
-            messages: request.messages,
+            messages: testBudget.retainedMessages,
             explicitContext: request.context,
             systemContent: systemContent
         )
@@ -444,6 +589,12 @@ actor LocalModelProcessAIService: AIService {
             systemContentLength: systemContent.count,
             messageCount: chatMessages.count
         )
+
+        let additionalContext: [String: any Sendable]? = {
+            guard model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main", toolSpecs?.isEmpty == false else { return nil }
+            return ["enable_thinking": false]
+        }()
+        let userInput = UserInput(chat: chatMessages, tools: toolSpecs, additionalContext: additionalContext)
         
         // Wrap MLX inference with power management to prevent sleep during long generations
         let response: AIServiceResponse
@@ -451,22 +602,24 @@ actor LocalModelProcessAIService: AIService {
             response = try await coordinator.withActivity(type: .mlxInference) {
                 try await generator.generate(
                     modelDirectory: modelDirectory,
-                    messages: chatMessages,
+                    userInput: userInput,
                     tools: toolSpecs,
                     toolCallFormat: model.toolCallFormat,
                     runId: request.runId,
                     contextLength: contextLength,
+                    maxOutputTokens: testBudget.maxOutputTokens,
                     conversationId: conversationId
                 )
             }
         } else {
             response = try await generator.generate(
                 modelDirectory: modelDirectory,
-                messages: chatMessages,
+                userInput: userInput,
                 tools: toolSpecs,
                 toolCallFormat: model.toolCallFormat,
                 runId: request.runId,
                 contextLength: contextLength,
+                maxOutputTokens: testBudget.maxOutputTokens,
                 conversationId: conversationId
             )
         }
@@ -542,155 +695,233 @@ actor LocalModelProcessAIService: AIService {
 
     nonisolated private func buildChatMessages(messages: [ChatMessage], explicitContext: String?, systemContent: String) -> [Chat.Message] {
         var chatMessages: [Chat.Message] = []
+        let mergedSystemContent = mergedSystemContent(
+            messages: messages,
+            explicitContext: explicitContext,
+            systemContent: systemContent
+        )
 
-        // 1. System message with mode-specific instructions (NOT tool prose)
-        chatMessages.append(.system(systemContent))
+        chatMessages.append(.system(mergedSystemContent))
 
-        // 2. Inject explicit context as a system message if provided
-        if let explicitContext, !explicitContext.isEmpty {
-            chatMessages.append(.system("Project context:\n\(explicitContext)"))
-        }
-
-        // 3. Map conversation history preserving roles
         for message in messages {
             switch message.role {
             case .user:
-                chatMessages.append(.user(message.content))
+                chatMessages.append(.user(
+                    message.content,
+                    images: imageInputs(from: message.mediaAttachments),
+                    videos: videoInputs(from: message.mediaAttachments)
+                ))
             case .assistant:
                 chatMessages.append(.assistant(message.content))
             case .system:
-                chatMessages.append(.system(message.content))
+                continue
             case .tool:
-                chatMessages.append(.tool(message.content))
+                chatMessages.append(.tool(replayToolMessageContent(from: message)))
             }
         }
 
         return chatMessages
     }
 
-    private func buildSystemContent(tools: [AITool]?, mode: AIMode?, stage: AIRequestStage? = nil) -> String {
-        var parts: [String] = []
+    nonisolated private func imageInputs(from attachments: [ChatMessageMediaAttachment]) -> [UserInput.Image] {
+        attachments.compactMap { attachment in
+            guard attachment.kind == .image else { return nil }
+            return .url(attachment.url)
+        }
+    }
 
-        // Load custom system prompt from settings
+    nonisolated private func videoInputs(from attachments: [ChatMessageMediaAttachment]) -> [UserInput.Video] {
+        attachments.compactMap { attachment in
+            guard attachment.kind == .video else { return nil }
+            return .url(attachment.url)
+        }
+    }
+
+    nonisolated private func buildRawMessages(messages: [ChatMessage], explicitContext: String?, systemContent: String) -> [Message] {
+        let mergedSystemContent = mergedSystemContent(
+            messages: messages,
+            explicitContext: explicitContext,
+            systemContent: systemContent
+        )
+
+        var rawMessages: [Message] = []
+        rawMessages.append([
+            "role": MessageRole.system.rawValue,
+            "content": mergedSystemContent,
+        ])
+
+        for message in messages {
+            if message.role == .system {
+                continue
+            }
+
+            var rawMessage: Message = [
+                "role": message.role.rawValue,
+                "content": rawContent(for: message),
+            ]
+
+            if message.role == .assistant,
+               let toolCalls = message.toolCalls,
+               !toolCalls.isEmpty {
+                rawMessage["tool_calls"] = toolCalls.map { toolCall in
+                    [
+                        "id": toolCall.id,
+                        "type": "function",
+                        "function": [
+                            "name": toolCall.name,
+                            "arguments": rawMessageValue(from: toolCall.arguments) as? [String: any Sendable] ?? [:],
+                        ] as [String: any Sendable],
+                    ] as [String: any Sendable]
+                }
+            }
+
+            rawMessages.append(rawMessage)
+        }
+
+        return rawMessages
+    }
+
+    nonisolated private func mergedSystemContent(messages: [ChatMessage], explicitContext: String?, systemContent: String) -> String {
+        let normalizedContext = explicitContext?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let historicalSystemContent = messages
+            .filter { $0.role == .system }
+            .map(\.content)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return ([systemContent] + (normalizedContext.map { ["Project context:\n\($0)"] } ?? []) + historicalSystemContent)
+            .joined(separator: "\n\n")
+    }
+
+    nonisolated private func rawContent(for message: ChatMessage) -> String {
+        if message.role == .tool {
+            return replayToolMessageContent(from: message)
+        }
+        return message.content
+    }
+
+    nonisolated private func rawMessageValue(from value: Any) -> (any Sendable)? {
+        switch value {
+        case let string as String:
+            return string
+        case let int as Int:
+            return int
+        case let int8 as Int8:
+            return Int(int8)
+        case let int16 as Int16:
+            return Int(int16)
+        case let int32 as Int32:
+            return Int(int32)
+        case let int64 as Int64:
+            return Int(int64)
+        case let uint as UInt:
+            return Int(uint)
+        case let double as Double:
+            return double
+        case let float as Float:
+            return Double(float)
+        case let bool as Bool:
+            return bool
+        case let number as NSNumber:
+            if CFGetTypeID(number) == CFBooleanGetTypeID() {
+                return number.boolValue
+            }
+            return number.doubleValue
+        case let dictionary as [String: Any]:
+            var sendableDictionary: [String: any Sendable] = [:]
+            for (key, nestedValue) in dictionary {
+                if let sendableValue = rawMessageValue(from: nestedValue) {
+                    sendableDictionary[key] = sendableValue
+                }
+            }
+            return sendableDictionary
+        case let array as [Any]:
+            return array.compactMap { rawMessageValue(from: $0) }
+        case _ as NSNull:
+            return nil
+        default:
+            return String(describing: value)
+        }
+    }
+
+    nonisolated private func replayToolMessageContent(from message: ChatMessage) -> String {
+        guard let envelope = ToolExecutionEnvelope.decode(from: message.content) else {
+            return message.content
+        }
+
+        if let payload = envelope.payload?.trimmingCharacters(in: .whitespacesAndNewlines), !payload.isEmpty {
+            return payload
+        }
+
+        let fallback = envelope.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        return fallback.isEmpty ? message.content : fallback
+    }
+
+    private func buildSystemContent(
+        tools: [AITool]?,
+        mode: AIMode?,
+        stage: AIRequestStage? = nil,
+        projectRoot: URL?
+    ) throws -> String {
         let settings = settingsStore.load(includeApiKey: false)
-
-        if !settings.systemPrompt.isEmpty {
-            parts.append(settings.systemPrompt)
-        } else if let tools, !tools.isEmpty {
-            // CRITICAL: For local models with chat template tool support, use concise prompt.
-            // The chat template will inject tool definitions - we only provide behavioral guidance.
-            // Using fullStatic here would create "double prompt building" where tools are described
-            // in prose AND injected by chat template, confusing the model.
-            parts.append(ToolAwarenessPrompt.structuredToolCallingSystemPrompt)
-        } else {
-            parts.append("You are a helpful, concise coding assistant.")
-        }
-
-        // Add mode-specific additions
-        if let mode = mode {
-            parts.append("\n\n\(mode.systemPromptAddition)")
-        }
-
-        if let reasoningPrompt = buildReasoningPromptIfNeeded(reasoningEnabled: settings.reasoningEnabled, mode: mode, stage: stage) {
-            parts.append(reasoningPrompt)
-        }
-
-        return parts.joined(separator: "\n")
+        return try SystemPromptAssembler().assemble(
+            input: .init(
+                systemPromptOverride: settings.systemPrompt,
+                hasTools: tools?.isEmpty == false,
+                toolPromptMode: settings.toolPromptMode,
+                mode: mode,
+                projectRoot: projectRoot,
+                reasoningMode: settings.reasoningMode,
+                stage: stage,
+                includeModelReasoning: settings.reasoningMode.includesModelReasoning && stage != .tool_loop
+            )
+        )
     }
 
-    private func buildReasoningPromptIfNeeded(reasoningEnabled: Bool, mode: AIMode?, stage: AIRequestStage? = nil) -> String? {
-        guard let mode else { return nil }
-        guard mode == .agent, reasoningEnabled else { return nil }
-        if stage == .tool_loop {
-            return """
-
-            ## Reasoning
-            During tool execution steps, reasoning is optional but recommended when it clarifies intent.
-            If included, keep it very short using <ide_reasoning>...</ide_reasoning> with only these sections:
-            - Analyze
-            - Plan
-            - Action
-            Then provide one concise user-facing update sentence and tool calls.
-            """
-        }
-
-        return """
-
-        ## Reasoning
-        When responding, include a structured reasoning block enclosed in <ide_reasoning>...</ide_reasoning>.
-        This block will be shown in a separate, foldable UI panel.
-
-        Requirements:
-        - ALWAYS include all six sections in this exact order: Analyze, Research, Plan, Reflect, Action, Delivery.
-        - If a section is not applicable, write 'N/A' (do not omit the section).
-        - If no action is needed, write 'None' in Action.
-        - Delivery MUST start with either 'DONE' or 'NEEDS_WORK'. Use DONE only when the task is fully complete.
-        - Keep it concise and actionable; use short bullets or short sentences.
-        - Do NOT include code blocks in <ide_reasoning>.
-        - Do NOT use placeholders like '...' or copy the format example text verbatim.
-        - After </ide_reasoning>, provide the normal user-facing answer as usual (markdown allowed).
-
-        Format example:
-        <ide_reasoning>
-        Analyze: - ... (write real bullets)
-        Research: - ... (write real bullets)
-        Plan: - ... (write real bullets)
-        Reflect: - ... (write real bullets)
-        Action: - ... (write real bullets)
-        Delivery: DONE - ... (write real bullets)
-        </ide_reasoning>
-        """
-    }
-    
-    /// Convert AITool array to ToolSpec array for MLXLLM
     private func convertToToolSpec(_ tools: [AITool]?) -> [ToolSpec]? {
         guard let tools, !tools.isEmpty else { return nil }
-        
+
         return tools.map { tool in
-            // Convert parameters to Sendable format using JSON serialization
-            let sendableParams = convertToSendable(tool.parameters)
-            
+            let sendableParameters = convertToSendable(tool.parameters)
+
             return [
                 "type": "function",
                 "function": [
                     "name": tool.name,
                     "description": tool.description,
-                    "parameters": sendableParams
+                    "parameters": sendableParameters
                 ] as [String: any Sendable]
-            ] as [String: any Sendable]
+            ] as ToolSpec
         }
     }
-    
-    /// Recursively convert [String: Any] to [String: any Sendable]
-    private func convertToSendable(_ dict: [String: Any]) -> [String: any Sendable] {
+
+    private func convertToSendable(_ dictionary: [String: Any]) -> [String: any Sendable] {
         var result: [String: any Sendable] = [:]
-        for (key, value) in dict {
+        for (key, value) in dictionary {
             result[key] = convertValueToSsendable(value)
         }
         return result
     }
-    
-    /// Convert Any to Sendable
+
     private func convertValueToSsendable(_ value: Any) -> any Sendable {
         switch value {
-        case let s as String:
-            return s
-        case let i as Int:
-            return i
-        case let d as Double:
-            return d
-        case let b as Bool:
-            return b
-        case let dict as [String: Any]:
-            return convertToSendable(dict)
-        case let array as [Any]:
-            return array.map { convertValueToSsendable($0) }
+        case let stringValue as String:
+            return stringValue
+        case let intValue as Int:
+            return intValue
+        case let doubleValue as Double:
+            return doubleValue
+        case let boolValue as Bool:
+            return boolValue
+        case let dictionaryValue as [String: Any]:
+            return convertToSendable(dictionaryValue)
+        case let arrayValue as [Any]:
+            return arrayValue.map { convertValueToSsendable($0) }
         default:
             return String(describing: value)
         }
     }
-    
-    // MARK: - Tool Calling Telemetry
     
     /// Log telemetry about what we're sending to the model for tool calling diagnosis
     private func logToolCallingTelemetry(
@@ -701,7 +932,7 @@ actor LocalModelProcessAIService: AIService {
         messageCount: Int
     ) {
         let toolCount = toolSpecs?.count ?? 0
-        let formatDesc = modelToolCallFormat != nil ? "json" : "nil"
+        let formatDesc = modelToolCallFormat?.rawValue ?? "nil"
         
         print("[ToolCallingTelemetry] === REQUEST ===")
         print("[ToolCallingTelemetry] Model: \(modelId)")

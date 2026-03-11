@@ -45,12 +45,6 @@ struct MessageContentCoordinator {
                     message: message,
                     fontSize: fontSize
                 )
-            } else if isPlanMessage {
-                PlanMessageView(
-                    content: message.content,
-                    fontSize: fontSize,
-                    fontFamily: fontFamily
-                )
             } else if hasReasoning {
                 ReasoningMessageView(
                     message: message,
@@ -59,16 +53,17 @@ struct MessageContentCoordinator {
                     isReasoningHidden: $isReasoningHidden
                 )
             } else if message.role == .assistant {
+                let displayContent = assistantDisplayContent
                 MarkdownMessageView(
-                    content: message.content,
+                    content: displayContent,
                     fontSize: fontSize,
                     fontFamily: fontFamily
                 )
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(backgroundColor(for: message))
-                .foregroundColor(foregroundColor(for: message))
-                .cornerRadius(16)
+                .background(bubbleBackground(for: message))
+                .foregroundColor(bubbleForegroundColor(for: message))
+                .cornerRadius(18, corners: bubbleCorners(for: message))
                 .textSelection(.enabled)
                 .contextMenu {
                     copyMessageButton
@@ -76,11 +71,12 @@ struct MessageContentCoordinator {
             } else {
                 Text(message.content)
                     .font(.system(size: CGFloat(fontSize)))
+                    .lineSpacing(2)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(backgroundColor(for: message))
-                    .foregroundColor(foregroundColor(for: message))
-                    .cornerRadius(16)
+                    .background(bubbleBackground(for: message))
+                    .foregroundColor(bubbleForegroundColor(for: message))
+                    .cornerRadius(18, corners: bubbleCorners(for: message))
                     .textSelection(.enabled)
                     .contextMenu {
                         copyMessageButton
@@ -91,15 +87,15 @@ struct MessageContentCoordinator {
 
     // MARK: - Private Methods
 
-    private func backgroundColor(for message: ChatMessage) -> Color {
+    private func bubbleBackground(for message: ChatMessage) -> Color {
         if message.role == .user {
-            return Color.accentColor.opacity(0.8)
+            return Color.accentColor
         }
 
-        return Color(NSColor.controlBackgroundColor)
+        return Color(NSColor.windowBackgroundColor).opacity(0.92)
     }
 
-    private func foregroundColor(for message: ChatMessage) -> Color {
+    private func bubbleForegroundColor(for message: ChatMessage) -> Color {
         if message.role == .user {
             return Color.white
         }
@@ -107,15 +103,22 @@ struct MessageContentCoordinator {
         return Color.primary
     }
 
+    private func bubbleCorners(for message: ChatMessage) -> MessageUIComponents.RectCorner {
+        if message.role == .user {
+            return [.topLeft, .topRight, .bottomLeft]
+        }
+
+        return [.topLeft, .topRight, .bottomRight]
+    }
+
     private var hasReasoning: Bool {
         guard let reasoning = message.reasoning else { return false }
         return !reasoning.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty
     }
 
-    private var isPlanMessage: Bool {
-        guard message.role == .assistant else { return false }
-        let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return trimmed.hasPrefix("# implementation plan")
+    private var assistantDisplayContent: String {
+        let cleaned = ChatPromptBuilder.contentForDisplay(from: message.content)
+        return cleaned.isEmpty ? message.content : cleaned
     }
 
     private var isReasoningOutcomeMessage: Bool {

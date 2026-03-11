@@ -31,7 +31,7 @@ final class ConversationToolProvider {
         let projectRoot = projectRootProvider()
         let aiService = aiServiceProvider()
         let codebaseIndex = codebaseIndexProvider()
-        let settingsStore = SettingsStore(userDefaults: .standard)
+        let settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
         let agentMemoryEnabled = settingsStore.bool(
             forKey: AppConstantsStorage.agentMemoryEnabledKey, default: true)
 
@@ -56,6 +56,7 @@ final class ConversationToolProvider {
                 pathValidator: pathValidator
             )
         )
+        tools.append(ListFilesTool(pathValidator: pathValidator))
         tools.append(
             WriteFileTool(
                 fileSystemService: fileSystemService,
@@ -84,6 +85,7 @@ final class ConversationToolProvider {
         tools.append(
             ArchitectAdvisorTool(
                 aiService: aiService, index: codebaseIndex, projectRoot: projectRoot))
+        tools.append(ContemplationTool())
         tools.append(PlannerTool())
         tools.append(StrategicPlanTool())
         tools.append(TacticalPlanTool())

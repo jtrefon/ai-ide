@@ -42,6 +42,8 @@ class AppState: ObservableObject, IDEContext {
     @Published var showHiddenFilesInFileTree: Bool = false
 
     @Published var languageOverridesByRelativePath: [String: String] = [:]
+    @Published var isUIReady: Bool = false
+    @Published var uiCompositionIssues: [String] = []
 
     // MARK: - Services
 
@@ -198,11 +200,17 @@ class AppState: ObservableObject, IDEContext {
 
         setupFileTreeRefreshSubscription()
 
-        projectSessionCoordinator.loadProjectSessionIfAvailable()
+        if !AppRuntimeEnvironment.launchContext.isTesting {
+            projectSessionCoordinator.loadProjectSessionIfAvailable()
+        }
     }
 
     func attachWindow(_ window: NSWindow) {
         projectSessionCoordinator.attachWindow(window)
+    }
+
+    func persistSessionNow() {
+        projectSessionCoordinator.persistProjectSessionNow()
     }
 
     func setLanguageOverride(forAbsoluteFilePath filePath: String, languageIdentifier: String?) {

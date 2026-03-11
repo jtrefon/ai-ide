@@ -21,27 +21,94 @@ class ChatPromptBuilder {
     static func splitReasoning(from text: String) -> (reasoning: String?, content: String) {
         guard !text.isEmpty else { return (nil, "") }
 
-        let startTag = "<ide_reasoning>"
-        let endTag = "</ide_reasoning>"
-
-        guard let startRange = text.range(of: startTag),
-              let endRange = text.range(of: endTag) else {
-            return (nil, text)
+        if let tagged = splitTaggedReasoning(from: text) {
+            return tagged
         }
 
-        guard startRange.lowerBound < endRange.lowerBound else {
-            return (nil, text)
+        if let plain = splitPlainReasoning(from: text) {
+            return plain
         }
 
-        let reasoningStart = startRange.upperBound
-        let reasoningEnd = endRange.lowerBound
-        let reasoning = String(text[reasoningStart..<reasoningEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (nil, text)
+    }
 
+    /// Sanitizes model text for user-visible rendering:
+    /// strips reasoning from rendered content while preserving paragraph breaks.
+    static func contentForDisplay(from text: String) -> String {
+        let split = splitReasoning(from: text)
+        let withoutToolMarkup = stripTextualToolCallMarkup(from: split.content)
+        return normalizeDisplayWhitespace(withoutToolMarkup)
+    }
+
+    static func isControlMarkupOnly(_ text: String) -> Bool {
+        let stripped = stripTextualToolCallMarkup(from: text)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && stripped.isEmpty
+    }
+
+    private static func normalizeDisplayWhitespace(_ text: String) -> String {
+        var output = text
+            .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // If words were glued by model glitches around punctuation-less boundaries, ensure at least single spaces.
+        output = output.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+        return output
+    }
+
+    private static func stripTextualToolCallMarkup(from text: String) -> String {
+        guard !text.isEmpty else { return text }
+
+        var output = text
+        let patterns = [
+            #"(?is)<tool_call>\s*.*?\s*</tool_call>"#,
+            #"(?is)<arg_key>\s*.*?\s*</arg_key>"#,
+            #"(?is)<arg_value>\s*.*?\s*</arg_value>"#
+        ]
+
+        for pattern in patterns {
+            output = output.replacingOccurrences(
+                of: pattern,
+                with: "",
+                options: .regularExpression
+            )
+        }
+
+        return output
+    }
+
+    private static func splitPlainReasoning(from text: String) -> (reasoning: String?, content: String)? {
+        let pattern = #"(?s)^\s*(Reflection:\s*.*?\n\s*Continuity:.*?)(?:\n{1,2}|$)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: fullRange),
+              let reasoningRange = Range(match.range(at: 1), in: text),
+              let removeRange = Range(match.range(at: 0), in: text) else {
+            return nil
+        }
+
+        let reasoning = String(text[reasoningRange]).trimmingCharacters(in: .whitespacesAndNewlines)
         var remaining = text
-        remaining.removeSubrange(startRange.lowerBound..<endRange.upperBound)
+        remaining.removeSubrange(removeRange)
         let cleaned = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+        return reasoning.isEmpty ? nil : (reasoning, cleaned)
+    }
 
-        return (reasoning.isEmpty ? nil : reasoning, cleaned)
+    private static func splitTaggedReasoning(from text: String) -> (reasoning: String?, content: String)? {
+        let pattern = #"(?is)<ide_reasoning>(.*?)</ide_reasoning>"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: fullRange),
+              let reasoningRange = Range(match.range(at: 1), in: text),
+              let removeRange = Range(match.range(at: 0), in: text) else {
+            return nil
+        }
+
+        let reasoning = String(text[reasoningRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        var remaining = text
+        remaining.removeSubrange(removeRange)
+        let cleaned = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+        return reasoning.isEmpty ? nil : (reasoning, cleaned)
     }
 
     /// Checks if a reasoning format correction is needed based on required sections.
@@ -52,8 +119,20 @@ class ChatPromptBuilder {
         guard let reasoning = split.reasoning, !reasoning.isEmpty else { return false }
 
         let lowercasedReasoning = reasoning.lowercased()
-        let required = ["analyze:", "research:", "plan:", "reflect:", "action:", "delivery:"]
-        return required.contains(where: { !lowercasedReasoning.contains($0) })
+        let modernRequired = ["reflection:", "planning:", "continuity:"]
+        let legacyRequired = ["analyze:", "research:", "plan:", "reflect:", "action:", "delivery:"]
+
+        let hasModern = modernRequired.contains(where: { lowercasedReasoning.contains($0) })
+        if hasModern {
+            return modernRequired.contains(where: { !lowercasedReasoning.contains($0) })
+        }
+
+        let hasLegacy = legacyRequired.contains(where: { lowercasedReasoning.contains($0) })
+        if hasLegacy {
+            return legacyRequired.contains(where: { !lowercasedReasoning.contains($0) })
+        }
+
+        return false
     }
 
     /// Checks if the reasoning block is present but low-quality (placeholders like "..." or no concrete content).
@@ -111,7 +190,10 @@ class ChatPromptBuilder {
     private static func extractReasoningSections(_ reasoning: String) -> [(key: String, value: String)] {
         // Parse lines like "Analyze: ..."; tolerate leading/trailing whitespace.
         let lines = reasoning.split(whereSeparator: \.isNewline).map { String($0) }
-        let keys = ["Analyze:", "Research:", "Plan:", "Reflect:", "Action:", "Delivery:"]
+        let keys = [
+            "Analyze:", "Research:", "Plan:", "Reflect:", "Action:", "Delivery:",
+            "Reflection:", "Planning:", "Continuity:"
+        ]
         var results: [(String, String)] = []
 
         for line in lines {
@@ -138,9 +220,9 @@ class ChatPromptBuilder {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        let planDelta = value(for: "Plan:")
+        let planDelta = value(for: "Plan:") ?? value(for: "Planning:")
         let nextAction = value(for: "Action:")
-        let knownRisks = value(for: "Reflect:")
+        let knownRisks = value(for: "Reflect:") ?? value(for: "Continuity:")
 
         let deliveryValue = (value(for: "Delivery:") ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -203,6 +285,10 @@ class ChatPromptBuilder {
         let text = content.lowercased()
         if text.isEmpty { return false }
 
+        if containsTextualToolCallMarkup(content) {
+            return true
+        }
+
         let triggers = [
             "i will implement",
             "i'll implement",
@@ -228,7 +314,65 @@ class ChatPromptBuilder {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
 
-        return true
+        if containsTextualToolCallMarkup(trimmed) {
+            return true
+        }
+
+        let lower = trimmed.lowercased()
+
+        let pendingExecutionSignals = [
+            "i will",
+            "i'll",
+            "i am going to",
+            "i'm going to",
+            "next i will",
+            "now i will",
+            "let me",
+            "i can",
+            "next:",
+            "next →",
+            "→ next:",
+            "path:"
+        ]
+
+        let hasPendingExecutionSignal = pendingExecutionSignals.contains(where: { lower.contains($0) })
+
+        if indicatesWorkWasPerformed(content: trimmed) {
+            return false
+        }
+
+        let completionSignals = [
+            "done",
+            "completed",
+            "finished",
+            "all set",
+            "resolved"
+        ]
+        if completionSignals.contains(where: { lower.contains($0) }) && !hasPendingExecutionSignal {
+            return false
+        }
+
+        if hasPendingExecutionSignal {
+            return true
+        }
+
+        return false
+    }
+
+    static func containsTextualToolCallMarkup(_ content: String) -> Bool {
+        let lower = content.lowercased()
+        return lower.contains("<tool_call>") || lower.contains("<arg_key>") || lower.contains("<arg_value>")
+    }
+
+    static func hasMissingClaimedFileArtifacts(content: String, projectRoot: URL) -> Bool {
+        guard indicatesWorkWasPerformed(content: content) else { return false }
+
+        let claimedArtifacts = claimedFileArtifacts(in: content)
+        guard !claimedArtifacts.isEmpty else { return false }
+
+        return claimedArtifacts.contains { artifact in
+            !projectContainsClaimedArtifact(artifact, projectRoot: projectRoot)
+        }
     }
 
     static func indicatesWorkWasPerformed(content: String) -> Bool {
@@ -239,30 +383,39 @@ class ChatPromptBuilder {
             "i implemented",
             "i've implemented",
             "i have implemented",
+            "implemented ",
             "i updated",
             "i've updated",
             "i have updated",
+            "updated ",
             "i patched",
             "i've patched",
             "i have patched",
+            "patched ",
             "i fixed",
             "i've fixed",
             "i have fixed",
+            "fixed ",
             "i changed",
             "i've changed",
             "i have changed",
+            "changed ",
             "i added",
             "i've added",
             "i have added",
+            "added ",
             "i created",
             "i've created",
             "i have created",
+            "created ",
             "i removed",
             "i've removed",
             "i have removed",
+            "removed ",
             "i refactored",
             "i've refactored",
-            "i have refactored"
+            "i have refactored",
+            "refactored "
         ]
 
         if directClaims.contains(where: { text.contains($0) }) {
@@ -280,10 +433,75 @@ class ChatPromptBuilder {
             "modified file",
             "created file",
             "changed file",
-            "applied patch"
+            "applied patch",
+            "all required files have been created",
+            "all requested files have been created",
+            "application structure is now in place",
+            "todo application structure is now in place",
+            "task complete."
         ]
 
         return artifactClaims.contains(where: { text.contains($0) })
+    }
+
+    private static func claimedFileArtifacts(in content: String) -> [String] {
+        let pattern = #"(?<![A-Za-z0-9_./-])([A-Za-z0-9_./-]+\.[A-Za-z0-9]{1,8})(?![A-Za-z0-9_./-])"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(content.startIndex..<content.endIndex, in: content)
+
+        var results: [String] = []
+        var seen: Set<String> = []
+        for match in regex.matches(in: content, options: [], range: range) {
+            guard let tokenRange = Range(match.range(at: 1), in: content) else { continue }
+            let rawToken = String(content[tokenRange])
+            let token = rawToken.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`[](){}<>.,;:"))
+            guard isLikelyProjectArtifactToken(token) else { continue }
+            if seen.insert(token).inserted {
+                results.append(token)
+            }
+        }
+
+        return results
+    }
+
+    private static func isLikelyProjectArtifactToken(_ token: String) -> Bool {
+        let lowered = token.lowercased()
+        guard !lowered.hasPrefix("http://"), !lowered.hasPrefix("https://") else { return false }
+        guard lowered.contains(".") else { return false }
+        return true
+    }
+
+    private static func projectContainsClaimedArtifact(_ artifact: String, projectRoot: URL) -> Bool {
+        let normalizedArtifact = NSString(string: artifact).standardizingPath
+        let directURL = projectRoot.appendingPathComponent(normalizedArtifact).standardizedFileURL
+        if FileManager.default.fileExists(atPath: directURL.path) {
+            return true
+        }
+
+        guard !normalizedArtifact.contains("/") else {
+            return false
+        }
+
+        let enumerator = FileManager.default.enumerator(
+            at: projectRoot,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles],
+            errorHandler: nil
+        )
+
+        while let next = enumerator?.nextObject() as? URL {
+            if next.path.contains("/.ide/") {
+                enumerator?.skipDescendants()
+                continue
+            }
+            guard next.lastPathComponent == normalizedArtifact else { continue }
+            let isRegularFile = (try? next.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile ?? false
+            if isRegularFile {
+                return true
+            }
+        }
+
+        return false
     }
 
     static func userRequestRequiresExecution(userInput: String) -> Bool {
@@ -309,12 +527,35 @@ class ChatPromptBuilder {
             "build",
             "compile",
             "deploy",
+            "write ",
+            "create ",
+            "generate ",
+            "scaffold",
+            "set up",
+            "setup",
+            "process ",
             "create file",
             "edit file",
             "apply patch"
         ]
 
         if executionTriggers.contains(where: { text.contains($0) }) {
+            return true
+        }
+
+        let executionPatterns = [
+            #"\b(create|write|generate|make|update|modify|delete|remove|process)\b.{0,80}\b(file|files|folder|directory|project|script|report|summary)\b"#,
+            #"\b(read|analyze)\b.{0,80}\b(file|files)\b.{0,80}\b(create|write|generate|produce)\b"#,
+            #"\b(run|execute)\b.{0,80}\b(command|commands|test|tests|build)\b"#
+        ]
+
+        if executionPatterns.contains(where: { pattern in
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                return false
+            }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            return regex.firstMatch(in: text, options: [], range: range) != nil
+        }) {
             return true
         }
 
@@ -377,7 +618,7 @@ class ChatPromptBuilder {
 
         let sections = extractReasoningSections(reasoning)
         guard let deliveryLine = sections.first(where: { $0.key.lowercased().hasPrefix("delivery:") })?.value else {
-            return .needsWork
+            return nil
         }
 
         let normalized = deliveryLine

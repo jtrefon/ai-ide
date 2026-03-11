@@ -208,7 +208,29 @@ private func debounceSearch() {
 - **Context-rich error messages** with operation context
 - **Graceful degradation** for non-critical failures
 
-### 6. Power Management
+### 6. Local Model Tool-Calling Formats
+
+- **Model-native formats only** for local tool calling
+- **Qwen 3.5 uses native JSON tool calling**
+- **Do not normalize Qwen 3.5 to XML**
+- **XML parsing remains only for models that are actually trained or templated for XML**
+
+For Qwen 3.5 specifically, the local runtime must treat tool calls as JSON objects rendered inside the tagged envelope expected by the JSON parser:
+
+```text
+<tool_call>
+{"name":"function_name","arguments":{"key":"value"}}
+</tool_call>
+```
+
+This decision exists to prevent regressions where an XML-oriented compatibility template or fallback parser is accidentally applied to a model whose native tool-calling behavior is JSON-based. If Qwen 3.5 tooling regresses, verify:
+
+- the catalog entry still uses `ToolCallFormat.json`
+- runtime compatibility template rewriting does not inject XML tool instructions
+- fallback parsing for Qwen 3.5 does not prioritize XML recovery
+- tests for Qwen 3.5 assert JSON-native behavior rather than XML behavior
+
+### 7. Power Management
 
 The IDE prevents macOS sleep/screen saver during agent activity to ensure long-running operations complete successfully.
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct PlanOutlineView: View {
     let rawPlan: String

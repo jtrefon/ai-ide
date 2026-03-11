@@ -36,11 +36,23 @@ final class ConversationPolicyTests: XCTestCase {
         "list_files",
         "conversation_fold"
     ]
+    private let expectedToolLoopExecution: Set<String> = [
+        "index_find_files",
+        "index_list_files",
+        "index_search_text",
+        "index_read_file",
+        "index_search_symbols",
+        "read_file",
+        "list_files",
+        "write_file",
+        "replace_in_file",
+        "run_command"
+    ]
 
     // MARK: - Chat mode
 
     func testChatModeReturnsNoToolsRegardlessOfStage() {
-        let stages: [AIRequestStage?] = [nil, .initial_response, .tool_loop, .delivery_gate, .final_response, .qa_tool_output_review, .qa_quality_review]
+        let stages: [AIRequestStage?] = [nil, .initial_response, .tool_loop, .final_response, .qa_tool_output_review, .qa_quality_review]
         for stage in stages {
             let result = policy.allowedTools(for: stage, mode: .chat, from: allTools)
             XCTAssertTrue(result.isEmpty, "Chat mode should return no tools for stage=\(String(describing: stage))")
@@ -56,17 +68,64 @@ final class ConversationPolicyTests: XCTestCase {
 
     func testAgentModeInitialResponseReturnsNoTools() {
         let result = policy.allowedTools(for: .initial_response, mode: .agent, from: allTools)
-        XCTAssertTrue(result.isEmpty, "initial_response should return no tools to save context")
+        XCTAssertTrue(result.isEmpty, "initial_response should remain a lightweight response stage")
     }
 
-    func testAgentModeToolLoopReturnsAllTools() {
+    func testAgentModeToolLoopReturnsExecutionToolsOnly() {
         let result = policy.allowedTools(for: .tool_loop, mode: .agent, from: allTools)
-        XCTAssertEqual(result.count, allTools.count)
+        let names = Set(result.map(\.name))
+        XCTAssertEqual(names, expectedToolLoopExecution)
     }
 
-    func testAgentModeDeliveryGateReturnsAllTools() {
-        let result = policy.allowedTools(for: .delivery_gate, mode: .agent, from: allTools)
-        XCTAssertEqual(result.count, allTools.count)
+    func testReasoningPromptKeyUsesToolLoopSpecificPromptOnlyForToolLoopStage() {
+        XCTAssertEqual(
+            AIRequestStage.tool_loop.reasoningPromptKey,
+            "ConversationFlow/Corrections/reasoning_optional_tool_loop"
+        )
+        XCTAssertEqual(
+            AIRequestStage.reasoningPromptKey(for: .tool_loop),
+            "ConversationFlow/Corrections/reasoning_optional_tool_loop"
+        )
+        XCTAssertEqual(
+            AIRequestStage.final_response.reasoningPromptKey,
+            "ConversationFlow/Corrections/reasoning_optional_general"
+        )
+        XCTAssertEqual(
+            AIRequestStage.reasoningPromptKey(for: nil),
+            "ConversationFlow/Corrections/reasoning_optional_general"
+        )
+        XCTAssertNil(
+            AIRequestStage.reasoningPromptKeyIfNeeded(
+                reasoningMode: .modelAndAgent,
+                mode: .agent,
+                stage: .tool_loop
+            )
+        )
+        XCTAssertNil(
+            AIRequestStage.reasoningPromptKeyIfNeeded(
+                reasoningMode: .none,
+                mode: .agent,
+                stage: .tool_loop
+            )
+        )
+        XCTAssertNil(
+            AIRequestStage.reasoningPromptKeyIfNeeded(
+                reasoningMode: .modelAndAgent,
+                mode: .chat,
+                stage: .tool_loop
+            )
+        )
+        XCTAssertNil(
+            AIRequestStage.reasoningPromptKeyIfNeeded(
+                reasoningMode: .modelAndAgent,
+                mode: .agent,
+                stage: .initial_response
+            )
+        )
+        XCTAssertEqual(
+            AIRequestStage.other.reasoningPromptKey,
+            "ConversationFlow/Corrections/reasoning_optional_general"
+        )
     }
 
     func testAgentModeFinalResponseReturnsAllTools() {

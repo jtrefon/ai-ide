@@ -27,13 +27,24 @@ struct StrategicPlanTool: AITool {
             throw AppError.aiServiceError("Missing 'userInput' for generate_implementation_plan")
         }
 
-        // We use the same synthesizer logic as the old hardwired node
         let plan = await StrategicPlanSynthesizer.build(userInput: userInput)
-
-        // Note: The caller (Dispatcher/ToolLoop) will handle appending this to history
-        // to ensure it's visible in the UI and context.
-        return plan
+        let result = StrategicPlanToolResult(
+            goal: userInput,
+            plan: plan,
+            kind: "strategic_plan"
+        )
+        let data = try JSONEncoder().encode(result)
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw AppError.aiServiceError("Failed to encode generate_implementation_plan result")
+        }
+        return json
     }
+}
+
+private struct StrategicPlanToolResult: Encodable {
+    let goal: String
+    let plan: String
+    let kind: String
 }
 
 /// Extracted from StrategicPlanningNode to be shared

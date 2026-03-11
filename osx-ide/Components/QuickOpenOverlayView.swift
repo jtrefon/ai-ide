@@ -99,7 +99,7 @@ struct QuickOpenOverlayView: View {
         isSearching = true
         defer { isSearching = false }
 
-        let settingsStore = SettingsStore(userDefaults: .standard)
+        let settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
         if let index = appState.codebaseIndex,
            settingsStore.bool(forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true),
            let matches = try? await index.findIndexedFiles(query: trimmed, limit: 50) {

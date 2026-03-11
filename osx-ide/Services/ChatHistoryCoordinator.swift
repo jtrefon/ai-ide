@@ -39,6 +39,10 @@ final class ChatHistoryCoordinator {
     func upsertMessage(_ message: ChatMessage) {
         historyManager.upsertMessage(message)
     }
+
+    func upsertDraftMessage(_ message: ChatMessage) {
+        historyManager.upsertDraftMessage(message)
+    }
     
     /// Finalizes a draft message by converting it to a regular message
     func finalizeDraftMessage(id: UUID, content: String, reasoning: String? = nil) {
@@ -71,6 +75,10 @@ final class ChatHistoryCoordinator {
         historyManager.clear()
     }
 
+    func replaceAllMessages(with newMessages: [ChatMessage]) {
+        historyManager.replaceAllMessages(with: newMessages)
+    }
+
     func updateMessageStatus(toolCallId: String, status: ToolExecutionStatus, content: String? = nil) {
         historyManager.updateMessageStatus(toolCallId: toolCallId, status: status, content: content)
     }
@@ -82,6 +90,12 @@ final class ChatHistoryCoordinator {
         persistConversationId(projectRoot: projectRoot, conversationId: conversationId)
         historyManager.clear()
         return (oldConversationId, conversationId)
+    }
+
+    func switchConversation(to newConversationId: String, projectRoot: URL) {
+        conversationId = newConversationId
+        hasStartedConversation = true
+        persistConversationId(projectRoot: projectRoot, conversationId: conversationId)
     }
 
     func updateProjectRoot(

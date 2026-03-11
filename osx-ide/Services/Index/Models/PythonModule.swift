@@ -8,49 +8,20 @@
 import Foundation
 import AppKit
 
-public final class PythonModule: RegexLanguageModule, @unchecked Sendable {
+public final class PythonModule: TokenLanguageModule, @unchecked Sendable {
     public init() {
-        super.init(id: .python, fileExtensions: ["py"])
-    }
-
-    public override func highlight(_ code: String, font: NSFont) -> NSAttributedString {
-        let base = makeBaseAttributedString(code: code, font: font)
-        let attr = base.attributed
-
-        applyDoubleAndSingleQuotedStringHighlighting(color: NSColor.systemRed, in: attr, code: code)
-        applyDecimalNumberHighlighting(color: NSColor.systemOrange, in: attr, code: code)
-        LanguageKeywordHighlighter.highlight(LanguageKeywordHighlighter.HighlightRequest(
-            words: LanguageKeywordRepository.python,
-            context: LanguageKeywordHighlighter.HighlightContext(
-                color: NSColor.systemBlue,
-                attributedString: attr,
-                code: code,
-                helper: self
+        let configuration = LanguageKeywordRepository.supportConfiguration(for: .python).highlighting
+        super.init(
+            id: .python,
+            fileExtensions: ["py"],
+            definition: TokenLanguageDefinition(
+                keywords: Set(configuration.keywords),
+                typeKeywords: Set(configuration.typeKeywords),
+                booleanLiterals: Set(configuration.booleanLiterals),
+                nullLiterals: Set(configuration.nullLiterals),
+                supportsHashLineComments: true
             )
-        ))
-
-        // Python specific
-        let regexContext = RegexLanguageModule.RegexHighlightContext(attributedString: attr, code: code)
-        applyRegex(RegexLanguageModule.RegexHighlightRequest(
-            pattern: "#.*",
-            color: NSColor.systemGreen,
-            context: regexContext,
-            captureGroup: nil
-        ))
-        applyRegex(RegexLanguageModule.RegexHighlightRequest(
-            pattern: "\"\"\"[\\s\\S]*?\"\"\"",
-            color: NSColor.systemRed,
-            context: regexContext,
-            captureGroup: nil
-        ))
-        applyRegex(RegexLanguageModule.RegexHighlightRequest(
-            pattern: "'''[\\s\\S]*?'''",
-            color: NSColor.systemRed,
-            context: regexContext,
-            captureGroup: nil
-        ))
-
-        return attr
+        )
     }
 
     public override func parseSymbols(content: String, resourceId: String) -> [Symbol] {

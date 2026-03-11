@@ -5,7 +5,7 @@ actor LocalModelSelectionStore {
     private let selectedModelKey = "LocalModel.SelectedId"
     private let offlineModeEnabledKey = "AI.OfflineModeEnabled"
 
-    init(settingsStore: SettingsStore = SettingsStore(userDefaults: .standard)) {
+    init(settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)) {
         self.settingsStore = settingsStore
     }
 

@@ -4,6 +4,7 @@ import Foundation
 public protocol CodebaseIndexProtocol: Sendable {
     func start()
     func stop()
+    var currentEmbeddingModelIdentifier: String { get }
 
     func setEnabled(_ enabled: Bool)
     func reindexProject()

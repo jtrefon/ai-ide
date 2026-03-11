@@ -14,8 +14,12 @@ public enum LanguageIdentifierNormalizer {
         switch normalized {
         case "js":
             return "javascript"
+        case "jsx":
+            return "javascript"
         case "ts":
             return "typescript"
+        case "tsx", "typescriptreact", "typescript-react", "typescript_react", "type script react":
+            return "tsx"
         case "py":
             return "python"
         default:

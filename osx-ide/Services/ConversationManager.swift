@@ -33,11 +33,21 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     private struct UserMessageContext {
         let text: String
+        let mediaAttachments: [ChatMessageMediaAttachment]
         let hasSelectionContext: Bool
         let message: ChatMessage
     }
 
+    private struct ConversationSessionSnapshot {
+        let messages: [ChatMessage]
+        let mode: AIMode
+        let input: String
+        let livePreview: String
+        let liveStatusPreview: String
+    }
+
     @Published var currentInput: String = ""
+    @Published var currentMediaAttachments: [ChatMessageMediaAttachment] = []
     @Published var isSending: Bool = false
     @Published var error: String?
     @Published var currentMode: AIMode = .chat
@@ -45,6 +55,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published private(set) var liveModelOutputPreview: String = ""
     @Published private(set) var liveModelOutputStatusPreview: String = ""
     @Published private(set) var isLiveModelOutputPreviewVisible: Bool = true
+    @Published private(set) var conversationTabs: [ConversationTabItem] = []
+    @Published private(set) var providerIssue: ConversationProviderIssueState?
 
     private let historyManager: ChatHistoryManager
     private let historyCoordinator: ChatHistoryCoordinator
@@ -61,7 +73,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var codebaseIndex: CodebaseIndexProtocol?
     private var projectRoot: URL
     private let conversationLogger: ConversationLogger
-    private let settingsStore = SettingsStore(userDefaults: .standard)
+    private let settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
     private let activityCoordinator: AgentActivityCoordinating?
     /// Token for the current API sending activity
     private var apiSendingActivityToken: AgentActivityToken?
@@ -77,20 +89,27 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var activeStreamingRunId: String?
     private var draftAssistantMessageId: UUID?
     private var draftAssistantText: String = ""
+    private var pendingStreamingBuffer: String = ""
+    private var streamingRenderTask: Task<Void, Never>?
+    private let streamingRenderIntervalNanoseconds: UInt64 = 16_000_000
+    private let maxStreamingCharactersPerTick = 8
     private var activeSendTask: Task<Void, Never>?
     private let maxPreviewCharacters = 12_000
     private let maxStatusPreviewCharacters = 4_000
+    private var currentSessionId: String
+    private var conversationSessionOrder: [String]
+    private var conversationSessionSnapshots: [String: ConversationSessionSnapshot]
 
     var messages: [ChatMessage] {
         historyCoordinator.messages
     }
 
     var currentConversationId: String {
-        historyCoordinator.currentConversationId
+        currentSessionId
     }
 
     private var conversationId: String {
-        historyCoordinator.currentConversationId
+        currentSessionId
     }
 
     private var pathValidator: PathValidator {
@@ -124,11 +143,24 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             historyManager: historyManager,
             projectRoot: root
         )
+        let initialConversationId = historyCoordinator.currentConversationId
+        self.currentSessionId = initialConversationId
+        self.conversationSessionOrder = [initialConversationId]
+        self.conversationSessionSnapshots = [
+            initialConversationId: ConversationSessionSnapshot(
+                messages: historyCoordinator.messages,
+                mode: .chat,
+                input: "",
+                livePreview: "",
+                liveStatusPreview: ""
+            )
+        ]
         let fileEditorServiceProvider = fileEditorService
         self.toolExecutor = AIToolExecutor(
             fileSystemService: dependencies.services.fileSystemService,
             errorManager: dependencies.services.errorManager,
             projectRoot: root,
+            eventBus: dependencies.environment.eventBus,
             defaultFilePathProvider: { [weak fileEditorServiceProvider] in
                 fileEditorServiceProvider?.selectedFile
             },
@@ -151,6 +183,41 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         setupStreamingSubscriptions()
         startTraceLogging()
         configureLoggingStores(root: root)
+        refreshConversationTabs()
+    }
+
+    private func refreshConversationTabs() {
+        conversationTabs = conversationSessionOrder.enumerated().map { index, id in
+            ConversationTabItem(id: id, title: "Chat \(index + 1)")
+        }
+    }
+
+    private func saveCurrentSessionSnapshot() {
+        conversationSessionSnapshots[currentSessionId] = ConversationSessionSnapshot(
+            messages: historyCoordinator.messages,
+            mode: currentMode,
+            input: currentInput,
+            livePreview: liveModelOutputPreview,
+            liveStatusPreview: liveModelOutputStatusPreview
+        )
+    }
+
+    private func restoreSession(_ sessionId: String) {
+        let snapshot = conversationSessionSnapshots[sessionId] ?? ConversationSessionSnapshot(
+            messages: [],
+            mode: .chat,
+            input: "",
+            livePreview: "",
+            liveStatusPreview: ""
+        )
+        currentSessionId = sessionId
+        historyCoordinator.switchConversation(to: sessionId, projectRoot: projectRoot)
+        historyCoordinator.replaceAllMessages(with: snapshot.messages)
+        currentMode = snapshot.mode
+        currentInput = snapshot.input
+        setLiveModelPreview(snapshot.livePreview)
+        setLiveModelStatusPreview(snapshot.liveStatusPreview)
+        cancelledToolCallIds.removeAll()
     }
 
     private func setupStreamingSubscriptions() {
@@ -167,24 +234,111 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 self.handleLocalModelStreamingStatus(event)
             }
             .store(in: &cancellables)
+
+        eventBus
+            .subscribe(to: ProviderIssueStatusEvent.self) { [weak self] event in
+                guard let self else { return }
+                self.providerIssue = ConversationProviderIssueState(
+                    providerName: event.providerName,
+                    issueType: self.providerIssueTypeLabel(for: event.statusKind),
+                    statusCode: event.statusCode,
+                    message: event.message,
+                    cooldownUntil: event.cooldownUntil
+                )
+            }
+            .store(in: &cancellables)
+    }
+
+    private func providerIssueTypeLabel(for statusKind: ProviderIssueStatusEvent.StatusKind) -> String {
+        switch statusKind {
+        case .rateLimited:
+            return "Rate limit"
+        case .unavailable:
+            return "Provider unavailable"
+        case .authentication:
+            return "Authentication"
+        case .transport:
+            return "Connection"
+        case .unknown:
+            return "Provider issue"
+        }
     }
 
     private func handleLocalModelStreamingChunk(_ event: LocalModelStreamingChunkEvent) {
         guard let runId = activeStreamingRunId, runId == event.runId else { return }
         guard let draftId = draftAssistantMessageId else { return }
+        guard !event.chunk.isEmpty else { return }
 
-        draftAssistantText.append(event.chunk)
         appendToLiveModelPreview(event.chunk)
-        let trimmed = draftAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Update the draft message with streaming content
-        // Draft messages are always visible, even with empty content
-        historyCoordinator.upsertMessage(
+        pendingStreamingBuffer.append(event.chunk)
+        startStreamingRenderLoopIfNeeded(draftId: draftId)
+    }
+
+    private func startStreamingRenderLoopIfNeeded(draftId: UUID) {
+        guard streamingRenderTask == nil else { return }
+        streamingRenderTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.streamingRenderTask = nil }
+            while self.activeStreamingRunId != nil {
+                if self.pendingStreamingBuffer.isEmpty {
+                    try? await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds)
+                    continue
+                }
+
+                let delta = self.dequeueStreamingDelta()
+                guard !delta.isEmpty else {
+                    try? await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds)
+                    continue
+                }
+                guard self.historyCoordinator.getDraftMessage(id: draftId) != nil else { break }
+
+                self.draftAssistantText.append(delta)
+                let displayText = ChatPromptBuilder.contentForDisplay(from: self.draftAssistantText)
+                let draftTimestamp = self.historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date()
+
+                self.historyCoordinator.upsertDraftMessage(
+                    ChatMessage(
+                        id: draftId,
+                        role: .assistant,
+                        content: displayText.isEmpty ? "Generating..." : displayText,
+                        timestamp: draftTimestamp,
+                        isDraft: true
+                    )
+                )
+
+                try? await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds)
+            }
+        }
+    }
+
+    private func dequeueStreamingDelta() -> String {
+        guard !pendingStreamingBuffer.isEmpty else { return "" }
+        let take = min(maxStreamingCharactersPerTick, pendingStreamingBuffer.count)
+        let splitIndex = pendingStreamingBuffer.index(
+            pendingStreamingBuffer.startIndex,
+            offsetBy: take
+        )
+        let chunk = String(pendingStreamingBuffer[..<splitIndex])
+        pendingStreamingBuffer.removeSubrange(pendingStreamingBuffer.startIndex..<splitIndex)
+        return chunk
+    }
+
+    private func flushPendingStreamingBuffer() {
+        guard let draftId = draftAssistantMessageId, !pendingStreamingBuffer.isEmpty else { return }
+        guard historyCoordinator.getDraftMessage(id: draftId) != nil else {
+            pendingStreamingBuffer = ""
+            return
+        }
+        draftAssistantText.append(pendingStreamingBuffer)
+        pendingStreamingBuffer = ""
+        let displayText = ChatPromptBuilder.contentForDisplay(from: draftAssistantText)
+        let draftTimestamp = historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date()
+        historyCoordinator.upsertDraftMessage(
             ChatMessage(
                 id: draftId,
                 role: .assistant,
-                content: trimmed.isEmpty ? "..." : trimmed,
-                timestamp: Date(),
+                content: displayText.isEmpty ? "Generating..." : displayText,
+                timestamp: draftTimestamp,
                 isDraft: true
             )
         )
@@ -267,6 +421,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         }
 
         projectRoot = newRoot
+        toolExecutor.updateProjectRoot(newRoot)
+        configureLoggingStores(root: newRoot)
+
+        saveCurrentSessionSnapshot()
 
         // Clear conversation history when switching to a new project
         // This ensures the chat is fresh for the new project
@@ -280,7 +438,22 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             }
         )
 
+        let migratedSessionId = historyCoordinator.currentConversationId
+        currentSessionId = migratedSessionId
+        conversationSessionOrder = [migratedSessionId]
+        conversationSessionSnapshots = [
+            migratedSessionId: ConversationSessionSnapshot(
+                messages: historyCoordinator.messages,
+                mode: currentMode,
+                input: currentInput,
+                livePreview: liveModelOutputPreview,
+                liveStatusPreview: liveModelOutputStatusPreview
+            )
+        ]
+        refreshConversationTabs()
+
         conversationLogger.initializeProjectRoot(newRoot)
+        startTraceLogging()
         conversationLogger.logConversationStart(
             conversationId: self.conversationId,
             mode: self.currentMode.rawValue,
@@ -303,14 +476,17 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     private func buildUserMessageContext(context: String?) -> UserMessageContext {
         let userMessageText = currentInput
+        let mediaAttachments = currentMediaAttachments
         let hasSelectionContext = (context?.isEmpty == false)
         let userMessage = ChatMessage(
             role: .user,
             content: currentInput,
+            mediaAttachments: mediaAttachments,
             context: ChatMessageContentContext(codeContext: context)
         )
         return UserMessageContext(
             text: userMessageText,
+            mediaAttachments: mediaAttachments,
             hasSelectionContext: hasSelectionContext,
             message: userMessage
         )
@@ -334,8 +510,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     private func resetInputState() {
         currentInput = ""
+        currentMediaAttachments = []
         isSending = true
         error = nil
+        providerIssue = nil
     }
 
     private func appendToLiveModelPreview(_ chunk: String) {
@@ -381,12 +559,16 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         activeStreamingRunId = nil
         draftAssistantMessageId = nil
         draftAssistantText = ""
+        pendingStreamingBuffer = ""
+        streamingRenderTask?.cancel()
+        streamingRenderTask = nil
     }
 
     private func resetConversationInteractionState() {
         resetStreamingDraftState()
         isSending = false
         error = nil
+        providerIssue = nil
     }
 
     private func cancelActiveSendTask() {
@@ -426,6 +608,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 try await self.sendCoordinator.send(
                     SendRequest(
                         userInput: userContext.text,
+                        mediaAttachments: userContext.mediaAttachments,
                         explicitContext: explicitContext,
                         mode: self.currentMode,
                         projectRoot: self.projectRoot,
@@ -438,6 +621,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     )
                 )
 
+                self.flushPendingStreamingBuffer()
                 if let finalAssistantMessage = self.messages.last(where: { $0.role == .assistant && !$0.isDraft }) {
                     self.setLiveModelPreview(finalAssistantMessage.content)
                 }
@@ -450,7 +634,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     self.historyCoordinator.removeDraftMessage(id: draftId)
                 }
                 self.resetStreamingDraftState()
-                if error is CancellationError {
+                if error is CancellationError || Task.isCancelled || self.isLikelyCancellation(error) {
                     self.setLiveModelPreview("Generation cancelled.")
                     self.appendToLiveModelStatusPreview("Run cancelled.")
                     self.isSending = false
@@ -482,6 +666,15 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         }
     }
 
+    private func isLikelyCancellation(_ error: Error) -> Bool {
+        let normalized = String(describing: error).lowercased()
+        return normalized.contains("cancellationerror")
+            || normalized.contains("request cancelled")
+            || normalized.contains("request canceled")
+            || normalized.contains("cancelled")
+            || normalized.contains("canceled")
+    }
+
     func clearConversation() {
         cancelActiveSendTask()
         resetConversationInteractionState()
@@ -495,20 +688,63 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     func startNewConversation() {
         cancelActiveSendTask()
         resetConversationInteractionState()
+        saveCurrentSessionSnapshot()
         currentInput = ""
         setLiveModelPreview("")
         setLiveModelStatusPreview("")
 
-        let oldConversationId = conversationId
-        let ids = historyCoordinator.startNewConversation(projectRoot: projectRoot)
+        let oldConversationId = currentSessionId
+        let newConversationId = UUID().uuidString
+        conversationSessionOrder.append(newConversationId)
+        conversationSessionSnapshots[newConversationId] = ConversationSessionSnapshot(
+            messages: [],
+            mode: currentMode,
+            input: "",
+            livePreview: "",
+            liveStatusPreview: ""
+        )
+        restoreSession(newConversationId)
+        refreshConversationTabs()
         cancelledToolCallIds.removeAll()
 
         conversationLogger.logConversationStart(
-            conversationId: ids.newConversationId,
+            conversationId: newConversationId,
             mode: self.currentMode.rawValue,
             projectRootPath: self.projectRoot.path,
             previousConversationId: oldConversationId
         )
+    }
+
+    func switchConversation(to id: String) {
+        guard id != currentSessionId else { return }
+        guard conversationSessionSnapshots[id] != nil else { return }
+
+        cancelActiveSendTask()
+        resetConversationInteractionState()
+        saveCurrentSessionSnapshot()
+        restoreSession(id)
+        refreshConversationTabs()
+    }
+
+    func closeConversation(id: String) {
+        guard conversationSessionOrder.count > 1 else { return }
+        guard let closingIndex = conversationSessionOrder.firstIndex(of: id) else { return }
+
+        cancelActiveSendTask()
+        if id == currentSessionId {
+            saveCurrentSessionSnapshot()
+        }
+
+        conversationSessionOrder.remove(at: closingIndex)
+        conversationSessionSnapshots[id] = nil
+
+        if id == currentSessionId {
+            let fallbackIndex = min(closingIndex, conversationSessionOrder.count - 1)
+            let fallbackId = conversationSessionOrder[fallbackIndex]
+            restoreSession(fallbackId)
+        }
+
+        refreshConversationTabs()
     }
 
     func stopGeneration() {

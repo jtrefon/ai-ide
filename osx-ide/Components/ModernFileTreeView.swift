@@ -31,7 +31,7 @@ struct ModernFileTreeView: NSViewRepresentable {
         containerView.translatesAutoresizingMaskIntoConstraints = false
 
         let outlineView = NSOutlineView(frame: .zero)
-        outlineView.setAccessibilityIdentifier("Modern Explorer")
+        outlineView.setAccessibilityIdentifier(AccessibilityID.fileExplorerOutline)
         outlineView.headerView = nil
         outlineView.rowSizeStyle = .default
         outlineView.rowHeight = max(18, CGFloat(fontSize) + 6)
@@ -52,7 +52,7 @@ struct ModernFileTreeView: NSViewRepresentable {
         outlineView.doubleAction = #selector(ModernFileTreeCoordinator.onDoubleClick(_:))
 
         let scrollView = NSScrollView(frame: .zero)
-        scrollView.setAccessibilityIdentifier("Modern Explorer")
+        scrollView.setAccessibilityIdentifier(AccessibilityID.fileExplorerOutline)
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder

@@ -8,40 +8,19 @@
 import Foundation
 import AppKit
 
-public final class SwiftModule: RegexLanguageModule, @unchecked Sendable {
-    // Force re-indexing
+public final class SwiftModule: TokenLanguageModule, @unchecked Sendable {
     public init() {
-        super.init(id: .swift, fileExtensions: ["swift"])
-    }
-
-    public override func highlight(_ code: String, font: NSFont) -> NSAttributedString {
-        let base = makeBaseAttributedString(code: code, font: font)
-        let attr = base.attributed
-
-        applyDoubleQuotedStringHighlighting(color: NSColor.systemRed, in: attr, code: code)
-        applyLineAndBlockCommentHighlighting(color: NSColor.systemGreen, in: attr, code: code)
-        applyDecimalNumberHighlighting(color: NSColor.systemOrange, in: attr, code: code)
-
-        LanguageKeywordHighlighter.highlight(LanguageKeywordHighlighter.HighlightRequest(
-            words: LanguageKeywordRepository.swiftKeywords,
-            context: LanguageKeywordHighlighter.HighlightContext(
-                color: NSColor.systemBlue,
-                attributedString: attr,
-                code: code,
-                helper: self
+        let configuration = LanguageKeywordRepository.supportConfiguration(for: .swift).highlighting
+        super.init(
+            id: .swift,
+            fileExtensions: ["swift"],
+            definition: TokenLanguageDefinition(
+                keywords: Set(configuration.keywords),
+                typeKeywords: Set(configuration.typeKeywords),
+                booleanLiterals: Set(configuration.booleanLiterals),
+                nullLiterals: Set(configuration.nullLiterals)
             )
-        ))
-        LanguageKeywordHighlighter.highlight(LanguageKeywordHighlighter.HighlightRequest(
-            words: LanguageKeywordRepository.swiftTypes,
-            context: LanguageKeywordHighlighter.HighlightContext(
-                color: NSColor.systemPurple,
-                attributedString: attr,
-                code: code,
-                helper: self
-            )
-        ))
-
-        return attr
+        )
     }
 
     public override func parseSymbols(content: String, resourceId: String) -> [Symbol] {

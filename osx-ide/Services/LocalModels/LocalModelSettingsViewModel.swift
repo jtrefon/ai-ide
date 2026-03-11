@@ -43,7 +43,7 @@ final class LocalModelSettingsViewModel: ObservableObject {
 
     init(
         downloader: LocalModelDownloader = LocalModelDownloader(),
-        settingsStore: SettingsStore = SettingsStore(userDefaults: .standard)
+        settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
     ) {
         self.downloader = downloader
         self.settingsStore = settingsStore

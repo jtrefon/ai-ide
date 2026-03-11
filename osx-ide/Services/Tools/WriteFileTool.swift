@@ -53,7 +53,11 @@ struct WriteFileTool: AITool {
             )
         }
         guard let content = arguments["content"] as? String else {
-            throw AppError.aiServiceError("Missing 'content' argument for write_file")
+            let keys = arguments.keys.sorted().joined(separator: ", ")
+            throw AppError.aiServiceError(
+                "Missing 'content' argument for write_file. Provided keys: [\(keys)]. "
+                    + "Fix: include a 'content' string with the file body."
+            )
         }
 
         let context = ToolInvocationContext.from(arguments: arguments)
@@ -82,6 +86,12 @@ struct WriteFileTool: AITool {
             )
         }
 
+        if FileManager.default.fileExists(atPath: url.path),
+           let existingContent = try? fileSystemService.readFile(at: url),
+           existingContent == content {
+            return "No-op: content already matches for \(relativePath)"
+        }
+
         try await FileToolWriteApplier.applyWrite(
             FileToolWriteApplier.ApplyWriteRequest(
                 fileSystemService: fileSystemService,
@@ -89,7 +99,8 @@ struct WriteFileTool: AITool {
                 url: url,
                 relativePath: relativePath,
                 content: content,
-                traceType: "fs.write_file"
+                traceType: "fs.write_file",
+                conversationId: context.conversationId
             )
         )
         return "Successfully wrote to \(relativePath)"

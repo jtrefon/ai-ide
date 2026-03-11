@@ -43,6 +43,7 @@ public class ChatHistoryManager: ObservableObject {
         }
 
         messages.append(message)
+        messages = MessageChronology.sort(messages)
         saveHistoryAsync()
     }
 
@@ -54,6 +55,7 @@ public class ChatHistoryManager: ObservableObject {
 
         if let index = messages.lastIndex(where: { $0.toolCallId == toolCallId }) {
             messages[index] = message
+            messages = MessageChronology.sort(messages)
             saveHistoryAsync()
         } else {
             append(message)
@@ -63,9 +65,23 @@ public class ChatHistoryManager: ObservableObject {
     public func upsertMessage(_ message: ChatMessage) {
         if let index = messages.firstIndex(where: { $0.id == message.id }) {
             messages[index] = message
+            messages = MessageChronology.sort(messages)
             saveHistoryAsync()
         } else {
             append(message)
+        }
+    }
+
+    public func upsertDraftMessage(_ message: ChatMessage) {
+        guard message.isDraft else {
+            upsertMessage(message)
+            return
+        }
+
+        if let index = messages.firstIndex(where: { $0.id == message.id }) {
+            messages[index] = message
+        } else {
+            messages.append(message)
         }
     }
     
@@ -87,6 +103,7 @@ public class ChatHistoryManager: ObservableObject {
             ),
             isDraft: false
         )
+        messages = MessageChronology.sort(messages)
         saveHistoryAsync()
     }
     
@@ -104,6 +121,7 @@ public class ChatHistoryManager: ObservableObject {
     public func replaceMessage(at index: Int, with message: ChatMessage) {
         guard messages.indices.contains(index) else { return }
         messages[index] = message
+        messages = MessageChronology.sort(messages)
         saveHistoryAsync()
     }
 
@@ -152,6 +170,12 @@ public class ChatHistoryManager: ObservableObject {
         saveHistoryAsync()
     }
 
+    public func replaceAllMessages(with newMessages: [ChatMessage]) {
+        messages = MessageChronology.sort(newMessages)
+        ensureDefaultGreetingMessageIfNeeded()
+        saveHistoryAsync()
+    }
+
     public func updateMessageStatus(toolCallId: String, status: ToolExecutionStatus, content: String? = nil) {
         if let index = messages.lastIndex(where: { $0.toolCallId == toolCallId }) {
             let oldMessage = messages[index]
@@ -169,6 +193,7 @@ public class ChatHistoryManager: ObservableObject {
                     toolCalls: oldMessage.toolCalls ?? []
                 )
             )
+            messages = MessageChronology.sort(messages)
             saveHistoryAsync()
         }
     }
@@ -233,7 +258,7 @@ public class ChatHistoryManager: ObservableObject {
         guard let data = try? Data(contentsOf: url) else { return }
 
         do {
-            messages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            messages = MessageChronology.sort(try JSONDecoder().decode([ChatMessage].self, from: data))
         } catch {
             Task {
                 await CrashReporter.shared.capture(

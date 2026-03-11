@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "language": "swift",
+  "highlighting": {
+    "keywords": [
+      "class", "struct", "enum", "protocol", "extension", "func", "var", "let",
+      "if", "else", "for", "while", "repeat", "switch", "case", "default", "break",
+      "continue", "defer", "do", "catch", "throw", "throws", "rethrows", "try", "in",
+      "where", "return", "as", "is", "nil", "true", "false", "init", "deinit",
+      "subscript", "typealias", "associatedtype", "mutating", "nonmutating", "static",
+      "final", "open", "public", "internal", "fileprivate", "private", "guard", "some",
+      "any", "actor", "await", "async", "yield", "inout"
+    ],
+    "typeKeywords": [
+      "Int", "Int8", "Int16", "Int32", "Int64", "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
+      "Float", "Double", "Bool", "String", "Character", "Array", "Dictionary", "Set", "Optional",
+      "Void", "Any", "AnyObject"
+    ],
+    "booleanLiterals": ["true", "false"],
+    "nullLiterals": ["nil"]
+  },
+  "styling": {
+    "tokenColors": {
+      "keyword": "#C586C0",
+      "type": "#4EC9B0",
+      "boolean": "#DCDCAA",
+      "null": "#DCDCAA",
+      "number": "#B5CEA8",
+      "string": "#CE9178",
+      "comment": "#6A9955"
+    },
+    "fontTraitsByRole": {
+      "keyword": "semibold",
+      "type": "semibold",
+      "comment": "italic"
+    },
+    "preferredFontFamily": null
+  },
+  "formatting": {
+    "indentUnitStyle": "spaces",
+    "indentWidth": 4,
+    "trimTrailingWhitespace": true,
+    "ensureTrailingNewline": true,
+    "maxConsecutiveBlankLines": 1
+  },
+  "linting": {
+    "registry": "builtin.swift",
+    "rules": [
+      {
+        "id": "force-unwrapping",
+        "severity": "warning",
+        "enabled": true,
+        "message": "Avoid force unwrap where possible",
+        "options": {}
+      },
+      {
+        "id": "line-length",
+        "severity": "info",
+        "enabled": true,
+        "message": "Prefer line length under configured limit",
+        "options": {
+          "max": "120"
+        }
+      }
+    ]
+  }
+}

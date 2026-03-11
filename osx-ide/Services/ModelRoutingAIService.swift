@@ -9,81 +9,62 @@ import Foundation
 
 actor ModelRoutingAIService: AIService {
     private let openRouterService: AIService
+    private let alibabaService: AIService
     private let localService: AIService
     private let selectionStore: LocalModelSelectionStore
+    private let providerSelectionStore: AIProviderSelectionStore
 
     init(
         openRouterService: AIService,
+        alibabaService: AIService,
         localService: AIService,
-        selectionStore: LocalModelSelectionStore = LocalModelSelectionStore()
+        selectionStore: LocalModelSelectionStore = LocalModelSelectionStore(),
+        providerSelectionStore: AIProviderSelectionStore = AIProviderSelectionStore()
     ) {
         self.openRouterService = openRouterService
+        self.alibabaService = alibabaService
         self.localService = localService
         self.selectionStore = selectionStore
+        self.providerSelectionStore = providerSelectionStore
+    }
+
+    private func selectedRemoteService() async -> AIService {
+        switch await providerSelectionStore.selectedRemoteProvider() {
+        case .openRouter:
+            return openRouterService
+        case .alibabaCloud:
+            return alibabaService
+        }
     }
 
     func sendMessage(_ request: AIServiceMessageWithProjectRootRequest) async throws -> AIServiceResponse {
-        // Check if offline mode is enabled
         let isOfflineMode = await selectionStore.isOfflineModeEnabled()
-        
-        // Simple routing: if offline mode, use MLX; otherwise use OpenRouter
         if isOfflineMode {
-            // Get MLX capability
-            let capability = MLXCapability()
-            
-            // MLX doesn't support Agent mode - force Chat mode
-            if request.mode == .agent {
-                let adjustedRequest = adjustRequestForMLX(request, capability: capability)
-                return try await localService.sendMessage(adjustedRequest)
-            }
             return try await localService.sendMessage(request)
         }
-        
-        // Online mode: always use OpenRouter (not MLX)
-        return try await openRouterService.sendMessage(request)
+        return try await selectedRemoteService().sendMessage(request)
     }
 
     func sendMessage(_ request: AIServiceHistoryRequest) async throws -> AIServiceResponse {
-        // Check if offline mode is enabled
         let isOfflineMode = await selectionStore.isOfflineModeEnabled()
-        
-        // Simple routing: if offline mode, use MLX; otherwise use OpenRouter
         if isOfflineMode {
-            // Get MLX capability
-            let capability = MLXCapability()
-            
-            // MLX doesn't support Agent mode - force Chat mode
-            if request.mode == .agent {
-                let adjustedRequest = adjustRequestForMLX(request, capability: capability)
-                return try await localService.sendMessage(adjustedRequest)
-            }
             return try await localService.sendMessage(request)
         }
-        
-        // Online mode: always use OpenRouter (not MLX)
-        return try await openRouterService.sendMessage(request)
+        return try await selectedRemoteService().sendMessage(request)
     }
 
     /// Streaming version - routes to appropriate service based on offline mode
     func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
         // Check if offline mode is enabled
         let isOfflineMode = await selectionStore.isOfflineModeEnabled()
+        print("[ROUTER] sendMessageStreaming offline=\(isOfflineMode) localService=\(String(describing: type(of: localService))) openRouterService=\(String(describing: type(of: openRouterService))) stage=\(String(describing: request.stage)) runId=\(runId)")
 
         // Simple routing: if offline mode, use MLX; otherwise use OpenRouter
         if isOfflineMode {
-            // Get MLX capability
-            let capability = MLXCapability()
-
-            // MLX doesn't support Agent mode - force Chat mode
-            if request.mode == .agent {
-                let adjustedRequest = adjustRequestForMLX(request, capability: capability)
-                return try await localService.sendMessageStreaming(adjustedRequest, runId: runId)
-            }
             return try await localService.sendMessageStreaming(request, runId: runId)
         }
         
-        // Online mode: always use OpenRouter (not MLX)
-        return try await openRouterService.sendMessageStreaming(request, runId: runId)
+        return try await selectedRemoteService().sendMessageStreaming(request, runId: runId)
     }
 
     func explainCode(_ code: String) async throws -> String {
@@ -91,7 +72,7 @@ actor ModelRoutingAIService: AIService {
         if isOfflineMode {
             return try await localService.explainCode(code)
         }
-        return try await openRouterService.explainCode(code)
+        return try await selectedRemoteService().explainCode(code)
     }
 
     func refactorCode(_ code: String, instructions: String) async throws -> String {
@@ -99,7 +80,7 @@ actor ModelRoutingAIService: AIService {
         if isOfflineMode {
             return try await localService.refactorCode(code, instructions: instructions)
         }
-        return try await openRouterService.refactorCode(code, instructions: instructions)
+        return try await selectedRemoteService().refactorCode(code, instructions: instructions)
     }
 
     func generateCode(_ prompt: String) async throws -> String {
@@ -107,7 +88,7 @@ actor ModelRoutingAIService: AIService {
         if isOfflineMode {
             return try await localService.generateCode(prompt)
         }
-        return try await openRouterService.generateCode(prompt)
+        return try await selectedRemoteService().generateCode(prompt)
     }
 
     func fixCode(_ code: String, error: String) async throws -> String {
@@ -115,7 +96,7 @@ actor ModelRoutingAIService: AIService {
         if isOfflineMode {
             return try await localService.fixCode(code, error: error)
         }
-        return try await openRouterService.fixCode(code, error: error)
+        return try await selectedRemoteService().fixCode(code, error: error)
     }
 
     // MARK: - Capability Detection
@@ -152,6 +133,7 @@ actor ModelRoutingAIService: AIService {
         
         return AIServiceMessageWithProjectRootRequest(
             message: request.message,
+            mediaAttachments: request.mediaAttachments,
             context: request.context,
             tools: limitedTools,
             mode: .chat,  // Force Chat mode for MLX
@@ -180,6 +162,7 @@ actor ModelRoutingAIService: AIService {
         
         return AIServiceHistoryRequest(
             messages: request.messages,
+            mediaAttachments: request.mediaAttachments,
             context: request.context,
             tools: limitedTools,
             mode: .chat,  // Force Chat mode for MLX

@@ -28,8 +28,16 @@ struct MessageFilterCoordinator {
             return false
         }
 
+        if message.role == .assistant {
+            let cleaned = ChatPromptBuilder.contentForDisplay(from: message.content)
+            let hasReasoning = !(message.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            if cleaned.isEmpty && !hasReasoning {
+                return false
+            }
+        }
+
         if message.role == .system {
-            return false
+            return ReasoningOutcomeMessageView.parse(from: message.content) != nil
         }
 
         if message.isToolExecution {

@@ -41,7 +41,7 @@ struct TextViewRepresentable: NSViewRepresentable {
 
         // UI Tests need a stable identifier; otherwise `app.textViews.firstMatch` can
         // accidentally match the AI chat input instead of the editor.
-        textView.setAccessibilityIdentifier("CodeEditorTextView")
+        textView.setAccessibilityIdentifier(AccessibilityID.codeEditorTextView)
     }
 
     private func configureTextContainerSizing(for textView: NSTextView) {
@@ -111,13 +111,15 @@ struct TextViewRepresentable: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
         let resolvedFont = Self.resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize)
+        let languageDidChange = context.coordinator.currentLanguageIdentifier != language
+        context.coordinator.currentLanguageIdentifier = language
         let needsRehighlight = syncFont(resolvedFont, for: textView, in: scrollView)
         scheduleWordWrapUpdate(for: scrollView, textView: textView)
         syncTextAndHighlightIfNeeded(
             for: textView,
             coordinator: context.coordinator,
             resolvedFont: resolvedFont,
-            needsRehighlight: needsRehighlight
+            needsRehighlight: needsRehighlight || languageDidChange
         )
         syncSelectionIfNeeded(for: textView, coordinator: context.coordinator)
         syncRulerVisibilityIfNeeded(for: scrollView, textView: textView)
@@ -183,10 +185,13 @@ struct TextViewRepresentable: NSViewRepresentable {
             return
         }
 
+        if textView.selectedRange() == range {
+            return
+        }
+
         coordinator.isProgrammaticSelectionUpdate = true
         defer { coordinator.isProgrammaticSelectionUpdate = false }
         textView.setSelectedRange(range)
-        textView.scrollRangeToVisible(range)
     }
 
     private func syncRulerVisibilityIfNeeded(for scrollView: NSScrollView, textView: NSTextView) {

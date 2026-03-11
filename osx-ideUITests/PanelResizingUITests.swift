@@ -1,30 +1,34 @@
 import XCTest
 
 @MainActor
-final class PanelResizingUITests: XCTestCase {
-    override func setUpWithError() throws {
-        continueAfterFailure = false
-    }
+final class PanelResizingUITests: BaseUITestCase {
+    func testSidebarAndChatResizeHandlesExistAndAreInteractive() {
+        let robot = launchApp()
+        robot.window().assertVisible()
 
-    override func tearDownWithError() throws {
-        XCUIApplication().terminate()
-    }
-    
-    func testPanelsAreResizable() throws {
-        let app = XCUIApplication()
-        app.launch()
-        
-        let mainWindow = app.windows.firstMatch
-        XCTAssertTrue(mainWindow.waitForExistence(timeout: 10))
-        
-        // Splitters in macOS are typically identified as SplitGroup or Splitters
-        let splitters = app.splitGroups.firstMatch.splitters
-        
-        // We expect at least two splitters if both sidebar and right panel are visible (HSplitView creates splitters)
-        // Actually, the main view has an HSplitView with 2 or 3 panes.
-        // Let's just verify that split groups exist and can be interacted with.
-        let splitGroup = app.splitGroups.firstMatch
-        XCTAssertTrue(splitGroup.exists, "Main HSplitView should exist")
-        XCTAssertTrue(splitGroup.splitters.count >= 1, "There should be at least one splitter for horizontal resizing")
+        let sidebar = app.outlines[UITestAccessibilityID.fileExplorerOutline]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 10), "Sidebar must exist")
+        let initialSidebarWidth = sidebar.frame.width
+
+        let sidebarHandle = app.descendants(matching: .any)[UITestAccessibilityID.sidebarResizeHandle].firstMatch
+        XCTAssertTrue(sidebarHandle.waitForExistence(timeout: 10), "Sidebar resize handle must exist")
+        let sidebarStart = sidebarHandle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let sidebarTarget = sidebarStart.withOffset(CGVector(dx: 120, dy: 0))
+        sidebarStart.press(forDuration: 0.1, thenDragTo: sidebarTarget)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        XCTAssertGreaterThan(abs(sidebar.frame.width - initialSidebarWidth), 20, "Sidebar width should change after drag")
+
+        let chatHandle = app.descendants(matching: .any)[UITestAccessibilityID.chatResizeHandle].firstMatch
+        XCTAssertTrue(chatHandle.waitForExistence(timeout: 10), "Chat resize handle must exist")
+        let initialChatHandleX = chatHandle.frame.minX
+        let chatStart = chatHandle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let chatTarget = chatStart.withOffset(CGVector(dx: -120, dy: 0))
+        chatStart.press(forDuration: 0.1, thenDragTo: chatTarget)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        XCTAssertGreaterThan(
+            abs(chatHandle.frame.minX - initialChatHandleX),
+            20,
+            "Chat panel geometry should change after chat divider drag"
+        )
     }
 }

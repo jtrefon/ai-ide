@@ -1,12 +1,25 @@
 import Foundation
 
 internal struct OpenRouterChatRequest: Encodable {
+    struct Reasoning: Encodable {
+        let enabled: Bool
+        let effort: String?
+        let exclude: Bool
+
+        init(configuration: OpenRouterAIService.NativeReasoningConfiguration) {
+            self.enabled = configuration.enabled
+            self.effort = configuration.effort
+            self.exclude = configuration.exclude
+        }
+    }
+
     let model: String
     let messages: [OpenRouterChatMessage]
     let maxTokens: Int?
     let temperature: Double?
     let tools: [[String: Any]]?
     let toolChoice: String?
+    let reasoning: Reasoning?
     let stream: Bool
 
     enum CodingKeys: String, CodingKey {
@@ -16,6 +29,7 @@ internal struct OpenRouterChatRequest: Encodable {
         case temperature
         case tools
         case toolChoice = "tool_choice"
+        case reasoning
         case stream
     }
 
@@ -38,6 +52,10 @@ internal struct OpenRouterChatRequest: Encodable {
 
         if let toolChoice, !toolChoice.isEmpty {
             try container.encode(toolChoice, forKey: .toolChoice)
+        }
+
+        if let reasoning {
+            try container.encode(reasoning, forKey: .reasoning)
         }
 
         // Only encode stream if it's true (to avoid unnecessary bytes in request)

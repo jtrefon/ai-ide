@@ -9,7 +9,7 @@ final class SettingsStore: @unchecked Sendable {
         changesSubject.eraseToAnyPublisher()
     }
 
-    init(userDefaults: UserDefaults) {
+    init(userDefaults: UserDefaults = AppRuntimeEnvironment.userDefaults) {
         self.userDefaults = userDefaults
     }
 
@@ -27,6 +27,10 @@ final class SettingsStore: @unchecked Sendable {
 
     func stringArray(forKey key: String) -> [String]? {
         userDefaults.stringArray(forKey: key)
+    }
+
+    func dictionary(forKey key: String) -> [String: Any]? {
+        userDefaults.dictionary(forKey: key)
     }
 
     func set(_ value: Any?, forKey key: String) {

@@ -156,9 +156,110 @@ struct IndexAndToolsTests {
         ]))
 
         let cssURL = tempRoot.appendingPathComponent("src/styles/app.css")
-        #expect(FileManager.default.fileExists(atPath: cssURL.path), "Nested create_file should create parent directories")
-        let cssContent = try fileSystemService.readFile(at: cssURL)
-        #expect(cssContent.isEmpty, "create_file should create an empty file")
+        let cssDirectoryURL = tempRoot.appendingPathComponent("src/styles", isDirectory: true)
+        #expect(FileManager.default.fileExists(atPath: cssDirectoryURL.path), "Nested create_file should prepare parent directories")
+        #expect(!FileManager.default.fileExists(atPath: cssURL.path), "create_file should not materialize an empty file before content is written")
+    }
+
+    @Test func testFileToolsNormalizeProjectPseudoRootPaths() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_project_pseudoroot_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let fileSystemService = FileSystemService()
+        let validator = PathValidator(projectRoot: tempRoot)
+        let eventBus = EventBus()
+
+        let writeFileTool = WriteFileTool(
+            fileSystemService: fileSystemService,
+            pathValidator: validator,
+            eventBus: eventBus
+        )
+        _ = try await writeFileTool.execute(arguments: ToolArguments([
+            "path": "/project/index.html",
+            "content": "<html></html>"
+        ]))
+
+        let rootIndexURL = tempRoot.appendingPathComponent("index.html")
+        let nestedProjectIndexURL = tempRoot.appendingPathComponent("project/index.html")
+        #expect(FileManager.default.fileExists(atPath: rootIndexURL.path), "Pseudo-root /project/index.html should resolve to the real project root")
+        #expect(!FileManager.default.fileExists(atPath: nestedProjectIndexURL.path), "Pseudo-root /project/index.html must not create a nested project directory")
+
+        let createFileTool = CreateFileTool(pathValidator: validator, eventBus: eventBus)
+        _ = try await createFileTool.execute(arguments: ToolArguments([
+            "path": "project/src/App.jsx"
+        ]))
+
+        let appDirectoryURL = tempRoot.appendingPathComponent("src", isDirectory: true)
+        let nestedProjectAppURL = tempRoot.appendingPathComponent("project/src/App.jsx")
+        #expect(FileManager.default.fileExists(atPath: appDirectoryURL.path), "project/src/App.jsx should resolve to src/App.jsx under the real root")
+        #expect(!FileManager.default.fileExists(atPath: nestedProjectAppURL.path), "project/src/App.jsx must not materialize a nested project directory")
+    }
+
+    @Test func testListFilesReturnsEmptyForMissingProjectRelativeDirectory() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_missing_dir_list_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let validator = PathValidator(projectRoot: tempRoot)
+        let listFilesTool = ListFilesTool(pathValidator: validator)
+
+        let result = try await listFilesTool.execute(arguments: ToolArguments([
+            "path": "src"
+        ]))
+
+        #expect(result.isEmpty, "Missing project-relative directories should return an empty listing instead of failing")
+    }
+
+    @Test func testCreateFileReturnsInformationalMessageWhenPathAlreadyExists() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_existing_create_file_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let existingURL = tempRoot.appendingPathComponent("package.json")
+        try "{}".write(to: existingURL, atomically: true, encoding: .utf8)
+
+        let createFileTool = CreateFileTool(pathValidator: PathValidator(projectRoot: tempRoot), eventBus: EventBus())
+        let result = try await createFileTool.execute(arguments: ToolArguments([
+            "path": "package.json"
+        ]))
+
+        #expect(result.contains("already exists"), "Expected create_file to guide the model toward write_file instead of failing")
+    }
+
+    @Test func testCreateFileWritesProvidedContentImmediately() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_create_file_with_content_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let createFileTool = CreateFileTool(pathValidator: PathValidator(projectRoot: tempRoot), eventBus: EventBus())
+        let result = try await createFileTool.execute(arguments: ToolArguments([
+            "path": "src/App.jsx",
+            "content": "export default function App() { return null }\n"
+        ]))
+
+        let createdURL = tempRoot.appendingPathComponent("src/App.jsx")
+        let persisted = try String(contentsOf: createdURL, encoding: .utf8)
+
+        #expect(result.localizedCaseInsensitiveContains("wrote provided content"))
+        #expect(persisted.contains("function App"))
+    }
+
+    @Test func testCreateFileTreatsMatchingExistingContentAsNoOp() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_create_file_content_noop_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let existingURL = tempRoot.appendingPathComponent("package.json")
+        try "{}\n".write(to: existingURL, atomically: true, encoding: .utf8)
+
+        let createFileTool = CreateFileTool(pathValidator: PathValidator(projectRoot: tempRoot), eventBus: EventBus())
+        let result = try await createFileTool.execute(arguments: ToolArguments([
+            "path": "package.json",
+            "content": "{}\n"
+        ]))
+
+        #expect(result.localizedCaseInsensitiveContains("already matches"))
     }
 
     @Test func testReplaceInFileThrowsWhenOldTextDoesNotMatch() async throws {
@@ -208,6 +309,118 @@ struct IndexAndToolsTests {
         } catch {
             #expect(error.localizedDescription.localizedCaseInsensitiveContains("already exists"))
         }
+    }
+
+    @Test func testWriteFileBlocksBlindFullOverwriteOfExistingFile() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_blind_overwrite_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let fileURL = tempRoot.appendingPathComponent("server.js")
+        try "const app = createServer();\n".write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let tool = WriteFileTool(
+            fileSystemService: FileSystemService(),
+            pathValidator: PathValidator(projectRoot: tempRoot),
+            eventBus: EventBus()
+        )
+
+        do {
+            _ = try await tool.execute(arguments: ToolArguments([
+                "path": "server.js",
+                "content": "import express from 'express'\nconst app = express()\n",
+                "_conversation_id": "blind-overwrite-conversation"
+            ]))
+            #expect(false, "Expected blind overwrite of existing file to be rejected")
+        } catch {
+            #expect(error.localizedDescription.localizedCaseInsensitiveContains("refused full-file overwrite"))
+        }
+    }
+
+    @Test func testWriteFileAllowsFullRewriteAfterReadInSameConversation() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_read_then_rewrite_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let fileURL = tempRoot.appendingPathComponent("server.js")
+        try "const app = createServer();\napp.listen(3000);\n".write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let conversationId = "read-then-rewrite-conversation"
+        let readTool = ReadFileTool(
+            fileSystemService: FileSystemService(),
+            pathValidator: PathValidator(projectRoot: tempRoot)
+        )
+        _ = try await readTool.execute(arguments: ToolArguments([
+            "path": "server.js",
+            "_conversation_id": conversationId
+        ]))
+
+        let writeTool = WriteFileTool(
+            fileSystemService: FileSystemService(),
+            pathValidator: PathValidator(projectRoot: tempRoot),
+            eventBus: EventBus()
+        )
+        _ = try await writeTool.execute(arguments: ToolArguments([
+            "path": "server.js",
+            "content": "import express from 'express'\nconst app = express()\napp.listen(3000)\n",
+            "_conversation_id": conversationId
+        ]))
+
+        let rewrittenContent = try String(contentsOf: fileURL)
+        #expect(rewrittenContent.contains("import express from 'express'"), "Expected full rewrite to succeed after a same-conversation read")
+    }
+
+    @Test func testWriteFileReturnsNoOpWhenContentAlreadyMatches() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_write_file_noop_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let fileURL = tempRoot.appendingPathComponent("index.html")
+        let existingContent = "<!DOCTYPE html>\n<html></html>\n"
+        try existingContent.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let tool = WriteFileTool(
+            fileSystemService: FileSystemService(),
+            pathValidator: PathValidator(projectRoot: tempRoot),
+            eventBus: EventBus()
+        )
+
+        let result = try await tool.execute(arguments: ToolArguments([
+            "path": "index.html",
+            "content": existingContent,
+            "_conversation_id": "same-content-noop"
+        ]))
+
+        #expect(result.localizedCaseInsensitiveContains("no-op"))
+    }
+
+    @Test func testWriteFileRejectsAbsolutePathFromSiblingTemporaryRoot() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_path_root_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let siblingRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_path_root_\(UUID().uuidString)_sibling")
+        try FileManager.default.createDirectory(at: siblingRoot, withIntermediateDirectories: true, attributes: nil)
+        defer { try? FileManager.default.removeItem(at: siblingRoot) }
+
+        let siblingFile = siblingRoot.appendingPathComponent("src/math.ts")
+        let tool = WriteFileTool(
+            fileSystemService: FileSystemService(),
+            pathValidator: PathValidator(projectRoot: tempRoot),
+            eventBus: EventBus()
+        )
+
+        do {
+            _ = try await tool.execute(arguments: ToolArguments([
+                "path": siblingFile.path,
+                "content": "export function add(a: number, b: number): number { return a + b }"
+            ]))
+            #expect(false, "Expected sibling absolute path to be rejected as outside project root")
+        } catch {
+            #expect(error.localizedDescription.localizedCaseInsensitiveContains("outside the project directory"))
+        }
+
+        #expect(!FileManager.default.fileExists(atPath: tempRoot.appendingPathComponent(String(siblingFile.path.dropFirst())).path))
     }
 
     @Test func testReplaceInFileTreatsAlreadyAppliedStateAsNoOp() async throws {

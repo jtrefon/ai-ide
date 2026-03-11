@@ -119,6 +119,7 @@ final class ConversationSendCoordinatorTests: XCTestCase {
     }
 
     private final class FakeCodebaseIndex: CodebaseIndexProtocol {
+        let currentEmbeddingModelIdentifier: String = "hashing_v1"
         private(set) var getSummariesCallCount: Int = 0
         private(set) var searchSymbolsWithPathsCallCount: Int = 0
         private(set) var getMemoriesCallCount: Int = 0
@@ -416,10 +417,129 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         XCTAssertGreaterThan(fakeIndex.searchSymbolsWithPathsCallCount, 0)
     }
 
+    func testSendInjectsBranchExecutionContextForPlannedComplexAgentRequest() async throws {
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        let aiService = SpyAIService(response: AIServiceResponse(content: "Done", toolCalls: nil))
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        historyCoordinator.append(ChatMessage(role: .user, content: "Re-architect the feature across multiple files and then verify the changes step by step"))
+
+        let sendCoordinator = makeSendCoordinator(
+            aiService: aiService,
+            historyCoordinator: historyCoordinator,
+            projectRoot: projectRoot
+        )
+
+        try await sendCoordinator.send(makeSendRequest(
+            conversationId: historyCoordinator.currentConversationId,
+            projectRoot: projectRoot,
+            userInput: "Re-architect the feature across multiple files and then verify the changes step by step"
+        ))
+
+        let context = try XCTUnwrap(aiService.historyRequests.last?.context)
+        XCTAssertTrue(context.contains("BRANCH EXECUTION CONTEXT:"))
+        XCTAssertTrue(context.contains("Active branch "))
+        XCTAssertTrue(context.contains("Branch checklist:"))
+        XCTAssertTrue(context.contains("Plan reference:"))
+    }
+
+    func testAIInteractionCoordinatorDisablesStreamingForFinalResponseStage() async throws {
+        let coordinator = AIInteractionCoordinator(
+            aiService: SpyAIService(response: AIServiceResponse(content: "Done", toolCalls: nil)),
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+
+        XCTAssertFalse(
+            coordinator.shouldUseStreamingForRequest(
+                runId: UUID().uuidString,
+                stage: .final_response,
+                isRunningUnitTests: false
+            ),
+            "Final-response requests should use the deterministic non-streaming path"
+        )
+
+        XCTAssertTrue(
+            coordinator.shouldUseStreamingForRequest(
+                runId: UUID().uuidString,
+                stage: .tool_loop,
+                isRunningUnitTests: false
+            ),
+            "Execution stages should remain eligible for streaming outside tests"
+        )
+
+        XCTAssertFalse(
+            coordinator.shouldUseStreamingForRequest(
+                runId: UUID().uuidString,
+                stage: .tool_loop,
+                isRunningUnitTests: true
+            ),
+            "Unit tests should keep streaming disabled for deterministic behavior"
+        )
+    }
+
+    func testAIInteractionCoordinatorUsesTighterRetryBudgetForFinalResponseStage() async throws {
+        let coordinator = AIInteractionCoordinator(
+            aiService: SpyAIService(response: AIServiceResponse(content: "Done", toolCalls: nil)),
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+
+        XCTAssertEqual(coordinator.maxAttemptsForRequestStage(.final_response), 3)
+        XCTAssertEqual(coordinator.maxAttemptsForRequestStage(.tool_loop), 5)
+        XCTAssertEqual(coordinator.maxAttemptsForRequestStage(.initial_response), 7)
+        XCTAssertEqual(coordinator.maxAttemptsForRequestStage(nil), 7)
+    }
+
+    func testAIInteractionCoordinatorCapsRateLimitBackoffByStage() async throws {
+        let coordinator = AIInteractionCoordinator(
+            aiService: SpyAIService(response: AIServiceResponse(content: "Done", toolCalls: nil)),
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+
+        XCTAssertEqual(
+            coordinator.retryDelayNanoseconds(
+                forAttempt: 3,
+                stage: .final_response,
+                isRateLimitError: true
+            ),
+            8_000_000_000,
+            "Final-response retries should cap quickly to avoid long degraded waits"
+        )
+        XCTAssertEqual(
+            coordinator.retryDelayNanoseconds(
+                forAttempt: 4,
+                stage: .tool_loop,
+                isRateLimitError: true
+            ),
+            16_000_000_000,
+            "Tool-loop retries can wait longer than final-response retries"
+        )
+        XCTAssertEqual(
+            coordinator.retryDelayNanoseconds(
+                forAttempt: 6,
+                stage: .initial_response,
+                isRateLimitError: true
+            ),
+            60_000_000_000,
+            "Initial-response retries should retain the broader cap"
+        )
+        XCTAssertEqual(
+            coordinator.retryDelayNanoseconds(
+                forAttempt: 2,
+                stage: .final_response,
+                isRateLimitError: false
+            ),
+            2_000_000_000,
+            "Non-rate-limit retries should remain short and constant"
+        )
+    }
+
     private func makeSequenceAIService(toolCalls: [AIToolCall]) -> SequenceAIService {
         let completeReasoningPrefix =
-            "<ide_reasoning>Analyze: Details\nResearch: Details\nPlan: Details\n" +
-            "Reflect: Details\nAction: Call fake_tool\nDelivery: DONE</ide_reasoning>"
+            "Reflection: Details\nPlanning: Details\nContinuity: DONE\n\n"
         let terminalResponses = Array(repeating: AIServiceResponse(
             content: completeReasoningPrefix + "Final answer",
             toolCalls: nil
@@ -480,12 +600,9 @@ final class ConversationSendCoordinatorTests: XCTestCase {
 
     private func reasoningOnlyContent() -> String {
         """
-        <ide_reasoning>
-        Analyze: Details
-        Research: Details
-        Plan: Details
-        Reflect: Details
-        </ide_reasoning>
+        Reflection: Details
+        Planning: Details
+        Continuity: Details
         """
     }
 

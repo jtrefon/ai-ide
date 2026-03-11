@@ -226,6 +226,7 @@ final class IndexToolsTests: XCTestCase {
 
 @MainActor
 class MockCodebaseIndex: CodebaseIndexProtocol {
+    var currentEmbeddingModelIdentifier: String = "hashing_v1"
     var mockFindFilesResult: [IndexedFileMatch] = []
     var mockListFilesResult: [String] = []
     var mockReadFileResult: String = ""

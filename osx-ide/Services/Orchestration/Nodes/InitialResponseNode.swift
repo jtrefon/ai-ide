@@ -1,0 +1,61 @@
+import Foundation
+
+@MainActor
+struct InitialResponseNode: OrchestrationNode {
+    static let idValue = "initial_response"
+
+    let id: String = Self.idValue
+
+    private let historyCoordinator: ChatHistoryCoordinator
+    private let handler: InitialResponseHandler
+    private let nextNodeId: String
+
+    init(historyCoordinator: ChatHistoryCoordinator, handler: InitialResponseHandler, nextNodeId: String) {
+        self.historyCoordinator = historyCoordinator
+        self.handler = handler
+        self.nextNodeId = nextNodeId
+    }
+
+    func run(state: OrchestrationState) async throws -> OrchestrationState {
+        let request = state.request
+        let response = try await handler.sendInitialResponse(
+            explicitContext: state.effectiveExplicitContext,
+            mode: request.mode,
+            projectRoot: request.projectRoot,
+            conversationId: request.conversationId,
+            availableTools: request.availableTools,
+            runId: request.runId,
+            userInput: request.userInput
+        )
+
+        let hasToolCalls = !(response.toolCalls?.isEmpty ?? true)
+        if !hasToolCalls, let content = response.content,
+           !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let split = ChatPromptBuilder.splitReasoning(from: content)
+            let displayContent = ChatPromptBuilder.contentForDisplay(from: content)
+            let hasReasoning = !(split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            guard !displayContent.isEmpty || hasReasoning else {
+                return OrchestrationState(
+                    request: request,
+                    response: response,
+                    lastToolResults: [],
+                    branchExecution: state.branchExecution,
+                    transition: .next(nextNodeId)
+                )
+            }
+            historyCoordinator.append(ChatMessage(
+                role: .assistant,
+                content: displayContent,
+                context: ChatMessageContentContext(reasoning: split.reasoning)
+            ))
+        }
+
+        return OrchestrationState(
+            request: request,
+            response: response,
+            lastToolResults: [],
+            branchExecution: state.branchExecution,
+            transition: .next(nextNodeId)
+        )
+    }
+}

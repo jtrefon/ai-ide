@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "language": "javascript",
+  "highlighting": {
+    "keywords": [
+      "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete",
+      "do", "else", "export", "extends", "finally", "for", "function", "if", "import", "in",
+      "instanceof", "let", "new", "return", "super", "switch", "this", "throw", "try",
+      "typeof", "var", "void", "while", "with", "yield", "async", "await"
+    ],
+    "typeKeywords": [],
+    "booleanLiterals": ["true", "false"],
+    "nullLiterals": ["null", "undefined"]
+  },
+  "styling": {
+    "tokenColors": {
+      "keyword": "#569CD6",
+      "type": "#4EC9B0",
+      "boolean": "#D19A66",
+      "null": "#D19A66",
+      "number": "#D19A66",
+      "string": "#CE9178",
+      "comment": "#6A9955"
+    },
+    "fontTraitsByRole": {
+      "keyword": "semibold",
+      "comment": "italic"
+    },
+    "preferredFontFamily": null
+  },
+  "formatting": {
+    "indentUnitStyle": "spaces",
+    "indentWidth": 2,
+    "trimTrailingWhitespace": true,
+    "ensureTrailingNewline": true,
+    "maxConsecutiveBlankLines": 1
+  },
+  "linting": {
+    "registry": "builtin.javascript",
+    "rules": [
+      {
+        "id": "no-console",
+        "severity": "warning",
+        "enabled": false,
+        "message": "Avoid console statements in production code",
+        "options": {}
+      },
+      {
+        "id": "eqeqeq",
+        "severity": "error",
+        "enabled": true,
+        "message": "Require strict equality",
+        "options": {
+          "allowNull": "false"
+        }
+      }
+    ]
+  }
+}

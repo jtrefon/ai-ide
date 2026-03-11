@@ -32,6 +32,7 @@ final class ToolLoopHandler {
         }
 
         var currentResponse = response
+        var currentTurnTools = availableTools
         var toolIteration = 0
         var lastToolCalls: [AIToolCall] = []
         var lastToolResults: [ChatMessage] = []
@@ -49,6 +50,11 @@ final class ToolLoopHandler {
         var previousToolCallSignatures: Set<String> = []
         var previouslyFailedToolCallSignatures: Set<String> = []
         var previouslyCompletedToolCallSignatures: Set<String> = []
+        var repeatedCompletedSignatureCount = 0
+        var hasObservedSuccessfulMutation = false
+        var hasObservedSuccessfulDirectRead = false
+        var consecutivePostMutationNonMutationIterations = 0
+        var consecutiveNonRecoverableMutationFailureIterations = 0
         let maxIterations = (mode == .agent) ? ToolLoopConstants.maxAgentIterations : ToolLoopConstants.maxNonAgentIterations
 
         if mode == .agent,
@@ -60,21 +66,53 @@ final class ToolLoopHandler {
                 "contentLength": currentResponse.content?.count ?? 0
             ])
 
-            let focusedMessages = await buildFocusedExecutionMessages(
+            let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
                 userInput: userInput,
                 conversationId: conversationId,
-                projectRoot: projectRoot
+                projectRoot: projectRoot,
+                historyMessages: historyCoordinator.messages
             )
 
+            currentTurnTools = availableTools
             currentResponse = try await aiInteractionCoordinator
                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: focusedMessages,
                     explicitContext: explicitContext,
-                    tools: availableTools,
+                    tools: currentTurnTools,
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
                     stage: AIRequestStage.tool_loop
+                ))
+                .get()
+        }
+
+        if mode == .agent,
+           currentResponse.toolCalls?.isEmpty ?? true,
+           !availableTools.isEmpty,
+           let content = currentResponse.content,
+           ChatPromptBuilder.shouldForceExecutionFollowup(
+               userInput: userInput,
+               content: content,
+               hasToolCalls: false
+           ) {
+            let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
+                userInput: userInput,
+                conversationId: conversationId,
+                projectRoot: projectRoot,
+                historyMessages: historyCoordinator.messages
+            )
+            currentTurnTools = availableTools
+            currentResponse = try await aiInteractionCoordinator
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                    messages: focusedMessages,
+                    explicitContext: explicitContext,
+                    tools: currentTurnTools,
+                    mode: mode,
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.tool_loop,
+                    conversationId: conversationId
                 ))
                 .get()
         }
@@ -90,11 +128,40 @@ final class ToolLoopHandler {
             let currentToolCallSignatures = Set(uniqueToolCalls.map(toolCallSignature))
             let repeatedCompletedSignatures = currentToolCallSignatures.intersection(previouslyCompletedToolCallSignatures)
             if !repeatedCompletedSignatures.isEmpty {
+                repeatedCompletedSignatureCount += 1
+                ToolExecutionTelemetry.shared.recordRepeatedToolCallSignatures(count: repeatedCompletedSignatures.count)
                 await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_completed_signature", data: [
                     "runId": runId,
                     "iteration": toolIteration,
                     "signatureCount": repeatedCompletedSignatures.count
                 ])
+
+                if repeatedCompletedSignatureCount >= ToolLoopConstants.repeatedCompletedSignatureStallThreshold {
+                    await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_completed_signature_stall", data: [
+                        "runId": runId,
+                        "iteration": toolIteration,
+                        "repeatedCount": repeatedCompletedSignatureCount
+                    ])
+                    let finalizationTools: [AITool]? =
+                        hasObservedSuccessfulMutation ? nil : currentTurnTools
+                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                        explicitContext: explicitContext,
+                        projectRoot: projectRoot,
+                        mode: mode,
+                        userInput: userInput,
+                        toolResults: lastToolResults,
+                        runId: runId,
+                        availableTools: finalizationTools,
+                        conversationId: conversationId
+                    )
+                    if finalizationTools != nil, shouldResumeRecoveredExecution(from: currentResponse) {
+                        repeatedCompletedSignatureCount = 0
+                        toolIteration = max(0, toolIteration - 1)
+                        continue
+                    }
+                    break
+                }
+
                 currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
                     explicitContext: explicitContext,
                     projectRoot: projectRoot,
@@ -102,12 +169,15 @@ final class ToolLoopHandler {
                     userInput: userInput,
                     runId: runId,
                     repeatedSignatures: repeatedCompletedSignatures.sorted(),
-                    availableTools: availableTools
+                    availableTools: currentTurnTools,
+                    conversationId: conversationId
                 )
                 continue
             }
+            repeatedCompletedSignatureCount = 0
             let repeatedFailedSignatures = currentToolCallSignatures.intersection(previouslyFailedToolCallSignatures)
             if !repeatedFailedSignatures.isEmpty {
+                ToolExecutionTelemetry.shared.recordRepeatedToolCallSignatures(count: repeatedFailedSignatures.count)
                 await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_failed_signature", data: [
                     "runId": runId,
                     "iteration": toolIteration,
@@ -120,7 +190,8 @@ final class ToolLoopHandler {
                     userInput: userInput,
                     runId: runId,
                     repeatedSignatures: repeatedFailedSignatures.sorted(),
-                    availableTools: availableTools
+                    availableTools: currentTurnTools,
+                    conversationId: conversationId
                 )
                 continue
             }
@@ -131,7 +202,6 @@ final class ToolLoopHandler {
             let isFullyRepeatedSignatureBatch =
                 !currentToolCallSignatures.isEmpty &&
                 repeatedSignatureCount == currentToolCallSignatures.count
-            previousToolCallSignatures = currentToolCallSignatures
 
             if isFullyRepeatedSignatureBatch {
                 await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_signature_batch", data: [
@@ -139,6 +209,15 @@ final class ToolLoopHandler {
                     "iteration": toolIteration,
                     "signatureCount": currentToolCallSignatures.count
                 ])
+                let diversifiedTools: [AITool]
+                if requestLikelyRequiresMutation(userInput), !hasObservedSuccessfulMutation {
+                    diversifiedTools = hasObservedSuccessfulDirectRead
+                        ? mutationOnlyTools(from: availableTools)
+                        : mutationRecoveryTools(from: availableTools)
+                } else {
+                    diversifiedTools = availableTools
+                }
+                currentTurnTools = diversifiedTools
                 currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
                     explicitContext: explicitContext,
                     projectRoot: projectRoot,
@@ -146,10 +225,13 @@ final class ToolLoopHandler {
                     userInput: userInput,
                     runId: runId,
                     repeatedSignatures: currentToolCallSignatures.sorted(),
-                    availableTools: availableTools
+                    availableTools: diversifiedTools,
+                    conversationId: conversationId
                 )
                 continue
             }
+
+            previousToolCallSignatures = currentToolCallSignatures
 
             if let previousToolBatchSignature,
                previousToolBatchSignature == currentToolBatchSignature {
@@ -184,7 +266,8 @@ final class ToolLoopHandler {
                     userInput: userInput,
                     runId: runId,
                     writeTargetSignature: currentWriteTargetSignature ?? "(none)",
-                    availableTools: availableTools
+                    availableTools: currentTurnTools,
+                    conversationId: conversationId
                 )
 
                 repeatedWriteTargetCount = 0
@@ -212,8 +295,13 @@ final class ToolLoopHandler {
                     userInput: userInput,
                     toolResults: lastToolResults,
                     runId: runId,
-                    availableTools: availableTools
+                    availableTools: currentTurnTools,
+                    conversationId: conversationId
                 )
+                if shouldResumeRecoveredExecution(from: currentResponse) {
+                    toolIteration = max(0, toolIteration - 1)
+                    continue
+                }
                 break
             }
 
@@ -253,18 +341,24 @@ final class ToolLoopHandler {
             }
 
             let split = ChatPromptBuilder.splitReasoning(from: currentResponse.content ?? "")
-            let hasModelStepUpdate = !split.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let hasReasoning = !(split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            let normalizedProgress = normalizedProgressUpdate(
+                modelContent: split.content,
+                modelReasoning: split.reasoning,
+                toolCalls: uniqueToolCalls,
+                iteration: toolIteration
+            )
+            let hasModelStepUpdate = !normalizedProgress.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty
+            let hasReasoning = !(normalizedProgress.reasoning?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty ?? true)
             let assistantMsg = ChatMessage(
                 role: .assistant,
-                content: split.content,
-                context: ChatMessageContentContext(reasoning: split.reasoning),
+                content: normalizedProgress.content,
+                context: ChatMessageContentContext(reasoning: normalizedProgress.reasoning),
                 tool: ChatMessageToolContext(toolCalls: uniqueToolCalls)
             )
             if hasModelStepUpdate || hasReasoning {
                 let updateSignature = assistantUpdateSignature(
-                    content: split.content,
-                    reasoning: split.reasoning,
+                    content: normalizedProgress.content,
+                    reasoning: normalizedProgress.reasoning,
                     toolCalls: uniqueToolCalls
                 )
                 if updateSignature == previousAssistantUpdateSignature {
@@ -276,13 +370,16 @@ final class ToolLoopHandler {
 
             logAssistantToolCalls(
                 conversationId: conversationId,
-                content: split.content,
+                content: normalizedProgress.content,
                 toolCalls: uniqueToolCalls
             )
 
             markCancelledToolCalls(toolCalls: uniqueToolCalls, cancelledToolCallIds: cancelledToolCallIds())
 
-            let statusSummary = buildGenericToolExecutionStatusSummary()
+            let statusSummary = buildGenericToolExecutionStatusSummary(
+                toolCalls: uniqueToolCalls,
+                iteration: toolIteration
+            )
             if !hasModelStepUpdate && !hasReasoning {
                 let statusSignature = assistantUpdateSignature(
                     content: statusSummary,
@@ -301,7 +398,7 @@ final class ToolLoopHandler {
 
             let toolResults = await toolExecutionCoordinator.executeToolCalls(
                 uniqueToolCalls,
-                availableTools: availableTools,
+                availableTools: currentTurnTools,
                 conversationId: conversationId
             ) { [weak self] progressMsg in
                 guard let self else { return }
@@ -315,7 +412,7 @@ final class ToolLoopHandler {
             for msg in toolResults {
                 if msg.isToolExecution {
                     historyCoordinator.upsertToolExecutionMessage(msg)
-                    if msg.toolStatus == .completed {
+                    if msg.toolStatus == ToolExecutionStatus.completed {
                         ToolExecutionTelemetry.shared.recordSuccessfulExecution()
                     }
                 } else {
@@ -325,7 +422,7 @@ final class ToolLoopHandler {
 
             lastToolResults = toolResults
             let failedToolCallIds = Set(toolResults.compactMap { result -> String? in
-                guard result.isToolExecution, result.toolStatus == .failed else { return nil }
+                guard result.isToolExecution, result.toolStatus == ToolExecutionStatus.failed else { return nil }
                 return result.toolCallId
             })
             if !failedToolCallIds.isEmpty {
@@ -333,9 +430,65 @@ final class ToolLoopHandler {
                     .filter { failedToolCallIds.contains($0.id) }
                     .map(toolCallSignature)
                 previouslyFailedToolCallSignatures.formUnion(failedSignatures)
+
+                if requestLikelyRequiresMutation(userInput),
+                   hasUnsupportedToolFailure(in: toolResults) {
+                    if hasObservedSuccessfulMutation || hasReservedFilePathHint(in: toolResults) {
+                        currentTurnTools = contentWriteRecoveryTools(from: availableTools)
+                    } else {
+                        currentTurnTools = hasObservedSuccessfulDirectRead
+                            ? mutationOnlyTools(from: availableTools)
+                            : mutationRecoveryTools(from: availableTools)
+                    }
+                    currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
+                        explicitContext: explicitContext,
+                        projectRoot: projectRoot,
+                        mode: mode,
+                        userInput: userInput,
+                        runId: runId,
+                        repeatedSignatures: failedSignatures,
+                        availableTools: currentTurnTools,
+                        conversationId: conversationId
+                    )
+                    continue
+                }
+
+                if requestLikelyRequiresMutation(userInput),
+                   !hasObservedSuccessfulMutation,
+                   !hasObservedSuccessfulDirectRead,
+                   hasFailedDirectRead(in: toolResults) {
+                    currentTurnTools = failedDirectReadRecoveryTools(from: availableTools)
+                    currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
+                        explicitContext: explicitContext,
+                        projectRoot: projectRoot,
+                        mode: mode,
+                        userInput: userInput,
+                        runId: runId,
+                        repeatedSignatures: failedSignatures,
+                        availableTools: currentTurnTools,
+                        conversationId: conversationId
+                    )
+                    continue
+                }
+
+                if requestLikelyRequiresMutation(userInput),
+                   hasCreateFileAlreadyExistsFailure(in: toolResults) {
+                    currentTurnTools = contentWriteRecoveryTools(from: availableTools)
+                    currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
+                        explicitContext: explicitContext,
+                        projectRoot: projectRoot,
+                        mode: mode,
+                        userInput: userInput,
+                        runId: runId,
+                        repeatedSignatures: failedSignatures,
+                        availableTools: currentTurnTools,
+                        conversationId: conversationId
+                    )
+                    continue
+                }
             }
             let completedToolCallIds = Set(toolResults.compactMap { result -> String? in
-                guard result.isToolExecution, result.toolStatus == .completed else { return nil }
+                guard result.isToolExecution, result.toolStatus == ToolExecutionStatus.completed else { return nil }
                 return result.toolCallId
             })
             if !completedToolCallIds.isEmpty {
@@ -343,10 +496,71 @@ final class ToolLoopHandler {
                     .filter { completedToolCallIds.contains($0.id) }
                     .map(toolCallSignature)
                 previouslyCompletedToolCallSignatures.formUnion(completedSignatures)
+
+                if uniqueToolCalls.contains(where: { toolCall in
+                    completedToolCallIds.contains(toolCall.id) && isDirectReadToolName(toolCall.name)
+                }) {
+                    hasObservedSuccessfulDirectRead = true
+                }
+            }
+
+            let successfulMutationThisIteration = uniqueToolCalls.contains { toolCall in
+                completedToolCallIds.contains(toolCall.id) && isMutationToolName(toolCall.name)
+            }
+            let completedCreateFileReservationThisIteration = uniqueToolCalls.contains { toolCall in
+                completedToolCallIds.contains(toolCall.id) && toolCall.name == "create_file"
+            }
+            let completedContentWriteThisIteration = uniqueToolCalls.contains { toolCall in
+                completedToolCallIds.contains(toolCall.id) && isContentWritingToolName(toolCall.name)
+            }
+            if successfulMutationThisIteration {
+                hasObservedSuccessfulMutation = true
+                consecutivePostMutationNonMutationIterations = 0
+            } else if hasObservedSuccessfulMutation {
+                consecutivePostMutationNonMutationIterations += 1
+            }
+            if shouldStopForNonRecoverableMutationFailureStall(
+                toolResults: toolResults,
+                successfulMutationThisIteration: successfulMutationThisIteration,
+                consecutiveFailureIterations: &consecutiveNonRecoverableMutationFailureIterations
+            ) {
+                await AIToolTraceLogger.shared.log(type: "chat.tool_loop_nonrecoverable_mutation_failure_stall", data: [
+                    "runId": runId,
+                    "iteration": toolIteration,
+                    "count": consecutiveNonRecoverableMutationFailureIterations
+                ])
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    explicitContext: explicitContext,
+                    projectRoot: projectRoot,
+                    mode: mode,
+                    userInput: userInput,
+                    toolResults: toolResults,
+                    runId: runId,
+                    availableTools: nil
+                )
+                break
+            }
+            if hasObservedSuccessfulMutation,
+               consecutivePostMutationNonMutationIterations >= ToolLoopConstants.postWriteNonMutationStallThreshold {
+                await AIToolTraceLogger.shared.log(type: "chat.tool_loop_post_mutation_non_mutation_stall", data: [
+                    "runId": runId,
+                    "iteration": toolIteration,
+                    "count": consecutivePostMutationNonMutationIterations
+                ])
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    explicitContext: explicitContext,
+                    projectRoot: projectRoot,
+                    mode: mode,
+                    userInput: userInput,
+                    toolResults: toolResults,
+                    runId: runId,
+                    availableTools: nil
+                )
+                break
             }
             await advancePlanProgressIfNeeded(
                 conversationId: conversationId,
-                toolResults: toolResults
+                successfulMutationThisIteration: successfulMutationThisIteration
             )
 
             await ToolLoopUtilities.appendRunSnapshot(
@@ -381,15 +595,47 @@ final class ToolLoopHandler {
             if let failureRecoveryMessage {
                 followupMessages.append(failureRecoveryMessage)
             }
-            followupMessages.append(toolLoopStepUpdateInstructionMessage(consecutiveReadOnlyIterations: consecutiveReadOnlyToolIterations))
+            if shouldInjectStepUpdateInstruction(
+                iteration: toolIteration,
+                consecutiveReadOnlyIterations: consecutiveReadOnlyToolIterations,
+                hasFailureRecovery: failureRecoveryMessage != nil
+            ) {
+                followupMessages.append(try toolLoopStepUpdateInstructionMessage(
+                    projectRoot: projectRoot,
+                    consecutiveReadOnlyIterations: consecutiveReadOnlyToolIterations
+                ))
+            }
             
             followupMessages = MessageTruncationPolicy.truncateForModel(followupMessages)
 
+            let followupTools: [AITool]
+            if requestLikelyRequiresMutation(userInput),
+               completedCreateFileReservationThisIteration,
+               !completedContentWriteThisIteration {
+                followupTools = contentWriteRecoveryTools(from: availableTools)
+            } else if requestLikelyRequiresMutation(userInput),
+                      hasObservedSuccessfulMutation,
+                      (
+                        isContentWriteRecoverySubset(currentTurnTools, availableTools: availableTools)
+                        || hasReservedFilePathHint(in: toolResults)
+                      ) {
+                followupTools = contentWriteRecoveryTools(from: availableTools)
+            } else if requestLikelyRequiresMutation(userInput),
+               !hasObservedSuccessfulMutation,
+               consecutiveReadOnlyToolIterations > 0 {
+                followupTools = hasObservedSuccessfulDirectRead
+                    ? mutationOnlyTools(from: availableTools)
+                    : mutationRecoveryTools(from: availableTools)
+            } else {
+                followupTools = availableTools
+            }
+
+            currentTurnTools = followupTools
             currentResponse = try await aiInteractionCoordinator
                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: followupMessages,
                     explicitContext: explicitContext,
-                    tools: availableTools,
+                    tools: currentTurnTools,
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
@@ -427,6 +673,32 @@ final class ToolLoopHandler {
             if mode == .agent,
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
+               hasObservedSuccessfulMutation,
+               ChatPromptBuilder.indicatesWorkWasPerformed(content: content),
+               !ChatPromptBuilder.hasMissingClaimedFileArtifacts(
+                    content: content,
+                    projectRoot: projectRoot
+               ) {
+                break
+            }
+
+            if mode == .agent,
+               currentResponse.toolCalls?.isEmpty ?? true,
+               let content = currentResponse.content,
+               hasObservedSuccessfulMutation,
+               isContentWriteRecoverySubset(currentTurnTools, availableTools: availableTools),
+               !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }),
+               ChatPromptBuilder.deliveryStatus(from: content) == .done {
+                break
+            }
+
+            if mode == .agent,
+               currentResponse.toolCalls?.isEmpty ?? true,
+               let content = currentResponse.content,
+               !(await shouldPreserveNoToolHandoffWithoutIncompletePlan(
+                    content: content,
+                    conversationId: conversationId
+               )),
                (
                     ChatPromptBuilder.shouldForceToolFollowup(content: content)
                     || ChatPromptBuilder.shouldForceExecutionFollowup(
@@ -434,40 +706,138 @@ final class ToolLoopHandler {
                         content: content,
                         hasToolCalls: false
                     )
+                    || ChatPromptBuilder.hasMissingClaimedFileArtifacts(
+                        content: content,
+                        projectRoot: projectRoot
+                    )
                ),
-               let lastUserMessage = historyCoordinator.messages.last(where: { $0.role == .user }) {
-                await AIToolTraceLogger.shared.log(type: "chat.force_execution_followup.tool_loop", data: [
-                    "runId": runId,
-                    "iteration": toolIteration,
-                    "hasToolCalls": false,
-                    "contentLength": content.count
-                ])
-                let promptText = PromptRepository.shared.prompt(
-                    key: "ConversationFlow/Corrections/force_tool_followup",
-                    defaultValue: "You indicated you will implement changes, but you returned no tool calls. " +
-                        "In Agent mode, you MUST now proceed by calling the appropriate tools. " +
-                        "Return tool calls now.",
+               !currentTurnTools.isEmpty {
+                 if hasObservedSuccessfulMutation,
+                    ChatPromptBuilder.hasMissingClaimedFileArtifacts(
+                    content: content,
                     projectRoot: projectRoot
-                )
-                let followupSystem = ChatMessage(
-                    role: .system,
-                    content: promptText
-                )
-                currentResponse = try await aiInteractionCoordinator
-                    .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                        messages: historyCoordinator.messages + [followupSystem, lastUserMessage],
+                 ) {
+                    currentResponse = try await requestFinalResponseForStalledToolLoop(
                         explicitContext: explicitContext,
-                        tools: availableTools,
-                        mode: mode,
                         projectRoot: projectRoot,
+                        mode: mode,
+                        userInput: userInput,
+                        toolResults: lastToolResults,
                         runId: runId,
-                        stage: AIRequestStage.tool_loop
-                    ))
-                    .get()
+                        availableTools: currentTurnTools,
+                        conversationId: conversationId,
+                        hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
+                    )
+                    if shouldResumeRecoveredExecution(from: currentResponse) {
+                        toolIteration = max(0, toolIteration - 1)
+                        continue
+                    }
+                 }
 
-                if updateRepeatedNoToolCallContentState(
-                    response: currentResponse,
-                    previousSignature: &previousNoToolCallContentSignature,
+                 if isContentWriteRecoverySubset(currentTurnTools, availableTools: availableTools),
+                    hasReservedFilePathHint(in: lastToolResults) {
+                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                        explicitContext: explicitContext,
+                        projectRoot: projectRoot,
+                        mode: mode,
+                        userInput: userInput,
+                        toolResults: lastToolResults,
+                        runId: runId,
+                        availableTools: currentTurnTools,
+                        conversationId: conversationId,
+                        hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
+                    )
+                    if shouldResumeRecoveredExecution(from: currentResponse) {
+                        toolIteration = max(0, toolIteration - 1)
+                        continue
+                    }
+                 }
+
+                 await AIToolTraceLogger.shared.log(type: "chat.force_execution_followup.tool_loop", data: [
+                     "runId": runId,
+                     "iteration": toolIteration,
+                     "hasToolCalls": false,
+                     "contentLength": content.count
+                 ])
+                 let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
+                     userInput: userInput,
+                     conversationId: conversationId,
+                     projectRoot: projectRoot,
+                     historyMessages: historyCoordinator.messages
+                 )
+                 currentResponse = try await aiInteractionCoordinator
+                     .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                         messages: focusedMessages,
+                         explicitContext: explicitContext,
+                         tools: currentTurnTools,
+                         mode: mode,
+                         projectRoot: projectRoot,
+                         runId: runId,
+                         stage: AIRequestStage.tool_loop,
+                         conversationId: conversationId
+                     ))
+                     .get()
+
+                 if updateRepeatedNoToolCallContentState(
+                     response: currentResponse,
+                     previousSignature: &previousNoToolCallContentSignature,
+                     repeatedCount: &repeatedNoToolCallContentCount
+                ) {
+                    await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_no_tool_call_content_stall", data: [
+                        "runId": runId,
+                        "iteration": toolIteration,
+                        "repeatedCount": repeatedNoToolCallContentCount + 1,
+                        "contentLength": currentResponse.content?.count ?? 0
+                    ])
+                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                        explicitContext: explicitContext,
+                        projectRoot: projectRoot,
+                        mode: mode,
+                        userInput: userInput,
+                        toolResults: lastToolResults,
+                        runId: runId,
+                        availableTools: currentTurnTools,
+                        conversationId: conversationId
+                    )
+                    if shouldResumeRecoveredExecution(from: currentResponse) {
+                        toolIteration = max(0, toolIteration - 1)
+                        continue
+                    }
+                    break
+                }
+            }
+
+             if mode == .agent,
+                currentResponse.toolCalls?.isEmpty ?? true,
+                let content = currentResponse.content,
+                !(await shouldPreserveNoToolHandoffWithoutIncompletePlan(
+                    content: content,
+                    conversationId: conversationId
+                )),
+                ChatPromptBuilder.isRequestingUserInputForNextStep(content: content),
+                !currentTurnTools.isEmpty {
+                 let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
+                     userInput: userInput,
+                     conversationId: conversationId,
+                     projectRoot: projectRoot,
+                     historyMessages: historyCoordinator.messages
+                 )
+                 currentResponse = try await aiInteractionCoordinator
+                     .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                         messages: focusedMessages,
+                         explicitContext: explicitContext,
+                         tools: currentTurnTools,
+                         mode: mode,
+                         projectRoot: projectRoot,
+                         runId: runId,
+                         stage: AIRequestStage.tool_loop,
+                         conversationId: conversationId
+                     ))
+                     .get()
+
+                 if updateRepeatedNoToolCallContentState(
+                     response: currentResponse,
+                     previousSignature: &previousNoToolCallContentSignature,
                     repeatedCount: &repeatedNoToolCallContentCount
                 ) {
                     await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_no_tool_call_content_stall", data: [
@@ -483,42 +853,46 @@ final class ToolLoopHandler {
                         userInput: userInput,
                         toolResults: lastToolResults,
                         runId: runId,
-                        availableTools: availableTools
+                        availableTools: currentTurnTools,
+                        conversationId: conversationId
                     )
                     break
                 }
             }
 
-            if mode == .agent,
-               currentResponse.toolCalls?.isEmpty ?? true,
-               let content = currentResponse.content,
-               ChatPromptBuilder.isRequestingUserInputForNextStep(content: content) {
-                let promptText = PromptRepository.shared.prompt(
-                    key: "ConversationFlow/Corrections/no_user_input_next_step",
-                    defaultValue: "In Agent mode, do not ask the user for additional inputs (diffs, files, confirmations) as a next step. " +
-                        "Proceed autonomously using the available tools and make reasonable assumptions. " +
-                        "If multiple options exist, pick the safest default and continue. Return tool calls now if needed.",
-                    projectRoot: projectRoot
-                )
-                let followupSystem = ChatMessage(
-                    role: .system,
-                    content: promptText
-                )
-                currentResponse = try await aiInteractionCoordinator
-                    .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                        messages: historyCoordinator.messages + [followupSystem],
-                        explicitContext: explicitContext,
-                        tools: availableTools,
-                        mode: mode,
-                        projectRoot: projectRoot,
-                        runId: runId,
-                        stage: AIRequestStage.tool_loop
-                    ))
-                    .get()
+             if mode == .agent,
+                currentResponse.toolCalls?.isEmpty ?? true,
+                let content = currentResponse.content,
+                !(await shouldPreserveNoToolHandoffWithoutIncompletePlan(
+                    content: content,
+                    conversationId: conversationId
+                )),
+                ChatPromptBuilder.isRequestingUserInputForNextStep(content: content),
+                availableTools.isEmpty {
+                 let autonomousMessages = try await ToolLoopUtilities.buildAutonomousNoUserInputMessages(
+                     userInput: userInput,
+                     conversationId: conversationId,
+                     projectRoot: projectRoot,
+                     existingAssistantContent: content,
+                     toolsAvailable: false
+                 )
+                 currentTurnTools = availableTools
+                 currentResponse = try await aiInteractionCoordinator
+                     .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                         messages: autonomousMessages,
+                         explicitContext: explicitContext,
+                         tools: currentTurnTools,
+                         mode: mode,
+                         projectRoot: projectRoot,
+                         runId: runId,
+                         stage: AIRequestStage.tool_loop,
+                         conversationId: conversationId
+                     ))
+                     .get()
 
-                if updateRepeatedNoToolCallContentState(
-                    response: currentResponse,
-                    previousSignature: &previousNoToolCallContentSignature,
+                 if updateRepeatedNoToolCallContentState(
+                     response: currentResponse,
+                     previousSignature: &previousNoToolCallContentSignature,
                     repeatedCount: &repeatedNoToolCallContentCount
                 ) {
                     await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_no_tool_call_content_stall", data: [
@@ -534,15 +908,16 @@ final class ToolLoopHandler {
                         userInput: userInput,
                         toolResults: lastToolResults,
                         runId: runId,
-                        availableTools: availableTools
+                        availableTools: availableTools,
+                        conversationId: conversationId
                     )
                     break
                 }
             }
 
-            let trimmedContent = currentResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if trimmedContent.isEmpty, currentResponse.toolCalls?.isEmpty == false {
-                consecutiveEmptyToolCallResponses += 1
+             let trimmedContent = currentResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+             if trimmedContent.isEmpty, currentResponse.toolCalls?.isEmpty == false {
+                 consecutiveEmptyToolCallResponses += 1
             } else {
                 consecutiveEmptyToolCallResponses = 0
             }
@@ -562,16 +937,62 @@ final class ToolLoopHandler {
             }
         }
 
-        if mode == .agent,
-           currentResponse.toolCalls?.isEmpty ?? true,
-           !availableTools.isEmpty,
-           await shouldForceContinuationForIncompletePlan(conversationId: conversationId, content: currentResponse.content) {
-            currentResponse = try await requestContinuationForIncompletePlan(
+        currentResponse = try await requestContinuationIfPlanIncompleteOrNeedsWork(
+            currentResponse: currentResponse,
+            explicitContext: explicitContext,
+            mode: mode,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: currentTurnTools,
+            runId: runId,
+            userInput: userInput,
+            hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
+        )
+
+        currentResponse = try await requestExecutionRecoveryIfPlanStillIncomplete(
+            currentResponse: currentResponse,
+            explicitContext: explicitContext,
+            mode: mode,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: currentTurnTools,
+            runId: runId,
+            userInput: userInput,
+            hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
+        )
+
+        if let escalatedContinuationResponse = try await requestEscalatedExecutionRecoveryForRecoveredReadOnlyToolCalls(
+            currentResponse: currentResponse,
+            explicitContext: explicitContext,
+            mode: mode,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: availableTools,
+            runId: runId,
+            userInput: userInput
+        ) {
+            currentResponse = escalatedContinuationResponse
+        }
+
+        if shouldResumeRecoveredExecution(from: currentResponse) {
+            let recoveredToolLoopResult = try await handleToolLoopIfNeeded(
+                response: currentResponse,
                 explicitContext: explicitContext,
-                projectRoot: projectRoot,
                 mode: mode,
+                projectRoot: projectRoot,
+                conversationId: conversationId,
                 availableTools: availableTools,
-                runId: runId
+                cancelledToolCallIds: cancelledToolCallIds,
+                runId: runId,
+                userInput: userInput
+            )
+
+            return ToolLoopResult(
+                response: recoveredToolLoopResult.response,
+                lastToolCalls: recoveredToolLoopResult.lastToolCalls.isEmpty
+                    ? lastToolCalls
+                    : recoveredToolLoopResult.lastToolCalls,
+                lastToolResults: lastToolResults + recoveredToolLoopResult.lastToolResults
             )
         }
 
@@ -652,7 +1073,22 @@ final class ToolLoopHandler {
                 ? "arguments: none"
                 : "argument keys: \(argumentKeys.joined(separator: ", "))"
             let output = ToolLoopUtilities.toolOutputText(from: result)
-            return "- \(toolName) (\(toolCallId)): \(output) [\(argumentSummary)]"
+            let envelope = ToolExecutionEnvelope.decode(from: result.content)
+            var detailLines: [String] = [
+                "- \(toolName) (\(toolCallId)): \(output) [\(argumentSummary)]"
+            ]
+            if let envelopeKeys = envelope?.argumentKeys, !envelopeKeys.isEmpty {
+                detailLines.append("  normalized keys: \(envelopeKeys.joined(separator: ", "))")
+            }
+            if let invocation = envelope?.argumentPreview,
+               !invocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                detailLines.append("  invocation: \(invocation)")
+            }
+            if let hint = envelope?.recoveryHint,
+               !hint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                detailLines.append("  recovery_hint: \(hint)")
+            }
+            return detailLines.joined(separator: "\n")
         }
 
         var recoveryLines: [String] = [
@@ -725,20 +1161,200 @@ final class ToolLoopHandler {
             content: [
                 "Tool calls completed successfully this iteration.",
                 "Treat these call signatures as already completed work and avoid repeating them unless new evidence requires a changed call.",
+                "If these completed calls satisfy the user request, provide the final response now without additional tool calls.",
                 "Completed call signatures:",
                 completedSignatures.map { "- \($0)" }.joined(separator: "\n")
             ].joined(separator: "\n")
         )
     }
 
-    private func buildGenericToolExecutionStatusSummary() -> String {
-        // This is shown when model doesn't provide a user-facing update
-        // Keep it brief and informative
-        return "Continuing with next step..."
+    private func buildGenericToolExecutionStatusSummary(
+        toolCalls: [AIToolCall],
+        iteration: Int
+    ) -> String {
+        let summary = progressTriplet(toolCalls: toolCalls, modelContent: nil, iteration: iteration)
+        return "\(summary.what) Next: \(summary.how) in \(summary.wherePath)."
     }
 
-    private func toolLoopStepUpdateInstructionMessage(consecutiveReadOnlyIterations: Int = 0) -> ChatMessage {
-        var content = "Before returning tool calls, include either (a) a short <ide_reasoning> block with Analyze/Plan/Action bullets or (b) at minimum one short user-facing update sentence explaining what you will do next and why. Then return tool calls. Do not ask the user for additional input."
+    private func normalizedProgressUpdate(
+        modelContent: String,
+        modelReasoning: String?,
+        toolCalls: [AIToolCall],
+        iteration: Int
+    ) -> (content: String, reasoning: String?) {
+        let trimmedContent = modelContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = progressTriplet(
+            toolCalls: toolCalls,
+            modelContent: trimmedContent.isEmpty ? nil : trimmedContent,
+            iteration: iteration
+        )
+
+        let normalizedContent = "\(summary.what) Next: \(summary.how) in \(summary.wherePath)."
+        let normalizedReasoning: String
+        if let modelReasoning,
+           !modelReasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            normalizedReasoning = modelReasoning
+        } else {
+            normalizedReasoning = [
+                "What: \(summary.what)",
+                "How: \(summary.how)",
+                "Where: \(summary.wherePath)"
+            ].joined(separator: "\n")
+        }
+
+        return (normalizedContent, normalizedReasoning)
+    }
+
+    private func progressTriplet(
+        toolCalls: [AIToolCall],
+        modelContent: String?,
+        iteration: Int
+    ) -> (what: String, how: String, wherePath: String) {
+        let compactTargets = uniqueStringsPreservingOrder(toolCalls.compactMap(extractCompactTarget(from:)))
+        let compactPathSummary = compactTargets.prefix(2).joined(separator: ", ")
+        let wherePath = compactPathSummary.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty
+            ? "project files"
+            : compactPathSummary
+
+        let how = summarizeExecutionIntent(toolCalls: toolCalls)
+
+        let what: String
+        if let modelContent, let distilled = distilledWhat(from: modelContent) {
+            what = distilled
+        } else {
+            what = "Completed progress update for step \(iteration)"
+        }
+
+        return (what, how, wherePath)
+    }
+
+    private func summarizeExecutionIntent(toolCalls: [AIToolCall]) -> String {
+        guard !toolCalls.isEmpty else {
+            return "continuing implementation"
+        }
+
+        let readOnlyTools: Set<String> = [
+            "read_file",
+            "index_read_file",
+            "index_find_files",
+            "index_list_files",
+            "index_list_symbols",
+            "index_search_text",
+            "index_search_symbols",
+            "index_list_memories",
+            "checkpoint_list",
+            "conversation_fold"
+        ]
+        let writeTools: Set<String> = [
+            "write_file",
+            "write_files",
+            "replace_in_file",
+            "create_file",
+            "delete_file"
+        ]
+        let commandTools: Set<String> = ["run_command"]
+
+        let names = Set(toolCalls.map { $0.name })
+        let hasWrite = !names.intersection(writeTools).isEmpty
+        let hasRunCommand = !names.intersection(commandTools).isEmpty
+        let hasReadOnly = !names.intersection(readOnlyTools).isEmpty
+
+        if hasWrite && hasRunCommand {
+            return "applying code changes and validating results"
+        }
+        if hasWrite {
+            return "applying targeted code changes"
+        }
+        if hasRunCommand {
+            return "running validation commands"
+        }
+        if hasReadOnly {
+            return "reviewing retrieved context and finalizing when the objective is satisfied"
+        }
+        return "executing the next implementation step"
+    }
+
+    private func uniqueStringsPreservingOrder(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for value in values where !seen.contains(value) {
+            seen.insert(value)
+            result.append(value)
+        }
+        return result
+    }
+
+    private func distilledWhat(from content: String) -> String? {
+        let cleaned = content
+            .replacingOccurrences(of: "\n", with: " ")
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleaned.isEmpty else { return nil }
+        if cleaned.localizedCaseInsensitiveContains("update (step") {
+            return nil
+        }
+
+        let noDuplicateNext: String
+        if let range = cleaned.range(of: " Next:", options: [.caseInsensitive]) {
+            noDuplicateNext = String(cleaned[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            noDuplicateNext = cleaned
+        }
+
+        guard !noDuplicateNext.isEmpty else { return nil }
+        return noDuplicateNext.count > 120
+            ? String(noDuplicateNext.prefix(120)).trimmingCharacters(in: .whitespacesAndNewlines)
+            : noDuplicateNext
+    }
+
+    private func extractCompactTarget(from toolCall: AIToolCall) -> String? {
+        let keys = ["path", "target_file", "file", "file_path", "directory"]
+        for key in keys {
+            if let raw = toolCall.arguments[key] as? String,
+               let compact = compactPath(raw) {
+                return compact
+            }
+        }
+        return nil
+    }
+
+    private func compactPath(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let normalized = trimmed.replacingOccurrences(of: "\\", with: "/")
+        let parts = normalized.split(separator: "/").map(String.init)
+        guard !parts.isEmpty else { return nil }
+        if parts.count == 1 { return parts[0] }
+
+        if let srcIndex = parts.firstIndex(of: "src"), srcIndex < parts.count {
+            return parts[srcIndex...].prefix(3).joined(separator: "/")
+        }
+
+        let penultimate = parts[parts.count - 2]
+        if looksLikeEphemeralIdentifier(penultimate) {
+            return parts.last
+        }
+
+        return parts.suffix(2).joined(separator: "/")
+    }
+
+    private func looksLikeEphemeralIdentifier(_ value: String) -> Bool {
+        let lowercase = value.lowercased()
+        return lowercase.count >= 16 && lowercase.contains("-")
+    }
+
+    private func toolLoopStepUpdateInstructionMessage(
+        projectRoot: URL,
+        consecutiveReadOnlyIterations: Int = 0
+    ) throws -> ChatMessage {
+        let baseInstruction = try PromptRepository.shared.prompt(
+            key: "ConversationFlow/Corrections/tool_loop_step_update_instruction",
+            projectRoot: projectRoot
+        )
+        var content = baseInstruction
         
         // Add nudge after consecutive read-only tool iterations
         if consecutiveReadOnlyIterations >= ToolLoopConstants.readOnlyIterationNudgeThreshold {
@@ -753,19 +1369,21 @@ final class ToolLoopHandler {
         )
     }
 
-    private func shouldForceContinuationForIncompletePlan(conversationId: String, content: String?) async -> Bool {
-        guard let plan = await ConversationPlanStore.shared.get(conversationId: conversationId),
-              !plan.isEmpty else {
-            return false
+    private func shouldInjectStepUpdateInstruction(
+        iteration: Int,
+        consecutiveReadOnlyIterations: Int,
+        hasFailureRecovery: Bool
+    ) -> Bool {
+        if hasFailureRecovery {
+            return true
         }
-
-        let progress = PlanChecklistTracker.progress(in: plan)
-        guard progress.total > 0, !progress.isComplete else {
-            return false
+        if consecutiveReadOnlyIterations >= ToolLoopConstants.readOnlyIterationNudgeThreshold {
+            return true
         }
-
-        let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: content ?? "")
-        return deliveryStatus != .done
+        if iteration == 1 {
+            return true
+        }
+        return iteration % 4 == 0
     }
 
     private func updateRepeatedNoToolCallContentState(
@@ -853,40 +1471,85 @@ final class ToolLoopHandler {
             "index_find_files",
             "index_list_files",
             "index_list_symbols",
+            "index_search_text",
+            "index_search_symbols",
             "index_list_memories",
-            "checkpoint_list"
+            "checkpoint_list",
+            "conversation_fold"
         ]
     }
 
-    private func requestContinuationForIncompletePlan(
-        explicitContext: String?,
-        projectRoot: URL,
-        mode: AIMode,
-        availableTools: [AITool],
-        runId: String
-    ) async throws -> AIServiceResponse {
-        let followupSystem = ChatMessage(
-            role: .system,
-            content: "The implementation plan is not complete yet. Continue with the next unfinished checklist item. Include a short reasoning/update, then return tool calls. Do not finish with a final answer yet."
-        )
-        return try await aiInteractionCoordinator
-            .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: historyCoordinator.messages + [followupSystem],
-                explicitContext: explicitContext,
-                tools: availableTools,
-                mode: mode,
-                projectRoot: projectRoot,
-                runId: runId,
-                stage: AIRequestStage.tool_loop
-            ))
-            .get()
+    private var mutationRecoveryToolNames: Set<String> {
+        [
+            "read_file",
+            "write_file",
+            "write_files",
+            "create_file",
+            "delete_file",
+            "replace_in_file",
+            "run_command"
+        ]
     }
 
-    private func advancePlanProgressIfNeeded(conversationId: String, toolResults: [ChatMessage]) async {
-        let hasSuccessfulToolResult = toolResults.contains {
-            $0.isToolExecution && $0.toolStatus == .completed
-        }
-        guard hasSuccessfulToolResult else { return }
+    private var contentWriteRecoveryToolNames: Set<String> {
+        [
+            "create_file",
+            "write_file",
+            "write_files",
+            "delete_file",
+            "run_command"
+        ]
+    }
+
+    private var failedDirectReadRecoveryToolNames: Set<String> {
+        [
+            "list_files",
+            "read_file",
+            "write_file",
+            "write_files",
+            "create_file",
+            "delete_file",
+            "replace_in_file",
+            "run_command"
+        ]
+    }
+
+    private var mutationOnlyToolNames: Set<String> {
+        [
+            "write_file",
+            "write_files",
+            "create_file",
+            "delete_file",
+            "replace_in_file",
+            "run_command"
+        ]
+    }
+
+    private func mutationRecoveryTools(from availableTools: [AITool]) -> [AITool] {
+        let preferredTools = availableTools.filter { mutationRecoveryToolNames.contains($0.name) }
+        return preferredTools.isEmpty ? availableTools : preferredTools
+    }
+
+    private func failedDirectReadRecoveryTools(from availableTools: [AITool]) -> [AITool] {
+        let preferredTools = availableTools.filter { failedDirectReadRecoveryToolNames.contains($0.name) }
+        return preferredTools.isEmpty ? availableTools : preferredTools
+    }
+
+    private func mutationOnlyTools(from availableTools: [AITool]) -> [AITool] {
+        let preferredTools = availableTools.filter { mutationOnlyToolNames.contains($0.name) }
+        return preferredTools.isEmpty ? availableTools : preferredTools
+    }
+
+    private func contentWriteRecoveryTools(from availableTools: [AITool]) -> [AITool] {
+        let preferredTools = availableTools.filter { contentWriteRecoveryToolNames.contains($0.name) }
+        return preferredTools.isEmpty ? availableTools : preferredTools
+    }
+
+    private func advancePlanProgressIfNeeded(
+        conversationId: String,
+        successfulMutationThisIteration: Bool
+    ) async {
+        guard successfulMutationThisIteration else { return }
 
         guard let currentPlan = await ConversationPlanStore.shared.get(conversationId: conversationId),
               !currentPlan.isEmpty,
@@ -895,47 +1558,104 @@ final class ToolLoopHandler {
         }
 
         await ConversationPlanStore.shared.set(conversationId: conversationId, plan: updatedPlan)
-        replaceLatestPlanMessage(with: updatedPlan)
     }
 
-    private func replaceLatestPlanMessage(with updatedPlan: String) {
-        let messages = historyCoordinator.messages
-        guard let lastPlanIndex = messages.lastIndex(where: {
-            $0.role == .assistant && $0.content.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("# Implementation Plan")
-        }) else {
-            return
+    private func shouldStopForNonRecoverableMutationFailureStall(
+        toolResults: [ChatMessage],
+        successfulMutationThisIteration: Bool,
+        consecutiveFailureIterations: inout Int
+    ) -> Bool {
+        guard !successfulMutationThisIteration else {
+            consecutiveFailureIterations = 0
+            return false
         }
 
-        historyCoordinator.replaceMessage(at: lastPlanIndex, with: ChatMessage(
-            role: .assistant,
-            content: updatedPlan
-        ))
+        let nonRecoverableMutationFailures = toolResults.filter { result in
+            guard result.isToolExecution,
+                  result.toolStatus == .failed,
+                  let toolName = result.toolName,
+                  isMutationToolName(toolName) else {
+                return false
+            }
+
+            let output = ToolLoopUtilities.toolOutputText(from: result).lowercased()
+            return output.contains("malformed arguments for")
+                || output.contains("pre-write prevention blocked tool")
+                || output.contains("duplicate_impl")
+        }
+
+        guard !nonRecoverableMutationFailures.isEmpty else {
+            consecutiveFailureIterations = 0
+            return false
+        }
+
+        consecutiveFailureIterations += 1
+        return consecutiveFailureIterations >= 2
     }
 
-    private func buildFocusedExecutionMessages(
-        userInput: String,
-        conversationId: String,
-        projectRoot: URL
-    ) async -> [ChatMessage] {
-        let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+    private func hasUnsupportedToolFailure(in toolResults: [ChatMessage]) -> Bool {
+        toolResults.contains { result in
+            guard result.isToolExecution, result.toolStatus == .failed else {
+                return false
+            }
 
-        var parts: [String] = []
-        parts.append("You are a coding assistant. Your job right now is to execute the task with tools.")
-        parts.append("If helpful, include a concise <ide_reasoning> block before your update.")
-        parts.append("RESPONSE FORMAT (required):")
-        parts.append("1) Optional: <ide_reasoning> with short Analyze/Plan/Action bullets only.")
-        parts.append("2) Then one short user-facing update sentence stating what you will do next and why.")
-        parts.append("3) Then return the tool calls needed for that step.")
-        parts.append("Keep reasoning and update concise. Do not ask the user for input.")
-
-        if !plan.isEmpty {
-            parts.append("Plan:\n\(plan)")
+            return ToolLoopUtilities.toolOutputText(from: result)
+                .localizedCaseInsensitiveContains("tool not found in current turn")
         }
+    }
 
-        return [
-            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
-            ChatMessage(role: .user, content: userInput)
-        ]
+    private func hasFailedDirectRead(in toolResults: [ChatMessage]) -> Bool {
+        toolResults.contains { result in
+            guard result.isToolExecution,
+                  result.toolStatus == .failed,
+                  result.toolName == "read_file" else {
+                return false
+            }
+
+            let output = ToolLoopUtilities.toolOutputText(from: result).lowercased()
+            return output.contains("file not found")
+                || output.contains("no such file")
+                || output.contains("couldn’t be opened")
+                || output.contains("could not be opened")
+        }
+    }
+
+    private func hasCreateFileAlreadyExistsFailure(in toolResults: [ChatMessage]) -> Bool {
+        toolResults.contains { result in
+            guard result.isToolExecution,
+                  result.toolStatus == .failed,
+                  result.toolName == "create_file" else {
+                return false
+            }
+
+            return ToolLoopUtilities.toolOutputText(from: result)
+                .localizedCaseInsensitiveContains("already exists")
+        }
+    }
+
+    private func isContentWritingToolName(_ toolName: String) -> Bool {
+        switch toolName {
+        case "write_file", "write_files", "replace_in_file":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func isContentWriteRecoverySubset(_ currentTools: [AITool], availableTools: [AITool]) -> Bool {
+        let currentToolNames = Set(currentTools.map(\.name))
+        let contentWriteToolNames = Set(contentWriteRecoveryTools(from: availableTools).map(\.name))
+        return !currentToolNames.isEmpty && currentToolNames == contentWriteToolNames
+    }
+
+    private func hasReservedFilePathHint(in toolResults: [ChatMessage]) -> Bool {
+        toolResults.contains { result in
+            guard result.isToolExecution else { return false }
+
+            let output = ToolLoopUtilities.toolOutputText(from: result)
+            return output.localizedCaseInsensitiveContains("reserved file path at")
+                || output.localizedCaseInsensitiveContains("file already exists at")
+        }
     }
 
     private func requestFinalResponseForStalledToolLoop(
@@ -945,14 +1665,23 @@ final class ToolLoopHandler {
         userInput: String,
         toolResults: [ChatMessage],
         runId: String,
-        availableTools: [AITool]? = nil
+        availableTools: [AITool]? = nil,
+        conversationId: String? = nil,
+        hasObservedSuccessfulMutation: Bool = false
     ) async throws -> AIServiceResponse {
         let toolSummary = ToolLoopUtilities.toolResultsSummaryText(toolResults)
-        
+
         // If we have execution tools available, try to force execution transition first
-        if let availableTools, mode == .agent {
-            let executionTools = availableTools.filter { !readOnlyLoopToolNames.contains($0.name) }
-            
+        if let availableTools, mode == .agent, let conversationId {
+            let executionTools: [AITool]
+            let availableToolNames = Set(availableTools.map(\.name))
+            if !availableToolNames.isEmpty,
+               availableToolNames.isSubset(of: contentWriteRecoveryToolNames) {
+                executionTools = availableTools
+            } else {
+                executionTools = availableTools.filter { !readOnlyLoopToolNames.contains($0.name) }
+            }
+
             if !executionTools.isEmpty {
                 // Log the execution transition attempt
                 await AIToolTraceLogger.shared.log(type: "chat.tool_loop_execution_transition", data: [
@@ -960,67 +1689,61 @@ final class ToolLoopHandler {
                     "executionToolsCount": executionTools.count,
                     "toolSummaryLength": toolSummary.count
                 ])
-                
-                let executionPrompt = ChatMessage(
-                    role: .system,
-                    content: """
-                    You have been gathering context with read-only tools but haven't made any changes yet.
-                    The user's request requires EXECUTION, not just exploration.
-                    
-                    You MUST now transition to execution:
-                    1. Use write_files for multi-file scaffolding and coordinated creation
-                    2. Use write_file only for single-file creation/overwrite
-                    3. Use replace_in_file to modify existing files
-                    4. Use run_command for build/test commands
-                    
-                    Do NOT call more read-only tools (read_file, index_*, list_*).
-                    Proceed with execution now using the available write/edit tools.
-                    
-                    User request: \(userInput)
-                    
-                    Context gathered:
-                    \(toolSummary)
-                    """
+
+                let executionMessages = try await ToolLoopUtilities.buildStalledExecutionTransitionMessages(
+                    userInput: userInput,
+                    conversationId: conversationId,
+                    projectRoot: projectRoot,
+                    toolSummary: toolSummary
                 )
-                
+
                 let executionResponse = try await aiInteractionCoordinator
                     .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                        messages: historyCoordinator.messages + [executionPrompt],
+                        messages: executionMessages,
                         explicitContext: explicitContext,
                         tools: executionTools,
                         mode: mode,
                         projectRoot: projectRoot,
                         runId: runId,
-                        stage: AIRequestStage.tool_loop
+                        stage: AIRequestStage.tool_loop,
+                        conversationId: conversationId
                     ))
                     .get()
-                
-                // If model returned execution tool calls, use them
+
                 if let toolCalls = executionResponse.toolCalls, !toolCalls.isEmpty {
                     let hasExecutionTool = toolCalls.contains { !readOnlyLoopToolNames.contains($0.name) }
                     if hasExecutionTool {
                         return executionResponse
                     }
                 }
+
+                if let focusedRecoveryResponse = try await requestFocusedExecutionRecoveryIfPlanIncomplete(
+                    currentResponse: executionResponse,
+                    explicitContext: explicitContext,
+                    mode: mode,
+                    projectRoot: projectRoot,
+                    conversationId: conversationId,
+                    availableTools: availableTools,
+                    runId: runId,
+                    userInput: userInput,
+                    hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
+                ), shouldResumeRecoveredExecution(from: focusedRecoveryResponse) {
+                    return focusedRecoveryResponse
+                }
             }
         }
-        
+
         // Fallback: request final response without tools
-        let correctionSystem = ChatMessage(
-            role: .system,
-            content: "You kept calling tools without producing a user-visible response. " +
-                "Stop calling tools now and provide a final response in plain text.\n\n" +
-                "User request:\n\(userInput)\n\nTool outputs:\n\(toolSummary)"
-        )
-        let correctionUser = ChatMessage(
-            role: .user,
-            content: "Provide the final response now."
+        let finalResponseMessages = try ToolLoopUtilities.buildStalledFinalResponseMessages(
+            userInput: userInput,
+            toolSummary: toolSummary,
+            projectRoot: projectRoot
         )
 
         let followupMode: AIMode = (mode == .agent) ? .agent : .chat
         let followup = try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: [correctionSystem, correctionUser],
+                messages: finalResponseMessages,
                 explicitContext: explicitContext,
                 tools: [],
                 mode: followupMode,
@@ -1037,8 +1760,103 @@ final class ToolLoopHandler {
         return AIServiceResponse(content: finalContent, toolCalls: nil)
     }
 
+    private func shouldPreserveNoToolHandoffWithoutIncompletePlan(
+        content: String,
+        conversationId: String
+    ) async -> Bool {
+        guard isLikelyContinuationOrRecoverySummary(content) else { return false }
+
+        let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
+        guard planProgress.total > 0 else { return true }
+        return !planProgress.isComplete
+    }
+
+    private func requestFocusedExecutionRecoveryIfPlanIncomplete(
+        currentResponse: AIServiceResponse,
+        explicitContext: String?,
+        mode: AIMode,
+        projectRoot: URL,
+        conversationId: String,
+        availableTools: [AITool],
+        runId: String,
+        userInput: String,
+        hasObservedSuccessfulMutation: Bool
+    ) async throws -> AIServiceResponse? {
+        let recoveredResponse = try await requestExecutionRecoveryIfPlanStillIncomplete(
+            currentResponse: currentResponse,
+            explicitContext: explicitContext,
+            mode: mode,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: availableTools,
+            runId: runId,
+            userInput: userInput,
+            hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
+        )
+
+        guard recoveredResponse.toolCalls?.isEmpty == false else {
+            let recoveredContent = recoveredResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !recoveredContent.isEmpty,
+               (isLikelyContinuationOrRecoverySummary(recoveredContent)
+                || ChatPromptBuilder.deliveryStatus(from: recoveredContent) == .needsWork) {
+                return recoveredResponse
+            }
+            return nil
+        }
+
+        if shouldEscalateRecoveredReadOnlyToolCalls(recoveredResponse) {
+            return try await requestEscalatedExecutionRecoveryForRecoveredReadOnlyToolCalls(
+                currentResponse: recoveredResponse,
+                explicitContext: explicitContext,
+                mode: mode,
+                projectRoot: projectRoot,
+                conversationId: conversationId,
+                availableTools: availableTools,
+                runId: runId,
+                userInput: userInput
+            ) ?? recoveredResponse
+        }
+
+        return recoveredResponse
+    }
+
+    private func requestEscalatedExecutionRecoveryForRecoveredReadOnlyToolCalls(
+        currentResponse: AIServiceResponse,
+        explicitContext: String?,
+        mode: AIMode,
+        projectRoot: URL,
+        conversationId: String,
+        availableTools: [AITool],
+        runId: String,
+        userInput: String
+    ) async throws -> AIServiceResponse? {
+        guard shouldEscalateRecoveredReadOnlyToolCalls(currentResponse) else {
+            return nil
+        }
+
+        let executionTools = mutationRecoveryTools(from: availableTools)
+        guard !executionTools.isEmpty else {
+            return nil
+        }
+
+        let recoveredToolCalls = deduplicateToolCalls(currentResponse.toolCalls ?? [])
+        let escalatedRecoveryResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
+            explicitContext: explicitContext,
+            projectRoot: projectRoot,
+            mode: mode,
+            userInput: userInput,
+            runId: runId,
+            repeatedSignatures: recoveredToolCalls.map(toolCallSignature),
+            availableTools: executionTools,
+            conversationId: conversationId
+        )
+
+        return escalatedRecoveryResponse
+    }
+
     private func deduplicateToolCalls(_ toolCalls: [AIToolCall]) -> [AIToolCall] {
-        var seenSignatures = Set<String>()
+        var seenSignatures: Set<String> = []
         var uniqueCalls: [AIToolCall] = []
 
         for toolCall in toolCalls {
@@ -1126,34 +1944,26 @@ final class ToolLoopHandler {
         userInput: String,
         runId: String,
         writeTargetSignature: String,
-        availableTools: [AITool]
+        availableTools: [AITool],
+        conversationId: String
     ) async throws -> AIServiceResponse {
-        let correctionSystem = ChatMessage(
-            role: .system,
-            content: """
-            You are repeatedly writing the same target files without completing the user's request.
-
-            Repeated write targets: \(writeTargetSignature)
-
-            You MUST diversify execution now:
-            1. Do NOT rewrite the same target files unless strictly necessary.
-            2. Create or modify the remaining missing files required by the user request.
-            3. Return concrete tool calls that advance completion.
-
-            User request:
-            \(userInput)
-            """
+        let correctionMessages = try await ToolLoopUtilities.buildRepeatedWriteTargetDiversionMessages(
+            userInput: userInput,
+            conversationId: conversationId,
+            projectRoot: projectRoot,
+            writeTargetSignature: writeTargetSignature
         )
 
         return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: historyCoordinator.messages + [correctionSystem],
+                messages: correctionMessages,
                 explicitContext: explicitContext,
                 tools: availableTools,
                 mode: mode,
                 projectRoot: projectRoot,
                 runId: runId,
-                stage: AIRequestStage.tool_loop
+                stage: AIRequestStage.tool_loop,
+                conversationId: conversationId
             ))
             .get()
     }
@@ -1165,37 +1975,244 @@ final class ToolLoopHandler {
         userInput: String,
         runId: String,
         repeatedSignatures: [String],
-        availableTools: [AITool]
+        availableTools: [AITool],
+        conversationId: String
     ) async throws -> AIServiceResponse {
-        let correctionSystem = ChatMessage(
-            role: .system,
-            content: """
-            You just repeated the exact same tool-call signatures from the prior iteration.
-            Do not repeat already executed signatures without changed arguments.
-
-            Repeated signatures:
-            \(repeatedSignatures.map { "- \($0)" }.joined(separator: "\n"))
-
-            Next action requirements:
-            1. Pivot to a different tool call sequence that advances completion.
-            2. If no more tool calls are needed, return a concise final answer with no tool calls.
-            3. If you still need tools, change arguments, targets, or tool choice.
-
-            User request:
-            \(userInput)
-            """
+        let correctionMessages = try await ToolLoopUtilities.buildRepeatedSignatureDiversionMessages(
+            userInput: userInput,
+            conversationId: conversationId,
+            projectRoot: projectRoot,
+            repeatedSignatures: repeatedSignatures
         )
 
         return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: historyCoordinator.messages + [correctionSystem],
+                messages: correctionMessages,
                 explicitContext: explicitContext,
                 tools: availableTools,
                 mode: mode,
                 projectRoot: projectRoot,
                 runId: runId,
-                stage: AIRequestStage.tool_loop
+                stage: AIRequestStage.tool_loop,
+                conversationId: conversationId
             ))
             .get()
+    }
+
+    private func requestContinuationIfPlanIncompleteOrNeedsWork(
+        currentResponse: AIServiceResponse,
+        explicitContext: String?,
+        mode: AIMode,
+        projectRoot: URL,
+        conversationId: String,
+        availableTools: [AITool],
+        runId: String,
+        userInput: String,
+        hasObservedSuccessfulMutation: Bool
+    ) async throws -> AIServiceResponse {
+        guard mode == .agent else { return currentResponse }
+        guard currentResponse.toolCalls?.isEmpty ?? true else { return currentResponse }
+        guard !availableTools.isEmpty else { return currentResponse }
+
+        let currentContent = currentResponse.content ?? ""
+        let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
+        let hasSatisfiedClaimedArtifacts = hasObservedSuccessfulMutation
+            && ChatPromptBuilder.indicatesWorkWasPerformed(content: currentContent)
+            && !ChatPromptBuilder.hasMissingClaimedFileArtifacts(
+                content: currentContent,
+                projectRoot: projectRoot
+            )
+
+        let shouldContinueForPlan = planProgress.total > 0 && !planProgress.isComplete
+        guard shouldContinueForPlan else { return currentResponse }
+        guard !hasSatisfiedClaimedArtifacts else { return currentResponse }
+        guard !isLikelyContinuationOrRecoverySummary(currentContent) else { return currentResponse }
+
+        let followupMessages = try await ToolLoopUtilities.buildPlanContinuationMessages(
+            userInput: userInput,
+            conversationId: conversationId,
+            projectRoot: projectRoot,
+            historyMessages: historyCoordinator.messages,
+            currentAssistantContent: currentContent,
+            planMarkdown: planMarkdown,
+            completedCount: planProgress.completed,
+            totalCount: planProgress.total
+        )
+
+        await AIToolTraceLogger.shared.log(type: "chat.tool_loop_continuation_recovery", data: [
+            "runId": runId,
+            "planProgress": "\(planProgress.completed)/\(planProgress.total)",
+            "userInputLength": userInput.count
+        ])
+
+        let continuationTools: [AITool]
+        if requestLikelyRequiresMutation(userInput), !hasObservedSuccessfulMutation {
+            continuationTools = mutationRecoveryTools(from: availableTools)
+        } else {
+            continuationTools = availableTools
+        }
+
+        return try await aiInteractionCoordinator
+            .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                messages: followupMessages,
+                explicitContext: explicitContext,
+                tools: continuationTools,
+                mode: mode,
+                projectRoot: projectRoot,
+                runId: runId,
+                stage: AIRequestStage.tool_loop,
+                conversationId: conversationId
+            ))
+            .get()
+    }
+
+    private func requestExecutionRecoveryIfPlanStillIncomplete(
+        currentResponse: AIServiceResponse,
+        explicitContext: String?,
+        mode: AIMode,
+        projectRoot: URL,
+        conversationId: String,
+        availableTools: [AITool],
+        runId: String,
+        userInput: String,
+        hasObservedSuccessfulMutation: Bool
+    ) async throws -> AIServiceResponse {
+        guard mode == .agent else { return currentResponse }
+        guard currentResponse.toolCalls?.isEmpty ?? true else { return currentResponse }
+        guard !availableTools.isEmpty else { return currentResponse }
+
+        let currentContent = currentResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
+        guard planProgress.total > 0, !planProgress.isComplete else { return currentResponse }
+        guard !isLikelyContinuationOrRecoverySummary(currentContent) else { return currentResponse }
+
+        let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: currentContent)
+        let deliveryStatusLabel: String
+        switch deliveryStatus {
+        case .done:
+            deliveryStatusLabel = "done"
+        case .needsWork:
+            deliveryStatusLabel = "needs_work"
+        case .none:
+            deliveryStatusLabel = "missing"
+        }
+        let shouldRecoverExecution = deliveryStatus != .done
+            || ChatPromptBuilder.shouldForceExecutionFollowup(
+                userInput: userInput,
+                content: currentContent,
+                hasToolCalls: false
+            )
+            || ChatPromptBuilder.hasMissingClaimedFileArtifacts(
+                content: currentContent,
+                projectRoot: projectRoot
+            )
+            || (requestLikelyRequiresMutation(userInput) && !hasObservedSuccessfulMutation)
+
+        guard shouldRecoverExecution else { return currentResponse }
+
+        await AIToolTraceLogger.shared.log(type: "chat.tool_loop_post_continuation_execution_recovery", data: [
+            "runId": runId,
+            "planProgress": "\(planProgress.completed)/\(planProgress.total)",
+            "deliveryStatus": deliveryStatusLabel,
+            "contentLength": currentContent.count
+        ])
+
+        let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
+            userInput: userInput,
+            conversationId: conversationId,
+            projectRoot: projectRoot,
+            historyMessages: historyCoordinator.messages
+        )
+
+        let recoveryTools: [AITool]
+        if requestLikelyRequiresMutation(userInput), !hasObservedSuccessfulMutation {
+            recoveryTools = mutationRecoveryTools(from: availableTools)
+        } else {
+            recoveryTools = availableTools
+        }
+
+        return try await aiInteractionCoordinator
+            .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                messages: focusedMessages,
+                explicitContext: explicitContext,
+                tools: recoveryTools,
+                mode: mode,
+                projectRoot: projectRoot,
+                runId: runId,
+                stage: AIRequestStage.tool_loop,
+                conversationId: conversationId
+            ))
+            .get()
+    }
+
+    private func shouldResumeRecoveredExecution(from response: AIServiceResponse) -> Bool {
+        guard let toolCalls = response.toolCalls, !toolCalls.isEmpty else {
+            return false
+        }
+
+        return toolCalls.contains { !readOnlyLoopToolNames.contains($0.name) }
+    }
+
+    private func shouldEscalateRecoveredReadOnlyToolCalls(_ response: AIServiceResponse) -> Bool {
+        guard let toolCalls = response.toolCalls, !toolCalls.isEmpty else {
+            return false
+        }
+
+        return toolCalls.allSatisfy { readOnlyLoopToolNames.contains($0.name) }
+    }
+
+    private func requestLikelyRequiresMutation(_ userInput: String) -> Bool {
+        let normalized = userInput.lowercased()
+        let mutationSignals = [
+            "create ",
+            "write ",
+            "edit ",
+            "modify ",
+            "update ",
+            "refactor ",
+            "migrate ",
+            "add ",
+            "delete ",
+            "remove ",
+            "rename ",
+            "implement "
+        ]
+        return mutationSignals.contains { normalized.contains($0) }
+    }
+
+    private func isLikelyContinuationOrRecoverySummary(_ content: String) -> Bool {
+        let normalized = content
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        let recoverySignals = [
+            "done -> next -> path:",
+            "continue with remaining",
+            "continuing with the next",
+            "all checklist items are complete",
+            "completed all requested implementation steps"
+        ]
+        return recoverySignals.contains { normalized.contains($0) }
+    }
+
+    private func isMutationToolName(_ toolName: String) -> Bool {
+        switch toolName {
+        case "write_file", "write_files", "create_file", "delete_file", "replace_in_file":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func isDirectReadToolName(_ toolName: String) -> Bool {
+        switch toolName {
+        case "read_file", "index_read_file":
+            return true
+        default:
+            return false
+        }
     }
 }

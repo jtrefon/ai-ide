@@ -38,6 +38,35 @@ final class DiagnosticsStore: ObservableObject {
         selectedDiagnosticID = nil
     }
 
+    func replace(with newDiagnostics: [Diagnostic]) {
+        diagnostics = newDiagnostics.sorted { left, right in
+            if left.relativePath != right.relativePath { return left.relativePath < right.relativePath }
+            if left.line != right.line { return left.line < right.line }
+            return (left.column ?? 0) < (right.column ?? 0)
+        }
+        selectedDiagnosticID = diagnostics.first?.id
+    }
+
+    func upsert(_ incomingDiagnostics: [Diagnostic], replacingPath relativePath: String) {
+        var map: [String: Diagnostic] = Dictionary(uniqueKeysWithValues: diagnostics.map { ($0.id, $0) })
+
+        for existing in diagnostics where existing.relativePath == relativePath {
+            map.removeValue(forKey: existing.id)
+        }
+        for diagnostic in incomingDiagnostics {
+            map[diagnostic.id] = diagnostic
+        }
+
+        diagnostics = Array(map.values).sorted { left, right in
+            if left.relativePath != right.relativePath { return left.relativePath < right.relativePath }
+            if left.line != right.line { return left.line < right.line }
+            return (left.column ?? 0) < (right.column ?? 0)
+        }
+        if selectedDiagnosticID == nil {
+            selectedDiagnosticID = diagnostics.first?.id
+        }
+    }
+
     func selectedDiagnostic() -> Diagnostic? {
         guard let id = selectedDiagnosticID else { return diagnostics.first }
         return diagnostics.first(where: { $0.id == id }) ?? diagnostics.first

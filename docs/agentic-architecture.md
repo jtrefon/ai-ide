@@ -129,7 +129,6 @@ This spec also defines:
    - Strategic plan build (Stage: `strategic_planning`)
    - Tactical planning (Stage: `tactical_planning`)
    - Execution loop (Stage: `execution`) with tool loops
-   - Delivery gate (Stage: `delivery_gate`)
    - QA advisory review (Stage: `qa_tool_output_review`, `qa_quality_review`) (non-mutating)
 4. Final message appended
 5. Run snapshot persisted
@@ -238,7 +237,7 @@ The agent execution framework is a fixed sequence of phases. The runtime may rep
 
 - Nodes are small single-responsibility steps with:
   - `id`
-  - `kind` (reasoning, strategic_planning, tactical_planning, tool_execution, delivery_gate, qa)
+  - `kind` (reasoning, strategic_planning, tactical_planning, tool_execution, qa)
   - `input` (run state slice)
   - `output` (state patch)
 
@@ -317,19 +316,12 @@ All prompts live under `osx-ide/Prompts/` (exact structure can be adjusted):
 - `Prompts/agent/reasoning_macro.md`
 - `Prompts/agent/reasoning_micro.md`
 - `Prompts/agent/tool_loop_context.md`
-- `Prompts/agent/empty_response_recovery.md`
 - `Prompts/agent/user_input_request_block.md`
-- `Prompts/agent/delivery_gate.md`
 
-Current incremental migration (already in repo):
+ Current incremental migration (already in repo):
 
-- `Prompts/ConversationFlow/Corrections/force_tool_followup.md`
-- `Prompts/ConversationFlow/Corrections/no_user_input_next_step.md`
-- `Prompts/ConversationFlow/Corrections/empty_response_followup.md`
-- `Prompts/ConversationFlow/DeliveryGate/reasoning_format_correction.md`
-- `Prompts/ConversationFlow/DeliveryGate/low_quality_reasoning.md`
-- `Prompts/ConversationFlow/DeliveryGate/reasoning_only_no_answer.md`
-- `Prompts/ConversationFlow/DeliveryGate/enforce_delivery_completion.md`
+- `Prompts/ConversationFlow/Corrections/tool_loop_focused_execution.md`
+- controller-owned autonomous no-user-input recovery in the conversation flow handlers
 - `Prompts/ConversationFlow/QA/tool_output_review_system.md`
 - `Prompts/ConversationFlow/QA/quality_review_system.md`
 

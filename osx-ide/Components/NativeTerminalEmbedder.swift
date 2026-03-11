@@ -122,6 +122,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
 
     private func makeTerminalScrollView() -> NSScrollView {
         let scrollView = NSScrollView()
+        scrollView.setAccessibilityIdentifier(AccessibilityID.terminalTextView)
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = false
@@ -149,7 +150,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView.drawsBackground = true
         terminalView.isContinuousSpellCheckingEnabled = false
         terminalView.delegate = self
-        terminalView.setAccessibilityIdentifier("TerminalTextView")
+        terminalView.setAccessibilityIdentifier(AccessibilityID.terminalTextView)
         return terminalView
     }
 

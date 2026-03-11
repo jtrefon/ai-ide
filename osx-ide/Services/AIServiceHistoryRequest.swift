@@ -6,15 +6,54 @@ public enum AIRequestStage: String, Codable, Sendable {
     case strategic_planning
     case tactical_planning
     case tool_loop
-    case delivery_gate
     case final_response
     case qa_tool_output_review
     case qa_quality_review
     case other
+
+    var reasoningPromptKey: String {
+        switch self {
+        case .tool_loop:
+            return "ConversationFlow/Corrections/reasoning_optional_tool_loop"
+        default:
+            return "ConversationFlow/Corrections/reasoning_optional_general"
+        }
+    }
+
+    static func reasoningPromptKey(for stage: AIRequestStage?) -> String {
+        stage?.reasoningPromptKey ?? AIRequestStage.other.reasoningPromptKey
+    }
+
+    static func reasoningPromptKeyIfNeeded(
+        reasoningMode: ReasoningMode,
+        mode: AIMode?,
+        stage: AIRequestStage?
+    ) -> String? {
+        guard reasoningMode.includesAgentReasoning, mode == .agent else { return nil }
+        let _ = stage
+        return nil
+    }
+
+    static func reasoningPromptIfNeeded(
+        reasoningMode: ReasoningMode,
+        mode: AIMode?,
+        stage: AIRequestStage?,
+        projectRoot: URL?
+    ) throws -> String? {
+        guard let promptKey = reasoningPromptKeyIfNeeded(
+            reasoningMode: reasoningMode,
+            mode: mode,
+            stage: stage
+        ) else {
+            return nil
+        }
+        return try PromptRepository.shared.prompt(key: promptKey, projectRoot: projectRoot)
+    }
 }
 
 public struct AIServiceHistoryRequest: Sendable {
     public let messages: [ChatMessage]
+    public let mediaAttachments: [ChatMessageMediaAttachment]
     public let context: String?
     public let tools: [AITool]?
     public let mode: AIMode?
@@ -25,6 +64,7 @@ public struct AIServiceHistoryRequest: Sendable {
 
     public init(
         messages: [ChatMessage],
+        mediaAttachments: [ChatMessageMediaAttachment] = [],
         context: String?,
         tools: [AITool]?,
         mode: AIMode?,
@@ -34,6 +74,7 @@ public struct AIServiceHistoryRequest: Sendable {
         conversationId: String? = nil
     ) {
         self.messages = messages
+        self.mediaAttachments = mediaAttachments
         self.context = context
         self.tools = tools
         self.mode = mode

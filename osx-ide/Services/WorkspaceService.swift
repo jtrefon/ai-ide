@@ -26,7 +26,7 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
             fileSystemService: fileSystemService,
             eventBus: eventBus
         )
-        self.settingsStore = SettingsStore(userDefaults: .standard)
+        self.settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
         self.currentDirectory = Self.restoreCurrentDirectoryFromUserDefaults(settingsStore: settingsStore)
     }
 

@@ -9,6 +9,32 @@ protocol ConversationPolicyProtocol {
 }
 
 final class ConversationPolicy: ConversationPolicyProtocol {
+    private let readOnlyToolNames: Set<String> = [
+        "index_find_files",
+        "index_list_files",
+        "index_search_text",
+        "index_read_file",
+        "index_search_symbols",
+        "read_file",
+        "list_files",
+        "conversation_fold"
+    ]
+    private let toolLoopExecutionToolNames: Set<String> = [
+        "index_find_files",
+        "index_list_files",
+        "index_search_text",
+        "index_read_file",
+        "index_search_symbols",
+        "read_file",
+        "list_files",
+        "write_file",
+        "write_files",
+        "create_file",
+        "delete_file",
+        "replace_in_file",
+        "run_command"
+    ]
+
     func allowedTools(
         for stage: AIRequestStage?,
         mode: AIMode,
@@ -26,39 +52,29 @@ final class ConversationPolicy: ConversationPolicyProtocol {
         switch stage {
         case .strategic_planning, .tactical_planning, .qa_tool_output_review, .qa_quality_review:
             // Read-only tools for planning and QA stages
-            let readOnlyToolNames: Set<String> = [
-                "index_find_files",
-                "index_list_files", 
-                "index_search_text",
-                "index_read_file",
-                "index_search_symbols",
-                "read_file",
-                "list_files",
-                "conversation_fold"
-            ]
-            return modeAllowedTools.filter { readOnlyToolNames.contains($0.name) }
+            return filterReadOnlyTools(from: modeAllowedTools)
             
         case .initial_response:
-            // No tools for initial response to save context
             return []
             
-        case .tool_loop, .delivery_gate, .final_response:
-            // All tools for execution stages
+        case .tool_loop:
+            return filterToolLoopExecutionTools(from: modeAllowedTools)
+
+        case .final_response:
+            // Preserve full tool visibility for final response handling.
             return modeAllowedTools
             
         case .warmup, .other:
             // Default to read-only for unknown stages
-            let readOnlyToolNames: Set<String> = [
-                "index_find_files",
-                "index_list_files",
-                "index_search_text", 
-                "index_read_file",
-                "index_search_symbols",
-                "read_file",
-                "list_files",
-                "conversation_fold"
-            ]
-            return modeAllowedTools.filter { readOnlyToolNames.contains($0.name) }
+            return filterReadOnlyTools(from: modeAllowedTools)
         }
+    }
+
+    private func filterReadOnlyTools(from tools: [AITool]) -> [AITool] {
+        tools.filter { readOnlyToolNames.contains($0.name) }
+    }
+
+    private func filterToolLoopExecutionTools(from tools: [AITool]) -> [AITool] {
+        tools.filter { toolLoopExecutionToolNames.contains($0.name) }
     }
 }

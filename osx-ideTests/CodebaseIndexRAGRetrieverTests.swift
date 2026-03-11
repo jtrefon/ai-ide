@@ -191,6 +191,7 @@ final class CodebaseIndexRAGRetrieverTests: XCTestCase {
 
 @MainActor
 private final class FakeRAGCodebaseIndex: CodebaseIndexProtocol {
+    var currentEmbeddingModelIdentifier: String = "hashing_v1"
     var stubbedSummaries: [(path: String, summary: String)] = []
     var stubbedSymbolResults: [SymbolSearchResult] = []
     var stubbedMemories: [MemoryEntry] = []

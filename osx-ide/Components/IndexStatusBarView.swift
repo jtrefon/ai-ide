@@ -177,6 +177,8 @@ struct IndexStatusBarView: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 24)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(AccessibilityID.statusBar)
         .background(Color(NSColor.windowBackgroundColor))
         .overlay(
             Rectangle()

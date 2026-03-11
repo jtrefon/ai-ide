@@ -32,7 +32,17 @@ public actor ProjectSessionStore {
     }
 
     private func sessionFileURL(projectRoot: URL) -> URL {
-        projectRoot
+        if let testProfilePath = AppRuntimeEnvironment.launchContext.testProfilePath,
+           !testProfilePath.isEmpty {
+            let sanitizedRoot = projectRoot.path
+                .replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression)
+            return URL(fileURLWithPath: testProfilePath, isDirectory: true)
+                .appendingPathComponent("project_sessions", isDirectory: true)
+                .appendingPathComponent(sanitizedRoot, isDirectory: true)
+                .appendingPathComponent("session.json")
+        }
+
+        return projectRoot
             .appendingPathComponent(".ide", isDirectory: true)
             .appendingPathComponent("session.json")
     }

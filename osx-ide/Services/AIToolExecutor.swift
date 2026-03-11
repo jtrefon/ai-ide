@@ -28,6 +28,8 @@ public final class AIToolExecutor {
     let logger: ToolExecutionLogger
     let argumentResolver: ToolArgumentResolver
     let scheduler: ToolScheduler
+    let eventBus: EventBusProtocol?
+    var preventionEngine: PreWritePreventionEngine
     
     /// Activity coordinator for power management during tool execution
     let activityCoordinator: AgentActivityCoordinating?
@@ -36,6 +38,7 @@ public final class AIToolExecutor {
         fileSystemService: FileSystemService,
         errorManager: any ErrorManagerProtocol,
         projectRoot: URL,
+        eventBus: EventBusProtocol? = nil,
         defaultFilePathProvider: (@MainActor () -> String?)? = nil,
         activityCoordinator: AgentActivityCoordinating? = nil
     ) {
@@ -47,7 +50,17 @@ public final class AIToolExecutor {
             defaultFilePathProvider: defaultFilePathProvider
         )
         self.scheduler = ToolScheduler()
+        self.eventBus = eventBus
+        self.preventionEngine = PreWritePreventionEngine(
+            fileSystemService: fileSystemService,
+            projectRoot: projectRoot
+        )
         self.activityCoordinator = activityCoordinator
+    }
+
+    func updateProjectRoot(_ newRoot: URL) {
+        argumentResolver.updateProjectRoot(newRoot)
+        preventionEngine.updateProjectRoot(newRoot)
     }
 
     // MARK: - Helper Methods (using specialized services)

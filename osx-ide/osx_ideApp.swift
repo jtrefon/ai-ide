@@ -32,14 +32,15 @@ fileprivate func earlyDiag(_ msg: String) {
 struct OSXIDEApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
+    private let launchContext: AppLaunchContext
     private let isUnitTesting: Bool
     @ObservedObject private var container: DependencyContainer
     @StateObject private var appState: AppState
     @StateObject private var errorManager: ErrorManager
-    @AppStorage(AppConstants.Storage.codebaseIndexEnabledKey) private var codebaseIndexEnabled: Bool = true
-    @AppStorage(AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey)
+    @AppStorage(AppConstants.Storage.codebaseIndexEnabledKey, store: AppRuntimeEnvironment.userDefaults)
+    private var codebaseIndexEnabled: Bool = true
+    @AppStorage(AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, store: AppRuntimeEnvironment.userDefaults)
     private var codebaseIndexAIEnrichmentEnabled: Bool = false
-    @State private var didInitializeCorePlugin: Bool = false
 
     init() {
         let _initStart = Date()
@@ -47,15 +48,16 @@ struct OSXIDEApp: App {
         
         Task { await DiagnosticsLogger.shared.logEvent(.appInitStart, name: "OSXIDEApp.init") }
         
-        let isUnitTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-            && ProcessInfo.processInfo.environment["XCUI_TESTING"] != "1"
+        let launchContext = AppRuntimeEnvironment.launchContext
+        self.launchContext = launchContext
+        let isUnitTesting = launchContext.mode == .unitTest
         self.isUnitTesting = isUnitTesting
-        earlyDiag("isUnitTesting=\(isUnitTesting)")
+        earlyDiag("launchMode=\(launchContext.mode) isUnitTesting=\(isUnitTesting)")
 
         Task { await DiagnosticsLogger.shared.logEvent(.dependencyContainerInitStart, name: "DependencyContainer") }
         earlyDiag("About to create DependencyContainer...")
         
-        let container = DependencyContainer(isTesting: isUnitTesting)
+        let container = DependencyContainer(launchContext: launchContext)
         
         earlyDiag("DependencyContainer created")
         
@@ -71,24 +73,112 @@ struct OSXIDEApp: App {
         let appSt = container.makeAppState()
         earlyDiag("AppState created")
 
-        if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1",
-           ProcessInfo.processInfo.environment["UI_TEST_SCENARIO"] == "json_highlighting" {
-            let json = """
-            {
-              "key": "value",
-              "number": 123,
-              "bool": true,
-              "nullVal": null,
-              "arr": [1, false],
-              "obj": {"nested": false}
+        if launchContext.isUITesting {
+            appSt.ui.isSidebarVisible = true
+            appSt.ui.isTerminalVisible = true
+            appSt.ui.isAIChatVisible = true
+            appSt.ui.bottomPanelSelectedName = AppConstants.UI.internalTerminalPanelName
+        }
+
+        if launchContext.isUITesting,
+           let scenario = ProcessInfo.processInfo.environment[TestLaunchKeys.uiTestScenario] {
+            switch scenario {
+            case "json_highlighting":
+                let json = """
+                {
+                  "key": "value",
+                  "number": 123,
+                  "bool": true,
+                  "nullVal": null,
+                  "arr": [1, false],
+                  "obj": {"nested": false}
+                }
+                """
+                appSt.fileEditor.primaryPane.editorContent = json
+                appSt.fileEditor.primaryPane.editorLanguage = "json"
+            case "typescript_highlighting":
+                let typescript = """
+                interface User {
+                  id: number
+                  name: string
+                }
+
+                const getUser = async (id: number): Promise<User> => {
+                  // load user
+                  const response = await fetch(`/users/${id}`)
+                  return response.json() as Promise<User>
+                }
+                """
+                appSt.fileEditor.primaryPane.editorContent = typescript
+                appSt.fileEditor.primaryPane.editorLanguage = "typescript"
+            case "typescript_realworld_highlighting":
+                let typescript = """
+                import React, { useState } from 'react'
+
+                interface PasswordRecoveryProps {
+                  onBackToLogin: () => void
+                  onPasswordRecovery?: (email: string) => void
+                }
+
+                const PasswordRecovery: React.FC<PasswordRecoveryProps> = ({
+                  onBackToLogin,
+                  onPasswordRecovery
+                }) => {
+                  const [email, setEmail] = useState('')
+                  const [emailError, setEmailError] = useState('')
+                  const [isSubmitting, setIsSubmitting] = useState(false)
+
+                  // Simulate API call
+                  const validateForm = () => {
+                    if (!email) {
+                      setEmailError('Email is required')
+                      return false
+                    }
+                    return true
+                  }
+                }
+                """
+                appSt.fileEditor.primaryPane.editorContent = typescript
+                appSt.fileEditor.primaryPane.editorLanguage = "typescript"
+            case "tsx_realworld_highlighting":
+                let tsx = """
+                import React from 'react'
+
+                interface PasswordRecoveryProps {
+                  onBackToLogin: () => void
+                  onPasswordRecovery: (email: string) => void
+                }
+
+                export const PasswordRecovery: React.FC<PasswordRecoveryProps> = ({
+                  onBackToLogin,
+                  onPasswordRecovery
+                }) => {
+                  const handlePasswordRecovery = (email: string) => {
+                    // In a real app, this would call the password recovery API
+                    console.log('Password recovery requested for:', email)
+                  }
+
+                  return (
+                    <div className="app-shell">
+                      <PasswordRecoveryForm
+                        onBackToLogin={onBackToLogin}
+                        onPasswordRecovery={handlePasswordRecovery}
+                      />
+                    </div>
+                  )
+                }
+                """
+                appSt.fileEditor.primaryPane.editorContent = tsx
+                appSt.fileEditor.primaryPane.editorLanguage = "tsx"
+            default:
+                break
             }
-            """
-            appSt.fileEditor.primaryPane.editorContent = json
-            appSt.fileEditor.primaryPane.editorLanguage = "json"
         }
 
         self._errorManager = StateObject(wrappedValue: errorMgr)
         self._appState = StateObject(wrappedValue: appSt)
+        AppDelegate.sharedAppState = appSt
+        AppDelegate.sharedErrorManager = errorMgr
         
         earlyDiag("OSXIDEApp.init END")
         
@@ -100,51 +190,16 @@ struct OSXIDEApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
-            if isUnitTesting {
+        Window("osx-ide", id: "main") {
+            if launchContext.mode == .unitTest {
                 Color.clear.frame(width: 0, height: 0)
             } else {
-                ZStack {
-                    ContentView(appState: appState)
-                        .environmentObject(errorManager)
-                        .onAppear {
-                            NSApp.activate(ignoringOtherApps: true)
-                        }
-                        .task {
-                            if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
-                                return
-                            }
-                            if didInitializeCorePlugin {
-                                return
-                            }
-
-                            CorePlugin.initialize(registry: appState.uiRegistry, context: appState)
-                            didInitializeCorePlugin = true
-                        }
-                        .alert(localized("alert.error.title"), isPresented: $errorManager.showErrorAlert) {
-                            Button(localized("common.ok")) {
-                                errorManager.dismissError()
-                            }
-                        } message: {
-                            if let error = errorManager.currentError {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(error.localizedDescription)
-                                        .font(.headline)
-
-                                    if let suggestion = error.recoverySuggestion {
-                                        Text(String(format: localized("alert.suggestion_format"), suggestion))
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                    
-                    // Loading overlay while services initialize
-                    if !container.isInitialized {
-                        LoadingOverlayView(status: container.initializationStatus)
-                    }
-                }
+                AppRootView(
+                    appState: appState,
+                    errorManager: errorManager,
+                    isContainerInitialized: container.isInitialized,
+                    initializationStatus: container.initializationStatus
+                )
             }
         }
         .windowToolbarStyle(.unifiedCompact)
@@ -442,6 +497,88 @@ struct OSXIDEApp: App {
     }
 }
 
+private struct AppRootView: View {
+    @ObservedObject var appState: AppState
+    @ObservedObject var errorManager: ErrorManager
+    @ObservedObject private var editorHighlightDiagnostics = EditorHighlightDiagnosticsStore.shared
+    let isContainerInitialized: Bool
+    let initializationStatus: String
+    @State private var didInitializeCorePlugin: Bool = false
+
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
+
+    var body: some View {
+        ZStack {
+            ContentView(appState: appState)
+                .environmentObject(errorManager)
+                .onAppear {
+                    if AppRuntimeEnvironment.launchContext.isUITesting {
+                        appState.ui.isSidebarVisible = true
+                        appState.ui.isTerminalVisible = true
+                        appState.ui.isAIChatVisible = true
+                        appState.ui.bottomPanelSelectedName = AppConstants.UI.internalTerminalPanelName
+                    }
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                .task {
+                    if AppRuntimeEnvironment.launchContext.isUITesting {
+                        appState.ui.isSidebarVisible = true
+                        appState.ui.isTerminalVisible = true
+                        appState.ui.isAIChatVisible = true
+                        appState.ui.bottomPanelSelectedName = AppConstants.UI.internalTerminalPanelName
+                    }
+                    UICompositionRoot.compose(
+                        appState: appState,
+                        didInitializeCorePlugin: &didInitializeCorePlugin
+                    )
+                }
+                .alert(localized("alert.error.title"), isPresented: $errorManager.showErrorAlert) {
+                    Button(localized("common.ok")) {
+                        errorManager.dismissError()
+                    }
+                } message: {
+                    if let error = errorManager.currentError {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(error.localizedDescription)
+                                .font(.headline)
+
+                            if let suggestion = error.recoverySuggestion {
+                                Text(String(format: localized("alert.suggestion_format"), suggestion))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+
+            Text(appState.isUIReady ? "ready" : "not_ready")
+                .font(.caption2)
+                .opacity(0.01)
+                .accessibilityIdentifier(AccessibilityID.appReadyMarker)
+                .accessibilityValue(appState.isUIReady ? "ready" : "not_ready")
+                .allowsHitTesting(false)
+
+            if AppRuntimeEnvironment.launchContext.isUITesting {
+                let diagnosticsText = editorHighlightDiagnostics.diagnostics.isEmpty
+                    ? "pending"
+                    : editorHighlightDiagnostics.diagnostics
+                Text(diagnosticsText)
+                    .font(.caption2)
+                    .opacity(0.01)
+                    .accessibilityIdentifier(AccessibilityID.editorHighlightDiagnostics)
+                    .accessibilityValue(diagnosticsText)
+                    .allowsHitTesting(false)
+            }
+
+            if !isContainerInitialized {
+                LoadingOverlayView(status: initializationStatus)
+            }
+        }
+    }
+}
+
 /// Loading overlay shown while services initialize
 private struct LoadingOverlayView: View {
     let status: String
@@ -466,14 +603,63 @@ private struct LoadingOverlayView: View {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        let isUnitTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-            && ProcessInfo.processInfo.environment["XCUI_TESTING"] != "1"
-        guard isUnitTesting else { return }
+    nonisolated(unsafe) static weak var sharedAppState: AppState?
+    nonisolated(unsafe) static weak var sharedErrorManager: ErrorManager?
+    nonisolated(unsafe) static var uiTestFallbackWindow: NSWindow?
 
-        NSApp.setActivationPolicy(.accessory)
-        DispatchQueue.main.async {
-            NSApp.windows.forEach { $0.orderOut(nil) }
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let launchMode = AppRuntimeEnvironment.launchContext.mode
+        earlyDiag("AppDelegate.applicationDidFinishLaunching launchMode=\(launchMode)")
+        let isUnitTesting = launchMode == .unitTest
+        if isUnitTesting {
+            NSApp.setActivationPolicy(.accessory)
+            earlyDiag("AppDelegate configured accessory activation policy for unit-test mode")
+            return
         }
+
+        guard launchMode == .uiTest else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            earlyDiag("uiTest activationPolicy(before)=\(NSApp.activationPolicy().rawValue)")
+            _ = NSApp.setActivationPolicy(.regular)
+            earlyDiag("uiTest activationPolicy(after)=\(NSApp.activationPolicy().rawValue)")
+            NSApp.activate(ignoringOtherApps: true)
+            earlyDiag("uiTest window bootstrap count=\(NSApp.windows.count)")
+            guard NSApp.windows.isEmpty else { return }
+
+            guard let appState = Self.sharedAppState, let errorManager = Self.sharedErrorManager else {
+                earlyDiag("uiTest fallback window skipped: missing shared app state")
+                return
+            }
+
+            let rootView = AppRootView(
+                appState: appState,
+                errorManager: errorManager,
+                isContainerInitialized: true,
+                initializationStatus: ""
+            )
+            let hosting = NSHostingController(rootView: rootView)
+            let window = NSWindow(contentViewController: hosting)
+            window.styleMask.insert(.resizable)
+            window.title = "osx-ide"
+            if let screen = NSScreen.main {
+                let visible = screen.visibleFrame
+                window.minSize = UILayoutNormalizer.normalizedMinWindowSize(screenVisibleFrame: visible)
+                let defaultFrame = UILayoutNormalizer.normalizedDefaultWindowFrame(screenVisibleFrame: visible)
+                window.setFrame(defaultFrame, display: true)
+            } else {
+                window.minSize = NSSize(width: 700, height: 480)
+                window.setContentSize(NSSize(width: 1280, height: 800))
+                window.center()
+            }
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            Self.uiTestFallbackWindow = window
+            earlyDiag("uiTest fallback window created. windows=\(NSApp.windows.count)")
+        }
+    }
+
+    @MainActor
+    func applicationWillTerminate(_ notification: Notification) {
+        Self.sharedAppState?.persistSessionNow()
     }
 }

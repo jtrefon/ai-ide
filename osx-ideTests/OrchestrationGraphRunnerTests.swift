@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 
 @testable import osx_ide
 
@@ -42,6 +43,7 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
                 request: state.request,
                 response: state.response,
                 lastToolResults: state.lastToolResults,
+                branchExecution: state.branchExecution,
                 transition: nextId.map { .next($0) } ?? .end
             )
         }
@@ -91,6 +93,113 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         }
     }
 
+    func testBranchReviewNodeAdvancesThroughRemainingBranchesThenFinishes() async throws {
+        let branchExecution = OrchestrationState.BranchExecution(
+            plan: "1. [ ] First\n2. [ ] Second",
+            globalInvariants: ["Keep edits focused"],
+            branches: [
+                .init(id: "branch_1", title: "First", checklistItems: ["Inspect files"]),
+                .init(id: "branch_2", title: "Second", checklistItems: ["Verify output"])
+            ],
+            activeBranchIndex: 0
+        )
+
+        let graph = OrchestrationGraph(
+            entryNodeId: "branch_review",
+            nodes: [
+                BranchReviewNode(executionNodeId: "execute", finalNodeId: "final"),
+                BranchStatePreservingNode(id: "execute", nextId: "branch_review"),
+                BranchStatePreservingNode(id: "final", nextId: nil)
+            ]
+        )
+
+        let runner = OrchestrationGraphRunner(graph: graph, maxTransitions: 10)
+        let finalState = try await runner.run(initialState: OrchestrationState(
+            request: makeSendRequest(),
+            response: AIServiceResponse(content: "Done", toolCalls: nil),
+            lastToolResults: [],
+            branchExecution: branchExecution,
+            transition: .next("branch_review")
+        ))
+
+        XCTAssertEqual(finalState.branchExecution?.activeBranchIndex, 1)
+        XCTAssertEqual(finalState.transition.nextNodeId, nil)
+    }
+
+    func testBranchReviewNodeResumesExecutionForLastBranchWhenPlanRemainsIncomplete() async throws {
+        let request = makeSendRequest(mode: .agent)
+        let branchExecution = OrchestrationState.BranchExecution(
+            plan: "1. [x] First\n2. [ ] Second",
+            globalInvariants: ["Keep edits focused"],
+            branches: [
+                .init(id: "branch_1", title: "First", checklistItems: ["Inspect files"]),
+                .init(id: "branch_2", title: "Second", checklistItems: ["Verify output"])
+            ],
+            activeBranchIndex: 1
+        )
+
+        await ConversationPlanStore.shared.setProjectRoot(request.projectRoot)
+        await ConversationPlanStore.shared.set(
+            conversationId: request.conversationId,
+            plan: """
+            # Implementation Plan
+
+            - [x] First
+            - [ ] Second
+            """
+        )
+
+        let node = BranchReviewNode(executionNodeId: "execute", finalNodeId: "final")
+        let nextState = try await node.run(state: OrchestrationState(
+            request: request,
+            response: AIServiceResponse(
+                content: "Reflection: Remaining work\nPlanning: Continue\nContinuity: NEEDS_WORK\n\nDone -> Next -> Path: Continue with remaining implementation.",
+                toolCalls: nil
+            ),
+            lastToolResults: [],
+            branchExecution: branchExecution,
+            transition: .next("branch_review")
+        ))
+
+        XCTAssertEqual(nextState.transition.nextNodeId, "execute")
+        XCTAssertEqual(nextState.branchExecution?.activeBranchIndex, 1)
+
+        await ConversationPlanStore.shared.set(conversationId: request.conversationId, plan: "")
+    }
+
+    func testConversationFlowGraphStartsAtDispatcherForSimpleAgentRequest() {
+        let graph = ConversationFlowGraphFactory.makeGraph(
+            request: makeSendRequest(mode: .agent),
+            historyCoordinator: makeHistoryCoordinator(),
+            aiInteractionCoordinator: makeAIInteractionCoordinator(),
+            initialResponseHandler: makeInitialResponseHandler(),
+            toolLoopHandler: makeToolLoopHandler(),
+            finalResponseHandler: makeFinalResponseHandler(),
+            qaReviewHandler: makeQAReviewHandler(),
+            qaReviewEnabled: false
+        )
+
+        XCTAssertEqual(graph.entryNodeId, DispatcherNode.idValue)
+    }
+
+    func testConversationFlowGraphStartsAtDispatcherForComplexAgentRequest() {
+        let graph = ConversationFlowGraphFactory.makeGraph(
+            request: makeSendRequest(
+                mode: .agent,
+                userInput: "re-architect the agent execution flow across multiple files and then migrate the old framework step by step"
+            ),
+            historyCoordinator: makeHistoryCoordinator(),
+            aiInteractionCoordinator: makeAIInteractionCoordinator(),
+            initialResponseHandler: makeInitialResponseHandler(),
+            toolLoopHandler: makeToolLoopHandler(),
+            finalResponseHandler: makeFinalResponseHandler(),
+            qaReviewHandler: makeQAReviewHandler(),
+            qaReviewEnabled: false
+        )
+
+        XCTAssertEqual(graph.entryNodeId, DispatcherNode.idValue)
+    }
+
     @MainActor
     private struct LoopNode: OrchestrationNode {
         let id: String
@@ -100,19 +209,36 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
                 request: state.request,
                 response: state.response,
                 lastToolResults: state.lastToolResults,
+                branchExecution: state.branchExecution,
                 transition: .next(id)
             )
         }
     }
 
-    private func makeSendRequest() -> SendRequest {
+    @MainActor
+    private struct BranchStatePreservingNode: OrchestrationNode {
+        let id: String
+        let nextId: String?
+
+        func run(state: OrchestrationState) async throws -> OrchestrationState {
+            OrchestrationState(
+                request: state.request,
+                response: state.response,
+                lastToolResults: state.lastToolResults,
+                branchExecution: state.branchExecution,
+                transition: nextId.map { .next($0) } ?? .end
+            )
+        }
+    }
+
+    private func makeSendRequest(mode: AIMode = .chat, userInput: String = "Hello") -> SendRequest {
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
 
         return SendRequest(
-            userInput: "Hello",
+            userInput: userInput,
             explicitContext: nil,
-            mode: .chat,
+            mode: mode,
             projectRoot: projectRoot,
             conversationId: UUID().uuidString,
             runId: UUID().uuidString,
@@ -121,5 +247,97 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
             qaReviewEnabled: false,
             draftAssistantMessageId: nil
         )
+    }
+
+    private func makeHistoryCoordinator() -> ChatHistoryCoordinator {
+        ChatHistoryCoordinator(
+            historyManager: ChatHistoryManager(),
+            projectRoot: FileManager.default.temporaryDirectory
+        )
+    }
+
+    private func makeAIInteractionCoordinator() -> AIInteractionCoordinator {
+        AIInteractionCoordinator(aiService: StubAIService(), codebaseIndex: nil, eventBus: MockEventBus())
+    }
+
+    private func makeInitialResponseHandler() -> InitialResponseHandler {
+        InitialResponseHandler(
+            aiInteractionCoordinator: makeAIInteractionCoordinator(),
+            historyCoordinator: makeHistoryCoordinator()
+        )
+    }
+
+    private func makeToolLoopHandler() -> ToolLoopHandler {
+        ToolLoopHandler(
+            historyCoordinator: makeHistoryCoordinator(),
+            aiInteractionCoordinator: makeAIInteractionCoordinator(),
+            toolExecutionCoordinator: ToolExecutionCoordinator(
+                toolExecutor: AIToolExecutor(
+                    fileSystemService: FileSystemService(),
+                    errorManager: AIToolExecutorNoopErrorManager(),
+                    projectRoot: FileManager.default.temporaryDirectory
+                )
+            )
+        )
+    }
+
+    private func makeFinalResponseHandler() -> FinalResponseHandler {
+        FinalResponseHandler(
+            historyCoordinator: makeHistoryCoordinator(),
+            aiInteractionCoordinator: makeAIInteractionCoordinator()
+        )
+    }
+
+    private func makeQAReviewHandler() -> QAReviewHandler {
+        QAReviewHandler(
+            historyCoordinator: makeHistoryCoordinator(),
+            aiInteractionCoordinator: makeAIInteractionCoordinator()
+        )
+    }
+
+    private struct StubAIService: AIService {
+        func sendMessage(_ request: AIServiceMessageWithProjectRootRequest) async throws -> AIServiceResponse {
+            _ = request
+            return AIServiceResponse(content: "ok", toolCalls: nil)
+        }
+
+        func sendMessage(_ request: AIServiceHistoryRequest) async throws -> AIServiceResponse {
+            _ = request
+            return AIServiceResponse(content: "ok", toolCalls: nil)
+        }
+
+        func explainCode(_ code: String) async throws -> String {
+            _ = code
+            return "ok"
+        }
+
+        func refactorCode(_ code: String, instructions: String) async throws -> String {
+            _ = code
+            _ = instructions
+            return "ok"
+        }
+
+        func generateCode(_ prompt: String) async throws -> String {
+            _ = prompt
+            return "ok"
+        }
+
+        func fixCode(_ code: String, error: String) async throws -> String {
+            _ = code
+            _ = error
+            return "ok"
+        }
+    }
+
+    private final class MockEventBus: EventBusProtocol {
+        func publish<E: Event>(_ event: E) {
+            _ = event
+        }
+
+        func subscribe<E: Event>(to eventType: E.Type, handler: @escaping (E) -> Void) -> AnyCancellable {
+            _ = eventType
+            _ = handler
+            return AnyCancellable {}
+        }
     }
 }

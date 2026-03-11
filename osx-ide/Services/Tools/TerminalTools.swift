@@ -132,8 +132,9 @@ struct RunCommandTool: AIToolProgressReporting {
                 timeoutSeconds: timeoutSeconds,
                 isCancelled: isCancelled
             )
+            let commandCompleted = didExitBeforeTimeout || !process.isRunning
 
-            if isCancelled.get() || !didExitBeforeTimeout {
+            if isCancelled.get() || !commandCompleted {
                 await AIToolTraceLogger.shared.log(
                     type: isCancelled.get()
                         ? "terminal.run_command_cancelled"
@@ -153,7 +154,7 @@ struct RunCommandTool: AIToolProgressReporting {
             await AIToolTraceLogger.shared.log(type: "terminal.run_command_result", data: [
                 "exitCode": Int(process.terminationStatus),
                 "outputLength": output.count,
-                "timedOut": !didExitBeforeTimeout,
+                "timedOut": !commandCompleted,
                 "cancelled": isCancelled.get()
             ])
 
@@ -166,7 +167,7 @@ struct RunCommandTool: AIToolProgressReporting {
 
             return """
             Exit Code: \(process.terminationStatus)
-            Timed Out: \(!didExitBeforeTimeout)
+            Timed Out: \(!commandCompleted)
             Output:
             \(output)
             """
@@ -194,7 +195,7 @@ struct RunCommandTool: AIToolProgressReporting {
     }
 
     private func resolveTimeoutSeconds(arguments: [String: Any]) throws -> Double {
-        let timeoutSecondsRaw = arguments["timeout_seconds"] as? Double
+        let timeoutSecondsRaw = parseTimeoutSeconds(arguments["timeout_seconds"])
         let timeoutSeconds: Double = {
             if let timeoutSecondsRaw {
                 return timeoutSecondsRaw
@@ -209,6 +210,25 @@ struct RunCommandTool: AIToolProgressReporting {
             )
         }
         return timeoutSeconds
+    }
+
+    private func parseTimeoutSeconds(_ value: Any?) -> Double? {
+        switch value {
+        case let number as Double:
+            return number
+        case let number as Int:
+            return Double(number)
+        case let number as Int32:
+            return Double(number)
+        case let number as Int64:
+            return Double(number)
+        case let number as NSNumber:
+            return number.doubleValue
+        case let string as String:
+            return Double(string)
+        default:
+            return nil
+        }
     }
 
     private func resolveWorkingDirectory(arguments: [String: Any]) throws -> URL {
@@ -234,11 +254,12 @@ struct RunCommandTool: AIToolProgressReporting {
             let data = handle.availableData
             guard !data.isEmpty else { return }
             request.collector.append(data)
-            if let onProgress = request.onProgress,
-               let chunk = String(data: data, encoding: .utf8),
-               !chunk.isEmpty {
-                onProgress(chunk)
+            guard let onProgress = request.onProgress,
+                  let chunk = String(data: data, encoding: .utf8),
+                  !chunk.isEmpty else {
+                return
             }
+            onProgress(chunk)
         }
 
         return (process, pipe)
@@ -251,32 +272,9 @@ struct RunCommandTool: AIToolProgressReporting {
     ) async -> Bool {
         await withTaskGroup(of: Bool.self) { group in
             group.addTask {
-                final class OneShot: @unchecked Sendable {
-                    private let lock = NSLock()
-                    private var fired = false
-
-                    func fire(_ action: () -> Void) {
-                        lock.lock()
-                        defer { lock.unlock() }
-                        guard !fired else { return }
-                        fired = true
-                        action()
-                    }
-                }
-
-                let oneShot = OneShot()
-                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                    if !process.isRunning {
-                        continuation.resume()
-                        return
-                    }
-
-                    process.terminationHandler = { _ in
-                        oneShot.fire {
-                            continuation.resume()
-                        }
-                    }
-                }
+                await Task.detached(priority: .userInitiated) {
+                    process.waitUntilExit()
+                }.value
                 return true
             }
             group.addTask {
@@ -310,8 +308,6 @@ struct RunCommandTool: AIToolProgressReporting {
 
     private func finalizeOutput(pipe: Pipe, collector: OutputCollector) -> String {
         pipe.fileHandleForReading.readabilityHandler = nil
-        let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
-        collector.append(remaining)
         return String(data: collector.snapshot(), encoding: .utf8) ?? ""
     }
 

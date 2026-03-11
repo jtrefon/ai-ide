@@ -8,7 +8,6 @@ struct AIChatPanel: View {
     let conversationManager: any ConversationManagerProtocol
     @ObservedObject var ui: UIStateManager
     @State private var renderRefreshToken: UInt = 0
-    @State private var isModelPreviewExpanded: Bool = true
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
@@ -16,105 +15,78 @@ struct AIChatPanel: View {
 
     var body: some View {
         let _ = renderRefreshToken
+        let displayedTabs = conversationManager.conversationTabs.isEmpty
+            ? [ConversationTabItem(id: conversationManager.currentConversationId, title: "Chat 1")]
+            : conversationManager.conversationTabs
 
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Text(localized("ai_chat.title"))
-                    .font(.headline)
-                    .padding(.horizontal)
-                Spacer()
-                if let selected = currentSelection, !selected.isEmpty {
-                    Text(String(
-                        format: localized("ai_chat.context_format"),
-                        "\(selected.prefix(30))\(selected.count > 30 ? "..." : "")"
-                    ))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal)
+            // Tabs header
+            HStack(spacing: 8) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(displayedTabs) { tab in
+                            HStack(spacing: 6) {
+                                Button {
+                                    conversationManager.switchConversation(to: tab.id)
+                                } label: {
+                                    Text(tab.title)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(tab.id == conversationManager.currentConversationId ? .white : .primary)
+                                        .lineLimit(1)
+                                }
+                                .buttonStyle(.plain)
+
+                                if displayedTabs.count > 1 {
+                                    Button {
+                                        conversationManager.closeConversation(id: tab.id)
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 9, weight: .semibold))
+                                            .foregroundColor(tab.id == conversationManager.currentConversationId ? .white.opacity(0.85) : .secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("ConversationTabCloseButton_\(tab.id)")
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .fill(tab.id == conversationManager.currentConversationId ? Color.accentColor : Color(NSColor.controlBackgroundColor))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .stroke(Color(NSColor.separatorColor).opacity(0.35), lineWidth: 1)
+                            )
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("ConversationTab_\(tab.id)")
+                        }
+                    }
+                    .padding(.leading, 8)
+                    .padding(.vertical, 4)
                 }
+
                 Button(action: {
                     conversationManager.startNewConversation()
                 }) {
                     Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 22, height: 22)
                 }
-                .buttonStyle(BorderlessButtonStyle())
+                .buttonStyle(.plain)
                 .help(localized("ai_chat.new_conversation_help"))
-                .accessibilityIdentifier("AIChatNewConversationButton")
-                .padding(.horizontal)
+                .accessibilityLabel(localized("ai_chat.new_conversation_help"))
+                .accessibilityIdentifier(AccessibilityID.aiChatNewConversationButton)
+                .padding(.trailing, 8)
             }
-            .frame(height: 30)
+            .frame(height: 34)
             .background(Color(NSColor.windowBackgroundColor))
-
-            ConversationPlanProgressView(
-                messages: conversationManager.messages,
-                isSending: conversationManager.isSending,
-                onStopGenerating: {
-                    conversationManager.stopGeneration()
-                },
-                fontSize: ui.fontSize
+            .overlay(
+                Rectangle()
+                    .frame(height: 1)
+                    .foregroundColor(Color.gray.opacity(0.18)),
+                alignment: .bottom
             )
-
-            if conversationManager.isLiveModelOutputPreviewVisible {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "waveform.and.magnifyingglass")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("Model Output Preview")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
-
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                isModelPreviewExpanded.toggle()
-                            }
-                        } label: {
-                            Image(systemName: isModelPreviewExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if isModelPreviewExpanded {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Raw Stream")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-
-                            ScrollView {
-                                Text(conversationManager.liveModelOutputPreview.isEmpty ? "No model output yet." : conversationManager.liveModelOutputPreview)
-                                    .font(.system(size: max(ui.fontSize - 1, 10), design: .monospaced))
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .frame(maxHeight: 110)
-
-                            Text("Tool Parsing / Loop Status")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-
-                            ScrollView {
-                                Text(conversationManager.liveModelOutputStatusPreview.isEmpty
-                                     ? "No tool parsing status yet."
-                                     : conversationManager.liveModelOutputStatusPreview)
-                                    .font(.system(size: max(ui.fontSize - 2, 9), design: .monospaced))
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .frame(maxHeight: 92)
-                        }
-                        .padding(8)
-                        .background(Color(NSColor.textBackgroundColor).opacity(0.75))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 6)
-                .padding(.bottom, 2)
-            }
 
             MessageListView(
                 messages: conversationManager.messages,
@@ -125,6 +97,10 @@ struct AIChatPanel: View {
             .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             .layoutPriority(1)
             .clipped()
+
+            if let providerIssue = conversationManager.providerIssue {
+                providerIssueBanner(providerIssue)
+            }
 
             // Error display
             if let error = conversationManager.error {
@@ -173,7 +149,8 @@ struct AIChatPanel: View {
             .background(Color.gray.opacity(0.1))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityIdentifier("AIChatPanel")
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(AccessibilityID.aiChatPanel)
         .background(Color(NSColor.controlBackgroundColor))
         .onReceive(conversationManager.statePublisher) { _ in
             renderRefreshToken &+= 1
@@ -198,6 +175,73 @@ struct AIChatPanel: View {
             get: { conversationManager.currentMode },
             set: { conversationManager.currentMode = $0 }
         )
+    }
+
+    @ViewBuilder
+    private func providerIssueBanner(_ issue: ConversationProviderIssueState) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let countdownText = providerIssueCountdownText(issue, now: context.date)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: issue.cooldownUntil == nil ? "exclamationmark.triangle.fill" : "clock.badge.exclamationmark")
+                        .foregroundColor(.orange)
+                    Text(providerIssueHeadline(issue))
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.primary)
+                    Spacer(minLength: 0)
+                    if let countdownText {
+                        Text(countdownText)
+                            .font(.caption.monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Text(issue.message)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.orange.opacity(0.12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+            )
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier(AccessibilityID.aiChatProviderIssueBanner)
+        }
+    }
+
+    private func providerIssueHeadline(_ issue: ConversationProviderIssueState) -> String {
+        if let statusCode = issue.statusCode {
+            return "\(issue.providerName) \(issue.issueType) (HTTP \(statusCode))"
+        }
+
+        return "\(issue.providerName) \(issue.issueType)"
+    }
+
+    private func providerIssueCountdownText(
+        _ issue: ConversationProviderIssueState,
+        now: Date
+    ) -> String? {
+        guard let cooldownUntil = issue.cooldownUntil else {
+            return nil
+        }
+
+        let remainingSeconds = max(0, Int(ceil(cooldownUntil.timeIntervalSince(now))))
+        guard remainingSeconds > 0 else {
+            return "Retrying now"
+        }
+
+        let minutes = remainingSeconds / 60
+        let seconds = remainingSeconds % 60
+        return String(format: "Retry in %02d:%02d", minutes, seconds)
     }
 
     private func sendMessage() {

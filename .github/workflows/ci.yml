@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  build-test:
+  build:
     runs-on: macos-15
     steps:
       - name: Checkout
@@ -28,7 +28,19 @@ jobs:
           build
           CODE_SIGNING_ALLOWED=NO
 
-      - name: Test (Unit Tests Only)
+  ui-unit:
+    runs-on: macos-15
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.1.1
+        uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd
+        with:
+          xcode-version: "26.1.1"
+
+      - name: Test (UI Unit + Integration)
         run: >
           xcodebuild
           -project osx-ide.xcodeproj
@@ -37,4 +49,60 @@ jobs:
           test
           -destination 'platform=macOS'
           -only-testing:osx-ideTests
+          CODE_SIGNING_ALLOWED=NO
+
+  ui-smoke-uitest:
+    runs-on: macos-15
+    needs: ui-unit
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.1.1
+        uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd
+        with:
+          xcode-version: "26.1.1"
+
+      - name: Enforce no XCTSkip in core UI tests
+        run: |
+          if grep -R -n "XCTSkip(" osx-ideUITests; then
+            echo "XCTSkip usage is not allowed in core UI tests"
+            exit 1
+          fi
+
+      - name: Test (UI Smoke)
+        run: >
+          xcodebuild
+          -project osx-ide.xcodeproj
+          -scheme osx-ide
+          -configuration Debug
+          test
+          -destination 'platform=macOS'
+          -only-testing:osx-ideUITests/OSXIDEUITests
+          -only-testing:osx-ideUITests/TerminalEchoUITests
+          -only-testing:osx-ideUITests/SettingsGeneralUITests
+          -only-testing:osx-ideUITests/ChatPanelAlignmentUITests
+          CODE_SIGNING_ALLOWED=NO
+
+  ui-full-uitest:
+    runs-on: macos-15
+    needs: ui-smoke-uitest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.1.1
+        uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd
+        with:
+          xcode-version: "26.1.1"
+
+      - name: Test (Full UI Suite)
+        run: >
+          xcodebuild
+          -project osx-ide.xcodeproj
+          -scheme osx-ide
+          -configuration Debug
+          test
+          -destination 'platform=macOS'
+          -only-testing:osx-ideUITests
           CODE_SIGNING_ALLOWED=NO

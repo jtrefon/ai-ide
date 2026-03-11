@@ -16,6 +16,7 @@ final class ConversationManagerTests: XCTestCase {
     var mockAIService: MockAIService!
     var mockErrorManager: MockErrorManager!
     var mockActivityCoordinator: AgentActivityCoordinator!
+    var eventBus: EventBus!
     let historyKey = "AIChatHistory"
 
     override func setUp() async throws {
@@ -24,7 +25,7 @@ final class ConversationManagerTests: XCTestCase {
         mockAIService = MockAIService()
         mockErrorManager = MockErrorManager()
         mockActivityCoordinator = AgentActivityCoordinator(powerManagementService: MockPowerManagementService())
-        let eventBus = EventBus()
+        eventBus = EventBus()
         let fileSystemService = FileSystemService()
         let workspaceService = WorkspaceService(
             errorManager: mockErrorManager,
@@ -55,6 +56,7 @@ final class ConversationManagerTests: XCTestCase {
         manager = nil
         mockAIService = nil
         mockErrorManager = nil
+        eventBus = nil
         try await super.tearDown()
     }
 
@@ -134,6 +136,19 @@ final class ConversationManagerTests: XCTestCase {
 
         await fulfillment(of: [agentResponded], timeout: 5.0)
 
+        let sendingCleared = expectation(description: "Agent sending cleared")
+        Task { @MainActor in
+            let deadline = Date().addingTimeInterval(2.0)
+            while Date() < deadline {
+                if self.manager.isSending == false {
+                    sendingCleared.fulfill()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+        await fulfillment(of: [sendingCleared], timeout: 3.0)
+
         XCTAssertEqual(mockAIService.lastHistoryRequest?.mode, .agent)
         XCTAssertFalse(manager.isSending)
     }
@@ -171,12 +186,9 @@ final class ConversationManagerTests: XCTestCase {
 
     func testSplitReasoningExtractsAndStripsBlock() {
         let input = """
-        <ide_reasoning>
-        Analyze: A
-        Research: B
-        Plan: C
-        Reflect: D
-        </ide_reasoning>
+        Reflection: A
+        Planning: B
+        Continuity: D
 
         Hello world.
         """
@@ -184,8 +196,8 @@ final class ConversationManagerTests: XCTestCase {
         let result = ChatPromptBuilder.splitReasoning(from: input)
         XCTAssertEqual(result.content, "Hello world.")
         XCTAssertNotNil(result.reasoning)
-        XCTAssertTrue((result.reasoning ?? "").contains("Analyze:"))
-        XCTAssertTrue((result.reasoning ?? "").contains("Reflect:"))
+        XCTAssertTrue((result.reasoning ?? "").contains("Reflection:"))
+        XCTAssertTrue((result.reasoning ?? "").contains("Continuity:"))
     }
 
     func testClearConversationResetsInteractionState() async {
@@ -238,6 +250,167 @@ final class ConversationManagerTests: XCTestCase {
 
         XCTAssertFalse(manager.isSending)
         XCTAssertEqual(manager.liveModelOutputPreview, "Generation stopped by user.")
+    }
+
+    func testProviderIssueEventUpdatesConversationState() {
+        let cooldownUntil = Date().addingTimeInterval(45)
+
+        eventBus.publish(ProviderIssueStatusEvent(
+            providerName: "OpenRouter",
+            statusKind: .rateLimited,
+            statusCode: 429,
+            message: "Provider rate limit hit. Retrying when cooldown ends.",
+            cooldownUntil: cooldownUntil
+        ))
+
+        let expectation = expectation(description: "Provider issue propagated")
+        Task { @MainActor in
+            let deadline = Date().addingTimeInterval(1.0)
+            while Date() < deadline {
+                if self.manager.providerIssue?.providerName == "OpenRouter" {
+                    expectation.fulfill()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+        }
+
+        wait(for: [expectation], timeout: 2.0)
+
+        XCTAssertEqual(manager.providerIssue?.providerName, "OpenRouter")
+        XCTAssertEqual(manager.providerIssue?.issueType, "Rate limit")
+        XCTAssertEqual(manager.providerIssue?.statusCode, 429)
+        XCTAssertEqual(manager.providerIssue?.message, "Provider rate limit hit. Retrying when cooldown ends.")
+        XCTAssertEqual(manager.providerIssue?.cooldownUntil, cooldownUntil)
+    }
+
+    func testSendMessageClearsPreviousProviderIssueState() {
+        eventBus.publish(ProviderIssueStatusEvent(
+            providerName: "OpenRouter",
+            statusKind: .unavailable,
+            statusCode: 503,
+            message: "Provider unavailable.",
+            cooldownUntil: nil
+        ))
+
+        let publishedExpectation = expectation(description: "Provider issue published")
+        Task { @MainActor in
+            let deadline = Date().addingTimeInterval(1.0)
+            while Date() < deadline {
+                if self.manager.providerIssue != nil {
+                    publishedExpectation.fulfill()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+        }
+
+        wait(for: [publishedExpectation], timeout: 2.0)
+        XCTAssertNotNil(manager.providerIssue)
+
+        manager.currentInput = "Hello again"
+        manager.sendMessage()
+
+        XCTAssertNil(manager.providerIssue)
+    }
+
+    func testStartNewConversationCreatesNewTabAndSwitchesToIt() {
+        let initialTabCount = manager.conversationTabs.count
+        let initialConversationId = manager.currentConversationId
+
+        manager.startNewConversation()
+
+        XCTAssertEqual(manager.conversationTabs.count, initialTabCount + 1)
+        XCTAssertNotEqual(manager.currentConversationId, initialConversationId)
+        XCTAssertEqual(manager.currentConversationId, manager.conversationTabs.last?.id)
+    }
+
+    func testSwitchConversationRestoresPerTabInputStateAndCloseRemovesSession() {
+        manager.currentInput = "Session A draft"
+        let firstSessionId = manager.currentConversationId
+
+        manager.startNewConversation()
+        let secondSessionId = manager.currentConversationId
+        manager.currentInput = "Session B draft"
+
+        manager.switchConversation(to: firstSessionId)
+        XCTAssertEqual(manager.currentInput, "Session A draft")
+
+        manager.switchConversation(to: secondSessionId)
+        XCTAssertEqual(manager.currentInput, "Session B draft")
+
+        manager.closeConversation(id: secondSessionId)
+        XCTAssertEqual(manager.currentConversationId, firstSessionId)
+        XCTAssertFalse(manager.conversationTabs.contains(where: { $0.id == secondSessionId }))
+    }
+
+    func testUpdateProjectRootRebindsToolExecutionToWorkspaceRoot() async throws {
+        let bootstrapRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("osx-ide-bootstrap-\(UUID().uuidString)", isDirectory: true)
+        let workspaceRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("osx-ide-workspace-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: bootstrapRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: workspaceRoot, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: bootstrapRoot)
+            try? FileManager.default.removeItem(at: workspaceRoot)
+        }
+
+        let eventBus = EventBus()
+        let fileSystemService = FileSystemService()
+        let workspaceService = WorkspaceService(
+            errorManager: mockErrorManager,
+            eventBus: eventBus,
+            fileSystemService: fileSystemService
+        )
+        let agentManager = ConversationManager(
+            dependencies: ConversationManager.Dependencies(
+                services: ConversationManager.ServiceDependencies(
+                    aiService: mockAIService,
+                    errorManager: mockErrorManager,
+                    fileSystemService: fileSystemService,
+                    fileEditorService: nil,
+                    activityCoordinator: mockActivityCoordinator
+                ),
+                environment: ConversationManager.EnvironmentDependencies(
+                    workspaceService: workspaceService,
+                    eventBus: eventBus,
+                    projectRoot: nil,
+                    codebaseIndex: nil
+                )
+            )
+        )
+
+        agentManager.updateProjectRoot(workspaceRoot)
+        agentManager.currentMode = .agent
+        mockAIService.nextHistoryResponse = AIServiceResponse(
+            content: nil,
+            toolCalls: [AIToolCall(id: "call-root-fix", name: "write_file", arguments: [
+                "path": "created-from-agent.txt",
+                "content": "root propagation works"
+            ])]
+        )
+        agentManager.currentInput = "Create created-from-agent.txt"
+        agentManager.sendMessage()
+
+        let timeout = Date().addingTimeInterval(5)
+        while agentManager.isSending, Date() < timeout {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        XCTAssertFalse(agentManager.isSending)
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: workspaceRoot.appendingPathComponent("created-from-agent.txt").path
+            ),
+            "Expected tool execution to target the updated workspace root"
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: bootstrapRoot.appendingPathComponent("created-from-agent.txt").path
+            ),
+            "Tool execution should not continue writing into the temporary bootstrap root"
+        )
     }
 }
 

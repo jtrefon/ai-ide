@@ -37,7 +37,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
     @Published var systemPrompt: String {
         didSet { persist() }
     }
-    @Published var reasoningEnabled: Bool {
+    @Published var reasoningMode: ReasoningMode {
         didSet { persist() }
     }
     @Published var toolPromptMode: ToolPromptMode {
@@ -54,8 +54,9 @@ final class OpenRouterSettingsViewModel: ObservableObject {
     @Published private(set) var testStatus = Status(kind: .idle, message: "No test run.")
     @Published private(set) var modelValidationStatus = Status(kind: .idle, message: "Model not validated.")
 
-    private let store: OpenRouterSettingsStore
+    private let store: any OpenRouterSettingsStoring
     private let client: OpenRouterAPIClient
+    private let providerDisplayName: String
     private let appName = "OSX IDE"
     private let referer = ""
     private var hasLoadedModels = false
@@ -69,18 +70,20 @@ final class OpenRouterSettingsViewModel: ObservableObject {
     }
 
     init(
-        store: OpenRouterSettingsStore = OpenRouterSettingsStore(),
-        client: OpenRouterAPIClient = OpenRouterAPIClient()
+        store: any OpenRouterSettingsStoring = OpenRouterSettingsStore(),
+        client: OpenRouterAPIClient = OpenRouterAPIClient(),
+        providerDisplayName: String = "OpenRouter"
     ) {
         let settings = store.load(includeApiKey: false)
         self.store = store
         self.client = client
+        self.providerDisplayName = providerDisplayName
         self.apiKey = settings.apiKey
         self.baseURL = settings.baseURL
         self.selectedModel = settings.model
         self.modelQuery = settings.model
         self.systemPrompt = settings.systemPrompt
-        self.reasoningEnabled = settings.reasoningEnabled
+        self.reasoningMode = settings.reasoningMode
         self.toolPromptMode = settings.toolPromptMode
         self.ragEnabledDuringToolLoop = settings.ragEnabledDuringToolLoop
     }
@@ -140,7 +143,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             await loadModels(force: true)
         }
         if models.contains(where: { $0.id == activeModel }) {
-            modelValidationStatus = Status(kind: .success, message: "Model found in OpenRouter list.")
+            modelValidationStatus = Status(kind: .success, message: "Model found in \(providerDisplayName) list.")
         } else {
             modelValidationStatus = Status(kind: .error, message: "Model not found. Check spelling.")
         }
@@ -205,7 +208,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             model: activeModel,
             baseURL: baseURL,
             systemPrompt: systemPrompt,
-            reasoningEnabled: reasoningEnabled,
+            reasoningMode: reasoningMode,
             toolPromptMode: toolPromptMode,
             ragEnabledDuringToolLoop: ragEnabledDuringToolLoop
         )

@@ -24,7 +24,7 @@ final class WorkspaceSymbolSearchService {
 
     init(codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?) {
         self.codebaseIndexProvider = codebaseIndexProvider
-        self.settingsStore = SettingsStore(userDefaults: .standard)
+        self.settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
     }
 
     func search(_ request: SearchRequest) async -> [WorkspaceSymbolLocation] {

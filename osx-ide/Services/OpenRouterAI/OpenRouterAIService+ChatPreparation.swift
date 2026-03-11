@@ -8,15 +8,16 @@ extension OpenRouterAIService {
         let settings = loadSettingsSnapshot()
         try validateSettings(apiKey: settings.apiKey, model: settings.model)
 
-        let systemContent = buildSystemContent(
+        let systemContent = try buildSystemContent(
             input: BuildSystemContentInput(
                 systemPrompt: settings.systemPrompt,
                 hasTools: request.tools?.isEmpty == false,
                 toolPromptMode: settings.toolPromptMode,
                 mode: request.mode,
                 projectRoot: request.projectRoot,
-                reasoningEnabled: settings.reasoningEnabled,
-                stage: request.stage
+                reasoningMode: settings.reasoningMode,
+                stage: request.stage,
+                useNativeReasoning: true
             )
         )
 
@@ -34,18 +35,19 @@ extension OpenRouterAIService {
             settings: settings,
             finalMessages: finalMessages,
             toolDefinitions: toolDefinitions,
-            toolChoice: toolChoice
+            toolChoice: toolChoice,
+            nativeReasoningConfiguration: nativeReasoningConfiguration(for: settings.reasoningMode)
         )
     }
 
     internal func loadSettingsSnapshot() -> SettingsSnapshot {
-        let settings = settingsStore.load()
+        let settings = settingsStore.load(includeApiKey: true)
         return SettingsSnapshot(
             apiKey: settings.apiKey.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
             model: settings.model.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
             systemPrompt: settings.systemPrompt.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
             baseURL: settings.baseURL,
-            reasoningEnabled: settings.reasoningEnabled,
+            reasoningMode: settings.reasoningMode,
             toolPromptMode: settings.toolPromptMode
         )
     }
@@ -59,112 +61,34 @@ extension OpenRouterAIService {
         }
     }
 
-    internal func buildSystemContent(input: BuildSystemContentInput) -> String {
-        var components: [String] = []
-        components.append(
-            buildBaseSystemContent(
-                systemPrompt: input.systemPrompt,
+    internal func buildSystemContent(input: BuildSystemContentInput) throws -> String {
+        try SystemPromptAssembler().assemble(
+            input: .init(
+                systemPromptOverride: input.systemPrompt,
                 hasTools: input.hasTools,
-                toolPromptMode: input.toolPromptMode
+                toolPromptMode: input.toolPromptMode,
+                mode: input.mode,
+                projectRoot: input.projectRoot,
+                reasoningMode: input.reasoningMode,
+                stage: input.stage,
+                includeModelReasoning: !input.useNativeReasoning
             )
         )
-
-        if let modeSystemAddition = buildModeSystemAddition(mode: input.mode) {
-            components.append(modeSystemAddition)
-        }
-
-        if let projectRootContext = buildProjectRootContext(projectRoot: input.projectRoot) {
-            components.append(projectRootContext)
-        }
-
-        if let reasoningPrompt = buildReasoningPromptIfNeeded(
-            reasoningEnabled: input.reasoningEnabled,
-            mode: input.mode,
-            stage: input.stage
-        ) {
-            components.append(reasoningPrompt)
-        }
-
-        return components.joined(separator: "\n\n")
     }
 
-    internal func buildBaseSystemContent(systemPrompt: String, hasTools: Bool, toolPromptMode: ToolPromptMode) -> String {
-        if !systemPrompt.isEmpty {
-            return systemPrompt
+    internal func nativeReasoningConfiguration(
+        for reasoningMode: ReasoningMode
+    ) -> NativeReasoningConfiguration? {
+        switch reasoningMode {
+        case .none:
+            return .init(enabled: false, effort: "none", exclude: true)
+        case .model:
+            return .init(enabled: true, effort: nil, exclude: true)
+        case .agent:
+            return .init(enabled: false, effort: "none", exclude: true)
+        case .modelAndAgent:
+            return .init(enabled: true, effort: nil, exclude: true)
         }
-
-        if hasTools {
-            switch toolPromptMode {
-            case .fullStatic:
-                return ToolAwarenessPrompt.systemPrompt
-            case .concise:
-                return ToolAwarenessPrompt.structuredToolCallingSystemPrompt
-            }
-        }
-
-        return "You are a helpful, concise coding assistant."
-    }
-
-    internal func buildModeSystemAddition(mode: AIMode?) -> String? {
-        guard let mode else { return nil }
-        return mode.systemPromptAddition
-    }
-
-    internal func buildProjectRootContext(projectRoot: URL?) -> String? {
-        guard let projectRoot else { return nil }
-        return """
-
-        **IMPORTANT CONTEXT:**
-        Project Root: `\(projectRoot.path)`
-        Platform: macOS
-        All file paths must be relative to the project root or validated absolute paths within it.
-        Never use Linux-style paths like /home.
-        """
-    }
-
-    internal func buildReasoningPromptIfNeeded(reasoningEnabled: Bool, mode: AIMode?, stage: AIRequestStage?) -> String? {
-        guard let mode else { return nil }
-        if mode != .agent || !reasoningEnabled { return nil }
-
-        if stage == .tool_loop {
-            return """
-
-            ## Reasoning
-            During tool loop execution, prioritize actionable tool calls.
-            Keep reasoning brief and optional.
-            Do not output code blocks or pseudo-tool JSON when tools are available.
-            Keep user-facing updates extremely concise (1 short sentence) unless the user explicitly asks for detailed explanation.
-            """
-        }
-
-        return """
-
-        ## Reasoning
-        When responding, include a structured reasoning block enclosed in <ide_reasoning>...</ide_reasoning>.
-        This block will be shown in a separate, foldable UI panel.
-
-        Requirements:
-        - ALWAYS include all six sections in this exact order: Analyze, Research, Plan, Reflect, Action, Delivery.
-        - If a section is not applicable, write 'N/A' (do not omit the section).
-        - If no action is needed, write 'None' in Action.
-        - Delivery MUST start with either 'DONE' or 'NEEDS_WORK'. Use DONE only when the task is fully complete.
-        - Keep it concise and actionable; use short bullets or short sentences.
-        - Prefer depth over verbosity: keep reasoning information-dense and avoid repetitive prose.
-        - Do NOT include code blocks in <ide_reasoning>.
-        - Do NOT use placeholders like '...' or copy the format example text verbatim.
-        - After </ide_reasoning>, provide a condensed user-facing update (1-3 short bullets max).
-        - Expand user-facing detail only when the user explicitly asks for it.
-
-        Format example:
-        <ide_reasoning>
-        Analyze: - ... (write real bullets)
-        Research: - ... (write real bullets)
-        Plan: - ... (write real bullets)
-        Reflect: - ... (write real bullets)
-        Action: - ... (write real bullets)
-        Delivery: DONE - ... (write real bullets)
-        </ide_reasoning>
-        """
     }
 
     internal func buildFinalMessages(

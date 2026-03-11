@@ -13,7 +13,7 @@ import SwiftUI
 final class UIService: UIServiceProtocol {
     private let errorManager: ErrorManagerProtocol
     private let eventBus: EventBusProtocol
-    private let settingsStore = SettingsStore(userDefaults: .standard)
+    private let settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
 
     init(errorManager: ErrorManagerProtocol, eventBus: EventBusProtocol) {
         self.errorManager = errorManager
@@ -140,7 +140,7 @@ final class UIService: UIServiceProtocol {
         let wordWrap: Bool = false
         let minimapVisible: Bool = false
 
-        let indentationStyle = IndentationStyle.current(userDefaults: .standard)
+        let indentationStyle = IndentationStyle.current(userDefaults: AppRuntimeEnvironment.userDefaults)
 
         let storedCliTimeout = settingsStore.double(forKey: AppConstantsStorage.cliTimeoutSecondsKey)
         let cliTimeoutSeconds = storedCliTimeout == 0 ? 30 : storedCliTimeout

@@ -10,7 +10,6 @@ final class ConversationSendCoordinator {
     private let initialResponseHandler: InitialResponseHandler
     private let toolLoopHandler: ToolLoopHandler
     private let qaReviewHandler: QAReviewHandler
-    private let reasoningCorrectionsHandler: ReasoningCorrectionsHandler
     private let finalResponseHandler: FinalResponseHandler
 
     init(
@@ -33,10 +32,6 @@ final class ConversationSendCoordinator {
             toolExecutionCoordinator: toolExecutionCoordinator
         )
         self.qaReviewHandler = QAReviewHandler(
-            historyCoordinator: historyCoordinator,
-            aiInteractionCoordinator: aiInteractionCoordinator
-        )
-        self.reasoningCorrectionsHandler = ReasoningCorrectionsHandler(
             historyCoordinator: historyCoordinator,
             aiInteractionCoordinator: aiInteractionCoordinator
         )
@@ -106,13 +101,14 @@ final class ConversationSendCoordinator {
         await OrchestrationRunStore.shared.setProjectRoot(request.projectRoot)
 
         let graph = ConversationFlowGraphFactory.makeGraph(
+            request: request,
             historyCoordinator: historyCoordinator,
             aiInteractionCoordinator: aiInteractionCoordinator,
             initialResponseHandler: initialResponseHandler,
             toolLoopHandler: toolLoopHandler,
-            reasoningCorrectionsHandler: reasoningCorrectionsHandler,
             finalResponseHandler: finalResponseHandler,
-            qaReviewHandler: qaReviewHandler
+            qaReviewHandler: qaReviewHandler,
+            qaReviewEnabled: request.qaReviewEnabled
         )
 
         let runner = OrchestrationGraphRunner(graph: graph)

@@ -21,7 +21,7 @@ public final class WorkspaceSearchService {
 
     public init(codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?) {
         self.codebaseIndexProvider = codebaseIndexProvider
-        self.settingsStore = SettingsStore(userDefaults: .standard)
+        self.settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
     }
 
     public func search(pattern: String, projectRoot: URL, limit: Int = 200) async -> [WorkspaceSearchMatch] {

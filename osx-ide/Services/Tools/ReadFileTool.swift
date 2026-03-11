@@ -40,8 +40,15 @@ struct ReadFileTool: AITool {
         guard let path = arguments["path"] as? String else {
             throw AppError.aiServiceError("Missing 'path' argument for read_file")
         }
+        let context = ToolInvocationContext.from(arguments: arguments)
         let url = try pathValidator.validateAndResolve(path)
+        let relativePath = pathValidator.relativePath(for: url)
         let content = try fileSystemService.readFile(at: url)
+
+        await ToolFileAccessLedger.shared.recordRead(
+            relativePath: relativePath,
+            conversationId: context.conversationId
+        )
 
         let startLine = parseLineNumber(arguments["start_line"])
         let endLine = parseLineNumber(arguments["end_line"])

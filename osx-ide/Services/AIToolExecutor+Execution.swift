@@ -24,6 +24,20 @@ extension AIToolExecutor {
         let targetFile: String?
         let toolCallId: String
         let preview: String?
+        let argumentKeys: [String]?
+        let argumentPreview: String?
+        let recoveryHint: String?
+    }
+
+    struct ToolExecutionContextError: LocalizedError {
+        let underlying: Error
+        let argumentKeys: [String]
+        let argumentPreview: String?
+        let recoveryHint: String?
+
+        var errorDescription: String? {
+            underlying.localizedDescription
+        }
     }
 
     struct ToolProgressSnapshotContext {
@@ -47,6 +61,14 @@ extension AIToolExecutor {
         let conversationId: String?
         let onProgress: @MainActor @Sendable (ChatMessage) -> Void
         let targetFile: String?
+    }
+
+    struct MalformedMutationArgumentsError: LocalizedError {
+        let toolName: String
+
+        var errorDescription: String? {
+            "Malformed arguments for \(toolName). Refusing to execute mutation with incomplete raw payload. Provide complete structured arguments before retrying."
+        }
     }
 
     nonisolated static func makeToolExecutionMessage(
@@ -77,7 +99,10 @@ extension AIToolExecutor {
             preview: context.preview,
             toolName: context.toolName,
             toolCallId: context.toolCallId,
-            targetFile: context.targetFile
+            targetFile: context.targetFile,
+            argumentKeys: context.argumentKeys,
+            argumentPreview: context.argumentPreview,
+            recoveryHint: context.recoveryHint
         )
 
         return ChatMessage(
@@ -108,7 +133,10 @@ extension AIToolExecutor {
                         status: .executing,
                         targetFile: context.targetFile,
                         toolCallId: context.toolCallId,
-                        preview: nil
+                        preview: nil,
+                        argumentKeys: nil,
+                        argumentPreview: nil,
+                        recoveryHint: nil
                     )
                 )
             )
@@ -293,11 +321,15 @@ extension AIToolExecutor {
                     status: .completed,
                     targetFile: targetFile,
                     toolCallId: toolCall.id,
-                    preview: preview
+                    preview: preview,
+                    argumentKeys: nil,
+                    argumentPreview: nil,
+                    recoveryHint: nil
                 )
             )
         case .failure(let error):
             let errorContent = Self.formatError(error, toolName: toolCall.name)
+            let contextError = error as? ToolExecutionContextError
             return Self.makeToolExecutionMessage(
                 content: errorContent,
                 context: ToolExecutionMessageContext(
@@ -305,7 +337,10 @@ extension AIToolExecutor {
                     status: .failed,
                     targetFile: targetFile,
                     toolCallId: toolCall.id,
-                    preview: preview
+                    preview: preview,
+                    argumentKeys: contextError?.argumentKeys,
+                    argumentPreview: contextError?.argumentPreview,
+                    recoveryHint: contextError?.recoveryHint
                 )
             )
         }
@@ -338,7 +373,7 @@ extension AIToolExecutor {
     private func resolveToolAndExecute(
         _ request: ExecuteToolCallRequest
     ) async -> ChatMessage {
-        guard let tool = request.availableTools.first(where: { $0.name == request.toolCall.name }) else {
+        guard let tool = resolveTool(for: request.toolCall, from: request.availableTools) else {
             await logToolNotFound(conversationId: request.conversationId, toolCall: request.toolCall)
             return makeToolNotFoundMessage(request)
         }
@@ -355,6 +390,53 @@ extension AIToolExecutor {
             targetFile: request.targetFile,
             preview: preview
         )
+    }
+
+    private func resolveTool(for toolCall: AIToolCall, from availableTools: [AITool]) -> AITool? {
+        if let directMatch = availableTools.first(where: { $0.name == toolCall.name }) {
+            return directMatch
+        }
+
+        let aliases: [String: [String]] = [
+            "find_by_name": ["find_file", "index_find_files"],
+            "find": ["find_by_name"],
+            "grep_search": ["grep", "index_search_text"],
+            "grep": ["grep_search"],
+            "list_dir": ["list_files", "index_list_files", "list_all_files"],
+            "get_project_structure": ["list_all_files", "list_files"],
+            "read": ["read_file"],
+            "view_file": ["read_file", "index_read_file"],
+            "write": ["write_file", "write_files"],
+            "write_files": ["write_file"],
+            "write_to_file": ["write_file", "write_files"],
+            "create_file": ["write_file", "write_files"],
+            "edit_file": ["replace_in_file", "write_file"],
+            "apply_patch": ["replace_in_file", "write_file"],
+            "run_terminal_command": ["run_command"],
+            "run_shell_command": ["run_command"]
+        ]
+
+        guard let candidates = aliases[toolCall.name] else {
+            return nil
+        }
+
+        for candidate in candidates {
+            if let resolved = availableTools.first(where: { $0.name == candidate }) {
+                Task {
+                    await AIToolTraceLogger.shared.log(
+                        type: "tool.alias_resolved",
+                        data: [
+                            "requested": toolCall.name,
+                            "resolved": candidate,
+                            "toolCallId": toolCall.id
+                        ]
+                    )
+                }
+                return resolved
+            }
+        }
+
+        return nil
     }
 
     private func executeKnownTool(
@@ -376,10 +458,22 @@ extension AIToolExecutor {
                 ToolTimeoutCenter.shared.finish(toolCallId: request.toolCall.id)
             }
         }
+        var mergedArguments: [String: Any] = [:]
+
         do {
-            let mergedArguments = await buildMergedArguments(
+            mergedArguments = await buildMergedArguments(
                 toolCall: request.toolCall,
                 conversationId: request.conversationId
+            )
+
+            try validateMutationArgumentsBeforeExecution(
+                toolCall: request.toolCall,
+                mergedArguments: mergedArguments
+            )
+
+            try runPreWritePreventionIfNeeded(
+                toolCall: request.toolCall,
+                mergedArguments: mergedArguments
             )
 
             let content = try await executeToolAndCaptureResultWithWatchdog(
@@ -391,19 +485,6 @@ extension AIToolExecutor {
                 onProgress: request.onProgress,
                 timeoutSeconds: timeoutSeconds
             )
-            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                let error = ToolExecutionCrashError(
-                    message: "Tool returned an empty response. Treat this as a crash."
-                )
-                await logToolExecuteError(
-                    conversationId: request.conversationId,
-                    toolCall: request.toolCall,
-                    error: error
-                )
-                return .failure(error)
-            }
-
             await logToolExecuteSuccess(
                 conversationId: request.conversationId,
                 toolCall: request.toolCall,
@@ -411,12 +492,59 @@ extension AIToolExecutor {
             )
             return .success(content)
         } catch {
+            let enriched = Self.enrichError(
+                error,
+                toolName: request.toolCall.name,
+                arguments: mergedArguments,
+                originalArguments: request.toolCall.arguments,
+                targetFile: request.targetFile
+            )
             await logToolExecuteError(
                 conversationId: request.conversationId,
                 toolCall: request.toolCall,
-                error: error
+                error: enriched
             )
-            return .failure(error)
+            return .failure(enriched)
+        }
+    }
+
+    private func validateMutationArgumentsBeforeExecution(
+        toolCall: AIToolCall,
+        mergedArguments: [String: Any]
+    ) throws {
+        guard mergedArguments["_raw_args_chunk"] != nil else { return }
+
+        switch toolCall.name {
+        case "write_file", "create_file":
+            guard let path = mergedArguments["path"] as? String,
+                  let content = mergedArguments["content"] as? String,
+                  !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !content.isEmpty else {
+                throw MalformedMutationArgumentsError(toolName: toolCall.name)
+            }
+        case "replace_in_file":
+            guard let path = mergedArguments["path"] as? String,
+                  let oldText = mergedArguments["old_text"] as? String,
+                  let newText = mergedArguments["new_text"] as? String,
+                  !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !oldText.isEmpty,
+                  !newText.isEmpty else {
+                throw MalformedMutationArgumentsError(toolName: toolCall.name)
+            }
+        case "write_files":
+            guard let files = mergedArguments["files"] as? [[String: Any]], !files.isEmpty else {
+                throw MalformedMutationArgumentsError(toolName: toolCall.name)
+            }
+            let allEntriesValid = files.allSatisfy { entry in
+                guard let path = entry["path"] as? String,
+                      let content = entry["content"] as? String else { return false }
+                return !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !content.isEmpty
+            }
+            guard allEntriesValid else {
+                throw MalformedMutationArgumentsError(toolName: toolCall.name)
+            }
+        default:
+            break
         }
     }
 
@@ -425,6 +553,119 @@ extension AIToolExecutor {
         // Default to 120s for npm operations, up to 600s max
         let normalized = stored == 0 ? 120 : stored
         return max(1, min(600, normalized))
+    }
+
+    private func runPreWritePreventionIfNeeded(
+        toolCall: AIToolCall,
+        mergedArguments: [String: Any]
+    ) throws {
+        guard supportsPreWritePrevention(toolName: toolCall.name) else {
+            return
+        }
+
+        let candidateFileCount = candidateFileCountForPrevention(toolName: toolCall.name, arguments: mergedArguments)
+        eventBus?.publish(
+            PreWritePreventionCheckStartedEvent(
+                toolName: toolCall.name,
+                candidateFileCount: candidateFileCount
+            )
+        )
+
+        let allowOverride = preventionOverrideEnabled(arguments: mergedArguments)
+        let result = preventionEngine.check(
+            toolName: toolCall.name,
+            arguments: mergedArguments,
+            allowOverride: allowOverride
+        )
+
+        for finding in result.findings {
+            switch finding.findingType {
+            case .duplicateImpl:
+                eventBus?.publish(
+                    DuplicateRiskDetectedEvent(
+                        summary: finding.explanation,
+                        severity: finding.severity.rawValue
+                    )
+                )
+            case .deadCodeRisk:
+                eventBus?.publish(
+                    DeadCodeRiskDetectedEvent(
+                        summary: finding.explanation,
+                        severity: finding.severity.rawValue
+                    )
+                )
+            case .parallelPathRisk, .orphanAPI:
+                break
+            }
+        }
+
+        let guardStatus = guardStatusLabel(outcome: result.outcome)
+        eventBus?.publish(
+            DebtPressureUpdatedEvent(
+                duplicateRiskCount: result.duplicateRiskCount,
+                deadCodeRiskCount: result.deadCodeRiskCount,
+                guardStatus: guardStatus
+            )
+        )
+        eventBus?.publish(
+            PreWritePreventionCheckCompletedEvent(
+                toolName: toolCall.name,
+                outcome: result.outcome.rawValue,
+                findingCount: result.findings.count
+            )
+        )
+
+        if result.outcome == .block {
+            throw AppError.aiServiceError(
+                "Pre-write prevention blocked tool '\(toolCall.name)'. Resolve duplicate/dead-code findings or pass prevention_override=true with justification.\n\n\(result.summary)"
+            )
+        }
+    }
+
+    private func supportsPreWritePrevention(toolName: String) -> Bool {
+        switch toolName {
+        case "write_file", "write_files", "create_file", "replace_in_file":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func preventionOverrideEnabled(arguments: [String: Any]) -> Bool {
+        if let boolValue = arguments["prevention_override"] as? Bool {
+            return boolValue
+        }
+
+        if let textValue = arguments["prevention_override"] as? String {
+            let normalized = textValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return normalized == "1" || normalized == "true" || normalized == "yes"
+        }
+
+        return false
+    }
+
+    private func candidateFileCountForPrevention(toolName: String, arguments: [String: Any]) -> Int {
+        if toolName == "write_files", let files = arguments["files"] as? [[String: Any]] {
+            return files.count
+        }
+
+        if let path = arguments["path"] as? String,
+           !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return 1
+        }
+
+        return 0
+    }
+
+    private func guardStatusLabel(outcome: PreventionPolicyOutcome) -> String {
+        switch outcome {
+        case .pass:
+            return "clear"
+        case .warn:
+            return "warn"
+        case .block:
+            return "block"
+        }
     }
 
     private func executeToolAndCaptureResultWithWatchdog(
@@ -458,11 +699,10 @@ extension AIToolExecutor {
                 let timeoutSecondsInt = Int(timeoutSeconds)
                 
                 while true {
-                    let (isCancelled, remaining, lastProgressAt) = await MainActor.run {
+                    let (isCancelled, remaining) = await MainActor.run {
                         (
                             ToolTimeoutCenter.shared.isCancelled(toolCallId: toolCall.id),
-                            ToolTimeoutCenter.shared.remainingSeconds(toolCallId: toolCall.id),
-                            ToolTimeoutCenter.shared.lastProgressAt
+                            ToolTimeoutCenter.shared.remainingSeconds(toolCallId: toolCall.id)
                         )
                     }
                     if isCancelled {
@@ -471,32 +711,13 @@ extension AIToolExecutor {
                     }
 
                     if let remaining, remaining <= 0 {
-                        // Intelligent timeout: check if there's been recent progress via ToolTimeoutCenter
-                        if let lastProgress = lastProgressAt {
-                            let timeSinceLastProgress = Date().timeIntervalSince(lastProgress)
-                            
-                            if timeSinceLastProgress > Double(timeoutSecondsInt) {
-                                // No progress for the entire timeout period - likely hung
-                                await MainActor.run {
-                                    ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
-                                }
-                                toolTask.cancel()
-                                throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
-                            } else {
-                                // There was progress, extend the timeout
-                                await MainActor.run {
-                                    ToolTimeoutCenter.shared.extendTimeout(toolCallId: toolCall.id, bySeconds: Double(timeoutSecondsInt))
-                                }
-                                continue
-                            }
-                        } else {
-                            // No progress ever recorded, just timeout
-                            await MainActor.run {
-                                ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
-                            }
-                            toolTask.cancel()
-                            throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
+                        // Deadline is computed from the most recent progress timestamp.
+                        // If we reached it, the tool has made no progress for timeoutSeconds.
+                        await MainActor.run {
+                            ToolTimeoutCenter.shared.cancel(toolCallId: toolCall.id)
                         }
+                        toolTask.cancel()
+                        throw ToolExecutionTimedOutError(timeoutSeconds: timeoutSecondsInt)
                     }
 
                     try await Task.sleep(nanoseconds: 200_000_000)
@@ -512,15 +733,85 @@ extension AIToolExecutor {
     private func makeToolNotFoundMessage(
         _ request: ExecuteToolCallRequest
     ) -> ChatMessage {
-        Self.makeToolExecutionMessage(
-            content: "Tool not found",
+        let availableToolNames = request.availableTools.map(\.name).sorted()
+        let availableToolsSummary = availableToolNames.isEmpty
+            ? "none"
+            : availableToolNames.joined(separator: ", ")
+        return Self.makeToolExecutionMessage(
+            content: "Tool not found in current turn",
             context: ToolExecutionMessageContext(
                 toolName: request.toolCall.name,
                 status: .failed,
                 targetFile: request.targetFile,
                 toolCallId: request.toolCall.id,
-                preview: nil
+                preview: nil,
+                argumentKeys: Array(request.toolCall.arguments.keys).sorted(),
+                argumentPreview: Self.argumentPreview(for: request.toolCall.arguments),
+                recoveryHint: "Available tools in this turn: \(availableToolsSummary). Choose one of those tools before retrying."
             )
         )
+    }
+
+    nonisolated private static func enrichError(
+        _ error: Error,
+        toolName: String,
+        arguments: [String: Any],
+        originalArguments: [String: Any],
+        targetFile: String?
+    ) -> Error {
+        if error is ToolExecutionContextError {
+            return error
+        }
+
+        let sourceArguments = arguments.isEmpty ? originalArguments : arguments
+        let argumentKeys = Array(sourceArguments.keys).sorted()
+        let invocationPreview = buildInvocationPreview(
+            toolName: toolName,
+            targetFile: targetFile,
+            arguments: sourceArguments
+        )
+        let argumentPreview = invocationPreview ?? argumentPreview(for: sourceArguments)
+        let recoveryHint = recoveryHintForError(error)
+
+        return ToolExecutionContextError(
+            underlying: error,
+            argumentKeys: argumentKeys,
+            argumentPreview: argumentPreview,
+            recoveryHint: recoveryHint
+        )
+    }
+
+    nonisolated private static func argumentPreview(for arguments: [String: Any]) -> String? {
+        guard !arguments.isEmpty else { return nil }
+        let filtered = arguments.filter { key, _ in
+            !key.hasPrefix("_")
+        }
+        guard !filtered.isEmpty else { return nil }
+        guard JSONSerialization.isValidJSONObject(filtered),
+              let data = try? JSONSerialization.data(withJSONObject: filtered, options: [.sortedKeys]),
+              var text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        if text.count > 1200 {
+            text = String(text.prefix(1200)) + "\n…"
+        }
+        return text
+    }
+
+    nonisolated private static func recoveryHintForError(_ error: Error) -> String? {
+        let text = error.localizedDescription.lowercased()
+        if text.contains("missing") || text.contains("required") || text.contains("argument") {
+            return "Retry with corrected arguments. Ensure all required fields are present and non-empty."
+        }
+        if text.contains("file not found") || text.contains("no such file") {
+            return "Discover the correct path first, then retry the tool call with that exact path."
+        }
+        if text.contains("permission denied") || text.contains("not permitted") {
+            return "Choose a writable target path and avoid protected/system directories."
+        }
+        if text.contains("timed out") || text.contains("cancelled") || text.contains("canceled") {
+            return "Use a finite, non-interactive command or a smaller scoped operation before retrying."
+        }
+        return "Change parameters or strategy before retrying this tool call."
     }
 }
