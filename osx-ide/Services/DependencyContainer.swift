@@ -87,9 +87,18 @@ class DependencyContainer: ObservableObject {
         let openRouterService = OpenRouterAIService(
             settingsStore: OpenRouterSettingsStore(settingsStore: settingsStore),
             eventBus: _eventBus,
+            providerName: "OpenRouter",
+            testConfigurationProvider: TestConfigurationProvider.shared
+        )
+        let alibabaService = OpenRouterAIService(
+            settingsStore: AlibabaSettingsStore(settingsStore: settingsStore),
+            eventBus: _eventBus,
+            providerName: "Alibaba Cloud",
+            supportsStreamingWithTools: false,
             testConfigurationProvider: TestConfigurationProvider.shared
         )
         let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
+        let providerSelectionStore = AIProviderSelectionStore(settingsStore: settingsStore)
         let localModelEventBus: EventBusProtocol? = launchContext.isTesting ? nil : _eventBus
         let localModelService = LocalModelProcessAIService(
             selectionStore: selectionStore,
@@ -98,8 +107,10 @@ class DependencyContainer: ObservableObject {
         )
         _aiService = ModelRoutingAIService(
             openRouterService: openRouterService,
+            alibabaService: alibabaService,
             localService: localModelService,
-            selectionStore: selectionStore
+            selectionStore: selectionStore,
+            providerSelectionStore: providerSelectionStore
         )
         earlyDiag(
             "AI services done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"

@@ -4,7 +4,11 @@ protocol OpenRouterSettingsLoading {
     func load(includeApiKey: Bool) -> OpenRouterSettings
 }
 
-final class OpenRouterSettingsStore: OpenRouterSettingsLoading, @unchecked Sendable {
+protocol OpenRouterSettingsStoring: OpenRouterSettingsLoading {
+    func save(_ settings: OpenRouterSettings)
+}
+
+final class OpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sendable {
     private let settingsStore: SettingsStore
     private let apiKeyKey = "OpenRouterAPIKey"
     private let modelKey = "OpenRouterModel"

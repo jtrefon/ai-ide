@@ -10,6 +10,11 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var ui: UIStateManager
     @StateObject private var openRouterViewModel = OpenRouterSettingsViewModel()
+    @StateObject private var alibabaViewModel = OpenRouterSettingsViewModel(
+        store: AlibabaSettingsStore(),
+        providerDisplayName: "Alibaba Cloud"
+    )
+    @StateObject private var providerSelectionViewModel = AIProviderSelectionViewModel()
     @StateObject private var localModelViewModel = LocalModelSettingsViewModel()
     @StateObject private var embeddingModelViewModel = EmbeddingModelSettingsViewModel()
     
@@ -33,7 +38,9 @@ struct SettingsView: View {
                         }
 
                     AISettingsTab(
-                        viewModel: openRouterViewModel,
+                        openRouterViewModel: openRouterViewModel,
+                        alibabaViewModel: alibabaViewModel,
+                        providerSelectionViewModel: providerSelectionViewModel,
                         localModelViewModel: localModelViewModel,
                         embeddingModelViewModel: embeddingModelViewModel
                     )

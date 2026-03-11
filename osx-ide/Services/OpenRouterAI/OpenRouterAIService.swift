@@ -65,10 +65,12 @@ actor OpenRouterProviderRateLimiter {
 }
 
 actor OpenRouterAIService: AIService {
-    internal let settingsStore: OpenRouterSettingsStore
+    internal let settingsStore: any OpenRouterSettingsLoading
     internal let client: OpenRouterAPIClient
     private let eventBus: EventBusProtocol
     private var contextLengthByModelId: [String: Int] = [:]
+    private let providerName: String
+    private let supportsStreamingWithTools: Bool
     
     // Rate limiting to prevent 421 errors
     private var minRequestInterval: TimeInterval = 0.5 // 500ms between requests
@@ -80,14 +82,18 @@ actor OpenRouterAIService: AIService {
     internal static let maxToolOutputCharsForModel = 12_000
 
     init(
-        settingsStore: OpenRouterSettingsStore = OpenRouterSettingsStore(),
+        settingsStore: any OpenRouterSettingsLoading = OpenRouterSettingsStore(),
         client: OpenRouterAPIClient = OpenRouterAPIClient(),
         eventBus: EventBusProtocol,
+        providerName: String = "OpenRouter",
+        supportsStreamingWithTools: Bool = true,
         testConfigurationProvider: TestConfigurationProvider = TestConfigurationProvider.shared
     ) {
         self.settingsStore = settingsStore
         self.client = client
         self.eventBus = eventBus
+        self.providerName = providerName
+        self.supportsStreamingWithTools = supportsStreamingWithTools
         self.testConfigurationProvider = testConfigurationProvider
     }
 
@@ -105,7 +111,11 @@ actor OpenRouterAIService: AIService {
         _ request: OpenRouterChatHistoryInput,
         runId: String
     ) async throws -> AIServiceResponse {
+        _ = runId
         let preparation = try buildChatPreparation(request: request)
+        if preparation.toolDefinitions?.isEmpty == false, !supportsStreamingWithTools {
+            return try await performChatWithHistory(request)
+        }
 
         await logRequestStart(RequestStartContext(
             requestId: preparation.requestId,
@@ -487,7 +497,7 @@ actor OpenRouterAIService: AIService {
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(effectiveTimeoutSeconds * 1_000_000_000))
                 throw AppError.aiServiceError(
-                    "OpenRouter request timed out after \(Int(effectiveTimeoutSeconds))s (requestId: \(requestId))"
+                    "\(self.providerName) request timed out after \(Int(effectiveTimeoutSeconds))s (requestId: \(requestId))"
                 )
             }
 
@@ -496,7 +506,7 @@ actor OpenRouterAIService: AIService {
             }
 
             guard let result = try await group.next() else {
-                throw AppError.aiServiceError("OpenRouter request ended without a result (requestId: \(requestId))")
+                throw AppError.aiServiceError("\(providerName) request ended without a result (requestId: \(requestId))")
             }
             return result
         }
@@ -532,8 +542,8 @@ actor OpenRouterAIService: AIService {
     }
 
     private func handlePotentialRateLimit(_ error: Error, requestId: String) async throws {
-        guard let openRouterError = error as? OpenRouterServiceError,
-              case let .serverError(code, _) = openRouterError,
+        guard let serviceError = error as? OpenRouterServiceError,
+              case let .serverError(code, _) = serviceError,
               isProviderRateLimitStatus(code)
         else {
             return
@@ -554,11 +564,11 @@ actor OpenRouterAIService: AIService {
 
         let cooldownUntil = Date().addingTimeInterval(cooldownDuration)
         let issueMessage = providerIssueMessage(
-            for: openRouterError,
+            for: serviceError,
             fallback: "Provider rate limit hit. Retrying when cooldown ends."
         )
         eventBus.publish(ProviderIssueStatusEvent(
-            providerName: "OpenRouter",
+            providerName: providerName,
             statusKind: .rateLimited,
             statusCode: code,
             message: issueMessage,
@@ -571,20 +581,20 @@ actor OpenRouterAIService: AIService {
     }
 
     private func publishProviderFailureIfNeeded(_ error: Error) async {
-        guard let openRouterError = error as? OpenRouterServiceError else {
+        guard let serviceError = error as? OpenRouterServiceError else {
             return
         }
 
-        let resolvedIssueStatus = providerIssueStatus(for: openRouterError)
+        let resolvedIssueStatus = providerIssueStatus(for: serviceError)
         let issueKind = resolvedIssueStatus.kind
         let issueStatusCode = resolvedIssueStatus.statusCode
         let issueMessage = providerIssueMessage(
-            for: openRouterError,
+            for: serviceError,
             fallback: error.localizedDescription
         )
 
         eventBus.publish(ProviderIssueStatusEvent(
-            providerName: "OpenRouter",
+            providerName: providerName,
             statusKind: issueKind,
             statusCode: issueStatusCode,
             message: issueMessage,
@@ -655,7 +665,7 @@ actor OpenRouterAIService: AIService {
                 ])
             )
             eventBus.publish(ProviderIssueStatusEvent(
-                providerName: "OpenRouter",
+                providerName: providerName,
                 statusKind: .unknown,
                 statusCode: nil,
                 message: "Failed to decode provider response.",

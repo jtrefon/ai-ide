@@ -41,7 +41,7 @@ extension OpenRouterAIService {
     }
 
     internal func loadSettingsSnapshot() -> SettingsSnapshot {
-        let settings = settingsStore.load()
+        let settings = settingsStore.load(includeApiKey: true)
         return SettingsSnapshot(
             apiKey: settings.apiKey.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
             model: settings.model.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
