@@ -85,6 +85,7 @@ final class ConversationToolProvider {
         tools.append(
             ArchitectAdvisorTool(
                 aiService: aiService, index: codebaseIndex, projectRoot: projectRoot))
+        tools.append(ContemplationTool())
         tools.append(PlannerTool())
         tools.append(StrategicPlanTool())
         tools.append(TacticalPlanTool())

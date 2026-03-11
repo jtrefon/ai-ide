@@ -41,7 +41,7 @@ class DependencyContainer: ObservableObject {
         let _initStart = Date()
         earlyDiag("DependencyContainer.init START")
 
-        settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
+        settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.makeUserDefaults(for: launchContext))
 
         // Create lightweight services immediately
         earlyDiag("Creating lightweight services...")

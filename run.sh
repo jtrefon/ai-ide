@@ -50,7 +50,7 @@ run_with_memory_guard() {
     local rss_limit_gb=$1
     shift
     local rss_limit_mb=$((rss_limit_gb * 1024))
-    local check_interval_seconds="${HARNESS_MEMORY_CHECK_INTERVAL_SECONDS:-5}"
+    local check_interval_seconds="${HARNESS_MEMORY_CHECK_INTERVAL_SECONDS:-1}"
     local status_file
     status_file=$(mktemp)
 
@@ -177,6 +177,9 @@ run_harness() {
     echo "Running headless harness tests..."
     local harness_memory_limit_gb="${HARNESS_MAX_RSS_GB:-6}"
     echo "Harness memory guard enabled: ${harness_memory_limit_gb}GB limit"
+    local harness_memory_limit_mb=$((harness_memory_limit_gb * 1024))
+    local local_model_memory_limit_mb="${OSXIDE_LOCAL_MODEL_MAX_RSS_MB:-$((harness_memory_limit_mb - 512))}"
+    echo "Local model in-process memory budget: ${local_model_memory_limit_mb}MB"
     local test_profile_dir
     test_profile_dir="${HARNESS_TEST_PROFILE_DIR:-$(pwd)/.build-tests/harness-test-profile}"
     mkdir -p "$test_profile_dir"
@@ -194,14 +197,15 @@ run_harness() {
     # Build environment variables to pass to test runner
     # Using TEST_RUNNER_ENV_ prefix to pass env vars through xcodebuild to the test process
     local env_args=()
-    local runtime_env_args=("OSX_IDE_PROMPTS_ROOT=$resolved_prompts_root" "OSXIDE_TEST_PROFILE_DIR=$test_profile_dir")
+    local runtime_env_args=("OSX_IDE_PROMPTS_ROOT=$resolved_prompts_root" "OSXIDE_TEST_PROFILE_DIR=$test_profile_dir" "TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR=$test_profile_dir" "OSXIDE_LOCAL_MODEL_MAX_RSS_MB=$local_model_memory_limit_mb")
+    env_args+=("TEST_RUNNER_ENV_OSXIDE_LOCAL_MODEL_MAX_RSS_MB=$local_model_memory_limit_mb")
     if [ -n "$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS" ]; then
         env_args+=("TEST_RUNNER_ENV_OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS=$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS")
         echo "Production parity harness enabled"
     fi
     if [ -n "$HARNESS_MODEL_ID" ]; then
         env_args+=("TEST_RUNNER_ENV_HARNESS_MODEL_ID=$HARNESS_MODEL_ID")
-        runtime_env_args+=("HARNESS_MODEL_ID=$HARNESS_MODEL_ID")
+        runtime_env_args+=("HARNESS_MODEL_ID=$HARNESS_MODEL_ID" "TEST_RUNNER_ENV_HARNESS_MODEL_ID=$HARNESS_MODEL_ID")
         echo "Using model: $HARNESS_MODEL_ID"
     fi
     if [ -n "$HARNESS_USE_OPENROUTER" ]; then

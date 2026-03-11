@@ -366,7 +366,63 @@ final class ToolArgumentResolver {
                 return decoded
             }
         }
+
+        for key in keys {
+            let prefixPattern = #""\#(key)"\s*:\s*""#
+            guard let prefixRegex = try? NSRegularExpression(pattern: prefixPattern) else { continue }
+            let range = NSRange(raw.startIndex..<raw.endIndex, in: raw)
+            guard let match = prefixRegex.firstMatch(in: raw, range: range),
+                  let prefixRange = Range(match.range(at: 0), in: raw) else {
+                continue
+            }
+
+            let trailingRaw = String(raw[prefixRange.upperBound...])
+            let truncatedValue = extractTruncatedJSONStringValue(from: trailingRaw)
+            let trimmed = truncatedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return truncatedValue
+            }
+        }
         return nil
+    }
+
+    private static func extractTruncatedJSONStringValue(from raw: String) -> String {
+        var result = ""
+        var escaping = false
+
+        for character in raw {
+            if escaping {
+                switch character {
+                case "\"":
+                    result.append("\"")
+                case "\\":
+                    result.append("\\")
+                case "n":
+                    result.append("\n")
+                case "r":
+                    result.append("\r")
+                case "t":
+                    result.append("\t")
+                default:
+                    result.append(character)
+                }
+                escaping = false
+                continue
+            }
+
+            if character == "\\" {
+                escaping = true
+                continue
+            }
+
+            if character == "\"" {
+                break
+            }
+
+            result.append(character)
+        }
+
+        return result
     }
 
     private static func decodeJSONStringFragment(_ raw: String) -> String? {

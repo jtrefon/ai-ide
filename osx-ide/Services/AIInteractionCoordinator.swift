@@ -4,6 +4,7 @@ import Foundation
 final class AIInteractionCoordinator {
     struct SendMessageWithRetryRequest {
         let messages: [ChatMessage]
+        let mediaAttachments: [ChatMessageMediaAttachment]
         let explicitContext: String?
         let tools: [AITool]
         let mode: AIMode
@@ -14,6 +15,7 @@ final class AIInteractionCoordinator {
 
         init(
             messages: [ChatMessage],
+            mediaAttachments: [ChatMessageMediaAttachment] = [],
             explicitContext: String?,
             tools: [AITool],
             mode: AIMode,
@@ -23,6 +25,7 @@ final class AIInteractionCoordinator {
             conversationId: String? = nil
         ) {
             self.messages = messages
+            self.mediaAttachments = mediaAttachments
             self.explicitContext = explicitContext
             self.tools = tools
             self.mode = mode
@@ -125,6 +128,7 @@ final class AIInteractionCoordinator {
 
             let historyRequest = AIServiceHistoryRequest(
                 messages: retryMessages,
+                mediaAttachments: request.mediaAttachments,
                 context: augmentedContext,
                 tools: filteredTools,
                 mode: request.mode,
@@ -314,7 +318,8 @@ final class AIInteractionCoordinator {
         }
 
         if isRunningUnitTests {
-            return min(baseDelay, min(maxDelay, 4_000_000_000))
+            let providerSafeMinimumDelay: UInt64 = 20_000_000_000
+            return max(min(baseDelay, maxDelay), providerSafeMinimumDelay)
         }
 
         return min(baseDelay, maxDelay)

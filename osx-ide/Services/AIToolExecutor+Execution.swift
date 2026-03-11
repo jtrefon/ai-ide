@@ -398,14 +398,22 @@ extension AIToolExecutor {
         }
 
         let aliases: [String: [String]] = [
+            "find_by_name": ["find_file", "index_find_files"],
             "find": ["find_by_name"],
+            "grep_search": ["grep", "index_search_text"],
             "grep": ["grep_search"],
+            "list_dir": ["list_files", "index_list_files", "list_all_files"],
+            "get_project_structure": ["list_all_files", "list_files"],
             "read": ["read_file"],
+            "view_file": ["read_file", "index_read_file"],
             "write": ["write_file", "write_files"],
             "write_files": ["write_file"],
+            "write_to_file": ["write_file", "write_files"],
             "create_file": ["write_file", "write_files"],
             "edit_file": ["replace_in_file", "write_file"],
-            "run_terminal_command": ["run_command"]
+            "apply_patch": ["replace_in_file", "write_file"],
+            "run_terminal_command": ["run_command"],
+            "run_shell_command": ["run_command"]
         ]
 
         guard let candidates = aliases[toolCall.name] else {

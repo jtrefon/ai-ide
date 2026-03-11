@@ -539,8 +539,7 @@ final class ConversationSendCoordinatorTests: XCTestCase {
 
     private func makeSequenceAIService(toolCalls: [AIToolCall]) -> SequenceAIService {
         let completeReasoningPrefix =
-            "<ide_reasoning>Analyze: Details\nResearch: Details\nPlan: Details\n" +
-            "Reflect: Details\nAction: Call fake_tool\nDelivery: DONE</ide_reasoning>"
+            "Reflection: Details\nPlanning: Details\nContinuity: DONE\n\n"
         let terminalResponses = Array(repeating: AIServiceResponse(
             content: completeReasoningPrefix + "Final answer",
             toolCalls: nil
@@ -601,12 +600,9 @@ final class ConversationSendCoordinatorTests: XCTestCase {
 
     private func reasoningOnlyContent() -> String {
         """
-        <ide_reasoning>
-        Analyze: Details
-        Research: Details
-        Plan: Details
-        Reflect: Details
-        </ide_reasoning>
+        Reflection: Details
+        Planning: Details
+        Continuity: Details
         """
     }
 

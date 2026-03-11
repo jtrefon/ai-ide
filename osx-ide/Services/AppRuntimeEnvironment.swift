@@ -4,7 +4,10 @@ enum AppRuntimeEnvironment {
     static let launchContext = AppLaunchContext.detect()
 
     nonisolated(unsafe) static let userDefaults: UserDefaults = {
-        let context = launchContext
+        makeUserDefaults(for: launchContext)
+    }()
+
+    static func makeUserDefaults(for context: AppLaunchContext) -> UserDefaults {
         guard let testProfilePath = context.testProfilePath, !testProfilePath.isEmpty else {
             return .standard
         }
@@ -13,5 +16,5 @@ enum AppRuntimeEnvironment {
             .replacingOccurrences(of: "[^A-Za-z0-9]", with: "_", options: .regularExpression)
         let suiteName = "tdc.osx-ide.test.\(sanitized)"
         return UserDefaults(suiteName: suiteName) ?? .standard
-    }()
+    }
 }

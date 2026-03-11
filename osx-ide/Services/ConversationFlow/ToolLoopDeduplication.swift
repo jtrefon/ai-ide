@@ -48,10 +48,7 @@ struct ToolLoopDeduplication {
         }
         
         // Remove common patterns that don't affect the semantic meaning
-        var normalized = content.lowercased()
-        
-        // Remove reasoning blocks
-        normalized = normalized.replacingOccurrences(of: "<ide_reasoning>.*?</ide_reasoning>", with: "", options: .regularExpression)
+        var normalized = ChatPromptBuilder.contentForDisplay(from: content).lowercased()
         
         // Remove common filler phrases
         let fillerPhrases = [

@@ -128,6 +128,7 @@ actor OpenRouterAIService: AIService {
             temperature: nil,
             tools: preparation.toolDefinitions,
             toolChoice: preparation.toolChoice,
+            reasoning: preparation.nativeReasoningConfiguration.map(OpenRouterChatRequest.Reasoning.init),
             stream: true  // Enable streaming
         )
 
@@ -176,11 +177,8 @@ actor OpenRouterAIService: AIService {
                 let content = chunks.joined()
                 
                 let toolCalls = toolCallsDrafts.sorted(by: { $0.key < $1.key }).compactMap { (_, draft) -> AIToolCall? in
-                    var argsDict: [String: Any] = [:]
-                    if let data = draft.arguments.data(using: .utf8),
-                       let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        argsDict = dict
-                    } else if !draft.arguments.isEmpty {
+                    var argsDict = Self.parseToolArguments(from: draft.arguments) ?? [:]
+                    if argsDict.isEmpty, !draft.arguments.isEmpty {
                         // If JSON is malformed but we have text, store raw so tools can try to handle or fail gracefully
                         argsDict = ["_raw_args_chunk": draft.arguments]
                     }
@@ -189,6 +187,33 @@ actor OpenRouterAIService: AIService {
                 
                 let tc = toolCalls.isEmpty ? nil : toolCalls
                 return (content, tc)
+            }
+
+            private static func parseToolArguments(from raw: String) -> [String: Any]? {
+                func parseJSONObject(_ candidate: String) -> [String: Any]? {
+                    guard let data = candidate.data(using: .utf8),
+                          let object = try? JSONSerialization.jsonObject(with: data),
+                          let dictionary = object as? [String: Any] else {
+                        return nil
+                    }
+                    return dictionary
+                }
+
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+
+                if let direct = parseJSONObject(trimmed) {
+                    return direct
+                }
+
+                if let start = trimmed.firstIndex(of: "{"),
+                   let end = trimmed.lastIndex(of: "}"),
+                   start < end,
+                   let bounded = parseJSONObject(String(trimmed[start...end])) {
+                    return bounded
+                }
+
+                return parseJSONObject("{\(trimmed)}")
             }
         }
         
@@ -329,6 +354,7 @@ actor OpenRouterAIService: AIService {
             temperature: nil,
             tools: preparation.toolDefinitions,
             toolChoice: preparation.toolChoice,
+            reasoning: preparation.nativeReasoningConfiguration.map(OpenRouterChatRequest.Reasoning.init),
             stream: false
         )
 

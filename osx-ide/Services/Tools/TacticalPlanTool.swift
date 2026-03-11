@@ -40,8 +40,23 @@ struct TacticalPlanTool: AITool {
             preserveCurrentPlan: false
         )
 
-        return plan
+        let result = TacticalPlanToolResult(
+            goal: userInput,
+            plan: plan,
+            kind: "tactical_plan"
+        )
+        let data = try JSONEncoder().encode(result)
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw AppError.aiServiceError("Failed to encode generate_tactical_plan result")
+        }
+        return json
     }
+}
+
+private struct TacticalPlanToolResult: Encodable {
+    let goal: String
+    let plan: String
+    let kind: String
 }
 
 /// Extracted from TacticalPlanningNode to be shared

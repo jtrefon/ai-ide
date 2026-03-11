@@ -25,6 +25,10 @@ public enum RAGContextBuilder {
     ) async -> String? {
         var parts: [String] = []
 
+        if let executionEnvironmentContext = buildExecutionEnvironmentContext(projectRoot: projectRoot) {
+            parts.append(executionEnvironmentContext)
+        }
+
         if let explicitContext {
             let trimmed = explicitContext.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
@@ -170,5 +174,33 @@ public enum RAGContextBuilder {
 
         guard !sections.isEmpty else { return nil }
         return "RAG CONTEXT:\n" + sections.joined(separator: "\n\n")
+    }
+
+    private static func buildExecutionEnvironmentContext(projectRoot: URL?) -> String? {
+        let processInfo = ProcessInfo.processInfo
+        let operatingSystemVersion = processInfo.operatingSystemVersion
+        let operatingSystemSummary = processInfo.operatingSystemVersionString
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let shell = processInfo.environment["SHELL"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let architecture = processInfo.environment["PROCESSOR_ARCHITECTURE"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? processInfo.environment["HOSTTYPE"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? "apple_silicon_or_intel_mac"
+
+        var lines: [String] = [
+            "EXECUTION ENVIRONMENT:",
+            "Platform: macOS",
+            "macOS Version: \(operatingSystemVersion.majorVersion).\(operatingSystemVersion.minorVersion).\(operatingSystemVersion.patchVersion)",
+            "OS Summary: \(operatingSystemSummary)",
+            "Architecture: \(architecture)",
+            "Shell: \(shell?.isEmpty == false ? shell! : "/bin/zsh")"
+        ]
+
+        if let projectRoot {
+            lines.append("Project Root: \(projectRoot.path)")
+            lines.append("Working Directory Scope: Use the project root unless a tool contract requires another path.")
+        }
+
+        lines.append("CLI Guidance: Prefer macOS-compatible shell commands and paths. Do not assume Linux-only utilities or package-manager behavior.")
+        return lines.joined(separator: "\n")
     }
 }

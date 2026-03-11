@@ -186,12 +186,9 @@ final class ConversationManagerTests: XCTestCase {
 
     func testSplitReasoningExtractsAndStripsBlock() {
         let input = """
-        <ide_reasoning>
-        Analyze: A
-        Research: B
-        Plan: C
-        Reflect: D
-        </ide_reasoning>
+        Reflection: A
+        Planning: B
+        Continuity: D
 
         Hello world.
         """
@@ -199,8 +196,8 @@ final class ConversationManagerTests: XCTestCase {
         let result = ChatPromptBuilder.splitReasoning(from: input)
         XCTAssertEqual(result.content, "Hello world.")
         XCTAssertNotNil(result.reasoning)
-        XCTAssertTrue((result.reasoning ?? "").contains("Analyze:"))
-        XCTAssertTrue((result.reasoning ?? "").contains("Reflect:"))
+        XCTAssertTrue((result.reasoning ?? "").contains("Reflection:"))
+        XCTAssertTrue((result.reasoning ?? "").contains("Continuity:"))
     }
 
     func testClearConversationResetsInteractionState() async {

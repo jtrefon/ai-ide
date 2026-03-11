@@ -24,6 +24,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
     public let id: UUID
     public let role: MessageRole
     public let content: String
+    public let mediaAttachments: [ChatMessageMediaAttachment]
     public let reasoning: String?
     public let codeContext: String?
     public let timestamp: Date
@@ -39,6 +40,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
     public init(
         role: MessageRole,
         content: String,
+        mediaAttachments: [ChatMessageMediaAttachment] = [],
         context: ChatMessageContentContext = ChatMessageContentContext(),
         tool: ChatMessageToolContext = ChatMessageToolContext(),
         isDraft: Bool = false
@@ -46,6 +48,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         self.id = UUID()
         self.role = role
         self.content = content
+        self.mediaAttachments = mediaAttachments
         self.reasoning = context.reasoning
         self.codeContext = context.codeContext
         self.timestamp = Date()
@@ -61,6 +64,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         id: UUID,
         role: MessageRole,
         content: String,
+        mediaAttachments: [ChatMessageMediaAttachment] = [],
         timestamp: Date,
         context: ChatMessageContentContext = ChatMessageContentContext(),
         tool: ChatMessageToolContext = ChatMessageToolContext(),
@@ -69,6 +73,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         self.id = id
         self.role = role
         self.content = content
+        self.mediaAttachments = mediaAttachments
         self.reasoning = context.reasoning
         self.codeContext = context.codeContext
         self.timestamp = timestamp

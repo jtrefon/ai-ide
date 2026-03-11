@@ -4,7 +4,7 @@
 
 Before returning the final answer:
 
-1. Emit the standard `<ide_reasoning>` block using the Reflection/Planning/Continuity schema (single-clause What/Where/How bullets; mention concrete files, commands, or tests). Keep it terse—this is still engineer-to-engineer pairing.
+1. If reasoning is needed, keep it as terse plain text using the Reflection/Planning/Continuity schema (single-clause What/Where/How bullets; mention concrete files, commands, or tests).
 2. Immediately follow with **one** sentence covering `Done → Next → Path` so the user sees the closing state at a glance.
 3. Do **not** call tools during this stage. This is a summary only.
 

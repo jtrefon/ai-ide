@@ -59,7 +59,8 @@ final class InitialResponseHandler {
              let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
                  userInput: userInput,
                  conversationId: conversationId,
-                 projectRoot: projectRoot
+                 projectRoot: projectRoot,
+                 historyMessages: historyCoordinator.messages
              )
              response = try await aiInteractionCoordinator
                  .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
@@ -83,7 +84,8 @@ final class InitialResponseHandler {
              let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
                  userInput: userInput,
                  conversationId: conversationId,
-                 projectRoot: projectRoot
+                 projectRoot: projectRoot,
+                 historyMessages: historyCoordinator.messages
              )
              response = try await aiInteractionCoordinator
                  .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(

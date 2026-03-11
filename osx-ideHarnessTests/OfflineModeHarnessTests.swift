@@ -109,7 +109,7 @@ final class OfflineModeHarnessTests: XCTestCase {
         let projectRoot = makeTempDir(prefix: "offline_minimal_tools")
         let container = try await makeOfflineContainer(projectRoot: projectRoot)
         let sendCoordinator = makeMinimalSendCoordinator(projectRoot: projectRoot, container: container)
-        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot, seedGreeting: false)
         let conversationId = historyCoordinator.currentConversationId
         let fileName = "minimal-offline-\(UUID().uuidString).txt"
 
@@ -150,7 +150,7 @@ final class OfflineModeHarnessTests: XCTestCase {
     func testOfflineHarnessDirectMinimalToolCallProducesAndExecutesCreateFile() async throws {
         let projectRoot = makeTempDir(prefix: "offline_direct_minimal_tools")
         let container = try await makeOfflineContainer(projectRoot: projectRoot)
-        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot, seedGreeting: false)
         let minimalTools = makeMinimalOfflineTools(projectRoot: projectRoot, eventBus: container.eventBus)
         let aiInteractionCoordinator = AIInteractionCoordinator(
             aiService: container.aiService,
@@ -416,8 +416,7 @@ final class OfflineModeHarnessTests: XCTestCase {
 
     private func resolveOfflineHarnessModelId(preferredModelId: String?) throws -> String {
         let environment = ProcessInfo.processInfo.environment
-        let candidateModelIds = [
-            preferredModelId,
+        let explicitCandidateModelIds = [
             environment["TEST_RUNNER_ENV_HARNESS_MODEL_ID"],
             environment["HARNESS_MODEL_ID"]
         ]
@@ -427,7 +426,7 @@ final class OfflineModeHarnessTests: XCTestCase {
             return trimmedValue.isEmpty ? nil : trimmedValue
         }
  
-        if let requestedModelId = candidateModelIds.first(where: { LocalModelCatalog.model(id: $0) != nil }) {
+        if let requestedModelId = explicitCandidateModelIds.first(where: { LocalModelCatalog.model(id: $0) != nil }) {
             guard let requestedModel = LocalModelCatalog.model(id: requestedModelId) else {
                 throw NSError(
                     domain: "OfflineModeHarnessTests",
@@ -443,6 +442,17 @@ final class OfflineModeHarnessTests: XCTestCase {
                 )
             }
             return requestedModelId
+        }
+
+        if let preferredModelId,
+           let preferredModel = LocalModelCatalog.model(id: preferredModelId),
+           LocalModelFileStore.isModelInstalled(preferredModel) {
+            return preferredModel.id
+        }
+
+        if let preferredInstalledModel = LocalModelCatalog.model(id: "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"),
+           LocalModelFileStore.isModelInstalled(preferredInstalledModel) {
+            return preferredInstalledModel.id
         }
 
         if let installedModel = LocalModelCatalog.allModels().first(where: { LocalModelFileStore.isModelInstalled($0) }) {
@@ -463,10 +473,7 @@ final class OfflineModeHarnessTests: XCTestCase {
         if let selectedLocalModelId, !selectedLocalModelId.isEmpty {
             return selectedLocalModelId
         }
-
-        let openRouterSettings = OpenRouterSettingsStore(settingsStore: settingsStore).load(includeApiKey: true)
-        let openRouterModelId = openRouterSettings.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        return openRouterModelId.isEmpty ? nil : openRouterModelId
+        return nil
     }
 
     private func makeRuntime(offlineModeEnabled: Bool, projectRoot: URL? = nil) async throws -> Runtime {
@@ -494,12 +501,14 @@ final class OfflineModeHarnessTests: XCTestCase {
         offlineModeEnabled: Bool,
         projectRoot: URL?
     ) async throws -> DependencyContainer {
+        let environment = ProcessInfo.processInfo.environment
         let container = DependencyContainer(
             launchContext: AppLaunchContext(
                 mode: .unitTest,
                 isTesting: true,
                 isUITesting: false,
-                testProfilePath: nil,
+                testProfilePath: environment[TestLaunchKeys.testProfileDir]
+                    ?? environment["TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR"],
                 disableHeavyInit: false
             )
         )
@@ -517,12 +526,15 @@ final class OfflineModeHarnessTests: XCTestCase {
         ))
 
         let selectionStore = LocalModelSelectionStore(settingsStore: container.settingsStore)
+        container.settingsStore.set(offlineModeEnabled, forKey: "AI.OfflineModeEnabled")
         await selectionStore.setOfflineModeEnabled(offlineModeEnabled)
         if offlineModeEnabled {
             let modelId = try resolveOfflineHarnessModelId(
                 preferredModelId: preferredOfflineHarnessModelId(settingsStore: container.settingsStore)
             )
+            container.settingsStore.set(modelId, forKey: "LocalModel.SelectedId")
             await selectionStore.setSelectedModelId(modelId)
+            XCTAssertEqual(container.settingsStore.string(forKey: "LocalModel.SelectedId"), modelId)
             let effectiveModelId = await selectionStore.selectedModelId()
             XCTAssertEqual(effectiveModelId, modelId)
         }
@@ -542,7 +554,7 @@ final class OfflineModeHarnessTests: XCTestCase {
         projectRoot: URL,
         container: DependencyContainer
     ) -> ConversationSendCoordinator {
-        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot, seedGreeting: false)
         let aiInteractionCoordinator = AIInteractionCoordinator(
             aiService: container.aiService,
             codebaseIndex: nil,
@@ -564,12 +576,14 @@ final class OfflineModeHarnessTests: XCTestCase {
         )
     }
 
-    private func makeHistoryCoordinator(projectRoot: URL) -> ChatHistoryCoordinator {
+    private func makeHistoryCoordinator(projectRoot: URL, seedGreeting: Bool = true) -> ChatHistoryCoordinator {
         let historyCoordinator = ChatHistoryCoordinator(
             historyManager: ChatHistoryManager(),
             projectRoot: projectRoot
         )
-        historyCoordinator.append(ChatMessage(role: .user, content: "Hello"))
+        if seedGreeting {
+            historyCoordinator.append(ChatMessage(role: .user, content: "Hello"))
+        }
         return historyCoordinator
     }
 

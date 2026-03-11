@@ -22,7 +22,7 @@ final class AgenticHarnessTests: XCTestCase {
             allowExternalAPIs: true,
             minAPIRequestInterval: 1.0,
             serialExternalAPITests: true,
-            externalAPITimeout: 60.0,
+            externalAPITimeout: 180.0,
             useMockServices: false
         )
         await TestConfigurationProvider.shared.setConfiguration(config)
@@ -77,6 +77,8 @@ final class AgenticHarnessTests: XCTestCase {
             print("[HARNESS][warning] Conversation manager reported error: \(error)")
         }
         if timedOut {
+            manager.stopGeneration()
+            _ = try await waitForConversationToFinish(manager, timeoutSeconds: 5)
             XCTFail("Timed out waiting for conversation to finish after \(Int(timeoutSeconds))s of inactivity")
         }
     }

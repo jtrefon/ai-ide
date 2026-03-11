@@ -55,8 +55,7 @@ final class ConversationPolicy: ConversationPolicyProtocol {
             return filterReadOnlyTools(from: modeAllowedTools)
             
         case .initial_response:
-            // Preserve full execution capability for the agent's first response.
-            return modeAllowedTools
+            return []
             
         case .tool_loop:
             return filterToolLoopExecutionTools(from: modeAllowedTools)

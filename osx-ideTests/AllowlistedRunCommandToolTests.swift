@@ -68,4 +68,20 @@ final class AllowlistedRunCommandToolTests: XCTestCase {
         XCTAssertTrue(output.contains("Timed Out: false"))
         XCTAssertTrue(output.contains("unit-run-command-ok"))
     }
+
+    func testRealRunCommandToolDoesNotReportTimeoutForFastDirectoryListing() async throws {
+        let projectRoot = makeTempDir(prefix: "run_command_listing")
+        defer { try? FileManager.default.removeItem(at: projectRoot) }
+
+        let pathValidator = PathValidator(projectRoot: projectRoot)
+        let tool = RunCommandTool(projectRoot: projectRoot, pathValidator: pathValidator)
+
+        let output = try await tool.execute(arguments: ToolArguments([
+            "command": "ls -la",
+            "timeout_seconds": 1
+        ]))
+
+        XCTAssertTrue(output.contains("Exit Code: 0"))
+        XCTAssertTrue(output.contains("Timed Out: false"))
+    }
 }

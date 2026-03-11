@@ -33,6 +33,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     private struct UserMessageContext {
         let text: String
+        let mediaAttachments: [ChatMessageMediaAttachment]
         let hasSelectionContext: Bool
         let message: ChatMessage
     }
@@ -46,6 +47,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     }
 
     @Published var currentInput: String = ""
+    @Published var currentMediaAttachments: [ChatMessageMediaAttachment] = []
     @Published var isSending: Bool = false
     @Published var error: String?
     @Published var currentMode: AIMode = .chat
@@ -474,14 +476,17 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     private func buildUserMessageContext(context: String?) -> UserMessageContext {
         let userMessageText = currentInput
+        let mediaAttachments = currentMediaAttachments
         let hasSelectionContext = (context?.isEmpty == false)
         let userMessage = ChatMessage(
             role: .user,
             content: currentInput,
+            mediaAttachments: mediaAttachments,
             context: ChatMessageContentContext(codeContext: context)
         )
         return UserMessageContext(
             text: userMessageText,
+            mediaAttachments: mediaAttachments,
             hasSelectionContext: hasSelectionContext,
             message: userMessage
         )
@@ -505,6 +510,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     private func resetInputState() {
         currentInput = ""
+        currentMediaAttachments = []
         isSending = true
         error = nil
         providerIssue = nil
@@ -602,6 +608,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 try await self.sendCoordinator.send(
                     SendRequest(
                         userInput: userContext.text,
+                        mediaAttachments: userContext.mediaAttachments,
                         explicitContext: explicitContext,
                         mode: self.currentMode,
                         projectRoot: self.projectRoot,

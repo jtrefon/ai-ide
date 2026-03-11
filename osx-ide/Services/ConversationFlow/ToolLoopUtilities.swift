@@ -4,6 +4,38 @@ import Foundation
 /// This eliminates code duplication between ToolLoopHandler, QAReviewHandler,
 /// FinalResponseHandler, and ConversationSendCoordinator.
 enum ToolLoopUtilities {
+    private static func prompt(
+        key: String,
+        projectRoot: URL,
+        replacements: [String: String] = [:]
+    ) throws -> String {
+        var content = try PromptRepository.shared.prompt(
+            key: key,
+            projectRoot: projectRoot
+        )
+        for (token, value) in replacements {
+            content = content.replacingOccurrences(of: token, with: value)
+        }
+        return content
+    }
+
+    private static func planSection(from plan: String) -> String {
+        let trimmedPlan = plan.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPlan.isEmpty else { return "" }
+        return "Plan:\n\(trimmedPlan)"
+    }
+
+    private static func nextPendingSection(from planMarkdown: String) -> String {
+        guard let nextPendingLine = planMarkdown
+            .components(separatedBy: .newlines)
+            .first(where: { $0.contains("- [ ]") })?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !nextPendingLine.isEmpty else {
+            return ""
+        }
+        return "Next unfinished item:\n\(nextPendingLine)"
+    }
+
     // MARK: - Text Processing
     
     /// Truncates text to a specified limit with a truncation marker.
@@ -94,13 +126,60 @@ enum ToolLoopUtilities {
         return summary.joined(separator: "\n")
     }
 
+    private static func focusedConversationContextSection(from historyMessages: [ChatMessage]) -> String {
+        let recentMessages = historyMessages
+            .filter { !$0.isDraft }
+            .suffix(16)
+
+        let recentConversationLines = recentMessages.compactMap { message -> String? in
+            guard !message.isToolExecution else { return nil }
+            let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+
+            let roleLabel: String
+            switch message.role {
+            case .user:
+                roleLabel = "User"
+            case .assistant:
+                roleLabel = "Assistant"
+            case .system:
+                roleLabel = "System"
+            case .tool:
+                roleLabel = "Tool"
+            }
+
+            return "- \(roleLabel): \(truncate(trimmed, limit: 220))"
+        }
+
+        let recentToolLines = recentMessages.compactMap { message -> String? in
+            guard message.isToolExecution else { return nil }
+            let status = message.toolStatus?.rawValue ?? "unknown"
+            let toolName = message.toolName ?? "unknown_tool"
+            let toolOutput = toolOutputText(from: message).trimmingCharacters(in: .whitespacesAndNewlines)
+            let compactOutput = toolOutput.isEmpty ? "No output recorded." : truncate(toolOutput, limit: 220)
+            return "- \(toolName) [\(status)]: \(compactOutput)"
+        }
+
+        var sections: [String] = []
+        if !recentConversationLines.isEmpty {
+            sections.append("Recent conversation:\n" + recentConversationLines.joined(separator: "\n"))
+        }
+        if !recentToolLines.isEmpty {
+            sections.append("Recent tool execution results:\n" + recentToolLines.joined(separator: "\n"))
+        }
+
+        return sections.joined(separator: "\n\n")
+    }
+
     static func buildFocusedExecutionMessages(
         userInput: String,
         conversationId: String,
-        projectRoot: URL
+        projectRoot: URL,
+        historyMessages: [ChatMessage]
     ) async throws -> [ChatMessage] {
         await ConversationPlanStore.shared.setProjectRoot(projectRoot)
         let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let contextSection = focusedConversationContextSection(from: historyMessages)
 
         var parts: [String] = [
             try PromptRepository.shared.prompt(
@@ -108,6 +187,10 @@ enum ToolLoopUtilities {
                 projectRoot: projectRoot
             )
         ]
+
+        if !contextSection.isEmpty {
+            parts.append(contextSection)
+        }
 
         if !plan.isEmpty {
             parts.append("Plan:\n\(plan)")
@@ -126,20 +209,20 @@ enum ToolLoopUtilities {
         toolSummary: String
     ) async throws -> [ChatMessage] {
         let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
-
-        var parts: [String] = [
+        let parts: [String] = [
             try PromptRepository.shared.prompt(
                 key: "ConversationFlow/Corrections/tool_loop_focused_execution",
                 projectRoot: projectRoot
             ),
-            "The tool loop stalled after read-only or non-executing progress.",
-            "Use concrete execution tools now. Do not repeat read-only exploration unless it is strictly required to unblock execution.",
-            "Observed tool results:\n\(toolSummary)"
+            try prompt(
+                key: "ConversationFlow/Corrections/stalled_execution_transition",
+                projectRoot: projectRoot,
+                replacements: [
+                    "{{TOOL_SUMMARY}}": toolSummary,
+                    "{{PLAN_SECTION}}": planSection(from: plan)
+                ]
+            )
         ]
-
-        if !plan.isEmpty {
-            parts.append("Plan:\n\(plan)")
-        }
 
         return [
             ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
@@ -163,21 +246,23 @@ enum ToolLoopUtilities {
 
         var parts: [String] = []
         if toolsAvailable {
-            parts.append(try PromptRepository.shared.prompt(
-                key: "ConversationFlow/Corrections/tool_loop_focused_execution",
-                projectRoot: projectRoot
+            parts.append(try prompt(
+                key: "ConversationFlow/Corrections/autonomous_with_tools",
+                projectRoot: projectRoot,
+                replacements: [
+                    "{{ASSISTANT_DRAFT}}": existingAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines),
+                    "{{PLAN_SECTION}}": planSection(from: plan)
+                ]
             ))
-            parts.append("The assistant asked the user for the next step or extra input. In agent mode, continue autonomously with the safest reasonable assumptions.")
-            parts.append("Do not ask the user for confirmation, file selection, or implementation choices. Return concrete tool calls now.")
         } else {
-            parts.append("You are finalizing an agent response without tool access.")
-            parts.append("The assistant asked the user for the next step or extra input. In agent mode, do not hand work back to the user when a safe default can be chosen.")
-            parts.append("Choose the safest reasonable assumption, explain it briefly, and provide a clear user-visible response in plain text with no tool calls.")
-        }
-        parts.append("Current assistant draft:\n\(existingAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines))")
-
-        if !plan.isEmpty {
-            parts.append("Plan:\n\(plan)")
+            parts.append(try prompt(
+                key: "ConversationFlow/Corrections/autonomous_without_tools",
+                projectRoot: projectRoot,
+                replacements: [
+                    "{{ASSISTANT_DRAFT}}": existingAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines),
+                    "{{PLAN_SECTION}}": planSection(from: plan)
+                ]
+            ))
         }
 
         return [
@@ -194,19 +279,20 @@ enum ToolLoopUtilities {
     ) async throws -> [ChatMessage] {
         let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
 
-        var parts: [String] = [
+        let parts: [String] = [
             try PromptRepository.shared.prompt(
                 key: "ConversationFlow/Corrections/tool_loop_focused_execution",
                 projectRoot: projectRoot
             ),
-            "The previous iteration repeated the same tool-call signatures.",
-            "Pivot to a different execution sequence that advances completion. If execution is complete, return a concise plain-text final response instead of more tool calls.",
-            "Repeated signatures:\n\(repeatedSignatures.map { "- \($0)" }.joined(separator: "\n"))"
+            try prompt(
+                key: "ConversationFlow/Corrections/repeated_signature_diversion",
+                projectRoot: projectRoot,
+                replacements: [
+                    "{{REPEATED_SIGNATURES}}": repeatedSignatures.map { "- \($0)" }.joined(separator: "\n"),
+                    "{{PLAN_SECTION}}": planSection(from: plan)
+                ]
+            )
         ]
-
-        if !plan.isEmpty {
-            parts.append("Plan:\n\(plan)")
-        }
 
         return [
             ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
@@ -222,19 +308,20 @@ enum ToolLoopUtilities {
     ) async throws -> [ChatMessage] {
         let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
 
-        var parts: [String] = [
+        let parts: [String] = [
             try PromptRepository.shared.prompt(
                 key: "ConversationFlow/Corrections/tool_loop_focused_execution",
                 projectRoot: projectRoot
             ),
-            "The tool loop is repeatedly targeting the same files without finishing the request.",
-            "Progress remaining work before revisiting the same write target. Return concrete tool calls that move the implementation forward.",
-            "Repeated write targets:\n\(writeTargetSignature)"
+            try prompt(
+                key: "ConversationFlow/Corrections/repeated_write_target_diversion",
+                projectRoot: projectRoot,
+                replacements: [
+                    "{{WRITE_TARGET_SIGNATURE}}": writeTargetSignature,
+                    "{{PLAN_SECTION}}": planSection(from: plan)
+                ]
+            )
         ]
-
-        if !plan.isEmpty {
-            parts.append("Plan:\n\(plan)")
-        }
 
         return [
             ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
@@ -246,29 +333,36 @@ enum ToolLoopUtilities {
         userInput: String,
         conversationId: String,
         projectRoot: URL,
+        historyMessages: [ChatMessage],
         currentAssistantContent: String,
         planMarkdown: String,
         completedCount: Int,
         totalCount: Int
     ) async throws -> [ChatMessage] {
+        let contextSection = focusedConversationContextSection(from: historyMessages)
+
         var parts: [String] = [
             try PromptRepository.shared.prompt(
                 key: "ConversationFlow/Corrections/tool_loop_focused_execution",
                 projectRoot: projectRoot
             ),
-            "The implementation plan is not complete yet. Continue with the next unfinished checklist item instead of stopping.",
-            "Progress: \(completedCount)/\(totalCount)",
-            "Current assistant draft:\n\(currentAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines))",
-            "Plan:\n\(planMarkdown)"
         ]
 
-        if let nextPendingLine = planMarkdown
-            .components(separatedBy: .newlines)
-            .first(where: { $0.contains("- [ ]") })?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !nextPendingLine.isEmpty {
-            parts.append("Next unfinished item:\n\(nextPendingLine)")
+        if !contextSection.isEmpty {
+            parts.append(contextSection)
         }
+
+        parts.append(try prompt(
+                key: "ConversationFlow/Corrections/plan_continuation",
+                projectRoot: projectRoot,
+                replacements: [
+                    "{{COMPLETED_COUNT}}": String(completedCount),
+                    "{{TOTAL_COUNT}}": String(totalCount),
+                    "{{ASSISTANT_DRAFT}}": currentAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines),
+                    "{{PLAN_MARKDOWN}}": planMarkdown,
+                    "{{NEXT_PENDING_SECTION}}": nextPendingSection(from: planMarkdown)
+                ]
+            ))
 
         return [
             ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
@@ -278,18 +372,21 @@ enum ToolLoopUtilities {
 
     static func buildStalledFinalResponseMessages(
         userInput: String,
-        toolSummary: String
-    ) -> [ChatMessage] {
-        let systemContent = [
-            "Tool-loop progress has stalled for this branch.",
-            "Stop calling tools and provide a clear final user-visible response in plain text.",
-            "Summarize what was completed, what remains uncertain, and any concise next steps without asking the user to restate the task."
-        ].joined(separator: "\n\n")
-        let userContent = [
-            "User request:\n\(userInput)",
-            "Tool outputs:\n\(toolSummary)",
-            "Provide the final response now."
-        ].joined(separator: "\n\n")
+        toolSummary: String,
+        projectRoot: URL
+    ) throws -> [ChatMessage] {
+        let systemContent = try PromptRepository.shared.prompt(
+            key: "ConversationFlow/Corrections/stalled_final_response_system",
+            projectRoot: projectRoot
+        )
+        let userContent = try prompt(
+            key: "ConversationFlow/Corrections/stalled_final_response_user",
+            projectRoot: projectRoot,
+            replacements: [
+                "{{USER_INPUT}}": userInput,
+                "{{TOOL_SUMMARY}}": toolSummary
+            ]
+        )
 
         return [
             ChatMessage(role: .system, content: systemContent),

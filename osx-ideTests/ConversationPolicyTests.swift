@@ -68,7 +68,7 @@ final class ConversationPolicyTests: XCTestCase {
 
     func testAgentModeInitialResponseReturnsNoTools() {
         let result = policy.allowedTools(for: .initial_response, mode: .agent, from: allTools)
-        XCTAssertEqual(result.count, allTools.count, "initial_response should preserve tools for agent execution")
+        XCTAssertTrue(result.isEmpty, "initial_response should remain a lightweight response stage")
     }
 
     func testAgentModeToolLoopReturnsExecutionToolsOnly() {

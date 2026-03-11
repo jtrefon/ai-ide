@@ -9,6 +9,13 @@ extension OpenRouterAIService {
         let projectRoot: URL?
         let reasoningMode: ReasoningMode
         let stage: AIRequestStage?
+        let useNativeReasoning: Bool
+    }
+
+    struct NativeReasoningConfiguration: Equatable, Sendable {
+        let enabled: Bool
+        let effort: String?
+        let exclude: Bool
     }
 
     struct OpenRouterChatInput {
@@ -55,5 +62,6 @@ extension OpenRouterAIService {
         let finalMessages: [OpenRouterChatMessage]
         let toolDefinitions: [[String: Any]]?
         let toolChoice: String?
+        let nativeReasoningConfiguration: NativeReasoningConfiguration?
     }
 }

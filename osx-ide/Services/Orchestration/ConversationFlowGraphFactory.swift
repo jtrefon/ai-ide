@@ -3,6 +3,7 @@ import Foundation
 @MainActor
 enum ConversationFlowGraphFactory {
     static func makeGraph(
+        request: SendRequest,
         historyCoordinator: ChatHistoryCoordinator,
         aiInteractionCoordinator: AIInteractionCoordinator,
         initialResponseHandler: InitialResponseHandler,
@@ -11,28 +12,20 @@ enum ConversationFlowGraphFactory {
         qaReviewHandler: QAReviewHandler,
         qaReviewEnabled: Bool
     ) -> OrchestrationGraph {
-        let strategicPlanningNodeId = StrategicPlanningNode.idValue
-        let tacticalPlanningNodeId = TacticalPlanningNode.idValue
-        let initialResponseNodeId = InitialResponseNode.idValue
+        _ = request
+        let dispatcherNodeId = DispatcherNode.idValue
         let emptyResponseRecoveryNodeId = "empty_response_recovery"
         let branchReviewNodeId = BranchReviewNode.idValue
         let finalResponseNextNodeId = qaReviewEnabled ? QAToolOutputReviewNode.idValue : nil
 
         return OrchestrationGraph(
-            entryNodeId: strategicPlanningNodeId,
+            entryNodeId: dispatcherNodeId,
             nodes: [
-                StrategicPlanningNode(
-                    historyCoordinator: historyCoordinator,
-                    nextNodeId: tacticalPlanningNodeId
-                ),
-                TacticalPlanningNode(
-                    historyCoordinator: historyCoordinator,
-                    nextNodeId: initialResponseNodeId
-                ),
-                InitialResponseNode(
+                DispatcherNode(
                     historyCoordinator: historyCoordinator,
                     handler: initialResponseHandler,
-                    nextNodeId: ToolLoopNode.idValue
+                    toolLoopNodeId: ToolLoopNode.idValue,
+                    finalResponseNodeId: FinalResponseNode.idValue
                 ),
                 ToolLoopNode(
                     handler: toolLoopHandler,
@@ -43,7 +36,7 @@ enum ConversationFlowGraphFactory {
                     nextNodeId: branchReviewNodeId,
                 ),
                 BranchReviewNode(
-                    executionNodeId: initialResponseNodeId,
+                    executionNodeId: ToolLoopNode.idValue,
                     finalNodeId: FinalResponseNode.idValue
                 ),
                 FinalResponseNode(

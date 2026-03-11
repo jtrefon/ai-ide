@@ -37,6 +37,7 @@ public protocol ConversationManagerProtocol: AnyObject, StatePublisherProtocol {
     var messages: [ChatMessage] { get }
     var conversationTabs: [ConversationTabItem] { get }
     var currentInput: String { get set }
+    var currentMediaAttachments: [ChatMessageMediaAttachment] { get set }
     var isSending: Bool { get }
     var error: String? { get }
     var currentMode: AIMode { get set }

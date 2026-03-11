@@ -30,8 +30,8 @@ public enum AIRequestStage: String, Codable, Sendable {
         stage: AIRequestStage?
     ) -> String? {
         guard reasoningMode.includesAgentReasoning, mode == .agent else { return nil }
-        guard stage != .initial_response, stage != .tool_loop else { return nil }
-        return reasoningPromptKey(for: stage)
+        let _ = stage
+        return nil
     }
 
     static func reasoningPromptIfNeeded(
@@ -53,6 +53,7 @@ public enum AIRequestStage: String, Codable, Sendable {
 
 public struct AIServiceHistoryRequest: Sendable {
     public let messages: [ChatMessage]
+    public let mediaAttachments: [ChatMessageMediaAttachment]
     public let context: String?
     public let tools: [AITool]?
     public let mode: AIMode?
@@ -63,6 +64,7 @@ public struct AIServiceHistoryRequest: Sendable {
 
     public init(
         messages: [ChatMessage],
+        mediaAttachments: [ChatMessageMediaAttachment] = [],
         context: String?,
         tools: [AITool]?,
         mode: AIMode?,
@@ -72,6 +74,7 @@ public struct AIServiceHistoryRequest: Sendable {
         conversationId: String? = nil
     ) {
         self.messages = messages
+        self.mediaAttachments = mediaAttachments
         self.context = context
         self.tools = tools
         self.mode = mode

@@ -69,7 +69,8 @@ final class ToolLoopHandler {
             let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
                 userInput: userInput,
                 conversationId: conversationId,
-                projectRoot: projectRoot
+                projectRoot: projectRoot,
+                historyMessages: historyCoordinator.messages
             )
 
             currentTurnTools = availableTools
@@ -98,7 +99,8 @@ final class ToolLoopHandler {
             let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
                 userInput: userInput,
                 conversationId: conversationId,
-                projectRoot: projectRoot
+                projectRoot: projectRoot,
+                historyMessages: historyCoordinator.messages
             )
             currentTurnTools = availableTools
             currentResponse = try await aiInteractionCoordinator
@@ -140,6 +142,8 @@ final class ToolLoopHandler {
                         "iteration": toolIteration,
                         "repeatedCount": repeatedCompletedSignatureCount
                     ])
+                    let finalizationTools: [AITool]? =
+                        hasObservedSuccessfulMutation ? nil : currentTurnTools
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
                         explicitContext: explicitContext,
                         projectRoot: projectRoot,
@@ -147,10 +151,10 @@ final class ToolLoopHandler {
                         userInput: userInput,
                         toolResults: lastToolResults,
                         runId: runId,
-                        availableTools: currentTurnTools,
+                        availableTools: finalizationTools,
                         conversationId: conversationId
                     )
-                    if shouldResumeRecoveredExecution(from: currentResponse) {
+                    if finalizationTools != nil, shouldResumeRecoveredExecution(from: currentResponse) {
                         repeatedCompletedSignatureCount = 0
                         toolIteration = max(0, toolIteration - 1)
                         continue
@@ -758,7 +762,8 @@ final class ToolLoopHandler {
                  let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
                      userInput: userInput,
                      conversationId: conversationId,
-                     projectRoot: projectRoot
+                     projectRoot: projectRoot,
+                     historyMessages: historyCoordinator.messages
                  )
                  currentResponse = try await aiInteractionCoordinator
                      .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
@@ -805,12 +810,17 @@ final class ToolLoopHandler {
              if mode == .agent,
                 currentResponse.toolCalls?.isEmpty ?? true,
                 let content = currentResponse.content,
+                !(await shouldPreserveNoToolHandoffWithoutIncompletePlan(
+                    content: content,
+                    conversationId: conversationId
+                )),
                 ChatPromptBuilder.isRequestingUserInputForNextStep(content: content),
                 !currentTurnTools.isEmpty {
                  let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
                      userInput: userInput,
                      conversationId: conversationId,
-                     projectRoot: projectRoot
+                     projectRoot: projectRoot,
+                     historyMessages: historyCoordinator.messages
                  )
                  currentResponse = try await aiInteractionCoordinator
                      .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
@@ -853,6 +863,10 @@ final class ToolLoopHandler {
              if mode == .agent,
                 currentResponse.toolCalls?.isEmpty ?? true,
                 let content = currentResponse.content,
+                !(await shouldPreserveNoToolHandoffWithoutIncompletePlan(
+                    content: content,
+                    conversationId: conversationId
+                )),
                 ChatPromptBuilder.isRequestingUserInputForNextStep(content: content),
                 availableTools.isEmpty {
                  let autonomousMessages = try await ToolLoopUtilities.buildAutonomousNoUserInputMessages(
@@ -1720,9 +1734,10 @@ final class ToolLoopHandler {
         }
 
         // Fallback: request final response without tools
-        let finalResponseMessages = ToolLoopUtilities.buildStalledFinalResponseMessages(
+        let finalResponseMessages = try ToolLoopUtilities.buildStalledFinalResponseMessages(
             userInput: userInput,
-            toolSummary: toolSummary
+            toolSummary: toolSummary,
+            projectRoot: projectRoot
         )
 
         let followupMode: AIMode = (mode == .agent) ? .agent : .chat
@@ -1753,7 +1768,8 @@ final class ToolLoopHandler {
 
         let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
-        return planProgress.total == 0
+        guard planProgress.total > 0 else { return true }
+        return !planProgress.isComplete
     }
 
     private func requestFocusedExecutionRecoveryIfPlanIncomplete(
@@ -2017,6 +2033,7 @@ final class ToolLoopHandler {
             userInput: userInput,
             conversationId: conversationId,
             projectRoot: projectRoot,
+            historyMessages: historyCoordinator.messages,
             currentAssistantContent: currentContent,
             planMarkdown: planMarkdown,
             completedCount: planProgress.completed,
@@ -2069,6 +2086,7 @@ final class ToolLoopHandler {
         let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
         guard planProgress.total > 0, !planProgress.isComplete else { return currentResponse }
+        guard !isLikelyContinuationOrRecoverySummary(currentContent) else { return currentResponse }
 
         let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: currentContent)
         let deliveryStatusLabel: String
@@ -2104,7 +2122,8 @@ final class ToolLoopHandler {
         let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
             userInput: userInput,
             conversationId: conversationId,
-            projectRoot: projectRoot
+            projectRoot: projectRoot,
+            historyMessages: historyCoordinator.messages
         )
 
         let recoveryTools: [AITool]

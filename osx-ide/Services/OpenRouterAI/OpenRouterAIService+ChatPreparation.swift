@@ -16,7 +16,8 @@ extension OpenRouterAIService {
                 mode: request.mode,
                 projectRoot: request.projectRoot,
                 reasoningMode: settings.reasoningMode,
-                stage: request.stage
+                stage: request.stage,
+                useNativeReasoning: true
             )
         )
 
@@ -34,7 +35,8 @@ extension OpenRouterAIService {
             settings: settings,
             finalMessages: finalMessages,
             toolDefinitions: toolDefinitions,
-            toolChoice: toolChoice
+            toolChoice: toolChoice,
+            nativeReasoningConfiguration: nativeReasoningConfiguration(for: settings.reasoningMode)
         )
     }
 
@@ -60,84 +62,33 @@ extension OpenRouterAIService {
     }
 
     internal func buildSystemContent(input: BuildSystemContentInput) throws -> String {
-        var components: [String] = []
-        components.append(
-            buildBaseSystemContent(
-                systemPrompt: input.systemPrompt,
+        try SystemPromptAssembler().assemble(
+            input: .init(
+                systemPromptOverride: input.systemPrompt,
                 hasTools: input.hasTools,
-                toolPromptMode: input.toolPromptMode
+                toolPromptMode: input.toolPromptMode,
+                mode: input.mode,
+                projectRoot: input.projectRoot,
+                reasoningMode: input.reasoningMode,
+                stage: input.stage,
+                includeModelReasoning: !input.useNativeReasoning
             )
         )
-
-        if let modeSystemAddition = buildModeSystemAddition(mode: input.mode) {
-            components.append(modeSystemAddition)
-        }
-
-        if let projectRootContext = buildProjectRootContext(projectRoot: input.projectRoot) {
-            components.append(projectRootContext)
-        }
-
-        if let modelReasoningPrompt = try buildModelReasoningPrompt(
-            reasoningMode: input.reasoningMode,
-            projectRoot: input.projectRoot
-        ) {
-            components.append(modelReasoningPrompt)
-        }
-
-        if let reasoningPrompt = try AIRequestStage.reasoningPromptIfNeeded(
-            reasoningMode: input.reasoningMode,
-            mode: input.mode,
-            stage: input.stage,
-            projectRoot: input.projectRoot
-        ) {
-            components.append(reasoningPrompt)
-        }
-
-        return components.joined(separator: "\n\n")
     }
 
-    internal func buildBaseSystemContent(systemPrompt: String, hasTools: Bool, toolPromptMode: ToolPromptMode) -> String {
-        if !systemPrompt.isEmpty {
-            return systemPrompt
+    internal func nativeReasoningConfiguration(
+        for reasoningMode: ReasoningMode
+    ) -> NativeReasoningConfiguration? {
+        switch reasoningMode {
+        case .none:
+            return .init(enabled: false, effort: "none", exclude: true)
+        case .model:
+            return .init(enabled: true, effort: nil, exclude: true)
+        case .agent:
+            return .init(enabled: false, effort: "none", exclude: true)
+        case .modelAndAgent:
+            return .init(enabled: true, effort: nil, exclude: true)
         }
-
-        if hasTools {
-            switch toolPromptMode {
-            case .fullStatic:
-                return ToolAwarenessPrompt.systemPrompt
-            case .concise:
-                return ToolAwarenessPrompt.structuredToolCallingSystemPrompt
-            }
-        }
-
-        return "You are a helpful, concise coding assistant."
-    }
-
-    internal func buildModeSystemAddition(mode: AIMode?) -> String? {
-        guard let mode else { return nil }
-        return mode.systemPromptAddition
-    }
-
-    internal func buildProjectRootContext(projectRoot: URL?) -> String? {
-        guard let projectRoot else { return nil }
-        return """
-
-        **IMPORTANT CONTEXT:**
-        Project Root: `\(projectRoot.path)`
-        Platform: macOS
-        All file paths must be relative to the project root or validated absolute paths within it.
-        Never use Linux-style paths like /home.
-        """
-    }
-
-    internal func buildModelReasoningPrompt(
-        reasoningMode: ReasoningMode,
-        projectRoot: URL?
-    ) throws -> String? {
-        try PromptRepository.shared.prompt(
-            key: reasoningMode.modelReasoningPromptKey,
-            projectRoot: projectRoot
-        )
     }
 
     internal func buildFinalMessages(

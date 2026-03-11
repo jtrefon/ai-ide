@@ -118,10 +118,7 @@ public enum LocalModelFileStore {
     }
 
     private static func requiresRuntimeCompatibilityDirectory(model: LocalModelDefinition) -> Bool {
-        guard let config = loadModelConfig(modelId: model.id) else {
-            return false
-        }
-        return config.effectiveModelType == "qwen3_5"
+        model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main"
     }
 
     private static func prepareRuntimeCompatibilityDirectory(
@@ -129,7 +126,7 @@ public enum LocalModelFileStore {
         model: LocalModelDefinition
     ) throws -> URL {
         let runtimeDirectory = sourceDirectory.appendingPathComponent("osx-ide-runtime", isDirectory: true)
-        let normalizedConfigData = try normalizedRuntimeConfigData(for: model)
+        let normalizedChatTemplate = try normalizedRuntimeChatTemplateData(for: model)
 
         if FileManager.default.fileExists(atPath: runtimeDirectory.path) {
             try FileManager.default.removeItem(at: runtimeDirectory)
@@ -147,7 +144,8 @@ public enum LocalModelFileStore {
             guard sourceItem.lastPathComponent != runtimeDirectory.lastPathComponent else {
                 continue
             }
-            guard sourceItem.lastPathComponent != "config.json" else {
+            guard sourceItem.lastPathComponent != "config.json",
+                  sourceItem.lastPathComponent != "chat_template.jinja" else {
                 continue
             }
 
@@ -155,32 +153,86 @@ public enum LocalModelFileStore {
             try fileManager.createSymbolicLink(at: destinationItem, withDestinationURL: sourceItem)
         }
 
-        try normalizedConfigData.write(
+        try originalRuntimeConfigData(for: model).write(
             to: runtimeDirectory.appendingPathComponent("config.json"),
+            options: Data.WritingOptions.atomic
+        )
+        try normalizedChatTemplate.write(
+            to: runtimeDirectory.appendingPathComponent("chat_template.jinja"),
             options: Data.WritingOptions.atomic
         )
         return runtimeDirectory
     }
 
-    private static func normalizedRuntimeConfigData(for model: LocalModelDefinition) throws -> Data {
+    private static func originalRuntimeConfigData(for model: LocalModelDefinition) throws -> Data {
         let configURL = try artifactURL(modelId: model.id, fileName: "config.json")
-        let configData = try Data(contentsOf: configURL)
-        guard var rootObject = try JSONSerialization.jsonObject(with: configData) as? [String: Any] else {
-            return configData
-        }
-
-        guard rootObject["model_type"] as? String == "qwen3_5",
-              let textConfig = rootObject["text_config"] as? [String: Any] else {
-            return configData
-        }
-
-        if rootObject["vocab_size"] == nil,
-           let vocabSize = textConfig["vocab_size"] {
-            rootObject["vocab_size"] = vocabSize
-        }
-
-        return try JSONSerialization.data(withJSONObject: rootObject, options: [.prettyPrinted, .sortedKeys])
+        return try Data(contentsOf: configURL)
     }
+
+    private static func normalizedRuntimeChatTemplateData(for model: LocalModelDefinition) throws -> Data {
+        if model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main" {
+            return Data(qwen35JSONOnlyChatTemplate.utf8)
+        }
+
+        let templateURL = try artifactURL(modelId: model.id, fileName: "chat_template.jinja")
+        return try Data(contentsOf: templateURL)
+    }
+
+    private static let qwen35JSONOnlyChatTemplate = #"""
+{%- if tools %}
+    {{- '<|im_start|>system\n' }}
+    {%- if messages[0].role == 'system' %}
+        {{- messages[0].content + '\n\n' }}
+    {%- endif %}
+    {{- '# Tools\n\nYou have access to the following functions.\nReturn tool calls as JSON only. Do not use XML, HTML, or tag wrappers.\n\n' }}
+    {%- for tool in tools %}
+        {{- tool | tojson + '\n' }}
+    {%- endfor %}
+    {{- '\nIf you choose to call a function, reply with a single JSON object and no trailing text.\nFormat:\n{"tool_calls":[{"name":"function_name","arguments":{"parameter":"value"}}]}' }}
+    {{- '<|im_end|>\n' }}
+{%- else %}
+    {%- if messages[0].role == 'system' %}
+        {{- '<|im_start|>system\n' + messages[0].content + '<|im_end|>\n' }}
+    {%- endif %}
+{%- endif %}
+{%- for message in messages %}
+    {%- if message.content is string %}
+        {%- set content = message.content %}
+    {%- else %}
+        {%- set content = '' %}
+    {%- endif %}
+    {%- if (message.role == "user") or (message.role == "system" and not loop.first) %}
+        {{- '<|im_start|>' + message.role + '\n' + content + '<|im_end|>\n' }}
+    {%- elif message.role == "assistant" %}
+        {{- '<|im_start|>' + message.role + '\n' + content }}
+        {%- if message.tool_calls %}
+            {%- for tool_call in message.tool_calls %}
+                {%- if (loop.first and content) or (not loop.first) %}
+                    {{- '\n' }}
+                {%- endif %}
+                {%- if tool_call.function %}
+                    {%- set tool_call = tool_call.function %}
+                {%- endif %}
+                {{- '{"tool_calls":[{"name":"' }}
+                {{- tool_call.name }}
+                {{- '","arguments":' }}
+                {%- if tool_call.arguments is string %}
+                    {{- tool_call.arguments }}
+                {%- else %}
+                    {{- tool_call.arguments | tojson }}
+                {%- endif %}
+                {{- '}}]}' }}
+            {%- endfor %}
+        {%- endif %}
+        {{- '<|im_end|>\n' }}
+    {%- elif message.role == "tool" %}
+        {{- '<|im_start|>user\nTool Output:\n' + content + '<|im_end|>\n' }}
+    {%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<|im_start|>assistant\n' }}
+{%- endif %}
+"""#
 
     private static func sanitizeModelId(_ modelId: String) -> String {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))

@@ -25,6 +25,7 @@ actor ModelRoutingAIService: AIService {
     func sendMessage(_ request: AIServiceMessageWithProjectRootRequest) async throws -> AIServiceResponse {
         // Check if offline mode is enabled
         let isOfflineMode = await selectionStore.isOfflineModeEnabled()
+        print("[ROUTER] sendMessage(projectRoot) offline=\(isOfflineMode) localService=\(String(describing: type(of: localService))) openRouterService=\(String(describing: type(of: openRouterService)))")
         
         // Simple routing: if offline mode, use MLX; otherwise use OpenRouter
         if isOfflineMode {
@@ -38,6 +39,7 @@ actor ModelRoutingAIService: AIService {
     func sendMessage(_ request: AIServiceHistoryRequest) async throws -> AIServiceResponse {
         // Check if offline mode is enabled
         let isOfflineMode = await selectionStore.isOfflineModeEnabled()
+        print("[ROUTER] sendMessage(history) offline=\(isOfflineMode) localService=\(String(describing: type(of: localService))) openRouterService=\(String(describing: type(of: openRouterService))) stage=\(String(describing: request.stage)) runId=\(String(describing: request.runId))")
         
         // Simple routing: if offline mode, use MLX; otherwise use OpenRouter
         if isOfflineMode {
@@ -52,6 +54,7 @@ actor ModelRoutingAIService: AIService {
     func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
         // Check if offline mode is enabled
         let isOfflineMode = await selectionStore.isOfflineModeEnabled()
+        print("[ROUTER] sendMessageStreaming offline=\(isOfflineMode) localService=\(String(describing: type(of: localService))) openRouterService=\(String(describing: type(of: openRouterService))) stage=\(String(describing: request.stage)) runId=\(runId)")
 
         // Simple routing: if offline mode, use MLX; otherwise use OpenRouter
         if isOfflineMode {
@@ -128,6 +131,7 @@ actor ModelRoutingAIService: AIService {
         
         return AIServiceMessageWithProjectRootRequest(
             message: request.message,
+            mediaAttachments: request.mediaAttachments,
             context: request.context,
             tools: limitedTools,
             mode: .chat,  // Force Chat mode for MLX
@@ -156,6 +160,7 @@ actor ModelRoutingAIService: AIService {
         
         return AIServiceHistoryRequest(
             messages: request.messages,
+            mediaAttachments: request.mediaAttachments,
             context: request.context,
             tools: limitedTools,
             mode: .chat,  // Force Chat mode for MLX

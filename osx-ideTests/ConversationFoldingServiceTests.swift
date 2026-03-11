@@ -81,7 +81,10 @@ final class ConversationFoldingServiceTests: XCTestCase {
         for i in 0..<50 {
             let role: MessageRole = (i % 2 == 0) ? .user : .assistant
             let content = "Message \(i)"
-            let context = ChatMessageContentContext(reasoning: "<ide_reasoning>secret reasoning</ide_reasoning>", codeContext: nil)
+            let context = ChatMessageContentContext(
+                reasoning: "Reflection: secret reasoning\nPlanning: retain summary\nContinuity: stable",
+                codeContext: nil
+            )
             messages.append(ChatMessage(role: role, content: content, context: context))
         }
         let thresholds = ConversationFoldingThresholds(maxMessageCount: 40, maxContentCharacters: 200_000, preserveMostRecentMessages: 20)
@@ -89,6 +92,7 @@ final class ConversationFoldingServiceTests: XCTestCase {
         let result = try await ConversationFoldingService.fold(messages: messages, projectRoot: projectRoot, thresholds: thresholds)
         XCTAssertNotNil(result)
         XCTAssertFalse(result!.entry.summary.contains("<ide_reasoning>"))
+        XCTAssertFalse(result!.entry.summary.contains("secret reasoning"))
     }
 
     func testFoldWritesToStore() async throws {

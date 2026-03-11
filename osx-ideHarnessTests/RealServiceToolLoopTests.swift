@@ -59,6 +59,9 @@ final class RealServiceToolLoopTests: XCTestCase {
         )
 
         let files = listAllFiles(under: result.projectRoot)
+        print("[HARNESS][INFO] tool_loop_uppercase files=\(files)")
+        let lastAssistantContent = result.manager.messages.last(where: { $0.role == .assistant })?.content ?? ""
+        print("[HARNESS][INFO] tool_loop_uppercase lastAssistant=\(lastAssistantContent)")
         harnessTrue(files.contains("output.txt"), "Should have created output.txt")
         if files.contains("output.txt") {
             let outputContent = try String(contentsOf: result.projectRoot.appendingPathComponent("output.txt"))

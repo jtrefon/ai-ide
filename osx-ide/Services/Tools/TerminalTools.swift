@@ -132,8 +132,9 @@ struct RunCommandTool: AIToolProgressReporting {
                 timeoutSeconds: timeoutSeconds,
                 isCancelled: isCancelled
             )
+            let commandCompleted = didExitBeforeTimeout || !process.isRunning
 
-            if isCancelled.get() || !didExitBeforeTimeout {
+            if isCancelled.get() || !commandCompleted {
                 await AIToolTraceLogger.shared.log(
                     type: isCancelled.get()
                         ? "terminal.run_command_cancelled"
@@ -153,7 +154,7 @@ struct RunCommandTool: AIToolProgressReporting {
             await AIToolTraceLogger.shared.log(type: "terminal.run_command_result", data: [
                 "exitCode": Int(process.terminationStatus),
                 "outputLength": output.count,
-                "timedOut": !didExitBeforeTimeout,
+                "timedOut": !commandCompleted,
                 "cancelled": isCancelled.get()
             ])
 
@@ -166,7 +167,7 @@ struct RunCommandTool: AIToolProgressReporting {
 
             return """
             Exit Code: \(process.terminationStatus)
-            Timed Out: \(!didExitBeforeTimeout)
+            Timed Out: \(!commandCompleted)
             Output:
             \(output)
             """
@@ -249,16 +250,16 @@ struct RunCommandTool: AIToolProgressReporting {
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.currentDirectoryURL = request.workingDirectoryURL
 
-        if let onProgress = request.onProgress {
-            pipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                request.collector.append(data)
-                guard let chunk = String(data: data, encoding: .utf8), !chunk.isEmpty else {
-                    return
-                }
-                onProgress(chunk)
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            request.collector.append(data)
+            guard let onProgress = request.onProgress,
+                  let chunk = String(data: data, encoding: .utf8),
+                  !chunk.isEmpty else {
+                return
             }
+            onProgress(chunk)
         }
 
         return (process, pipe)
@@ -271,9 +272,9 @@ struct RunCommandTool: AIToolProgressReporting {
     ) async -> Bool {
         await withTaskGroup(of: Bool.self) { group in
             group.addTask {
-                while process.isRunning {
-                    try? await Task.sleep(nanoseconds: 50_000_000)
-                }
+                await Task.detached(priority: .userInitiated) {
+                    process.waitUntilExit()
+                }.value
                 return true
             }
             group.addTask {
@@ -307,8 +308,6 @@ struct RunCommandTool: AIToolProgressReporting {
 
     private func finalizeOutput(pipe: Pipe, collector: OutputCollector) -> String {
         pipe.fileHandleForReading.readabilityHandler = nil
-        let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
-        collector.append(remaining)
         return String(data: collector.snapshot(), encoding: .utf8) ?? ""
     }
 

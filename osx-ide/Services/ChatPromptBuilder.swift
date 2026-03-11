@@ -33,35 +33,17 @@ class ChatPromptBuilder {
     }
 
     /// Sanitizes model text for user-visible rendering:
-    /// strips reasoning tags and tool-control XML-like markup while preserving paragraph breaks.
+    /// strips reasoning from rendered content while preserving paragraph breaks.
     static func contentForDisplay(from text: String) -> String {
         let split = splitReasoning(from: text)
-        let withoutControl = stripToolControlMarkup(from: split.content)
-        return normalizeDisplayWhitespace(withoutControl)
+        let withoutToolMarkup = stripTextualToolCallMarkup(from: split.content)
+        return normalizeDisplayWhitespace(withoutToolMarkup)
     }
 
     static func isControlMarkupOnly(_ text: String) -> Bool {
-        let lowered = text.lowercased()
-        let hasToolMarkup = lowered.contains("<tool_call>") || lowered.contains("<arg_key>") || lowered.contains("<arg_value>")
-        guard hasToolMarkup else { return false }
-        return contentForDisplay(from: text).isEmpty
-    }
-
-    private static func stripToolControlMarkup(from text: String) -> String {
-        var output = text
-        let patterns = [
-            #"(?is)<tool_call>\s*.*?\s*</tool_call>"#,
-            #"(?is)<arg_key>\s*.*?\s*</arg_key>"#,
-            #"(?is)<arg_value>\s*.*?\s*</arg_value>"#,
-            #"(?is)</?tool_call>"#,
-            #"(?is)</?arg_key>"#,
-            #"(?is)</?arg_value>"#
-        ]
-
-        for pattern in patterns {
-            output = output.replacingOccurrences(of: pattern, with: "\n\n", options: .regularExpression)
-        }
-        return output
+        let stripped = stripTextualToolCallMarkup(from: text)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && stripped.isEmpty
     }
 
     private static func normalizeDisplayWhitespace(_ text: String) -> String {
@@ -74,71 +56,46 @@ class ChatPromptBuilder {
         return output
     }
 
-    private static func splitTaggedReasoning(from text: String) -> (reasoning: String?, content: String)? {
-        let taggedPattern = #"(?is)<ide_reasoning>\s*(.*?)\s*</ide_reasoning>"#
-        guard let regex = try? NSRegularExpression(pattern: taggedPattern) else { return nil }
+    private static func stripTextualToolCallMarkup(from text: String) -> String {
+        guard !text.isEmpty else { return text }
 
-        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
-        let matches = regex.matches(in: text, options: [], range: fullRange)
+        var output = text
+        let patterns = [
+            #"(?is)<tool_call>\s*.*?\s*</tool_call>"#,
+            #"(?is)<arg_key>\s*.*?\s*</arg_key>"#,
+            #"(?is)<arg_value>\s*.*?\s*</arg_value>"#
+        ]
 
-        var reasoningBlocks: [String] = []
-        var remaining = text
-
-        // Replace complete blocks with paragraph separators to avoid gluing content.
-        for match in matches.reversed() {
-            if match.numberOfRanges > 1, let blockRange = Range(match.range(at: 1), in: text) {
-                let block = String(text[blockRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !block.isEmpty {
-                    reasoningBlocks.append(block)
-                }
-            }
-            if let fullBlockRange = Range(match.range(at: 0), in: remaining) {
-                remaining.replaceSubrange(fullBlockRange, with: "\n\n")
-            }
+        for pattern in patterns {
+            output = output.replacingOccurrences(
+                of: pattern,
+                with: "",
+                options: .regularExpression
+            )
         }
 
-        reasoningBlocks.reverse()
-
-        // Recover and strip partial reasoning block if opening tag exists without closing tag.
-        let startTag = "<ide_reasoning>"
-        let endTag = "</ide_reasoning>"
-        let hasStartTag = remaining.range(of: startTag, options: .caseInsensitive) != nil
-        let hasEndTag = remaining.range(of: endTag, options: .caseInsensitive) != nil
-
-        if hasStartTag && !hasEndTag,
-           let openRange = remaining.range(of: startTag, options: .caseInsensitive) {
-            let trailing = remaining[openRange.upperBound...]
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trailing.isEmpty {
-                reasoningBlocks.append(String(trailing))
-            }
-            remaining.replaceSubrange(openRange.lowerBound..<remaining.endIndex, with: "\n\n")
-        }
-
-        // Remove orphan closing tag fragments from leaked/incomplete outputs.
-        remaining = remaining.replacingOccurrences(
-            of: #"(?is)</ide_reasoning>"#,
-            with: "\n\n",
-            options: .regularExpression
-        )
-        remaining = remaining.replacingOccurrences(
-            of: #"\n{3,}"#,
-            with: "\n\n",
-            options: .regularExpression
-        )
-
-        let reasoning = reasoningBlocks.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleaned = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if reasoning.isEmpty && cleaned == text.trimmingCharacters(in: .whitespacesAndNewlines) {
-            return nil
-        }
-
-        return (reasoning.isEmpty ? nil : reasoning, cleaned)
+        return output
     }
 
     private static func splitPlainReasoning(from text: String) -> (reasoning: String?, content: String)? {
         let pattern = #"(?s)^\s*(Reflection:\s*.*?\n\s*Continuity:.*?)(?:\n{1,2}|$)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: fullRange),
+              let reasoningRange = Range(match.range(at: 1), in: text),
+              let removeRange = Range(match.range(at: 0), in: text) else {
+            return nil
+        }
+
+        let reasoning = String(text[reasoningRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        var remaining = text
+        remaining.removeSubrange(removeRange)
+        let cleaned = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+        return reasoning.isEmpty ? nil : (reasoning, cleaned)
+    }
+
+    private static func splitTaggedReasoning(from text: String) -> (reasoning: String?, content: String)? {
+        let pattern = #"(?is)<ide_reasoning>(.*?)</ide_reasoning>"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
         let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
         guard let match = regex.firstMatch(in: text, options: [], range: fullRange),
@@ -328,6 +285,10 @@ class ChatPromptBuilder {
         let text = content.lowercased()
         if text.isEmpty { return false }
 
+        if containsTextualToolCallMarkup(content) {
+            return true
+        }
+
         let triggers = [
             "i will implement",
             "i'll implement",
@@ -352,6 +313,10 @@ class ChatPromptBuilder {
 
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
+
+        if containsTextualToolCallMarkup(trimmed) {
+            return true
+        }
 
         let lower = trimmed.lowercased()
 
@@ -392,6 +357,11 @@ class ChatPromptBuilder {
         }
 
         return false
+    }
+
+    static func containsTextualToolCallMarkup(_ content: String) -> Bool {
+        let lower = content.lowercased()
+        return lower.contains("<tool_call>") || lower.contains("<arg_key>") || lower.contains("<arg_value>")
     }
 
     static func hasMissingClaimedFileArtifacts(content: String, projectRoot: URL) -> Bool {

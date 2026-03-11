@@ -101,6 +101,7 @@ final class ConversationSendCoordinator {
         await OrchestrationRunStore.shared.setProjectRoot(request.projectRoot)
 
         let graph = ConversationFlowGraphFactory.makeGraph(
+            request: request,
             historyCoordinator: historyCoordinator,
             aiInteractionCoordinator: aiInteractionCoordinator,
             initialResponseHandler: initialResponseHandler,
