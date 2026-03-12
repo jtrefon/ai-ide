@@ -1,0 +1,10 @@
+--- osx-ideHarnessTests/ToolLoopDropoutHarnessTests.swift
++++ osx-ideHarnessTests/ToolLoopDropoutHarnessTests.swift
+@@ -455,6 +455,7 @@
+             request.stage == .final_response
+         }
+         let requestStages = capturedRequests.map { $0.stage?.rawValue ?? "nil" }
++        try? requestStages.joined(separator: ",").write(to: URL(fileURLWithPath: "/tmp/test_output.txt"), atomically: true, encoding: .utf8)
+         XCTAssertTrue(
+             sawFinalResponseFollowup,
+             "Expected final response follow-up when assistant output was generic"

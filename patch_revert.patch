@@ -1,0 +1,32 @@
+--- osx-ide/Services/ConversationFlow/FinalResponseHandler.swift
++++ osx-ide/Services/ConversationFlow/FinalResponseHandler.swift
+@@ -222,7 +222,6 @@
+     ) async throws -> String {
+         let template = try PromptRepository.shared.prompt(
+             key: "ConversationFlow/FinalResponse/final_response_summary",
+-            defaultValue: Self.defaultFinalResponsePrompt,
+             projectRoot: projectRoot
+         )
+ 
+@@ -238,21 +237,6 @@
+             .replacingOccurrences(of: "{{plan_progress}}", with: progress)
+     }
+ 
+-    private static let defaultFinalResponsePrompt = """
+-# Final Summary Contract
+-
+-{{followup_reason}}
+-
+-Provide a concise final user-facing summary of the completed work.
+-Do NOT call any tools.
+-
+-Context:
+-{{tool_summary}}
+-
+-Plan:
+-{{plan_markdown}}
+-"""
+-
+     private func buildDeterministicFinalSummaryFallback(
+         toolSummary: String,
+         conversationId: String

@@ -147,6 +147,7 @@ final class AIInteractionCoordinator {
             let shouldUseStreaming = shouldUseStreamingForRequest(
                 runId: request.runId,
                 stage: request.stage,
+                hasTools: !filteredTools.isEmpty,
                 isRunningUnitTests: isUnitTestRun
             )
 
@@ -338,10 +339,12 @@ final class AIInteractionCoordinator {
     func shouldUseStreamingForRequest(
         runId: String?,
         stage: AIRequestStage?,
+        hasTools: Bool,
         isRunningUnitTests: Bool
     ) -> Bool {
         runId != nil
             && !isRunningUnitTests
+            && !hasTools
             && stage != .final_response
     }
 

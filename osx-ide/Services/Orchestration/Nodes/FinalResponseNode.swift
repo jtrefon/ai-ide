@@ -14,7 +14,8 @@ struct FinalResponseNode: OrchestrationNode {
         self.nextNodeId = nextNodeId
     }
 
-    func run(state: OrchestrationState) async throws -> OrchestrationState {
+        func run(state: OrchestrationState) async throws -> OrchestrationState {
+        print("====== FinalResponseNode RUN ======")
         let request = state.request
         let response = try requireResponse(from: state)
 

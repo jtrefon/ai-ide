@@ -1,0 +1,14 @@
+{"line":43,"type":"openrouter.request_body","data":{"bytes":14416},"session":"C921F0C4-72B1-49F2-A2F5-B18F6D41D7ED","ts":"2026-03-12T12:02:50Z","file":"osx_ide\/OpenRouterAIService+Logging.swift"}
+{"ts":"2026-03-12T12:02:58Z","type":"openrouter.response","file":"osx_ide\/OpenRouterAIService+Logging.swift","line":82,"data":{"toolCalls":1,"contentLength":0},"session":"C921F0C4-72B1-49F2-A2F5-B18F6D41D7ED"}
+--
+{"file":"osx_ide\/OpenRouterAIService+Logging.swift","ts":"2026-03-12T12:02:58Z","line":43,"session":"C921F0C4-72B1-49F2-A2F5-B18F6D41D7ED","type":"openrouter.request_body","data":{"bytes":14916}}
+{"file":"osx_ide\/OpenRouterAIService+Logging.swift","line":82,"type":"openrouter.response","session":"C921F0C4-72B1-49F2-A2F5-B18F6D41D7ED","data":{"contentLength":97,"toolCalls":1},"ts":"2026-03-12T12:03:00Z"}
+--
+{"data":{"bytes":15888},"ts":"2026-03-12T12:03:01Z","type":"openrouter.request_body","session":"C921F0C4-72B1-49F2-A2F5-B18F6D41D7ED","file":"osx_ide\/OpenRouterAIService+Logging.swift","line":43}
+{"session":"C921F0C4-72B1-49F2-A2F5-B18F6D41D7ED","data":{"contentLength":428,"toolCalls":0},"ts":"2026-03-12T12:03:11Z","line":82,"type":"openrouter.response","file":"osx_ide\/OpenRouterAIService+Logging.swift"}
+--
+{"type":"openrouter.request_body","file":"osx_ide\/OpenRouterAIService+Logging.swift","data":{"bytes":10623},"session":"C921F0C4-72B1-49F2-A2F5-B18F6D41D7ED","line":43,"ts":"2026-03-12T12:03:12Z"}
+{"data":{"toolCalls":0,"contentLength":863},"ts":"2026-03-12T12:03:18Z","type":"openrouter.response","session":"C921F0C4-72B1-49F2-A2F5-B18F6D41D7ED","file":"osx_ide\/OpenRouterAIService+Logging.swift","line":82}
+--
+{"ts":"2026-03-12T12:03:18Z","type":"openrouter.request_body","data":{"bytes":10644},"line":43,"session":"C921F0C4-72B1-49F2-A2F5-B18F6D41D7ED","file":"osx_ide\/OpenRouterAIService+Logging.swift"}
+{"data":{"contentLength":251,"toolCalls":0},"ts":"2026-03-12T12:03:28Z","type":"openrouter.response","session":"C921F0C4-72B1-49F2-A2F5-B18F6D41D7ED","file":"osx_ide\/OpenRouterAIService+Logging.swift","line":82}

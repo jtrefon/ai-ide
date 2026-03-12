@@ -83,6 +83,7 @@ private final class RunCommandSession: @unchecked Sendable {
     let outputPipe: Pipe
     let outputBuffer: RunCommandOutputBuffer
     let createdAt: Date
+    var onOutput: (@Sendable (Data) -> Void)?
 
     init(
         id: String,
@@ -91,7 +92,8 @@ private final class RunCommandSession: @unchecked Sendable {
         process: Process,
         inputPipe: Pipe,
         outputPipe: Pipe,
-        outputBuffer: RunCommandOutputBuffer
+        outputBuffer: RunCommandOutputBuffer,
+        onOutput: (@Sendable (Data) -> Void)? = nil
     ) {
         self.id = id
         self.command = command
@@ -101,6 +103,7 @@ private final class RunCommandSession: @unchecked Sendable {
         self.outputPipe = outputPipe
         self.outputBuffer = outputBuffer
         self.createdAt = Date()
+        self.onOutput = onOutput
     }
 
     func sendInput(_ text: String) {
@@ -130,7 +133,8 @@ private actor RunCommandSessionStore {
     func start(
         command: String,
         workingDirectory: URL,
-        environment: [String: String]
+        environment: [String: String],
+        onProgress: (@Sendable (String) -> Void)? = nil
     ) throws -> RunCommandSession {
         let sessionId = UUID().uuidString
         let process = Process()
@@ -146,12 +150,6 @@ private actor RunCommandSessionStore {
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.currentDirectoryURL = workingDirectory
 
-        outputPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            outputBuffer.append(data)
-        }
-
         let session = RunCommandSession(
             id: sessionId,
             command: command,
@@ -159,8 +157,20 @@ private actor RunCommandSessionStore {
             process: process,
             inputPipe: inputPipe,
             outputPipe: outputPipe,
-            outputBuffer: outputBuffer
+            outputBuffer: outputBuffer,
+            onOutput: { data in
+                if let str = String(data: data, encoding: .utf8) {
+                    onProgress?(str)
+                }
+            }
         )
+
+        outputPipe.fileHandleForReading.readabilityHandler = { [weak session] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            session?.outputBuffer.append(data)
+            session?.onOutput?(data)
+        }
 
         sessions[sessionId] = session
         do {
@@ -177,10 +187,19 @@ private actor RunCommandSessionStore {
     func observation(
         for sessionId: String,
         waitSeconds: TimeInterval,
-        reasonWhenWaitingExpires: String
+        reasonWhenWaitingExpires: String,
+        onProgress: (@Sendable (String) -> Void)? = nil
     ) async throws -> Observation {
         guard let session = sessions[sessionId] else {
             throw AppError.aiServiceError("Unknown run_command session_id '\(sessionId)'. Start a new command instead.")
+        }
+
+        // Update onProgress handler for the session
+        if let onProgress = onProgress {
+            session.onOutput = { data in
+                guard let str = String(data: data, encoding: .utf8) else { return }
+                onProgress(str)
+            }
         }
 
         let observation = await observe(session: session, waitSeconds: waitSeconds, reasonWhenWaitingExpires: reasonWhenWaitingExpires)
@@ -194,10 +213,19 @@ private actor RunCommandSessionStore {
         sessionId: String,
         input: String,
         appendNewline: Bool,
-        waitSeconds: TimeInterval
+        waitSeconds: TimeInterval,
+        onProgress: (@Sendable (String) -> Void)? = nil
     ) async throws -> Observation {
         guard let session = sessions[sessionId] else {
             throw AppError.aiServiceError("Unknown run_command session_id '\(sessionId)'.")
+        }
+
+        // Update onProgress handler for the session
+        if let onProgress = onProgress {
+            session.onOutput = { data in
+                guard let str = String(data: data, encoding: .utf8) else { return }
+                onProgress(str)
+            }
         }
 
         let payload = appendNewline ? input + "\n" : input
@@ -209,12 +237,17 @@ private actor RunCommandSessionStore {
         return observation
     }
 
-    func stop(sessionId: String) async throws -> Observation {
+    func stop(sessionId: String, signal: String? = nil) async throws -> Observation {
         guard let session = sessions[sessionId] else {
             throw AppError.aiServiceError("Unknown run_command session_id '\(sessionId)'.")
         }
 
-        await terminate(session: session)
+        if let signal = signal {
+            await sendSignal(session: session, signalName: signal)
+        } else {
+            await terminate(session: session)
+        }
+
         let observation = makeObservation(
             session: session,
             status: "stopped",
@@ -224,6 +257,26 @@ private actor RunCommandSessionStore {
         )
         removeSession(id: session.id)
         return observation
+    }
+
+    private func sendSignal(session: RunCommandSession, signalName: String) async {
+        guard session.process.isRunning else { return }
+
+        let signalMap: [String: Int32] = [
+            "SIGINT": SIGINT,
+            "SIGTERM": SIGTERM,
+            "SIGKILL": SIGKILL,
+            "SIGHUP": SIGHUP,
+            "SIGQUIT": SIGQUIT,
+            "SIGUSR1": SIGUSR1,
+            "SIGUSR2": SIGUSR2
+        ]
+
+        let sig = signalMap[signalName.uppercased()] ?? SIGTERM
+        kill(session.process.processIdentifier, sig)
+        
+        // Give it a moment to react
+        try? await Task.sleep(nanoseconds: 200_000_000)
     }
 
     private func observe(
@@ -246,21 +299,7 @@ private actor RunCommandSessionStore {
                 )
             }
 
-            let current = session.outputBuffer.snapshot()
-            if current.version != baseline.version {
-                if let lastAppendAt = current.lastAppendAt,
-                   Date().timeIntervalSince(lastAppendAt) >= settleInterval {
-                    return makeObservation(
-                        session: session,
-                        status: "running",
-                        reason: "output",
-                        exitCode: nil,
-                        suggestedWaitSeconds: 30
-                    )
-                }
-            }
-
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            try? await Task.sleep(nanoseconds: 200_000_000)
         }
 
         let status = session.process.isRunning ? "running" : "exited"
@@ -368,6 +407,10 @@ struct RunCommandTool: AIToolProgressReporting {
                     "type": "boolean",
                     "description": "Append a newline after input when action=send_input. Defaults to false."
                 ],
+                "signal": [
+                    "type": "string",
+                    "description": "Optional signal name (e.g. SIGINT, SIGKILL) for action=stop."
+                ],
                 "wait_seconds": [
                     "type": "number",
                     "description": "How long to wait for output or completion before returning control. Defaults: start uses the CLI setting (15s fallback), wait/send_input use 30s."
@@ -384,17 +427,20 @@ struct RunCommandTool: AIToolProgressReporting {
     let pathValidator: PathValidator
 
     func execute(arguments: ToolArguments) async throws -> String {
-        try await executeImpl(arguments: arguments.raw)
+        try await executeImpl(arguments: arguments.raw, onProgress: nil)
     }
 
     func execute(
         arguments: ToolArguments,
-        onProgress _: @Sendable @escaping (String) -> Void
+        onProgress: @Sendable @escaping (String) -> Void
     ) async throws -> String {
-        try await executeImpl(arguments: arguments.raw)
+        try await executeImpl(arguments: arguments.raw, onProgress: onProgress)
     }
 
-    private func executeImpl(arguments: [String: Any]) async throws -> String {
+    private func executeImpl(
+        arguments: [String: Any],
+        onProgress: (@Sendable (String) -> Void)?
+    ) async throws -> String {
         let request = try resolveRequest(arguments: arguments)
         let environment = ProcessInfo.processInfo.environment
 
@@ -407,12 +453,14 @@ struct RunCommandTool: AIToolProgressReporting {
             let session = try await RunCommandSessionStore.shared.start(
                 command: command,
                 workingDirectory: workingDirectoryURL,
-                environment: environment
+                environment: environment,
+                onProgress: onProgress
             )
             let observation = try await RunCommandSessionStore.shared.observation(
                 for: session.id,
                 waitSeconds: request.waitSeconds,
-                reasonWhenWaitingExpires: "wait_elapsed"
+                reasonWhenWaitingExpires: "wait_elapsed",
+                onProgress: onProgress
             )
             return encodeObservation(observation)
 
@@ -423,7 +471,8 @@ struct RunCommandTool: AIToolProgressReporting {
             let observation = try await RunCommandSessionStore.shared.observation(
                 for: sessionId,
                 waitSeconds: request.waitSeconds,
-                reasonWhenWaitingExpires: "wait_elapsed"
+                reasonWhenWaitingExpires: "wait_elapsed",
+                onProgress: onProgress
             )
             return encodeObservation(observation)
 
@@ -436,7 +485,8 @@ struct RunCommandTool: AIToolProgressReporting {
                 sessionId: sessionId,
                 input: input,
                 appendNewline: request.appendNewline,
-                waitSeconds: request.waitSeconds
+                waitSeconds: request.waitSeconds,
+                onProgress: onProgress
             )
             return encodeObservation(observation)
 
@@ -444,7 +494,11 @@ struct RunCommandTool: AIToolProgressReporting {
             guard let sessionId = request.sessionId else {
                 throw AppError.aiServiceError("Missing 'session_id' argument for run_command action=stop")
             }
-            let observation = try await RunCommandSessionStore.shared.stop(sessionId: sessionId)
+            let signal = (arguments["signal"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let observation = try await RunCommandSessionStore.shared.stop(
+                sessionId: sessionId,
+                signal: signal?.isEmpty == false ? signal : nil
+            )
             return encodeObservation(observation)
         }
     }

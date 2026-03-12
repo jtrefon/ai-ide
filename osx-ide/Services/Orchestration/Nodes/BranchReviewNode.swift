@@ -59,18 +59,49 @@ struct BranchReviewNode: OrchestrationNode {
     ) async -> Bool {
         guard state.request.mode == .agent else { return false }
         guard !branchExecution.hasAdditionalBranches else { return false }
+        return await shouldResumeExecutionForCurrentResponse(from: state)
+    }
+
+    private func shouldResumeExecutionForCurrentResponse(from state: OrchestrationState) async -> Bool {
+        guard state.request.mode == .agent else { return false }
         guard let response = state.response else { return false }
+
+        let content = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !content.isEmpty else { return false }
 
         let planMarkdown = await ConversationPlanStore.shared.get(
             conversationId: state.request.conversationId
         ) ?? ""
         let progress = PlanChecklistTracker.progress(in: planMarkdown)
-        guard progress.total > 0, !progress.isComplete else { return false }
+        let hasIncompletePlan = progress.total > 0 && !progress.isComplete
 
-        let content = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !content.isEmpty else { return false }
+        if hasIncompletePlan {
+            return indicatesUnfinishedExecution(content)
+        }
 
-        let normalized = content.lowercased()
+        if isIntermediateExecutionHandoff(content) {
+            return false
+        }
+
+        guard !state.lastToolResults.isEmpty else { return false }
+        guard response.toolCalls?.isEmpty ?? true else { return false }
+
+        return indicatesUnfinishedExecution(content)
+            || isSyntheticProgressArtifact(content)
+            || ChatPromptBuilder.shouldForceToolFollowup(content: content)
+            || ChatPromptBuilder.shouldForceExecutionFollowup(
+                userInput: state.request.userInput,
+                content: content,
+                hasToolCalls: false
+            )
+    }
+
+    private func indicatesUnfinishedExecution(_ content: String) -> Bool {
+        let normalized = ChatPromptBuilder.contentForDisplay(from: content)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty else { return false }
+
         let unfinishedSignals = [
             "needs_work",
             "needs work",
@@ -86,5 +117,40 @@ struct BranchReviewNode: OrchestrationNode {
         }
 
         return ChatPromptBuilder.deliveryStatus(from: content) == .needsWork
+    }
+
+    private func isSyntheticProgressArtifact(_ content: String) -> Bool {
+        let normalized = ChatPromptBuilder.contentForDisplay(from: content)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        if normalized.contains("next: reviewing retrieved context and finalizing when the objective is satisfied") {
+            return true
+        }
+
+        let generatedPrefixes = [
+            "done -> next -> path:",
+            "completed progress update for step ",
+            "start checkpoint scan.",
+            "checking checkpoints pass "
+        ]
+        return generatedPrefixes.contains { normalized.hasPrefix($0) }
+    }
+
+    private func isIntermediateExecutionHandoff(_ content: String) -> Bool {
+        let normalized = ChatPromptBuilder.contentForDisplay(from: content)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        let handoffSignals = [
+            "done -> next -> path:",
+            "continue with remaining",
+            "continuing with the next",
+            "starting execution now",
+            "pending tasks remain"
+        ]
+        return handoffSignals.contains { normalized.contains($0) }
     }
 }
