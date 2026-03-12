@@ -33,7 +33,7 @@ enum ToolLoopConstants {
     static let repeatedBatchStallThreshold = 2
 
     /// Number of repeated already-completed tool signature rounds before forcing finalization.
-    static let repeatedCompletedSignatureStallThreshold = 1
+    static let repeatedCompletedSignatureStallThreshold = 2
 
     /// Number of consecutive empty responses before stall detection triggers
     static let emptyResponseStallThreshold = 3
@@ -48,7 +48,7 @@ enum ToolLoopConstants {
     static let repeatedReadOnlyBatchStallThreshold = 2
 
     /// Number of non-mutating iterations allowed after at least one successful write/mutation.
-    static let postWriteNonMutationStallThreshold = 1
+    static let postWriteNonMutationStallThreshold = 3
 
     /// Number of repeated content occurrences for textual tool call patterns
     static let textualPatternRepeatedThreshold = 3

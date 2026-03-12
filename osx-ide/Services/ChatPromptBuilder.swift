@@ -40,6 +40,12 @@ class ChatPromptBuilder {
         return normalizeDisplayWhitespace(withoutToolMarkup)
     }
 
+    static func isReasoningOutcomePayload(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return trimmed.hasPrefix("ReasoningOutcome:")
+    }
+
     static func isControlMarkupOnly(_ text: String) -> Bool {
         let stripped = stripTextualToolCallMarkup(from: text)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -298,6 +304,8 @@ class ChatPromptBuilder {
             "i'll patch",
             "i will fix",
             "i'll fix",
+            "i will resolve",
+            "i'll resolve",
             "i am going to implement",
             "i'm going to implement",
             "next i will",
@@ -337,6 +345,10 @@ class ChatPromptBuilder {
 
         let hasPendingExecutionSignal = pendingExecutionSignals.contains(where: { lower.contains($0) })
 
+        if hasPendingExecutionSignal {
+            return true
+        }
+
         if indicatesWorkWasPerformed(content: trimmed) {
             return false
         }
@@ -348,12 +360,8 @@ class ChatPromptBuilder {
             "all set",
             "resolved"
         ]
-        if completionSignals.contains(where: { lower.contains($0) }) && !hasPendingExecutionSignal {
+        if completionSignals.contains(where: { lower.contains($0) }) {
             return false
-        }
-
-        if hasPendingExecutionSignal {
-            return true
         }
 
         return false
@@ -508,6 +516,26 @@ class ChatPromptBuilder {
         let text = userInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if text.isEmpty { return false }
 
+        let continuationExecutionPatterns = [
+            #"^(please\s+)?continue\b"#,
+            #"^(please\s+)?proceed\b"#,
+            #"^(please\s+)?go ahead\b"#,
+            #"^(please\s+)?resume\b"#,
+            #"^(please\s+)?recover(\s+and\s+continue)?\b"#,
+            #"\bfinish( it up)?\b.{0,80}\b(implementation|feature|dashboard|page|flow|setup|migration|task)\b"#,
+            #"\bresolve\b.{0,80}\b(dependency|dependencies|conflict|conflicts|issue|issues|problem|problems|error|errors|failure|failures)\b"#,
+            #"\binstall\b.{0,80}\b(dependency|dependencies|package|packages|plugin|plugins|tool|tools)\b"#
+        ]
+        if continuationExecutionPatterns.contains(where: { pattern in
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                return false
+            }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            return regex.firstMatch(in: text, options: [], range: range) != nil
+        }) {
+            return true
+        }
+
         let executionTriggers = [
             "implement",
             "fix",
@@ -534,6 +562,9 @@ class ChatPromptBuilder {
             "set up",
             "setup",
             "process ",
+            "continue ",
+            "proceed ",
+            "resume ",
             "create file",
             "edit file",
             "apply patch"

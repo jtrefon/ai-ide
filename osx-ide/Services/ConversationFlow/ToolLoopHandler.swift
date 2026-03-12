@@ -673,11 +673,33 @@ final class ToolLoopHandler {
             if mode == .agent,
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
+               await shouldPreserveNoToolHandoffWithoutIncompletePlan(
+                    content: content,
+                    conversationId: conversationId
+               ),
+               !ChatPromptBuilder.shouldForceToolFollowup(content: content),
+               !ChatPromptBuilder.shouldForceExecutionFollowup(
+                    userInput: userInput,
+                    content: content,
+                    hasToolCalls: false
+               ) {
+                break
+            }
+
+            if mode == .agent,
+               currentResponse.toolCalls?.isEmpty ?? true,
+               let content = currentResponse.content,
                hasObservedSuccessfulMutation,
                ChatPromptBuilder.indicatesWorkWasPerformed(content: content),
                !ChatPromptBuilder.hasMissingClaimedFileArtifacts(
                     content: content,
                     projectRoot: projectRoot
+               ),
+               !ChatPromptBuilder.shouldForceToolFollowup(content: content),
+               !ChatPromptBuilder.shouldForceExecutionFollowup(
+                    userInput: userInput,
+                    content: content,
+                    hasToolCalls: false
                ) {
                 break
             }
@@ -688,7 +710,13 @@ final class ToolLoopHandler {
                hasObservedSuccessfulMutation,
                isContentWriteRecoverySubset(currentTurnTools, availableTools: availableTools),
                !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }),
-               ChatPromptBuilder.deliveryStatus(from: content) == .done {
+               ChatPromptBuilder.deliveryStatus(from: content) == .done,
+               !ChatPromptBuilder.shouldForceToolFollowup(content: content),
+               !ChatPromptBuilder.shouldForceExecutionFollowup(
+                    userInput: userInput,
+                    content: content,
+                    hasToolCalls: false
+               ) {
                 break
             }
 
@@ -1493,9 +1521,13 @@ final class ToolLoopHandler {
 
     private var contentWriteRecoveryToolNames: Set<String> {
         [
+            "read_file",
+            "index_read_file",
+            "list_files",
             "create_file",
             "write_file",
             "write_files",
+            "replace_in_file",
             "delete_file",
             "run_command"
         ]
@@ -1764,7 +1796,7 @@ final class ToolLoopHandler {
         content: String,
         conversationId: String
     ) async -> Bool {
-        guard isLikelyContinuationOrRecoverySummary(content) else { return false }
+        guard isPureContinuationOrRecoverySummary(content) else { return false }
 
         let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
@@ -1798,7 +1830,7 @@ final class ToolLoopHandler {
         guard recoveredResponse.toolCalls?.isEmpty == false else {
             let recoveredContent = recoveredResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if !recoveredContent.isEmpty,
-               (isLikelyContinuationOrRecoverySummary(recoveredContent)
+               (isPureContinuationOrRecoverySummary(recoveredContent)
                 || ChatPromptBuilder.deliveryStatus(from: recoveredContent) == .needsWork) {
                 return recoveredResponse
             }
@@ -2027,7 +2059,7 @@ final class ToolLoopHandler {
         let shouldContinueForPlan = planProgress.total > 0 && !planProgress.isComplete
         guard shouldContinueForPlan else { return currentResponse }
         guard !hasSatisfiedClaimedArtifacts else { return currentResponse }
-        guard !isLikelyContinuationOrRecoverySummary(currentContent) else { return currentResponse }
+        guard !isPureContinuationOrRecoverySummary(currentContent) else { return currentResponse }
 
         let followupMessages = try await ToolLoopUtilities.buildPlanContinuationMessages(
             userInput: userInput,
@@ -2086,7 +2118,7 @@ final class ToolLoopHandler {
         let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
         guard planProgress.total > 0, !planProgress.isComplete else { return currentResponse }
-        guard !isLikelyContinuationOrRecoverySummary(currentContent) else { return currentResponse }
+        guard !isPureContinuationOrRecoverySummary(currentContent) else { return currentResponse }
 
         let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: currentContent)
         let deliveryStatusLabel: String
@@ -2182,8 +2214,8 @@ final class ToolLoopHandler {
         return mutationSignals.contains { normalized.contains($0) }
     }
 
-    private func isLikelyContinuationOrRecoverySummary(_ content: String) -> Bool {
-        let normalized = content
+    private func isPureContinuationOrRecoverySummary(_ content: String) -> Bool {
+        let normalized = ChatPromptBuilder.contentForDisplay(from: content)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         guard !normalized.isEmpty else { return false }
@@ -2193,14 +2225,19 @@ final class ToolLoopHandler {
             "continue with remaining",
             "continuing with the next",
             "all checklist items are complete",
-            "completed all requested implementation steps"
+            "completed all requested implementation steps",
+            "next i will",
+            "next step:",
+            "proceeding with",
+            "moving on to"
         ]
-        return recoverySignals.contains { normalized.contains($0) }
+        return recoverySignals.contains { normalized.hasPrefix($0) }
+        || normalized.contains("next step is to")
     }
 
     private func isMutationToolName(_ toolName: String) -> Bool {
         switch toolName {
-        case "write_file", "write_files", "create_file", "delete_file", "replace_in_file":
+        case "write_file", "write_files", "create_file", "delete_file", "replace_in_file", "multi_replace_file_content", "write_to_file":
             return true
         default:
             return false

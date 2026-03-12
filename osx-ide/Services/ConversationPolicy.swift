@@ -55,7 +55,9 @@ final class ConversationPolicy: ConversationPolicyProtocol {
             return filterReadOnlyTools(from: modeAllowedTools)
             
         case .initial_response:
-            return []
+            // Initial agent turns must be able to start execution. Stripping tools here
+            // makes the live app answer conversationally and stop before any tool loop begins.
+            return filterToolLoopExecutionTools(from: modeAllowedTools)
             
         case .tool_loop:
             return filterToolLoopExecutionTools(from: modeAllowedTools)

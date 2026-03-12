@@ -314,6 +314,41 @@ final class ConversationManagerTests: XCTestCase {
         XCTAssertNil(manager.providerIssue)
     }
 
+    func testSuccessfulSendClearsProviderIssuePublishedMidRequest() async throws {
+        mockAIService.nextHistoryResponse = AIServiceResponse(content: "Recovered response", toolCalls: nil)
+        mockAIService.responseDelayNanoseconds = 100_000_000
+        mockAIService.onSendHistoryRequest = { [eventBus] _ in
+            eventBus?.publish(ProviderIssueStatusEvent(
+                providerName: "OpenRouter",
+                statusKind: .rateLimited,
+                statusCode: 429,
+                message: "Provider cooldown active. Waiting before the next request.",
+                cooldownUntil: Date().addingTimeInterval(30)
+            ))
+        }
+
+        manager.currentInput = "Retry this"
+        manager.sendMessage()
+
+        let completionExpectation = expectation(description: "Send completed and provider issue cleared")
+        Task { @MainActor in
+            let deadline = Date().addingTimeInterval(2.0)
+            while Date() < deadline {
+                let finalAssistantMessage = self.manager.messages.last(where: { $0.role == .assistant && !$0.isDraft })
+                if self.manager.isSending == false,
+                   finalAssistantMessage?.content == "Recovered response",
+                   self.manager.providerIssue == nil {
+                    completionExpectation.fulfill()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+
+        await fulfillment(of: [completionExpectation], timeout: 3.0)
+        XCTAssertNil(manager.providerIssue)
+    }
+
     func testStartNewConversationCreatesNewTabAndSwitchesToIt() {
         let initialTabCount = manager.conversationTabs.count
         let initialConversationId = manager.currentConversationId
@@ -419,6 +454,7 @@ final class ConversationManagerTests: XCTestCase {
 final class MockAIService: AIService, @unchecked Sendable {
     var nextHistoryResponse = AIServiceResponse(content: "Mock response", toolCalls: nil)
     var responseDelayNanoseconds: UInt64 = 0
+    var onSendHistoryRequest: ((AIServiceHistoryRequest) -> Void)?
     private(set) var lastHistoryRequest: AIServiceHistoryRequest?
 
     func sendMessage(
@@ -435,6 +471,7 @@ final class MockAIService: AIService, @unchecked Sendable {
         _ request: AIServiceHistoryRequest
     ) async throws -> AIServiceResponse {
         lastHistoryRequest = request
+        onSendHistoryRequest?(request)
         if responseDelayNanoseconds > 0 {
             try await Task.sleep(nanoseconds: responseDelayNanoseconds)
         }

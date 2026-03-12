@@ -31,6 +31,13 @@ struct AllowlistedRunCommandTool: AIToolProgressReporting {
     }
 
     private func validatedCommand(arguments: [String: Any]) throws -> String {
+        let action = (arguments["action"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? "start"
+        guard action == "start" else {
+            return arguments["command"] as? String ?? ""
+        }
+
         guard let raw = arguments["command"] as? String else {
             throw AppError.aiServiceError("Missing 'command' argument for run_command")
         }

@@ -1,6 +1,7 @@
 import Foundation
+import CoreServices
 
-/// File watcher that monitors project root for changes.
+/// File watcher that monitors project root for changes recursively using FSEvents.
 /// Uses an actor for thread-safe state management to avoid blocking UI.
 actor ProjectRootFileWatcherActor {
     private let rootURL: URL
@@ -8,8 +9,7 @@ actor ProjectRootFileWatcherActor {
     private let excludePatterns: [String]
     private let debounceNanoseconds: UInt64
 
-    private var fileDescriptor: CInt = -1
-    private var source: DispatchSourceFileSystemObject?
+    private var stream: FSEventStreamRef?
     private var scanTask: Task<Void, Never>?
     private var snapshot: [String: FileSnapshot] = [:]
     private var isActive = false
@@ -27,7 +27,9 @@ actor ProjectRootFileWatcherActor {
     }
 
     func start() {
-        stop()
+        guard !isActive else { return }
+        isActive = true
+        
         // Build initial snapshot and start watching
         Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
@@ -42,40 +44,61 @@ actor ProjectRootFileWatcherActor {
     }
     
     private func startWatching() async {
-        let fd = open(rootURL.path, O_EVTONLY)
-        guard fd >= 0 else { return }
+        let path = rootURL.path as CFString
+        let pathsToWatch = [path] as CFArray
         
-        fileDescriptor = fd
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .extend, .attrib, .rename, .delete, .revoke],
-            queue: DispatchQueue.global(qos: .utility)
+        var context = FSEventStreamContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil,
+            release: nil,
+            copyDescription: nil
         )
-        weak var weakSelf = self
-        source.setEventHandler {
-            Task { [weak weakSelf] in await weakSelf?.scheduleScan() }
+
+        let callback: FSEventStreamCallback = { (
+            streamRef,
+            clientCallBackInfo,
+            numEvents,
+            eventPaths,
+            eventFlags,
+            eventIds
+        ) in
+            let watcher = Unmanaged<ProjectRootFileWatcherActor>.fromOpaque(clientCallBackInfo!).takeUnretainedValue()
+            Task {
+                await watcher.scheduleScan()
+            }
         }
-        source.setCancelHandler {
-            Task { [weak weakSelf] in await weakSelf?.closeDescriptor() }
-        }
-        self.source = source
-        isActive = true
-        source.resume()
+
+        let flags = UInt32(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagUseCFTypes)
+        
+        guard let stream = FSEventStreamCreate(
+            kCFAllocatorDefault,
+            callback,
+            &context,
+            pathsToWatch,
+            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+            0.1, // Latency
+            flags
+        ) else { return }
+
+        self.stream = stream
+        FSEventStreamSetDispatchQueue(stream, DispatchQueue.global(qos: .utility))
+        FSEventStreamStart(stream)
     }
 
     func stop() {
-        let wasActive = isActive
+        guard isActive else { return }
         isActive = false
         
-        guard wasActive else {
-            closeDescriptor()
-            return
+        if let stream = stream {
+            FSEventStreamStop(stream)
+            FSEventStreamInvalidate(stream)
+            FSEventStreamRelease(stream)
+            self.stream = nil
         }
+        
         scanTask?.cancel()
         scanTask = nil
-        source?.cancel()
-        source = nil
     }
 
     private func scheduleScan() {
@@ -220,12 +243,6 @@ actor ProjectRootFileWatcherActor {
         let changedPaths = (createdPaths + deletedPaths + modifiedPaths)
 
         return (createdPaths, modifiedPaths, deletedPaths, changedPaths)
-    }
-
-    private func closeDescriptor() {
-        guard fileDescriptor >= 0 else { return }
-        close(fileDescriptor)
-        fileDescriptor = -1
     }
 }
 

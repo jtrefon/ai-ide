@@ -70,6 +70,7 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         private let lock = AsyncLock()
         private(set) var historyRequests: [AIServiceHistoryRequest] = []
         private(set) var messageRequests: [AIServiceMessageWithProjectRootRequest] = []
+        private(set) var streamingRequests: [AIServiceHistoryRequest] = []
 
         let response: AIServiceResponse
 
@@ -91,6 +92,17 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         ) async throws -> AIServiceResponse {
             await lock.lock()
             historyRequests.append(request)
+            await lock.unlock()
+            return response
+        }
+
+        func sendMessageStreaming(
+            _ request: AIServiceHistoryRequest,
+            runId: String
+        ) async throws -> AIServiceResponse {
+            _ = runId
+            await lock.lock()
+            streamingRequests.append(request)
             await lock.unlock()
             return response
         }
@@ -444,7 +456,7 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         XCTAssertTrue(context.contains("Plan reference:"))
     }
 
-    func testAIInteractionCoordinatorDisablesStreamingForFinalResponseStage() async throws {
+    func testAIInteractionCoordinatorDisablesStreamingForToolAndFinalResponseStages() async throws {
         let coordinator = AIInteractionCoordinator(
             aiService: SpyAIService(response: AIServiceResponse(content: "Done", toolCalls: nil)),
             codebaseIndex: nil,
@@ -455,28 +467,109 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             coordinator.shouldUseStreamingForRequest(
                 runId: UUID().uuidString,
                 stage: .final_response,
+                hasTools: false,
                 isRunningUnitTests: false
             ),
             "Final-response requests should use the deterministic non-streaming path"
-        )
-
-        XCTAssertTrue(
-            coordinator.shouldUseStreamingForRequest(
-                runId: UUID().uuidString,
-                stage: .tool_loop,
-                isRunningUnitTests: false
-            ),
-            "Execution stages should remain eligible for streaming outside tests"
         )
 
         XCTAssertFalse(
             coordinator.shouldUseStreamingForRequest(
                 runId: UUID().uuidString,
                 stage: .tool_loop,
+                hasTools: true,
+                isRunningUnitTests: false
+            ),
+            "Tool-bearing execution stages should stay on the deterministic non-streaming path"
+        )
+
+        XCTAssertTrue(
+            coordinator.shouldUseStreamingForRequest(
+                runId: UUID().uuidString,
+                stage: .initial_response,
+                hasTools: false,
+                isRunningUnitTests: false
+            ),
+            "Tool-free stages may still use streaming in the app runtime"
+        )
+
+        XCTAssertFalse(
+            coordinator.shouldUseStreamingForRequest(
+                runId: UUID().uuidString,
+                stage: .tool_loop,
+                hasTools: false,
                 isRunningUnitTests: true
             ),
             "Unit tests should keep streaming disabled for deterministic behavior"
         )
+    }
+
+    func testAIInteractionCoordinatorUsesNonStreamingTransportForToolRequests() async throws {
+        let spy = SpyAIService(response: AIServiceResponse(content: "Done", toolCalls: nil))
+        let coordinator = AIInteractionCoordinator(
+            aiService: spy,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+
+        let result = await coordinator.sendMessageWithRetry(
+            AIInteractionCoordinator.SendMessageWithRetryRequest(
+                messages: [ChatMessage(role: .user, content: "Fix linting")],
+                explicitContext: nil,
+                tools: [FakeTool(name: "read_file", response: "ok")],
+                mode: .agent,
+                projectRoot: FileManager.default.temporaryDirectory,
+                runId: UUID().uuidString,
+                stage: .tool_loop,
+                conversationId: UUID().uuidString
+            )
+        )
+
+        guard case .success = result else {
+            return XCTFail("Expected sendMessageWithRetry to succeed")
+        }
+
+        XCTAssertEqual(spy.historyRequests.count, 1)
+        XCTAssertEqual(spy.streamingRequests.count, 0)
+    }
+
+    func testAIInteractionCoordinatorKeepsExecutionToolsOnInitialAgentRequest() async throws {
+        let spy = SpyAIService(response: AIServiceResponse(content: "I will inspect the project.", toolCalls: nil))
+        let coordinator = AIInteractionCoordinator(
+            aiService: spy,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+
+        let result = await coordinator.sendMessageWithRetry(
+            AIInteractionCoordinator.SendMessageWithRetryRequest(
+                messages: [ChatMessage(role: .user, content: "Is linting installed and working?")],
+                explicitContext: nil,
+                tools: [
+                    FakeTool(name: "read_file", response: "ok"),
+                    FakeTool(name: "run_command", response: "ok"),
+                    FakeTool(name: "replace_in_file", response: "ok")
+                ],
+                mode: .agent,
+                projectRoot: FileManager.default.temporaryDirectory,
+                runId: UUID().uuidString,
+                stage: .initial_response,
+                conversationId: UUID().uuidString
+            )
+        )
+
+        guard case .success = result else {
+            return XCTFail("Expected sendMessageWithRetry to succeed")
+        }
+
+        let request = try XCTUnwrap(spy.historyRequests.last)
+        XCTAssertEqual(request.stage, .initial_response)
+        XCTAssertEqual(
+            Set((request.tools ?? []).map { $0.name }),
+            Set(["read_file", "run_command", "replace_in_file"]),
+            "Initial agent requests must retain execution tools in the live coordinator path"
+        )
+        XCTAssertEqual(spy.streamingRequests.count, 0)
     }
 
     func testAIInteractionCoordinatorUsesTighterRetryBudgetForFinalResponseStage() async throws {

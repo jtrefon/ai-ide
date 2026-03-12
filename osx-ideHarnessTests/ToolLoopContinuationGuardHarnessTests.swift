@@ -186,6 +186,84 @@ final class ToolLoopContinuationGuardHarnessTests: XCTestCase {
         XCTAssertEqual(requestStages, "initial_response,tool_loop")
     }
 
+    func testMixedExecutionPromiseAndRecoverySummaryTriggersFocusedRecovery() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        let runId = UUID().uuidString
+
+        let initialToolCall = AIToolCall(id: "dependency-setup-1", name: "fake_tool", arguments: [:])
+        let recoveryToolCall = AIToolCall(id: "dependency-recovery-1", name: "fake_tool", arguments: [:])
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "The ESLint installation encountered dependency conflicts with React Scripts. To resolve this, I'll try installing the static analysis tools as development dependencies with force flag to override conflicts:\n\nDone -> Next -> Path: Resolved dependency conflicts by installing ESLint, Prettier, and React plugin with force flag. Next: verify installation and create configuration files.",
+                toolCalls: nil
+            ),
+            AIServiceResponse(
+                content: "Proceeding with the forced dependency recovery execution now.",
+                toolCalls: [recoveryToolCall]
+            ),
+            AIServiceResponse(
+                content: "Validated the dependency recovery path after resuming tool execution.",
+                toolCalls: nil
+            ),
+            AIServiceResponse(
+                content: "Validated the dependency recovery path after resuming tool execution.",
+                toolCalls: nil
+            )
+        ])
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let handler = ToolLoopHandler(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        let result = try await handler.handleToolLoopIfNeeded(
+            response: AIServiceResponse(
+                content: "Start by checking the current dependency state.",
+                toolCalls: [initialToolCall]
+            ),
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: [FakeTool(name: "fake_tool")],
+            cancelledToolCallIds: { [] },
+            runId: runId,
+            userInput: "Resolve the dependency conflicts"
+        )
+
+        XCTAssertTrue(result.response.toolCalls?.isEmpty ?? true)
+        XCTAssertEqual(result.lastToolCalls.map(\.id), ["dependency-recovery-1"])
+        XCTAssertEqual(
+            result.response.content?.trimmingCharacters(in: .whitespacesAndNewlines),
+            "Validated the dependency recovery path after resuming tool execution."
+        )
+
+        let executedToolMessages = historyCoordinator.messages.filter {
+            $0.isToolExecution && $0.toolStatus == .completed && $0.toolName == "fake_tool"
+        }
+        XCTAssertGreaterThanOrEqual(executedToolMessages.count, 1)
+
+        let followupRequests = scriptedService.capturedHistoryRequests()
+        let requestStages = followupRequests.map { $0.stage?.rawValue ?? "nil" }
+        XCTAssertGreaterThanOrEqual(requestStages.count, 2)
+        XCTAssertGreaterThanOrEqual(requestStages.filter { $0 == "tool_loop" }.count, 2)
+    }
+
     private func makeHistoryCoordinator(projectRoot: URL) -> ChatHistoryCoordinator {
         let historyManager = ChatHistoryManager()
         return ChatHistoryCoordinator(historyManager: historyManager, projectRoot: projectRoot)

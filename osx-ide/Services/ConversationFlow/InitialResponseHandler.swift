@@ -45,6 +45,10 @@ final class InitialResponseHandler {
                     content: content,
                     hasToolCalls: false
                 )
+                || (
+                    ChatPromptBuilder.userRequestRequiresExecution(userInput: userInput)
+                    && ChatPromptBuilder.indicatesWorkWasPerformed(content: content)
+                )
                 || ChatPromptBuilder.hasMissingClaimedFileArtifacts(
                     content: content,
                     projectRoot: projectRoot

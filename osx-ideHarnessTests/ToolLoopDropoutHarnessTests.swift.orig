@@ -455,6 +455,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             request.stage == .final_response
         }
         let requestStages = capturedRequests.map { $0.stage?.rawValue ?? "nil" }
+        XCTFail("STAGES: \\(requestStages.joined(separator: ","))")
         XCTAssertTrue(
             sawFinalResponseFollowup,
             "Expected final response follow-up when assistant output was generic"

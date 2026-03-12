@@ -70,7 +70,7 @@ Best practice:
 - **delete_file**: Delete a file permanently
 
 ### Search & Execution
-- **run_command**: Execute shell commands
+- **run_command**: Execute and control shell commands through resumable sessions
 
 ### Folded Conversation Context
 - **conversation_fold**: List and read folded (condensed) conversation context stored outside the active prompt context.
@@ -86,10 +86,19 @@ Best practice:
    file tools (prefer `write_files`). Do not paste full file contents into chat unless the user
    explicitly asks.
 6. **Line-number discipline**: When proposing/performing edits, reference line numbers from `index_read_file` output.
-7. **Avoid long-running commands**: `run_command` is for commands that terminate quickly
-   (formatters, installs, builds, tests). Do NOT run non-terminating commands like
-   `npm run dev`, `npm start`, `vite`, `next dev`, or servers/watchers.
-8. **Verify changes**: Re-read the edited range to confirm correctness.
+7. **Use `run_command` as a control loop**:
+   - Start commands with a short wait window, usually 5-15 seconds:
+     `{"action":"start","command":"npm test","wait_seconds":10}`
+   - If the result says `"status":"running"`, keep using the returned `session_id`.
+   - To continue waiting:
+     `{"action":"wait","session_id":"...","wait_seconds":30}`
+   - To answer an interactive prompt:
+     `{"action":"send_input","session_id":"...","input":"y","append_newline":true,"wait_seconds":10}`
+   - To kill a stuck process:
+     `{"action":"stop","session_id":"..."}`
+   - Prefer bounded waits and inspect each `output_delta` before deciding whether to wait longer, send input, or stop.
+8. **Avoid non-terminating background servers unless explicitly needed**: prefer finite commands, but if a command is interactive or long-running, manage it through the `run_command` session loop instead of retrying the full command.
+9. **Verify changes**: Re-read the edited range to confirm correctness.
 
 ## Context Condensation (Folded History)
 

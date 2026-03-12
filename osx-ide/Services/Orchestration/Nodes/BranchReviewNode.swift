@@ -8,83 +8,41 @@ struct BranchReviewNode: OrchestrationNode {
 
     private let executionNodeId: String
     private let finalNodeId: String
+    private let continuationDecider: any BranchExecutionContinuationDeciding
 
-    init(executionNodeId: String, finalNodeId: String) {
+    init(
+        executionNodeId: String,
+        finalNodeId: String,
+        continuationDecider: any BranchExecutionContinuationDeciding = BranchExecutionContinuationDecider()
+    ) {
         self.executionNodeId = executionNodeId
         self.finalNodeId = finalNodeId
+        self.continuationDecider = continuationDecider
     }
 
     func run(state: OrchestrationState) async throws -> OrchestrationState {
         guard let branchExecution = state.branchExecution else {
-            return OrchestrationState(
-                request: state.request,
-                response: state.response,
-                lastToolResults: state.lastToolResults,
-                transition: .next(finalNodeId)
-            )
+            return state.transitioning(to: finalNodeId)
         }
 
-        if await shouldResumeExecution(from: state, branchExecution: branchExecution) {
-            return OrchestrationState(
-                request: state.request,
-                response: state.response,
-                lastToolResults: state.lastToolResults,
-                branchExecution: state.branchExecution,
-                transition: .next(executionNodeId)
-            )
+        if await continuationDecider.shouldResumeExecution(
+            from: state,
+            branchExecution: branchExecution
+        ) {
+            return state.transitioning(to: executionNodeId)
         }
 
         guard branchExecution.hasAdditionalBranches else {
-            return OrchestrationState(
-                request: state.request,
-                response: state.response,
-                lastToolResults: state.lastToolResults,
-                branchExecution: branchExecution,
-                transition: .next(finalNodeId)
+            return state.transitioning(
+                to: finalNodeId,
+                branchExecution: branchExecution
             )
         }
 
-        return OrchestrationState(
-            request: state.request,
-            response: state.response,
+        return state.transitioning(
+            to: executionNodeId,
             lastToolResults: [],
-            branchExecution: branchExecution.advanced(),
-            transition: .next(executionNodeId)
+            branchExecution: branchExecution.advanced()
         )
-    }
-
-    private func shouldResumeExecution(
-        from state: OrchestrationState,
-        branchExecution: OrchestrationState.BranchExecution
-    ) async -> Bool {
-        guard state.request.mode == .agent else { return false }
-        guard !branchExecution.hasAdditionalBranches else { return false }
-        guard let response = state.response else { return false }
-
-        let planMarkdown = await ConversationPlanStore.shared.get(
-            conversationId: state.request.conversationId
-        ) ?? ""
-        let progress = PlanChecklistTracker.progress(in: planMarkdown)
-        guard progress.total > 0, !progress.isComplete else { return false }
-
-        let content = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !content.isEmpty else { return false }
-
-        let normalized = content.lowercased()
-        let unfinishedSignals = [
-            "needs_work",
-            "needs work",
-            "pending tasks remain",
-            "continue with remaining",
-            "continuing with the next",
-            "remaining implementation",
-            "done -> next -> path:"
-        ]
-
-        if unfinishedSignals.contains(where: { normalized.contains($0) }) {
-            return true
-        }
-
-        return ChatPromptBuilder.deliveryStatus(from: content) == .needsWork
     }
 }

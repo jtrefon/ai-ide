@@ -1,5 +1,10 @@
 import Foundation
 
+protocol ConversationPlanStoring: Actor {
+    func get(conversationId: String) -> String?
+    func set(conversationId: String, plan: String)
+}
+
 actor ConversationPlanStore {
     static let shared = ConversationPlanStore()
 
@@ -65,3 +70,5 @@ actor ConversationPlanStore {
             .appendingPathComponent("\(conversationId).md")
     }
 }
+
+extension ConversationPlanStore: ConversationPlanStoring {}

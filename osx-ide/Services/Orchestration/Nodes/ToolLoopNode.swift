@@ -30,12 +30,10 @@ struct ToolLoopNode: OrchestrationNode {
             userInput: request.userInput
         )
 
-        return OrchestrationState(
-            request: request,
+        return state.transitioning(
+            to: nextNodeId,
             response: toolLoopResult.response,
-            lastToolResults: toolLoopResult.lastToolResults,
-            branchExecution: state.branchExecution,
-            transition: .next(nextNodeId)
+            lastToolResults: toolLoopResult.lastToolResults
         )
     }
 

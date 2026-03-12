@@ -90,6 +90,35 @@ struct OrchestrationState: Sendable {
         branchExecution?.makeContext(baseExplicitContext: request.explicitContext) ?? request.explicitContext
     }
 
+    func updating(
+        response: AIServiceResponse? = nil,
+        lastToolResults: [ChatMessage]? = nil,
+        branchExecution: BranchExecution? = nil,
+        transition: Transition? = nil
+    ) -> OrchestrationState {
+        OrchestrationState(
+            request: request,
+            response: response ?? self.response,
+            lastToolResults: lastToolResults ?? self.lastToolResults,
+            branchExecution: branchExecution ?? self.branchExecution,
+            transition: transition ?? self.transition
+        )
+    }
+
+    func transitioning(
+        to nextNodeId: String?,
+        response: AIServiceResponse? = nil,
+        lastToolResults: [ChatMessage]? = nil,
+        branchExecution: BranchExecution? = nil
+    ) -> OrchestrationState {
+        updating(
+            response: response,
+            lastToolResults: lastToolResults,
+            branchExecution: branchExecution,
+            transition: nextNodeId.map(Transition.next) ?? .end
+        )
+    }
+
     init(
         request: SendRequest,
         response: AIServiceResponse? = nil,

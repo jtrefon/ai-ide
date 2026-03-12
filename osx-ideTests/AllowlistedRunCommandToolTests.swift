@@ -52,7 +52,18 @@ final class AllowlistedRunCommandToolTests: XCTestCase {
         XCTAssertEqual(output, "FAKE: echo ok")
     }
 
-    func testRealRunCommandToolExecutesSimpleCommandWithIntegerTimeout() async throws {
+    func testAllowlistedWrapperAllowsSessionFollowUpWithoutRevalidatingCommand() async throws {
+        let tool = AllowlistedRunCommandTool(base: FakeRunCommandTool(), allowedPrefixes: ["echo "])
+
+        let output = try await tool.execute(arguments: ToolArguments([
+            "action": "wait",
+            "session_id": "existing-session"
+        ]))
+
+        XCTAssertEqual(output, "FAKE: ")
+    }
+
+    func testRealRunCommandToolExecutesSimpleCommandAndReturnsExitedStatus() async throws {
         let projectRoot = makeTempDir(prefix: "run_command_unit")
         defer { try? FileManager.default.removeItem(at: projectRoot) }
 
@@ -61,27 +72,80 @@ final class AllowlistedRunCommandToolTests: XCTestCase {
 
         let output = try await tool.execute(arguments: ToolArguments([
             "command": "printf 'unit-run-command-ok'",
-            "timeout_seconds": 5
+            "wait_seconds": 5
         ]))
 
-        XCTAssertTrue(output.contains("Exit Code: 0"))
-        XCTAssertTrue(output.contains("Timed Out: false"))
+        XCTAssertTrue(output.contains("\"status\" : \"exited\""))
+        XCTAssertTrue(output.contains("\"exit_code\" : 0"))
         XCTAssertTrue(output.contains("unit-run-command-ok"))
     }
 
-    func testRealRunCommandToolDoesNotReportTimeoutForFastDirectoryListing() async throws {
-        let projectRoot = makeTempDir(prefix: "run_command_listing")
+    func testRealRunCommandToolReturnsRunningSessionAndCanWaitForCompletion() async throws {
+        let projectRoot = makeTempDir(prefix: "run_command_wait")
         defer { try? FileManager.default.removeItem(at: projectRoot) }
 
         let pathValidator = PathValidator(projectRoot: projectRoot)
         let tool = RunCommandTool(projectRoot: projectRoot, pathValidator: pathValidator)
 
-        let output = try await tool.execute(arguments: ToolArguments([
-            "command": "ls -la",
-            "timeout_seconds": 1
+        let first = try await tool.execute(arguments: ToolArguments([
+            "action": "start",
+            "command": "sleep 2; printf 'done'",
+            "wait_seconds": 1
         ]))
 
-        XCTAssertTrue(output.contains("Exit Code: 0"))
-        XCTAssertTrue(output.contains("Timed Out: false"))
+        XCTAssertTrue(first.contains("\"status\" : \"running\""))
+        guard let sessionId = sessionId(from: first) else {
+            XCTFail("Expected session_id in running response")
+            return
+        }
+
+        let second = try await tool.execute(arguments: ToolArguments([
+            "action": "wait",
+            "session_id": sessionId,
+            "wait_seconds": 3
+        ]))
+
+        XCTAssertTrue(second.contains("\"status\" : \"exited\""))
+        XCTAssertTrue(second.contains("\"exit_code\" : 0"))
+        XCTAssertTrue(second.contains("done"))
+    }
+
+    func testRealRunCommandToolSupportsInteractiveInput() async throws {
+        let projectRoot = makeTempDir(prefix: "run_command_input")
+        defer { try? FileManager.default.removeItem(at: projectRoot) }
+
+        let pathValidator = PathValidator(projectRoot: projectRoot)
+        let tool = RunCommandTool(projectRoot: projectRoot, pathValidator: pathValidator)
+
+        let first = try await tool.execute(arguments: ToolArguments([
+            "action": "start",
+            "command": "read name; printf 'hello:%s' \"$name\"",
+            "wait_seconds": 1
+        ]))
+
+        XCTAssertTrue(first.contains("\"status\" : \"running\""))
+        guard let sessionId = sessionId(from: first) else {
+            XCTFail("Expected session_id in interactive response")
+            return
+        }
+
+        let second = try await tool.execute(arguments: ToolArguments([
+            "action": "send_input",
+            "session_id": sessionId,
+            "input": "jack",
+            "append_newline": true,
+            "wait_seconds": 2
+        ]))
+
+        XCTAssertTrue(second.contains("\"status\" : \"exited\""))
+        XCTAssertTrue(second.contains("hello:jack"))
+    }
+
+    private func sessionId(from output: String) -> String? {
+        guard let data = output.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return object["session_id"] as? String
     }
 }

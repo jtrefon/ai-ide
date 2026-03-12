@@ -11,12 +11,21 @@ final class NativeTerminalTextView: NSTextView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        super.mouseDown(with: event)
+        // Prevent clicking from changing the selection/cursor position
+        // super.mouseDown(with: event) // Skip super to prevent selection change
     }
 
     override func keyDown(with event: NSEvent) {
         if let characters = event.characters {
             inputDelegate?.forwardTerminalInput(characters)
+        }
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting flag: Bool) {
+        // Only allow programmatic selection changes from the embedder
+        // or effectively "lock" the external selection attempts
+        if let _ = inputDelegate {
+             super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: flag)
         }
     }
 
@@ -27,24 +36,10 @@ final class NativeTerminalTextView: NSTextView {
 
     // MARK: - Block Cursor Support
 
-    override func becomeFirstResponder() -> Bool {
-        let result = super.becomeFirstResponder()
-        if result {
-            startCursorBlinking()
-        }
-        return result
-    }
-
-    override func resignFirstResponder() -> Bool {
-        let result = super.resignFirstResponder()
-        stopCursorBlinking()
-        return result
-    }
-
     override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
         // Draw a block cursor instead of the default vertical line
-        // NOTE: We do NOT call super.drawInsertionPoint to avoid drawing the slim cursor
-        guard cursorVisible else { return }
+        // We use the 'flag' parameter which indicates the system's blink state
+        guard flag else { return }
 
         let cursorPosition = selectedRange().location
 
@@ -81,32 +76,7 @@ final class NativeTerminalTextView: NSTextView {
     
     // Disable the default cursor drawing
     override var shouldDrawInsertionPoint: Bool {
-        return cursorVisible
-    }
-
-    override func setNeedsDisplay(_ invalidRect: NSRect) {
-        super.setNeedsDisplay(invalidRect)
-    }
-
-    private func startCursorBlinking() {
-        stopCursorBlinking()
-        cursorVisible = true
-        cursorTimer = Timer.scheduledTimer(withTimeInterval: cursorBlinkRate, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.toggleCursor()
-            }
-        }
-    }
-
-    private func stopCursorBlinking() {
-        cursorTimer?.invalidate()
-        cursorTimer = nil
-        cursorVisible = true
-    }
-
-    private func toggleCursor() {
-        cursorVisible.toggle()
-        needsDisplay = true
+        return true
     }
 
     // Ensure cursor is drawn even when not blinking

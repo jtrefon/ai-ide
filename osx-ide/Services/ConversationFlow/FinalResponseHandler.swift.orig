@@ -35,6 +35,7 @@ final class FinalResponseHandler {
         if mode == .agent && !draft.isEmpty {
             let hasUnresolvedToolCalls = response.toolCalls?.isEmpty == false
             let isGenericContent = isGenericStatusMessage(draft)
+            print("FinalResponseHandler: isGenericContent = \(isGenericContent), draft = \(draft)")
             if hasUnresolvedToolCalls || isGenericContent {
                 let followupReason: String
                 if hasUnresolvedToolCalls {
@@ -220,6 +221,7 @@ final class FinalResponseHandler {
     ) async throws -> String {
         let template = try PromptRepository.shared.prompt(
             key: "ConversationFlow/FinalResponse/final_response_summary",
+            defaultValue: Self.defaultFinalResponsePrompt,
             projectRoot: projectRoot
         )
 
@@ -338,35 +340,18 @@ final class FinalResponseHandler {
         }
 
         // Finalize the draft message if it exists, otherwise append a new one
-        let shouldAlwaysAppendPreservedHandoff =
-            completionStatus == .needsWork || isIntermediateExecutionHandoffResponse(responseContent)
-
         if let draftIdString = draftAssistantMessageId,
             let draftId = UUID(uuidString: draftIdString)
         {
-            let lastMessage = historyCoordinator.messages.last
-            let isDraftAtEnd = (lastMessage?.id == draftId && lastMessage?.role == MessageRole.assistant)
-
-            if isDraftAtEnd {
-                historyCoordinator.finalizeDraftMessage(
-                    id: draftId,
-                    content: displayContent,
-                    reasoning: splitFinal.reasoning
-                )
-            } else {
-                historyCoordinator.removeDraftMessage(id: draftId)
-                historyCoordinator.append(
-                    ChatMessage(
-                        role: MessageRole.assistant,
-                        content: displayContent,
-                        context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
-                    )
-                )
-            }
-        } else if shouldAlwaysAppendPreservedHandoff || !isDuplicateOfLastAssistantMessage(content: displayContent) {
+            historyCoordinator.finalizeDraftMessage(
+                id: draftId,
+                content: displayContent,
+                reasoning: splitFinal.reasoning
+            )
+        } else if !isDuplicateOfLastAssistantMessage(content: displayContent) {
             historyCoordinator.append(
                 ChatMessage(
-                    role: MessageRole.assistant,
+                    role: .assistant,
                     content: displayContent,
                     context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
                 )

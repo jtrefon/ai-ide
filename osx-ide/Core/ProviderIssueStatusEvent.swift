@@ -2,6 +2,7 @@ import Foundation
 
 public struct ProviderIssueStatusEvent: Event {
     public enum StatusKind: String, Equatable {
+        case resolved
         case rateLimited
         case unavailable
         case authentication

@@ -18,46 +18,16 @@ class TerminalScreenRenderer {
         
         let result = NSMutableAttributedString()
         
-        // Only render rows that have content (up to and including cursor row)
-        let maxRow = min(buffer.cursorRow + 1, buffer.rows)
-        
-        for row in 0..<maxRow {
-            // Find the last non-space character in this row
-            var lastNonSpaceCol = -1
-            for col in (0..<buffer.columns).reversed() {
-                if buffer.grid[row][col].character != " " {
-                    lastNonSpaceCol = col
-                    break
-                }
-            }
-
-            // Render only up to the last non-space character (or cursor column if on cursor row)
-            let renderUpTo: Int
-            if row == buffer.cursorRow {
-                // cursorColumn points *after* the last written character in many cases.
-                // Rendering up to cursorColumn can introduce a trailing space.
-                renderUpTo = max(lastNonSpaceCol, buffer.cursorColumn - 1)
-            } else {
-                renderUpTo = lastNonSpaceCol
-            }
-
-            guard renderUpTo >= 0 else {
-                if row < maxRow - 1 {
-                    result.append(NSAttributedString(string: "\n"))
-                }
-                continue
-            }
-
-            for col in 0...renderUpTo {
+        for row in 0..<buffer.rows {
+            for col in 0..<buffer.columns {
                 let cell = buffer.grid[row][col]
                 let attrs = attributesForCell(cell, fontSize: fontSize, fontFamily: fontFamily)
                 result.append(NSAttributedString(string: String(cell.character), attributes: attrs))
             }
             
-            // Add newline except for last row
-            if row < maxRow - 1 {
-                result.append(NSAttributedString(string: "\n"))
-            }
+            // Add newline for all rows to maintain consistent grid height/width
+            // even for the last row (this ensures the formula (row*(cols+1))+col works)
+            result.append(NSAttributedString(string: "\n"))
         }
         
         textStorage.beginEditing()
@@ -69,26 +39,9 @@ class TerminalScreenRenderer {
     /// The rendered string has variable-length rows (trimmed trailing spaces)
     /// We need to count characters up to the cursor position
     func cursorTextPosition(in buffer: TerminalScreenBuffer) -> Int {
-        var position = 0
-        
-        // Count all characters in rows before the cursor row
-        for row in 0..<buffer.cursorRow {
-            // Find the last non-space character in this row
-            var lastNonSpaceCol = -1
-            for col in (0..<buffer.columns).reversed() {
-                if buffer.grid[row][col].character != " " {
-                    lastNonSpaceCol = col
-                    break
-                }
-            }
-            // Add characters in this row + newline
-            position += lastNonSpaceCol + 2  // +1 for 0-indexed, +1 for newline
-        }
-        
-        // Add the cursor column position in the current row
-        position += buffer.cursorColumn
-        
-        return position
+        // (row * (columns + 1)) + column
+        // columns + 1 accounts for the newline character at the end of each row
+        return (buffer.cursorRow * (buffer.columns + 1)) + buffer.cursorColumn
     }
     
     private func attributesForCell(_ cell: TerminalCell, fontSize: CGFloat, fontFamily: String) -> [NSAttributedString.Key: Any] {
