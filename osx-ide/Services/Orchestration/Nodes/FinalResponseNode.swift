@@ -14,7 +14,7 @@ struct FinalResponseNode: OrchestrationNode {
         self.nextNodeId = nextNodeId
     }
 
-        func run(state: OrchestrationState) async throws -> OrchestrationState {
+    func run(state: OrchestrationState) async throws -> OrchestrationState {
         print("====== FinalResponseNode RUN ======")
         let request = state.request
         let response = try requireResponse(from: state)
@@ -29,13 +29,7 @@ struct FinalResponseNode: OrchestrationNode {
             conversationId: request.conversationId
         )
 
-        return OrchestrationState(
-            request: request,
-            response: final,
-            lastToolResults: state.lastToolResults,
-            branchExecution: state.branchExecution,
-            transition: nextNodeId.map { .next($0) } ?? .end
-        )
+        return state.transitioning(to: nextNodeId, response: final)
     }
 
     private func requireResponse(from state: OrchestrationState) throws -> AIServiceResponse {

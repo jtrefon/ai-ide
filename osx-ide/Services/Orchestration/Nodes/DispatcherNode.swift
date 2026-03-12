@@ -28,8 +28,6 @@ struct DispatcherNode: OrchestrationNode {
 
     func run(state: OrchestrationState) async throws -> OrchestrationState {
         let request = state.request
-
-        // Use the existing handler logic for consistency (including retry loops if any)
         let response = try await handler.sendInitialResponse(
             explicitContext: request.explicitContext,
             mode: request.mode,
@@ -41,15 +39,11 @@ struct DispatcherNode: OrchestrationNode {
         )
 
         let hasToolCalls = !(response.toolCalls?.isEmpty ?? true)
-
-        // Determine next transition
         let nextNodeId = hasToolCalls ? toolLoopNodeId : finalResponseNodeId
-
-        return OrchestrationState(
-            request: request,
+        return state.transitioning(
+            to: nextNodeId,
             response: response,
-            lastToolResults: [],
-            transition: .next(nextNodeId)
+            lastToolResults: []
         )
     }
 }

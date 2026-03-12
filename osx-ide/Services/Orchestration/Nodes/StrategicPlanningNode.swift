@@ -6,12 +6,12 @@ struct StrategicPlanningNode: OrchestrationNode {
 
     let id: String = Self.idValue
 
-    private let historyCoordinator: ChatHistoryCoordinator
     private let nextNodeId: String
+    private let planStore: any ConversationPlanStoring
 
-    init(historyCoordinator: ChatHistoryCoordinator, nextNodeId: String) {
-        self.historyCoordinator = historyCoordinator
+    init(nextNodeId: String, planStore: any ConversationPlanStoring = ConversationPlanStore.shared) {
         self.nextNodeId = nextNodeId
+        self.planStore = planStore
     }
 
     func run(state: OrchestrationState) async throws -> OrchestrationState {
@@ -21,16 +21,10 @@ struct StrategicPlanningNode: OrchestrationNode {
             availableToolsCount: state.request.availableTools.count
         )
         guard planningMode == .requirePlanning else {
-            return OrchestrationState(
-                request: state.request,
-                response: state.response,
-                lastToolResults: state.lastToolResults,
-                branchExecution: state.branchExecution,
-                transition: .next(nextNodeId)
-            )
+            return state.transitioning(to: nextNodeId)
         }
 
-        let existingPlan = await ConversationPlanStore.shared.get(conversationId: state.request.conversationId) ?? ""
+        let existingPlan = await planStore.get(conversationId: state.request.conversationId) ?? ""
         let progress = PlanChecklistTracker.progress(in: existingPlan)
         let shouldReuseExistingPlan = !existingPlan.isEmpty && progress.total > 0 && !progress.isComplete
 
@@ -41,14 +35,7 @@ struct StrategicPlanningNode: OrchestrationNode {
             plan = StrategicPlanSynthesizer.build(userInput: state.request.userInput)
         }
 
-        await ConversationPlanStore.shared.set(conversationId: state.request.conversationId, plan: plan)
-
-        return OrchestrationState(
-            request: state.request,
-            response: state.response,
-            lastToolResults: state.lastToolResults,
-            branchExecution: state.branchExecution,
-            transition: .next(nextNodeId)
-        )
+        await planStore.set(conversationId: state.request.conversationId, plan: plan)
+        return state.transitioning(to: nextNodeId)
     }
 }

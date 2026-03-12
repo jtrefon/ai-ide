@@ -30,6 +30,35 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         }
     }
 
+    private actor StubPlanStore: ConversationPlanStoring {
+        private var plans: [String: String]
+
+        init(plans: [String: String] = [:]) {
+            self.plans = plans
+        }
+
+        func get(conversationId: String) -> String? {
+            plans[conversationId]
+        }
+
+        func set(conversationId: String, plan: String) {
+            plans[conversationId] = plan
+        }
+    }
+
+    private struct StubBranchExecutionContinuationDecider: BranchExecutionContinuationDeciding {
+        let shouldResume: Bool
+
+        func shouldResumeExecution(
+            from state: OrchestrationState,
+            branchExecution: OrchestrationState.BranchExecution
+        ) async -> Bool {
+            _ = state
+            _ = branchExecution
+            return shouldResume
+        }
+    }
+
     @MainActor
     private struct AppendToLogNode: OrchestrationNode {
         let id: String
@@ -39,13 +68,7 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
 
         func run(state: OrchestrationState) async throws -> OrchestrationState {
             await log.append(output)
-            return OrchestrationState(
-                request: state.request,
-                response: state.response,
-                lastToolResults: state.lastToolResults,
-                branchExecution: state.branchExecution,
-                transition: nextId.map { .next($0) } ?? .end
-            )
+            return state.transitioning(to: nextId)
         }
     }
 
@@ -167,6 +190,62 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         await ConversationPlanStore.shared.set(conversationId: request.conversationId, plan: "")
     }
 
+    func testBranchReviewNodeUsesInjectedContinuationDecider() async throws {
+        let branchExecution = OrchestrationState.BranchExecution(
+            plan: "1. [x] First",
+            globalInvariants: [],
+            branches: [
+                .init(id: "branch_1", title: "First", checklistItems: ["Inspect files"])
+            ],
+            activeBranchIndex: 0
+        )
+
+        let node = BranchReviewNode(
+            executionNodeId: "execute",
+            finalNodeId: "final",
+            continuationDecider: StubBranchExecutionContinuationDecider(shouldResume: true)
+        )
+        let nextState = try await node.run(state: OrchestrationState(
+            request: makeSendRequest(mode: .agent),
+            response: AIServiceResponse(content: "Done", toolCalls: nil),
+            lastToolResults: [],
+            branchExecution: branchExecution,
+            transition: .next("branch_review")
+        ))
+
+        XCTAssertEqual(nextState.transition.nextNodeId, "execute")
+        XCTAssertEqual(nextState.branchExecution?.activeBranchIndex, 0)
+    }
+
+    func testBranchExecutionContinuationDeciderDoesNotResumeIntermediateHandoffWithoutToolResults() async throws {
+        let request = makeSendRequest(mode: .agent)
+        let branchExecution = OrchestrationState.BranchExecution(
+            plan: "1. [x] First",
+            globalInvariants: [],
+            branches: [
+                .init(id: "branch_1", title: "First", checklistItems: ["Inspect files"])
+            ],
+            activeBranchIndex: 0
+        )
+        let decider = BranchExecutionContinuationDecider(planStore: StubPlanStore())
+
+        let shouldResume = await decider.shouldResumeExecution(
+            from: OrchestrationState(
+                request: request,
+                response: AIServiceResponse(
+                    content: "Done -> Next -> Path: Continue with remaining implementation.",
+                    toolCalls: nil
+                ),
+                lastToolResults: [],
+                branchExecution: branchExecution,
+                transition: .next("branch_review")
+            ),
+            branchExecution: branchExecution
+        )
+
+        XCTAssertFalse(shouldResume)
+    }
+
     func testConversationFlowGraphStartsAtDispatcherForSimpleAgentRequest() {
         let graph = ConversationFlowGraphFactory.makeGraph(
             request: makeSendRequest(mode: .agent),
@@ -205,13 +284,7 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         let id: String
 
         func run(state: OrchestrationState) async throws -> OrchestrationState {
-            OrchestrationState(
-                request: state.request,
-                response: state.response,
-                lastToolResults: state.lastToolResults,
-                branchExecution: state.branchExecution,
-                transition: .next(id)
-            )
+            state.transitioning(to: id)
         }
     }
 
@@ -221,13 +294,7 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         let nextId: String?
 
         func run(state: OrchestrationState) async throws -> OrchestrationState {
-            OrchestrationState(
-                request: state.request,
-                response: state.response,
-                lastToolResults: state.lastToolResults,
-                branchExecution: state.branchExecution,
-                transition: nextId.map { .next($0) } ?? .end
-            )
+            state.transitioning(to: nextId)
         }
     }
 
