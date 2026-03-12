@@ -146,7 +146,7 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView.alignment = .left
         terminalView.isVerticallyResizable = true
         terminalView.isHorizontallyResizable = false // Disable horizontal resizing to prevent wrapping issues
-        terminalView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        terminalView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         terminalView.textContainer?.widthTracksTextView = false
         terminalView.textContainer?.lineFragmentPadding = 0 // Remove padding for precise grid control
         terminalView.drawsBackground = true
@@ -253,14 +253,17 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         let viewWidth = view.bounds.width
         let viewHeight = view.bounds.height
         
-        let columns = max(1, Int(viewWidth / charWidth))
-        let rows = max(1, Int(viewHeight / charHeight))
+        let columns = max(1, Int(floor(viewWidth / charWidth)))
+        let rows = max(1, Int(floor(viewHeight / charHeight)))
         
         // Disable line wrapping to maintain grid integrity
         terminalView?.textContainer?.widthTracksTextView = false
         terminalView?.isHorizontallyResizable = true
         terminalView?.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        terminalView?.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        
+        // Strictly set the container size to the grid width to prevent any spill-over wrapping
+        let gridWidth = CGFloat(columns) * charWidth
+        terminalView?.textContainer?.containerSize = NSSize(width: gridWidth, height: CGFloat.greatestFiniteMagnitude)
         
         // Resize both the PTY and the screen buffer
         screenBuffer?.resize(rows: rows, columns: columns)

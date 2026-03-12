@@ -6,6 +6,13 @@ extension NativeTerminalEmbedder {
         guard !isCleaningUp, let terminalView = terminalView else { return }
 
         eventBus.publish(TerminalOutputProducedEvent(output: text))
+        
+        #if DEBUG
+        // Log dimensions and output for debugging "glued up" issues
+        if let buffer = screenBuffer {
+            print("[Terminal] Received \(text.count) chars. Buffer: \(buffer.rows)x\(buffer.columns). Cursor: \(buffer.cursorRow),\(buffer.cursorColumn)")
+        }
+        #endif
 
         let shouldAutoscroll = isNearBottom(terminalView)
         applyTerminalOutput(text, to: terminalView)

@@ -25,10 +25,9 @@ class TerminalScreenRenderer {
                 result.append(NSAttributedString(string: String(cell.character), attributes: attrs))
             }
             
-            // Add newline except for last row
-            if row < buffer.rows - 1 {
-                result.append(NSAttributedString(string: "\n"))
-            }
+            // Add newline for all rows to maintain consistent grid height/width
+            // even for the last row (this ensures the formula (row*(cols+1))+col works)
+            result.append(NSAttributedString(string: "\n"))
         }
         
         textStorage.beginEditing()
