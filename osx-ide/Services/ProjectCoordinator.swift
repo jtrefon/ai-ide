@@ -151,6 +151,8 @@ class ProjectCoordinator: ObservableObject {
                         cm.updateCodebaseIndex(index)
                         cm.updateProjectRoot(root)
                     }
+
+                    self.startRootWatcher(projectRoot: root)
                 }
 
                 // Post-init background configuration - this continues while isInitializing is false

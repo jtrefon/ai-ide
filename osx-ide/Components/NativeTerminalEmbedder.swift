@@ -142,11 +142,13 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         terminalView.font = resolveFont(size: fontSize, family: fontFamily)
         terminalView.backgroundColor = NSColor.black
         terminalView.textColor = NSColor.green
-        terminalView.insertionPointColor = NSColor.green
+        terminalView.insertionPointColor = NSColor.clear // Hide standard cursor
         terminalView.alignment = .left
         terminalView.isVerticallyResizable = true
-        terminalView.isHorizontallyResizable = true
-        terminalView.textContainer?.lineFragmentPadding = 5
+        terminalView.isHorizontallyResizable = false // Disable horizontal resizing to prevent wrapping issues
+        terminalView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        terminalView.textContainer?.widthTracksTextView = false
+        terminalView.textContainer?.lineFragmentPadding = 0 // Remove padding for precise grid control
         terminalView.drawsBackground = true
         terminalView.isContinuousSpellCheckingEnabled = false
         terminalView.delegate = self
@@ -253,6 +255,12 @@ class NativeTerminalEmbedder: NSObject, ObservableObject {
         
         let columns = max(1, Int(viewWidth / charWidth))
         let rows = max(1, Int(viewHeight / charHeight))
+        
+        // Disable line wrapping to maintain grid integrity
+        terminalView?.textContainer?.widthTracksTextView = false
+        terminalView?.isHorizontallyResizable = true
+        terminalView?.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        terminalView?.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         
         // Resize both the PTY and the screen buffer
         screenBuffer?.resize(rows: rows, columns: columns)

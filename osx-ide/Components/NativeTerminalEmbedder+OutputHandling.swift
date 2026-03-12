@@ -70,17 +70,17 @@ extension NativeTerminalEmbedder {
             case "\n":
                 buffer.newline()
             case "\r":
-                // Skip carriage returns to avoid overwriting content
-                break
+                buffer.carriageReturn()
             case "\t":
-                buffer.putCharacter("\t")
+                buffer.tab()
             case "\u{08}", "\u{7F}":  // Backspace or DEL
+                buffer.backspace()
+            case "\u{07}": // Bell - ignore for now
                 break
             default:
                 // Skip other control characters
                 let scalarValue = ch.unicodeScalars.first?.value ?? 0
-                let isControl = scalarValue < 32
-                if ch.isASCII && !isControl {
+                if scalarValue >= 32 || !ch.isASCII {
                     buffer.putCharacter(ch)
                 }
             }
@@ -226,11 +226,9 @@ extension NativeTerminalEmbedder {
     
     /// Handle cursor positioning (CUP) - ESC [ row ; col H
     func handleBufferCursorPosition(parameters: [Int], buffer: TerminalScreenBuffer) {
-        // This app intentionally treats cursor positioning sequences as non-rendering control codes.
-        // For headless rendering in tests, we skip cursor movement to avoid injecting leading
-        // whitespace/newlines into the rendered output.
-        _ = parameters
-        _ = buffer
+        let row = max(1, parameters.first ?? 1) - 1
+        let col = parameters.count >= 2 ? max(1, parameters[1]) - 1 : 0
+        buffer.moveCursor(row: row, column: col)
     }
     
     /// Handle cursor up (CUU) - ESC [ n A

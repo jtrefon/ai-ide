@@ -135,58 +135,58 @@ final class NativeTerminalEmbedderTests: XCTestCase {
     
     func testParseSGRReset() {
         let output = renderedString(from: "\u{1B}[0m")
-        XCTAssertEqual(output, "")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "")
     }
     
     func testParseSGRForegroundColors() {
         let output = renderedString(from: "\u{1B}[31mRed\u{1B}[0m")
-        XCTAssertEqual(output, "Red")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Red")
     }
     
     func testParseMultipleSGRParameters() {
         let output = renderedString(from: "\u{1B}[1;31mBold Red\u{1B}[0m")
-        XCTAssertEqual(output, "Bold Red")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Bold Red")
     }
     
     func testParseOSCSequence() {
         // OSC sequence for setting window title
         let output = renderedString(from: "\u{1B}]0;My Title\u{07}Hello")
-        XCTAssertEqual(output, "Hello")  // OSC should be skipped
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Hello")  // OSC should be skipped
     }
     
     func testParseOSCSequenceWithBELTerminator() {
         let output = renderedString(from: "\u{1B}]2;Status Message\u{07}World")
-        XCTAssertEqual(output, "World")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "World")
     }
     
     func testParseOSCSequenceWithStringTerminator() {
         // OSC with ST (\u{1B}\\) terminator
         let output = renderedString(from: "\u{1B}]0;Title\u{1B}\\Text")
-        XCTAssertEqual(output, "Text")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Text")
     }
     
     func testParseCSISequenceCursorPosition() {
-        // CSI H for cursor position - should be skipped
+        // CSI H for cursor position - should move cursor but not render anything
         let output = renderedString(from: "\u{1B}[HTest")
-        XCTAssertEqual(output, "Test")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Test")
     }
     
     func testParseCSISequenceWithParameters() {
         // CSI 10;20H for cursor position
         let output = renderedString(from: "\u{1B}[10;20HContent")
-        XCTAssertEqual(output, "Content")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Content")
     }
     
     func testParseEraseInDisplay() {
         // CSI 2J - clear screen
         let output = renderedString(from: "\u{1B}[2JScreen Cleared")
-        XCTAssertEqual(output, "Screen Cleared")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Screen Cleared")
     }
     
     func testParseEraseInLine() {
         // CSI K - erase to end of line
         let output = renderedString(from: "\u{1B}[KLine Content")
-        XCTAssertEqual(output, "Line Content")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Line Content")
     }
     
     func testParseAllANSIColors() {
@@ -194,7 +194,7 @@ final class NativeTerminalEmbedderTests: XCTestCase {
         let colorCodes = [30, 31, 32, 33, 34, 35, 36, 37]
         for code in colorCodes {
             let output = renderedString(from: "\u{1B}[\(code)mX")
-            XCTAssertEqual(output, "X", "Failed for color code \(code)")
+            XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "X", "Failed for color code \(code)")
         }
     }
     
@@ -203,7 +203,7 @@ final class NativeTerminalEmbedderTests: XCTestCase {
         let brightColorCodes = [90, 91, 92, 93, 94, 95, 96, 97]
         for code in brightColorCodes {
             let output = renderedString(from: "\u{1B}[\(code)mX")
-            XCTAssertEqual(output, "X", "Failed for bright color code \(code)")
+            XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "X", "Failed for bright color code \(code)")
         }
     }
     
@@ -212,28 +212,28 @@ final class NativeTerminalEmbedderTests: XCTestCase {
         let bgCodes = [40, 41, 42, 43, 44, 45, 46, 47]
         for code in bgCodes {
             let output = renderedString(from: "\u{1B}[\(code)mX")
-            XCTAssertEqual(output, "X", "Failed for background code \(code)")
+            XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "X", "Failed for background code \(code)")
         }
     }
     
     func testParseTextAttributes() {
         // Bold
         let boldOutput = renderedString(from: "\u{1B}[1mBold")
-        XCTAssertEqual(boldOutput, "Bold")
+        XCTAssertEqual(boldOutput.trimmingCharacters(in: .whitespacesAndNewlines), "Bold")
         
         // Italic
         let italicOutput = renderedString(from: "\u{1B}[3mItalic")
-        XCTAssertEqual(italicOutput, "Italic")
+        XCTAssertEqual(italicOutput.trimmingCharacters(in: .whitespacesAndNewlines), "Italic")
         
         // Underline
         let underlineOutput = renderedString(from: "\u{1B}[4mUnderline")
-        XCTAssertEqual(underlineOutput, "Underline")
+        XCTAssertEqual(underlineOutput.trimmingCharacters(in: .whitespacesAndNewlines), "Underline")
     }
     
     func testParseComplexANSISequence() {
         // Complex sequence with multiple attributes
         let output = renderedString(from: "\u{1B}[1;31;4mBold Red Underlined\u{1B}[0m Normal")
-        XCTAssertEqual(output, "Bold Red Underlined Normal")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Bold Red Underlined Normal")
     }
     
     func testParseInvalidANSISequence() {
@@ -246,35 +246,47 @@ final class NativeTerminalEmbedderTests: XCTestCase {
     func testParseIncompleteANSISequence() {
         // Incomplete sequence at end of string
         let output = renderedString(from: "Text\u{1B}[")
-        XCTAssertEqual(output, "Text")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Text")
     }
     
     // MARK: - Control Character Tests
     
-    func testCarriageReturnIsSkipped() {
+    func testCarriageReturnOverwrites() {
         let output = renderedString(from: "Hello\rWorld")
-        XCTAssertEqual(output, "HelloWorld")
+        // "Hello" is written, then \r moves cursor to 0, then "World" overwrites "Hello"
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "World")
     }
     
     func testNewlineIsPreserved() {
         let output = renderedString(from: "Line1\nLine2")
-        XCTAssertEqual(output, "Line1\nLine2")
+        // Fixed-width rendering means each line has 120 chars (per renderedString helper)
+        let lines = output.components(separatedBy: "\n")
+        XCTAssertEqual(lines[0].trimmingCharacters(in: .whitespacesAndNewlines), "Line1")
+        XCTAssertEqual(lines[1].trimmingCharacters(in: .whitespacesAndNewlines), "Line2")
     }
     
-    func testTabIsPreserved() {
-        let output = renderedString(from: "Col1\tCol2")
-        XCTAssertEqual(output, "Col1\tCol2")
+    func testTabIncrementsColumn() {
+        let output = renderedString(from: "A\tB")
+        XCTAssertTrue(output.contains("A"))
+        XCTAssertTrue(output.contains("B"))
+        // Tab stop at 8, so B should be at index 8
+        let lines = output.components(separatedBy: "\n")
+        let firstLine = lines[0]
+        let indexA = firstLine.firstIndex(of: "A")!
+        let indexB = firstLine.firstIndex(of: "B")!
+        XCTAssertEqual(firstLine.distance(from: indexA, to: indexB), 8)
     }
     
     func testControlCharactersAreSkipped() {
         // Bell character (0x07) should be skipped in plain text
         let output = renderedString(from: "Hello\u{07}World")
-        XCTAssertEqual(output, "HelloWorld")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "HelloWorld")
     }
     
-    func testBackspaceIsSkipped() {
+    func testBackspaceMovesCursorBack_Overwrites() {
         let output = renderedString(from: "ABC\u{08}D")
-        XCTAssertEqual(output, "ABCD")
+        // ABC is written, cursor at 3. \u{08} moves to 2. D is written at 2, overwriting C.
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "ABD")
     }
     
     // MARK: - Font Resolution Tests
@@ -353,7 +365,7 @@ final class NativeTerminalEmbedderTests: XCTestCase {
         
         embedder.clearTerminal()
         
-        XCTAssertEqual(embedder.terminalView?.string, "")
+        XCTAssertEqual(embedder.terminalView?.string.trimmingCharacters(in: .whitespacesAndNewlines), "")
     }
     
     // MARK: - Cleanup Tests
@@ -419,16 +431,16 @@ final class NativeTerminalEmbedderTests: XCTestCase {
     
     func testPlainTextOnly() {
         let output = renderedString(from: "Hello, World!")
-        XCTAssertEqual(output, "Hello, World!")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Hello, World!")
     }
     
     func testMultipleConsecutiveANSISequences() {
         let output = renderedString(from: "\u{1B}[1m\u{1B}[31m\u{1B}[4mText")
-        XCTAssertEqual(output, "Text")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Text")
     }
     
     func testANSIAtEndOfString() {
         let output = renderedString(from: "Text\u{1B}[0m")
-        XCTAssertEqual(output, "Text")
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "Text")
     }
 }

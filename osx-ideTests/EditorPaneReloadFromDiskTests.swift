@@ -85,4 +85,28 @@ final class EditorPaneReloadFromDiskTests: XCTestCase {
         XCTAssertEqual(pane.tabs.first?.content, "old")
         XCTAssertEqual(pane.editorContent, "old")
     }
+
+    func testReloadFileIfOpenClosesTabWhenFileIsDeleted() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("osx_ide_reload_tests_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let fileURL = tempRoot.appendingPathComponent("a.swift")
+        try "content".write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let pane = makePaneStateManager(fileSystemService: FileSystemService())
+        let tab = EditorPaneStateManager.EditorTab(filePath: fileURL.path, language: "swift", content: "content", isDirty: false)
+        pane.tabs = [tab]
+        pane.activeTabID = tab.id
+        
+        // Delete the file
+        try FileManager.default.removeItem(at: fileURL)
+        
+        // Trigger reload
+        pane.reloadFileIfOpen(path: fileURL.path)
+
+        XCTAssertTrue(pane.tabs.isEmpty)
+        XCTAssertNil(pane.activeTabID)
+    }
 }
