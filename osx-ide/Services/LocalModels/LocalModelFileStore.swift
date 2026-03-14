@@ -1,6 +1,16 @@
 import Foundation
 
 public enum LocalModelFileStore {
+    enum LocalModelFileStoreError: Error, LocalizedError {
+        case missingRequiredRuntimeArtifact(modelId: String, fileName: String)
+
+        var errorDescription: String? {
+            switch self {
+            case let .missingRequiredRuntimeArtifact(modelId, fileName):
+                return "Required runtime artifact \(fileName) is missing for model \(modelId)."
+            }
+        }
+    }
     struct ModelConfig: Codable {
         let maxPositionEmbeddings: Int?
         let maxSequenceLength: Int?
@@ -65,7 +75,7 @@ public enum LocalModelFileStore {
     }
 
     static func runtimeModelDirectory(for model: LocalModelDefinition) throws -> URL {
-        let installedDirectory = try modelDirectory(modelId: model.id)
+        let installedDirectory = try ensureCanonicalInstallation(for: model)
         guard requiresRuntimeCompatibilityDirectory(model: model) else {
             return installedDirectory
         }
@@ -77,15 +87,8 @@ public enum LocalModelFileStore {
     }
 
     static func isModelInstalled(_ model: LocalModelDefinition) -> Bool {
-        for artifact in model.artifacts {
-            guard let url = try? artifactURL(modelId: model.id, fileName: artifact.fileName) else {
-                return false
-            }
-            if !FileManager.default.fileExists(atPath: url.path) {
-                return false
-            }
-        }
-        return true
+        _ = try? ensureCanonicalInstallation(for: model)
+        return hasAllArtifacts(for: model, in: try? modelDirectory(modelId: model.id))
     }
 
     static func deleteModelDirectory(modelId: String) throws {
@@ -107,6 +110,7 @@ public enum LocalModelFileStore {
     }
 
     static func contextLength(for model: LocalModelDefinition) -> Int {
+        _ = try? ensureCanonicalInstallation(for: model)
         // Try to load from config.json first
         if let config = loadModelConfig(modelId: model.id),
             let contextLength = config.contextLength
@@ -117,8 +121,117 @@ public enum LocalModelFileStore {
         return model.defaultContextLength
     }
 
+    @discardableResult
+    static func ensureCanonicalInstallation(for model: LocalModelDefinition) throws -> URL {
+        let canonicalDirectory = try modelDirectory(modelId: model.id)
+        try materializeCanonicalSymlinkIfNeeded(for: model, canonicalDirectory: canonicalDirectory)
+        try migrateLegacyCacheIfNeeded(for: model, canonicalDirectory: canonicalDirectory)
+        return canonicalDirectory
+    }
+
     private static func requiresRuntimeCompatibilityDirectory(model: LocalModelDefinition) -> Bool {
-        model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main"
+        // The upgraded mlx-swift-lm runtime supports Qwen 3.5 natively, including its
+        // multimodal configuration and processor stack. Keep the compatibility path for
+        // older-model shims only; Qwen 3.5 should now load from the installed directory.
+        false
+    }
+
+    private static func hasAllArtifacts(for model: LocalModelDefinition, in directory: URL?) -> Bool {
+        guard let directory else { return false }
+        let fileManager = FileManager.default
+        for artifact in model.artifacts {
+            let artifactPath = directory.appendingPathComponent(artifact.fileName, isDirectory: false).path
+            if !fileManager.fileExists(atPath: artifactPath) {
+                return false
+            }
+        }
+        return true
+    }
+
+    private static func materializeCanonicalSymlinkIfNeeded(
+        for model: LocalModelDefinition,
+        canonicalDirectory: URL
+    ) throws {
+        let fileManager = FileManager.default
+        guard isSymbolicLink(at: canonicalDirectory) else { return }
+
+        let symlinkTarget = try resolvedSymlinkTarget(at: canonicalDirectory)
+        let targetDirectory = symlinkTarget.standardizedFileURL
+
+        guard hasAllArtifacts(for: model, in: targetDirectory) else { return }
+
+        try fileManager.removeItem(at: canonicalDirectory)
+        if fileManager.fileExists(atPath: canonicalDirectory.path) {
+            try fileManager.removeItem(at: canonicalDirectory)
+        }
+        try fileManager.moveItem(at: targetDirectory, to: canonicalDirectory)
+    }
+
+    private static func migrateLegacyCacheIfNeeded(
+        for model: LocalModelDefinition,
+        canonicalDirectory: URL
+    ) throws {
+        guard !hasAllArtifacts(for: model, in: canonicalDirectory) else { return }
+        guard let legacyDirectory = legacyCacheDirectory(for: model) else { return }
+
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: legacyDirectory.path),
+              hasAllArtifacts(for: model, in: legacyDirectory) else {
+            return
+        }
+
+        if fileManager.fileExists(atPath: canonicalDirectory.path) {
+            try fileManager.removeItem(at: canonicalDirectory)
+        }
+
+        let canonicalParent = canonicalDirectory.deletingLastPathComponent()
+        try fileManager.createDirectory(at: canonicalParent, withIntermediateDirectories: true)
+        try fileManager.moveItem(at: legacyDirectory, to: canonicalDirectory)
+    }
+
+    private static func legacyCacheDirectory(for model: LocalModelDefinition) -> URL? {
+        guard let artifactURL = model.artifacts.first?.url,
+              artifactURL.host == "huggingface.co" else {
+            return nil
+        }
+
+        let pathComponents = artifactURL.pathComponents.filter { $0 != "/" }
+        guard pathComponents.count >= 4,
+              pathComponents[2] == "resolve" else {
+            return nil
+        }
+
+        let owner = pathComponents[0]
+        let repository = pathComponents[1]
+        guard let cachesRoot = try? FileManager.default.url(
+            for: .cachesDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        ) else {
+            return nil
+        }
+
+        return cachesRoot
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent(owner, isDirectory: true)
+            .appendingPathComponent(repository, isDirectory: true)
+    }
+
+    private static func isSymbolicLink(at url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isSymbolicLinkKey]) else {
+            return false
+        }
+        return values.isSymbolicLink == true
+    }
+
+    private static func resolvedSymlinkTarget(at symlinkURL: URL) throws -> URL {
+        let destination = try FileManager.default.destinationOfSymbolicLink(atPath: symlinkURL.path)
+        if destination.hasPrefix("/") {
+            return URL(fileURLWithPath: destination, isDirectory: true)
+        }
+        return symlinkURL.deletingLastPathComponent()
+            .appendingPathComponent(destination, isDirectory: true)
     }
 
     private static func prepareRuntimeCompatibilityDirectory(
@@ -134,6 +247,7 @@ public enum LocalModelFileStore {
         try FileManager.default.createDirectory(at: runtimeDirectory, withIntermediateDirectories: true)
 
         let fileManager = FileManager.default
+        try validateRequiredRuntimeArtifacts(for: model, in: sourceDirectory)
         let sourceContents = try fileManager.contentsOfDirectory(
             at: sourceDirectory,
             includingPropertiesForKeys: nil,
@@ -153,7 +267,7 @@ public enum LocalModelFileStore {
             try fileManager.createSymbolicLink(at: destinationItem, withDestinationURL: sourceItem)
         }
 
-        try originalRuntimeConfigData(for: model).write(
+        try normalizedRuntimeConfigData(for: model).write(
             to: runtimeDirectory.appendingPathComponent("config.json"),
             options: Data.WritingOptions.atomic
         )
@@ -164,9 +278,62 @@ public enum LocalModelFileStore {
         return runtimeDirectory
     }
 
-    private static func originalRuntimeConfigData(for model: LocalModelDefinition) throws -> Data {
+    private static func validateRequiredRuntimeArtifacts(for model: LocalModelDefinition, in directory: URL) throws {
+        let requiredArtifacts = requiredRuntimeArtifacts(for: model)
+        guard !requiredArtifacts.isEmpty else { return }
+
+        let fileManager = FileManager.default
+        for artifact in requiredArtifacts {
+            let path = directory.appendingPathComponent(artifact).path
+            guard fileManager.fileExists(atPath: path) else {
+                throw LocalModelFileStoreError.missingRequiredRuntimeArtifact(
+                    modelId: model.id,
+                    fileName: artifact
+                )
+            }
+        }
+    }
+
+    private static func requiredRuntimeArtifacts(for model: LocalModelDefinition) -> [String] {
+        guard model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main" else {
+            return []
+        }
+
+        return [
+            "preprocessor_config.json",
+            "processor_config.json",
+            "video_preprocessor_config.json",
+            "tokenizer.json",
+            "tokenizer_config.json"
+        ]
+    }
+
+    private static func normalizedRuntimeConfigData(for model: LocalModelDefinition) throws -> Data {
         let configURL = try artifactURL(modelId: model.id, fileName: "config.json")
-        return try Data(contentsOf: configURL)
+        let originalData = try Data(contentsOf: configURL)
+
+        guard model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main" else {
+            return originalData
+        }
+
+        guard var configObject = try JSONSerialization.jsonObject(with: originalData) as? [String: Any] else {
+            return originalData
+        }
+
+        var mutated = false
+
+        if let modelType = configObject["model_type"] as? String,
+           modelType == "qwen3_5" {
+            configObject["model_type"] = "qwen3_vl"
+            mutated = true
+        }
+
+        if let textConfig = configObject["text_config"] as? [String: Any] {
+            configObject["text_config"] = textConfig
+        }
+
+        guard mutated else { return originalData }
+        return try JSONSerialization.data(withJSONObject: configObject, options: [.prettyPrinted])
     }
 
     private static func normalizedRuntimeChatTemplateData(for model: LocalModelDefinition) throws -> Data {

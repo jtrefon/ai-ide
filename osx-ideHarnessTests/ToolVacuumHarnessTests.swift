@@ -37,6 +37,11 @@ final class ToolVacuumHarnessTests: XCTestCase {
             guard let tier else { return mockMemoriesResult }
             return mockMemoriesResult.filter { $0.tier == tier }
         }
+        func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult] {
+            _ = userInput
+            _ = limit
+            return []
+        }
         func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
             let entry = MemoryEntry(
                 id: UUID().uuidString,
@@ -276,11 +281,14 @@ final class ToolVacuumHarnessTests: XCTestCase {
             "strategicPlan": strategicResult,
             "userInput": "Validate basic tool execution coverage for the local agent pipeline"
         ]))
-        print("=== TACTICAL RESULT ===")
-        print(tacticalResult)
-        print("=======================")
-        XCTAssertTrue(tacticalResult.lowercased().contains("use read_file"), "TACTICAL OUTPUT: \(tacticalResult)")
-        XCTAssertTrue(tacticalResult.lowercased().contains("apply edits"), "TACTICAL OUTPUT: \(tacticalResult)")
+        let tacticalPayload = try XCTUnwrap(tacticalResult.data(using: .utf8))
+        let tacticalResponse = try JSONDecoder().decode(
+            TacticalPlanToolHarnessResult.self,
+            from: tacticalPayload
+        )
+        XCTAssertEqual(tacticalResponse.kind, "tactical_plan")
+        XCTAssertTrue(tacticalResponse.plan.lowercased().contains("read relevant source files"), "TACTICAL OUTPUT: \(tacticalResult)")
+        XCTAssertTrue(tacticalResponse.plan.lowercased().contains("apply focused edits"), "TACTICAL OUTPUT: \(tacticalResult)")
     }
 
     func testIndexMemoryToolsPersistAndListStableResultsInIsolation() async throws {
@@ -314,4 +322,10 @@ final class ToolVacuumHarnessTests: XCTestCase {
     private func cleanup(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
     }
+}
+
+private struct TacticalPlanToolHarnessResult: Decodable {
+    let goal: String
+    let plan: String
+    let kind: String
 }

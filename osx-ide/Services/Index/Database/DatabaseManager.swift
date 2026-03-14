@@ -25,6 +25,7 @@ public class DatabaseManager {
 
     private lazy var schemaManager = DatabaseSchemaManager(database: self)
     private lazy var memoryManager = DatabaseMemoryManager(database: self)
+    private lazy var codeChunkManager = DatabaseCodeChunkManager(database: self)
     private lazy var symbolManager = DatabaseSymbolManager(database: self)
     private lazy var queryExecutor = DatabaseQueryExecutor(database: self)
     private lazy var aiEnrichmentManager = DatabaseAIEnrichmentManager(database: self)
@@ -114,6 +115,26 @@ public class DatabaseManager {
         tier: MemoryTier?
     ) throws -> [MemorySimilarityResult] {
         try memoryManager.searchSimilarMemories(modelId: modelId, queryVector: queryVector, limit: limit, tier: tier)
+    }
+
+    func replaceCodeChunks(
+        resourceId: String,
+        modelId: String,
+        chunks: [CodeChunkRecord]
+    ) throws {
+        try codeChunkManager.replaceCodeChunks(resourceId: resourceId, modelId: modelId, chunks: chunks)
+    }
+
+    func deleteCodeChunks(resourceId: String, modelId: String? = nil) throws {
+        try codeChunkManager.deleteCodeChunks(resourceId: resourceId, modelId: modelId)
+    }
+
+    func searchSimilarCodeChunks(
+        modelId: String,
+        queryVector: [Float],
+        limit: Int
+    ) throws -> [CodeChunkSimilarityResult] {
+        try codeChunkManager.searchSimilarCodeChunks(modelId: modelId, queryVector: queryVector, limit: limit)
     }
 
     public func saveSymbols(_ symbols: [Symbol]) throws {

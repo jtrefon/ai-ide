@@ -156,6 +156,26 @@ public actor DatabaseStore {
         try database.searchSimilarMemories(modelId: modelId, queryVector: queryVector, limit: limit, tier: tier)
     }
 
+    func replaceCodeChunks(
+        resourceId: String,
+        modelId: String,
+        chunks: [CodeChunkRecord]
+    ) throws {
+        try database.replaceCodeChunks(resourceId: resourceId, modelId: modelId, chunks: chunks)
+    }
+
+    func deleteCodeChunks(resourceId: String, modelId: String? = nil) throws {
+        try database.deleteCodeChunks(resourceId: resourceId, modelId: modelId)
+    }
+
+    func searchSimilarCodeChunks(
+        modelId: String,
+        queryVector: [Float],
+        limit: Int
+    ) throws -> [CodeChunkSimilarityResult] {
+        try database.searchSimilarCodeChunks(modelId: modelId, queryVector: queryVector, limit: limit)
+    }
+
     // MARK: - AI Enrichment Operations
 
     public func isResourceAIEnriched(resourceId: String) throws -> Bool {

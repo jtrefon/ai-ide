@@ -11,6 +11,10 @@ extension CodebaseIndex {
     public func start() {
         print("CodebaseIndex service started")
         Task {
+            await coordinator.start(projectRoot: projectRoot)
+            await coordinator.reindexProject(rootURL: projectRoot)
+        }
+        Task {
             await pruneOutOfScopeResourcesIfNeeded()
         }
     }

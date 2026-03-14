@@ -36,7 +36,7 @@ actor LocalModelDownloader {
         model: LocalModelDefinition,
         onProgress: @Sendable (Progress) -> Void
     ) async throws {
-        let modelDirectory = try LocalModelFileStore.modelDirectory(modelId: model.id)
+        let modelDirectory = try LocalModelFileStore.ensureCanonicalInstallation(for: model)
         try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
 
         var completed = 0

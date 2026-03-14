@@ -81,9 +81,13 @@ struct CreateFileTool: AITool {
             return "Created file at \(relativePath) and wrote provided content."
         }
 
+        fileManager.createFile(atPath: url.path, contents: Data(), attributes: nil)
+        Task { @MainActor in
+            eventBus.publish(FileModifiedEvent(url: url))
+        }
         await AIToolTraceLogger.shared.log(type: "fs.create_file_reserved", data: [
             "path": relativePath
         ])
-        return "Reserved file path at \(relativePath). Use write_file to add content."
+        return "Created empty file at \(relativePath)."
     }
 }

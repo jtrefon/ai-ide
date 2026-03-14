@@ -10,11 +10,21 @@ import CryptoKit
 
 public actor IndexerActor {
     private let database: DatabaseStore
+    private var embeddingGenerator: any MemoryEmbeddingGenerating
     private let config: IndexConfiguration
 
-    public init(database: DatabaseStore, config: IndexConfiguration = .default) {
+    public init(
+        database: DatabaseStore,
+        embeddingGenerator: any MemoryEmbeddingGenerating,
+        config: IndexConfiguration = .default
+    ) {
         self.database = database
+        self.embeddingGenerator = embeddingGenerator
         self.config = config
+    }
+
+    public func updateEmbeddingGenerator(_ generator: any MemoryEmbeddingGenerating) {
+        self.embeddingGenerator = generator
     }
 
     private struct IndexResourceRequest {
@@ -154,6 +164,7 @@ public actor IndexerActor {
 
         let symbols = await extractSymbols(content: request.content, resourceId: request.resourceId, language: request.language)
         try await storeSymbolsIfNeeded(symbols, resourceId: request.resourceId, fileName: request.url.lastPathComponent)
+        try await updateCodeChunks(content: request.content, resourceId: request.resourceId)
     }
 
     private func extractSymbols(content: String, resourceId: String, language: CodeLanguage) async -> [Symbol] {
@@ -178,6 +189,93 @@ public actor IndexerActor {
 
         // Cascade delete should handle symbols, but let's be safe if we didn't enable foreign keys
         try await database.deleteSymbols(for: resourceId)
+        try await database.deleteCodeChunks(resourceId: resourceId)
+    }
+
+    private func updateCodeChunks(content: String, resourceId: String) async throws {
+        let chunkSnapshots = makeChunkSnapshots(from: content)
+        guard !chunkSnapshots.isEmpty else {
+            try await database.deleteCodeChunks(resourceId: resourceId)
+            return
+        }
+
+        let generator = embeddingGenerator
+        let modelIdentifier = generator.modelIdentifier
+        let chunkRecords = try await withThrowingTaskGroup(of: CodeChunkRecord?.self) { group in
+            for snapshot in chunkSnapshots {
+                group.addTask {
+                    let vector = try await generator.generateEmbedding(for: snapshot.snippet)
+                    guard !vector.isEmpty else { return nil }
+                    return CodeChunkRecord(
+                        chunkIndex: snapshot.chunkIndex,
+                        lineStart: snapshot.lineStart,
+                        lineEnd: snapshot.lineEnd,
+                        snippet: snapshot.snippet,
+                        vector: vector
+                    )
+                }
+            }
+
+            var records: [CodeChunkRecord] = []
+            for try await record in group {
+                if let record {
+                    records.append(record)
+                }
+            }
+            return records.sorted { lhs, rhs in
+                lhs.chunkIndex < rhs.chunkIndex
+            }
+        }
+
+        try await database.replaceCodeChunks(
+            resourceId: resourceId,
+            modelId: modelIdentifier,
+            chunks: chunkRecords
+        )
+    }
+
+    private func makeChunkSnapshots(from content: String) -> [CodeChunkSnapshot] {
+        let lines = content.components(separatedBy: .newlines)
+        guard !lines.isEmpty else { return [] }
+
+        let chunkLineCount = 24
+        let chunkLineOverlap = 8
+        let chunkStride = max(1, chunkLineCount - chunkLineOverlap)
+
+        var snapshots: [CodeChunkSnapshot] = []
+        var chunkIndex = 0
+        var lineCursor = 0
+
+        while lineCursor < lines.count {
+            let lineEndIndex = min(lines.count, lineCursor + chunkLineCount)
+            let snippet = Array(lines[lineCursor..<lineEndIndex])
+                .joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if !snippet.isEmpty {
+                snapshots.append(
+                    CodeChunkSnapshot(
+                        chunkIndex: chunkIndex,
+                        lineStart: lineCursor + 1,
+                        lineEnd: lineEndIndex,
+                        snippet: snippet
+                    )
+                )
+                chunkIndex += 1
+            }
+
+            if lineEndIndex == lines.count { break }
+            lineCursor += chunkStride
+        }
+
+        return snapshots
+    }
+
+    private struct CodeChunkSnapshot: Sendable {
+        let chunkIndex: Int
+        let lineStart: Int
+        let lineEnd: Int
+        let snippet: String
     }
 
     private func computeHash(for content: String) -> String {

@@ -144,7 +144,9 @@ actor LocalModelProcessAIService: AIService {
 
             do {
                 let response = try await performInference {
+                    try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "before_container_load")
                     let container = try await self.loadContainerCached(modelDirectory: modelDirectory, toolCallFormat: toolCallFormat)
+                    try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "after_container_load")
                     return try await container.perform { context in
                         try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "before_generation")
 
@@ -438,7 +440,11 @@ actor LocalModelProcessAIService: AIService {
             let useVLMFactory = try shouldUseVLMFactory(modelDirectory: modelDirectory)
             print("[LOCAL-MLX] loadModelContainer directory=\(modelDirectory.path) useVLMFactory=\(useVLMFactory)")
             if useVLMFactory {
-                return try await VLMModelFactory.shared.loadContainer(configuration: configuration)
+                do {
+                    return try await VLMModelFactory.shared.loadContainer(configuration: configuration)
+                } catch {
+                    print("[LOCAL-MLX] VLM loader failed for \(modelDirectory.lastPathComponent). Falling back to text-only container. error=\(error)")
+                }
             }
             return try await MLXLMCommon.loadModelContainer(configuration: configuration)
         }
@@ -456,11 +462,17 @@ actor LocalModelProcessAIService: AIService {
             print("[LOCAL-MLX] shouldUseVLMFactory config=\(configURL.path) model_type=\(String(describing: topLevelModelType)) text_config.model_type=\(String(describing: nestedTextModelType))")
 
             if let modelType = topLevelModelType,
-               modelType == "qwen3_vl" || modelType == "qwen3_5" {
-                return true
+               modelType == "qwen3_5" {
+                return false
             }
 
-            if nestedTextModelType == "qwen3_5_text" {
+            if let nestedTextModelType,
+               nestedTextModelType == "qwen3_5_text" {
+                return false
+            }
+
+            if let modelType = topLevelModelType,
+               modelType == "qwen3_vl" {
                 return true
             }
 
@@ -544,18 +556,26 @@ actor LocalModelProcessAIService: AIService {
         }
 
         let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
+        let isTesting = AppRuntimeEnvironment.launchContext.isTesting
         let testBudget = LocalModelTestBudget.applyIfNeeded(
             to: request,
             contextLength: LocalModelFileStore.contextLength(for: model)
         )
         let contextLength = testBudget.contextLength
+        let settings = settingsStore.load(includeApiKey: false)
         
         // Build system content for caching
-        let systemContent = try buildSystemContent(tools: request.tools, mode: request.mode, stage: request.stage, projectRoot: request.projectRoot)
+        let systemContent = try buildSystemContent(
+            tools: request.tools,
+            mode: request.mode,
+            stage: request.stage,
+            projectRoot: request.projectRoot,
+            settings: settings
+        )
         
         // Check prefix cache for this conversation
         let conversationId = request.conversationId
-        if let conversationId = conversationId {
+        if !isTesting, let conversationId = conversationId {
             let cachedPrefix = await prefixCache.getCachedPrefix(
                 conversationId: conversationId,
                 modelId: modelId,
@@ -590,10 +610,11 @@ actor LocalModelProcessAIService: AIService {
             messageCount: chatMessages.count
         )
 
-        let additionalContext: [String: any Sendable]? = {
-            guard model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main", toolSpecs?.isEmpty == false else { return nil }
-            return ["enable_thinking": false]
-        }()
+        let additionalContext = additionalContext(
+            for: model,
+            settings: settings,
+            stage: request.stage
+        )
         let userInput = UserInput(chat: chatMessages, tools: toolSpecs, additionalContext: additionalContext)
         
         // Wrap MLX inference with power management to prevent sleep during long generations
@@ -632,7 +653,7 @@ actor LocalModelProcessAIService: AIService {
         )
         
         // Store prefix in cache for future turns
-        if let conversationId = conversationId {
+        if !isTesting, let conversationId = conversationId {
             await prefixCache.storePrefix(
                 conversationId: conversationId,
                 modelId: modelId,
@@ -640,6 +661,8 @@ actor LocalModelProcessAIService: AIService {
                 tools: request.tools,
                 mode: request.mode
             )
+        } else if isTesting {
+            await prefixCache.clearAll()
         }
         
         return response
@@ -862,9 +885,9 @@ actor LocalModelProcessAIService: AIService {
         tools: [AITool]?,
         mode: AIMode?,
         stage: AIRequestStage? = nil,
-        projectRoot: URL?
+        projectRoot: URL?,
+        settings: OpenRouterSettings
     ) throws -> String {
-        let settings = settingsStore.load(includeApiKey: false)
         return try SystemPromptAssembler().assemble(
             input: .init(
                 systemPromptOverride: settings.systemPrompt,
@@ -877,6 +900,19 @@ actor LocalModelProcessAIService: AIService {
                 includeModelReasoning: settings.reasoningMode.includesModelReasoning && stage != .tool_loop
             )
         )
+    }
+
+    private func additionalContext(
+        for model: LocalModelDefinition,
+        settings: OpenRouterSettings,
+        stage: AIRequestStage?
+    ) -> [String: any Sendable]? {
+        guard model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main" else {
+            return nil
+        }
+
+        let enableThinking = settings.reasoningMode.includesModelReasoning && stage != .tool_loop
+        return ["enable_thinking": enableThinking]
     }
 
     private func convertToToolSpec(_ tools: [AITool]?) -> [ToolSpec]? {

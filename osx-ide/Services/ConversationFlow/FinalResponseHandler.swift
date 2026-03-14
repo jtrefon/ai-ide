@@ -32,6 +32,10 @@ final class FinalResponseHandler {
             return response
         }
 
+        if mode == .chat && !draft.isEmpty && toolResults.isEmpty {
+            return response
+        }
+
         if mode == .agent && !draft.isEmpty {
             let hasUnresolvedToolCalls = response.toolCalls?.isEmpty == false
             let isGenericContent = isGenericStatusMessage(draft)
