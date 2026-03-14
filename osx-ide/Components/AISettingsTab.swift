@@ -10,6 +10,7 @@ import SwiftUI
 struct AISettingsTab: View {
     @ObservedObject var openRouterViewModel: OpenRouterSettingsViewModel
     @ObservedObject var alibabaViewModel: OpenRouterSettingsViewModel
+    @ObservedObject var kiloCodeViewModel: OpenRouterSettingsViewModel
     @ObservedObject var providerSelectionViewModel: AIProviderSelectionViewModel
     @ObservedObject var localModelViewModel: LocalModelSettingsViewModel
     @ObservedObject var embeddingModelViewModel: EmbeddingModelSettingsViewModel
@@ -21,6 +22,8 @@ struct AISettingsTab: View {
             return openRouterViewModel
         case .alibabaCloud:
             return alibabaViewModel
+        case .kiloCode:
+            return kiloCodeViewModel
         }
     }
 
@@ -33,6 +36,24 @@ struct AISettingsTab: View {
             get: { self.activeViewModel[keyPath: keyPath] },
             set: { self.activeViewModel[keyPath: keyPath] = $0 }
         )
+    }
+
+    private var reasoningCardSubtitle: String {
+        switch providerSelectionViewModel.selectedProvider {
+        case .kiloCode:
+            return "Choose how much reasoning Kilo Code uses: none, model-only, agent-only, or both."
+        case .openRouter, .alibabaCloud:
+            return localized("settings.ai.reasoning_card.subtitle")
+        }
+    }
+
+    private var reasoningRowSubtitle: String {
+        switch providerSelectionViewModel.selectedProvider {
+        case .kiloCode:
+            return "None disables thinking, Model uses internal-only thinking, Agent uses app-side reasoning, and Model + Agent enables both."
+        case .openRouter, .alibabaCloud:
+            return localized("settings.ai.reasoning.subtitle")
+        }
     }
 
     var body: some View {
@@ -63,10 +84,12 @@ struct AISettingsTab: View {
         .onAppear {
             openRouterViewModel.loadApiKeyIfAvailable()
             alibabaViewModel.loadApiKeyIfAvailable()
+            kiloCodeViewModel.loadApiKeyIfAvailable()
             Task {
                 async let _ = openRouterViewModel.loadModels()
                 async let _ = alibabaViewModel.loadModels()
-                _ = await ((), ())
+                async let _ = kiloCodeViewModel.loadModels()
+                _ = await ((), (), ())
             }
         }
     }
@@ -81,8 +104,8 @@ struct AISettingsTab: View {
                     Text(provider.displayName).tag(provider)
                 }
             }
-            .pickerStyle(.segmented)
-            .frame(width: 360)
+            .pickerStyle(.menu)
+            .frame(width: 240)
         }
     }
 
@@ -219,11 +242,11 @@ struct AISettingsTab: View {
     private var reasoningCard: some View {
         SettingsCard(
             title: localized("settings.ai.reasoning_card.title"),
-            subtitle: localized("settings.ai.reasoning_card.subtitle")
+            subtitle: reasoningCardSubtitle
         ) {
             SettingsRow(
                 title: localized("settings.ai.reasoning.title"),
-                subtitle: localized("settings.ai.reasoning.subtitle"),
+                subtitle: reasoningRowSubtitle,
                 systemImage: "brain"
             ) {
                 Picker("", selection: binding(\.reasoningMode)) {

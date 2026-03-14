@@ -68,6 +68,54 @@ final class ChatPromptBuilderReasoningTests: XCTestCase {
         XCTAssertTrue(split.reasoning?.contains("Reflection: Working") == true)
     }
 
+    func testSplitReasoning_extractsThinkingTagAndCleansContent() {
+        let input = """
+        <thinking>
+        Reflection: A
+        Planning: B
+        Continuity: C
+        </thinking>
+
+        Visible answer
+        """
+
+        let split = ChatPromptBuilder.splitReasoning(from: input)
+        XCTAssertEqual(split.content, "Visible answer")
+        XCTAssertEqual(split.reasoning, "Reflection: A\nPlanning: B\nContinuity: C")
+    }
+
+    func testSplitReasoning_extractsThinkTagAndCleansContent() {
+        let input = """
+        <think>
+        Reflection: A
+        Planning: B
+        Continuity: C
+        </think>
+
+        Visible answer
+        """
+
+        let split = ChatPromptBuilder.splitReasoning(from: input)
+        XCTAssertEqual(split.content, "Visible answer")
+        XCTAssertEqual(split.reasoning, "Reflection: A\nPlanning: B\nContinuity: C")
+    }
+
+    func testSplitReasoning_extractsLegacyIdeReasoningTagAndCleansContent() {
+        let input = """
+        <ide_reasoning>
+        Reflection: A
+        Planning: B
+        Continuity: C
+        </ide_reasoning>
+
+        Visible answer
+        """
+
+        let split = ChatPromptBuilder.splitReasoning(from: input)
+        XCTAssertEqual(split.content, "Visible answer")
+        XCTAssertEqual(split.reasoning, "Reflection: A\nPlanning: B\nContinuity: C")
+    }
+
     func testSplitReasoningLeavesInlineContentUntouchedWithoutTaggedMarkupSupport() {
         let input = "Alpha Reflection: R Beta"
         let split = ChatPromptBuilder.splitReasoning(from: input)

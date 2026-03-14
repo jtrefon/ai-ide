@@ -10,6 +10,7 @@ import Foundation
 actor ModelRoutingAIService: AIService {
     private let openRouterService: AIService
     private let alibabaService: AIService
+    private let kiloCodeService: AIService
     private let localService: AIService
     private let selectionStore: LocalModelSelectionStore
     private let providerSelectionStore: AIProviderSelectionStore
@@ -17,12 +18,14 @@ actor ModelRoutingAIService: AIService {
     init(
         openRouterService: AIService,
         alibabaService: AIService,
+        kiloCodeService: AIService,
         localService: AIService,
         selectionStore: LocalModelSelectionStore = LocalModelSelectionStore(),
         providerSelectionStore: AIProviderSelectionStore = AIProviderSelectionStore()
     ) {
         self.openRouterService = openRouterService
         self.alibabaService = alibabaService
+        self.kiloCodeService = kiloCodeService
         self.localService = localService
         self.selectionStore = selectionStore
         self.providerSelectionStore = providerSelectionStore
@@ -34,6 +37,8 @@ actor ModelRoutingAIService: AIService {
             return openRouterService
         case .alibabaCloud:
             return alibabaService
+        case .kiloCode:
+            return kiloCodeService
         }
     }
 

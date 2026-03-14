@@ -146,6 +146,21 @@ struct IndexStatusBarView: View {
                         .lineLimit(1)
                 }
 
+                if !viewModel.remoteAICostText.isEmpty {
+                    Text(viewModel.remoteAICostText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+
+                if !viewModel.remoteAISpendText.isEmpty {
+                    Text(viewModel.remoteAISpendText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                }
+
                 Text(viewModel.metricsText)
                     .font(.caption)
                     .foregroundColor(.secondary)

@@ -73,8 +73,10 @@ actor OpenRouterAIService: AIService {
     internal let client: OpenRouterAPIClient
     private let eventBus: EventBusProtocol
     private var contextLengthByModelId: [String: Int] = [:]
+    private var pricingByModelId: [String: OpenRouterModel.Pricing] = [:]
     private let providerName: String
     private let supportsStreamingWithTools: Bool
+    internal let supportsNativeReasoning: Bool
     
     // Rate limiting to prevent 421 errors
     private var minRequestInterval: TimeInterval = 0.5 // 500ms between requests
@@ -91,6 +93,7 @@ actor OpenRouterAIService: AIService {
         eventBus: EventBusProtocol,
         providerName: String = "OpenRouter",
         supportsStreamingWithTools: Bool = true,
+        supportsNativeReasoning: Bool = true,
         testConfigurationProvider: TestConfigurationProvider = TestConfigurationProvider.shared
     ) {
         self.settingsStore = settingsStore
@@ -98,6 +101,7 @@ actor OpenRouterAIService: AIService {
         self.eventBus = eventBus
         self.providerName = providerName
         self.supportsStreamingWithTools = supportsStreamingWithTools
+        self.supportsNativeReasoning = supportsNativeReasoning
         self.testConfigurationProvider = testConfigurationProvider
     }
 
@@ -123,6 +127,9 @@ actor OpenRouterAIService: AIService {
 
         await logRequestStart(RequestStartContext(
             requestId: preparation.requestId,
+            providerName: providerName,
+            baseURL: preparation.settings.baseURL,
+            streaming: true,
             model: preparation.settings.model,
             messageCount: preparation.finalMessages.count,
             toolCount: preparation.toolDefinitions?.count ?? 0,
@@ -152,6 +159,7 @@ actor OpenRouterAIService: AIService {
         // Collect streaming chunks using a thread-safe wrapper
         final class ChunkCollector: @unchecked Sendable {
             var chunks: [String] = []
+            var usage: OpenRouterChatUsage?
             
             struct ToolCallDraft {
                 var id: String
@@ -184,8 +192,14 @@ actor OpenRouterAIService: AIService {
                     toolCallsDrafts[call.index] = draft
                 }
             }
+
+            func setUsage(_ usage: OpenRouterChatUsage) {
+                lock.lock()
+                defer { lock.unlock() }
+                self.usage = usage
+            }
             
-            func getResults() -> (content: String, toolCalls: [AIToolCall]?) {
+            func getResults() -> (content: String, toolCalls: [AIToolCall]?, usage: OpenRouterChatUsage?) {
                 lock.lock()
                 defer { lock.unlock() }
                 let content = chunks.joined()
@@ -200,7 +214,7 @@ actor OpenRouterAIService: AIService {
                 }
                 
                 let tc = toolCalls.isEmpty ? nil : toolCalls
-                return (content, tc)
+                return (content, tc, usage)
             }
 
             private static func parseToolArguments(from raw: String) -> [String: Any]? {
@@ -253,6 +267,9 @@ actor OpenRouterAIService: AIService {
                 // Parse the chunk
                 if let chunkData = chunkJson.data(using: .utf8),
                    let chunk = try? JSONDecoder().decode(OpenRouterChatResponseChunk.self, from: chunkData) {
+                    if let usage = chunk.usage {
+                        collector.setUsage(usage)
+                    }
                     if let delta = chunk.choices.first?.delta {
                         if let content = delta.content {
                             collector.appendChunk(content)
@@ -277,13 +294,53 @@ actor OpenRouterAIService: AIService {
 
         // Get collected results
         let results = collector.getResults()
-        let fullContent = results.content
+        let fullContent = sanitizeAssistantContent(results.content)
         let toolCalls = results.toolCalls
+        if let usage = results.usage {
+            let promptTokens = usage.promptTokens ?? usage.inputTokens
+            let completionTokens = usage.completionTokens ?? usage.outputTokens
+            let totalTokens = usage.totalTokens ?? {
+                guard let inputTokens = usage.inputTokens, let outputTokens = usage.outputTokens else {
+                    return nil
+                }
+                return inputTokens + outputTokens
+            }()
+            if let promptTokens, let completionTokens, let totalTokens {
+                let estimatedCostMicrodollars = try? await estimateCostMicrodollars(
+                    modelId: preparation.settings.model,
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    apiKey: preparation.settings.apiKey,
+                    baseURL: preparation.settings.baseURL
+                )
+                let costMicrodollars = usage.costMicrodollars ?? estimatedCostMicrodollars
+                let contextLength = try? await fetchContextLength(
+                    modelId: preparation.settings.model,
+                    apiKey: preparation.settings.apiKey,
+                    baseURL: preparation.settings.baseURL
+                )
+                let event = OpenRouterUsageUpdatedEvent(
+                    providerName: providerName,
+                    modelId: preparation.settings.model,
+                    runId: request.runId,
+                    usage: OpenRouterUsageUpdatedEvent.Usage(
+                        promptTokens: promptTokens,
+                        completionTokens: completionTokens,
+                        totalTokens: totalTokens,
+                        costMicrodollars: costMicrodollars
+                    ),
+                    contextLength: contextLength
+                )
+                await MainActor.run {
+                    eventBus.publish(event)
+                }
+            }
+        }
 
         // Log success
         await logRequestSuccess(
             requestId: preparation.requestId,
-            contentLength: fullContent.count,
+            contentLength: fullContent?.count ?? 0,
             toolCalls: toolCalls?.count ?? 0,
             responseBytes: 0
         )
@@ -350,6 +407,9 @@ actor OpenRouterAIService: AIService {
 
         await logRequestStart(RequestStartContext(
             requestId: preparation.requestId,
+            providerName: providerName,
+            baseURL: preparation.settings.baseURL,
+            streaming: false,
             model: preparation.settings.model,
             messageCount: preparation.finalMessages.count,
             toolCount: preparation.toolDefinitions?.count ?? 0,
@@ -392,17 +452,28 @@ actor OpenRouterAIService: AIService {
            let promptTokens = usage.promptTokens,
            let completionTokens = usage.completionTokens,
            let totalTokens = usage.totalTokens {
+            let estimatedCostMicrodollars = try? await estimateCostMicrodollars(
+                modelId: preparation.settings.model,
+                promptTokens: promptTokens,
+                completionTokens: completionTokens,
+                apiKey: preparation.settings.apiKey,
+                baseURL: preparation.settings.baseURL
+            )
+            let costMicrodollars = usage.costMicrodollars ?? estimatedCostMicrodollars
             let contextLength = try? await fetchContextLength(
                 modelId: preparation.settings.model,
                 apiKey: preparation.settings.apiKey,
                 baseURL: preparation.settings.baseURL
             )
             let event = OpenRouterUsageUpdatedEvent(
+                providerName: providerName,
                 modelId: preparation.settings.model,
+                runId: request.runId,
                 usage: OpenRouterUsageUpdatedEvent.Usage(
                     promptTokens: promptTokens,
                     completionTokens: completionTokens,
-                    totalTokens: totalTokens
+                    totalTokens: totalTokens,
+                    costMicrodollars: costMicrodollars
                 ),
                 contextLength: contextLength
             )
@@ -426,7 +497,7 @@ actor OpenRouterAIService: AIService {
             : nil
 
         return AIServiceResponse(
-            content: choice.message.content,
+            content: choice.message.content?.trimmingCharacters(in: .whitespacesAndNewlines),
             toolCalls: resolvedToolCalls
         )
     }
@@ -447,7 +518,65 @@ actor OpenRouterAIService: AIService {
         if let contextLength = model.contextLength {
             contextLengthByModelId[modelId] = contextLength
         }
+        if let pricing = model.pricing {
+            pricingByModelId[modelId] = pricing
+        }
         return model.contextLength
+    }
+
+    private func estimateCostMicrodollars(
+        modelId: String,
+        promptTokens: Int,
+        completionTokens: Int,
+        apiKey: String,
+        baseURL: String
+    ) async throws -> Int? {
+        let pricing = try await fetchPricing(modelId: modelId, apiKey: apiKey, baseURL: baseURL)
+        guard let pricing else { return nil }
+        let promptPricePerToken = decimalPrice(from: pricing.prompt)
+        let completionPricePerToken = decimalPrice(from: pricing.completion)
+        guard promptPricePerToken != 0 || completionPricePerToken != 0 else { return 0 }
+
+        let estimatedCostDollars =
+            (promptPricePerToken * Decimal(promptTokens))
+            + (completionPricePerToken * Decimal(completionTokens))
+        let estimatedCostMicrodollars = estimatedCostDollars * Decimal(1_000_000)
+        return NSDecimalNumber(decimal: estimatedCostMicrodollars).intValue
+    }
+
+    private func fetchPricing(
+        modelId: String,
+        apiKey: String,
+        baseURL: String
+    ) async throws -> OpenRouterModel.Pricing? {
+        if let cached = pricingByModelId[modelId] {
+            return cached
+        }
+
+        let requestContext = OpenRouterAPIClient.RequestContext(
+            baseURL: baseURL,
+            appName: "OSX IDE",
+            referer: ""
+        )
+        let models = try await client.fetchModels(apiKey: apiKey, context: requestContext)
+        guard let model = models.first(where: { $0.id == modelId }) else {
+            return nil
+        }
+        if let contextLength = model.contextLength {
+            contextLengthByModelId[modelId] = contextLength
+        }
+        if let pricing = model.pricing {
+            pricingByModelId[modelId] = pricing
+        }
+        return model.pricing
+    }
+
+    private func decimalPrice(from value: String?) -> Decimal {
+        guard let value,
+              let decimal = Decimal(string: value.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return 0
+        }
+        return decimal
     }
 
     private func executeChatCompletion(
@@ -646,7 +775,10 @@ actor OpenRouterAIService: AIService {
         fallback: String
     ) -> String {
         switch error {
-        case let .serverError(_, body):
+        case let .serverError(code, body):
+            if code == 402, let insufficientBalanceMessage = insufficientBalanceMessage(from: body) {
+                return insufficientBalanceMessage
+            }
             let trimmedBody = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if !trimmedBody.isEmpty {
                 return trimmedBody
@@ -655,6 +787,29 @@ actor OpenRouterAIService: AIService {
         default:
             return fallback
         }
+    }
+
+    private func insufficientBalanceMessage(from body: String?) -> String? {
+        guard let body,
+              let data = body.data(using: .utf8),
+              let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let errorObject = jsonObject["error"] as? [String: Any] else {
+            return nil
+        }
+
+        let message = (errorObject["message"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let metadata = errorObject["metadata"] as? [String: Any]
+        let buyCreditsURL = (metadata?["buyCreditsUrl"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let message, !message.isEmpty, let buyCreditsURL, !buyCreditsURL.isEmpty {
+            return "\(message) Add credits: \(buyCreditsURL)"
+        }
+        if let message, !message.isEmpty {
+            return message
+        }
+        return nil
     }
 
     private func decodeResponse(data: Data, requestId: String) async throws -> OpenRouterChatResponse {
@@ -746,5 +901,14 @@ actor OpenRouterAIService: AIService {
         case .warmup, .other, .none:
             return hasTools ? 420 : 640
         }
+    }
+
+    private func sanitizeAssistantContent(_ content: String?) -> String? {
+        guard let content else { return nil }
+        let split = ChatPromptBuilder.splitReasoning(from: content)
+        let cleaned = split.content
+            .replacingOccurrences(of: #"(?is)</?think>"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : cleaned
     }
 }

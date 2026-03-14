@@ -97,6 +97,14 @@ class DependencyContainer: ObservableObject {
             supportsStreamingWithTools: false,
             testConfigurationProvider: TestConfigurationProvider.shared
         )
+        let kiloCodeService = OpenRouterAIService(
+            settingsStore: KiloCodeSettingsStore(settingsStore: settingsStore),
+            eventBus: _eventBus,
+            providerName: "Kilo Code",
+            supportsStreamingWithTools: true,
+            supportsNativeReasoning: true,
+            testConfigurationProvider: TestConfigurationProvider.shared
+        )
         let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
         let providerSelectionStore = AIProviderSelectionStore(settingsStore: settingsStore)
         let localModelEventBus: EventBusProtocol? = launchContext.isTesting ? nil : _eventBus
@@ -108,6 +116,7 @@ class DependencyContainer: ObservableObject {
         _aiService = ModelRoutingAIService(
             openRouterService: openRouterService,
             alibabaService: alibabaService,
+            kiloCodeService: kiloCodeService,
             localService: localModelService,
             selectionStore: selectionStore,
             providerSelectionStore: providerSelectionStore

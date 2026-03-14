@@ -348,6 +348,7 @@ final class FinalResponseHandler {
         if let draftIdString = draftAssistantMessageId,
             let draftId = UUID(uuidString: draftIdString)
         {
+            let draftMessage = historyCoordinator.getDraftMessage(id: draftId)
             let lastMessage = historyCoordinator.messages.last
             let isDraftAtEnd = (lastMessage?.id == draftId && lastMessage?.role == MessageRole.assistant)
 
@@ -363,7 +364,8 @@ final class FinalResponseHandler {
                     ChatMessage(
                         role: MessageRole.assistant,
                         content: displayContent,
-                        context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
+                        context: ChatMessageContentContext(reasoning: splitFinal.reasoning),
+                        billing: draftMessage?.billing
                     )
                 )
             }

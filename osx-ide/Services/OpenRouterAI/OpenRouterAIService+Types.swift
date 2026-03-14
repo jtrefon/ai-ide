@@ -38,6 +38,9 @@ extension OpenRouterAIService {
 
     internal struct RequestStartContext {
         let requestId: String
+        let providerName: String
+        let baseURL: String
+        let streaming: Bool
         let model: String
         let messageCount: Int
         let toolCount: Int

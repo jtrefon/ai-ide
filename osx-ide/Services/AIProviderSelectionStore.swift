@@ -3,6 +3,7 @@ import Foundation
 enum RemoteAIProvider: String, CaseIterable, Equatable {
     case openRouter
     case alibabaCloud
+    case kiloCode
 
     var displayName: String {
         switch self {
@@ -10,6 +11,8 @@ enum RemoteAIProvider: String, CaseIterable, Equatable {
             return "OpenRouter"
         case .alibabaCloud:
             return "Alibaba Cloud"
+        case .kiloCode:
+            return "Kilo Code"
         }
     }
 }

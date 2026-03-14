@@ -14,6 +14,10 @@ struct SettingsView: View {
         store: AlibabaSettingsStore(),
         providerDisplayName: "Alibaba Cloud"
     )
+    @StateObject private var kiloCodeViewModel = OpenRouterSettingsViewModel(
+        store: KiloCodeSettingsStore(),
+        providerDisplayName: "Kilo Code"
+    )
     @StateObject private var providerSelectionViewModel = AIProviderSelectionViewModel()
     @StateObject private var localModelViewModel = LocalModelSettingsViewModel()
     @StateObject private var embeddingModelViewModel = EmbeddingModelSettingsViewModel()
@@ -40,6 +44,7 @@ struct SettingsView: View {
                     AISettingsTab(
                         openRouterViewModel: openRouterViewModel,
                         alibabaViewModel: alibabaViewModel,
+                        kiloCodeViewModel: kiloCodeViewModel,
                         providerSelectionViewModel: providerSelectionViewModel,
                         localModelViewModel: localModelViewModel,
                         embeddingModelViewModel: embeddingModelViewModel

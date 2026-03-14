@@ -20,6 +20,8 @@ final class IndexStatusBarViewModel: ObservableObject {
     @Published private(set) var embeddingModelIdentifier: String = "hashing_v1"
 
     @Published private(set) var openRouterContextUsageText: String = ""
+    @Published private(set) var remoteAICostText: String = ""
+    @Published private(set) var remoteAISpendText: String = ""
 
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
     private let eventBus: EventBusProtocol
@@ -27,6 +29,7 @@ final class IndexStatusBarViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var statsTimer: AnyCancellable?
     private var retrievalStatusTimer: Timer?
+    private var accumulatedRemoteCostMicrodollars: Int = 0
 
     init(
         codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
@@ -186,12 +189,23 @@ final class IndexStatusBarViewModel: ObservableObject {
 
         eventBus.subscribe(to: OpenRouterUsageUpdatedEvent.self) { [weak self] event in
             guard let self else { return }
-            guard let contextLength = event.contextLength, contextLength > 0 else {
+            if let contextLength = event.contextLength, contextLength > 0 {
+                let used = min(event.usage.totalTokens, contextLength)
+                self.openRouterContextUsageText = "CTX \(used)/\(contextLength)"
+            } else {
                 self.openRouterContextUsageText = ""
-                return
             }
-            let used = min(event.usage.totalTokens, contextLength)
-            self.openRouterContextUsageText = "CTX \(used)/\(contextLength)"
+            self.remoteAICostText = self.formatRemoteCost(
+                providerName: event.providerName,
+                costMicrodollars: event.usage.costMicrodollars
+            )
+            if let costMicrodollars = event.usage.costMicrodollars, costMicrodollars > 0 {
+                self.accumulatedRemoteCostMicrodollars += costMicrodollars
+            }
+            self.remoteAISpendText = self.formatObservedSpend(
+                providerName: event.providerName,
+                accumulatedCostMicrodollars: self.accumulatedRemoteCostMicrodollars
+            )
         }
         .store(in: &cancellables)
     }
@@ -254,5 +268,26 @@ final class IndexStatusBarViewModel: ObservableObject {
         if mb < 1024 { return String(format: "%.1f MB", mb) }
         let gb = mb / 1024
         return String(format: "%.2f GB", gb)
+    }
+
+    private func formatRemoteCost(providerName: String, costMicrodollars: Int?) -> String {
+        guard let costMicrodollars else { return "" }
+        let costDollars = Double(costMicrodollars) / 1_000_000
+        if costDollars == 0 {
+            return "\(providerName) $0"
+        }
+        if costDollars < 0.01 {
+            return String(format: "%@ $%.4f", providerName, costDollars)
+        }
+        return String(format: "%@ $%.2f", providerName, costDollars)
+    }
+
+    private func formatObservedSpend(providerName: String, accumulatedCostMicrodollars: Int) -> String {
+        guard accumulatedCostMicrodollars > 0 else { return "" }
+        let costDollars = Double(accumulatedCostMicrodollars) / 1_000_000
+        if costDollars < 0.01 {
+            return String(format: "%@ spent $%.4f", providerName, costDollars)
+        }
+        return String(format: "%@ spent $%.2f", providerName, costDollars)
     }
 }

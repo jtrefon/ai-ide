@@ -213,7 +213,18 @@ struct MessageView: View {
     }
 
     private var roleLabelText: String {
-        message.timestamp.formatted(date: .omitted, time: .standard)
+        let timestamp = message.timestamp.formatted(date: .omitted, time: .standard)
+        guard let requestCostMicrodollars = message.billing?.requestCostMicrodollars else {
+            return timestamp
+        }
+        let requestCostDollars = Double(requestCostMicrodollars) / 1_000_000
+        if requestCostDollars == 0 {
+            return "\(timestamp) · $0"
+        }
+        if requestCostDollars < 0.01 {
+            return String(format: "%@ · $%.4f", timestamp, requestCostDollars)
+        }
+        return String(format: "%@ · $%.2f", timestamp, requestCostDollars)
     }
 }
 
