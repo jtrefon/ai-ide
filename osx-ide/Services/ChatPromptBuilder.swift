@@ -68,11 +68,13 @@ class ChatPromptBuilder {
         var output = text
         let patterns = [
             #"(?is)<tool_call>\s*.*?\s*</tool_call>"#,
+            #"(?is)<tool_code>\s*.*?\s*</tool_code>"#,
             #"(?is)<arg_key>\s*.*?\s*</arg_key>"#,
             #"(?is)<arg_value>\s*.*?\s*</arg_value>"#,
             #"(?is)<minimax:tool_call>\s*.*?\s*</minimax:tool_call>"#,
             #"(?is)<invoke\s+name=\"[^\"]+\"\s*>.*?</invoke>"#,
-            #"(?is)</?parameter\s+name=\"[^\"]+\">"#
+            #"(?is)</?parameter\s+name=\"[^\"]+\">"#,
+            #"(?is)</?param\s+name=\"[^\"]+\">"#
         ]
 
         for pattern in patterns {
@@ -409,8 +411,10 @@ class ChatPromptBuilder {
     static func containsTextualToolCallMarkup(_ content: String) -> Bool {
         let lower = content.lowercased()
         return lower.contains("<tool_call>")
+            || lower.contains("<tool_code>")
             || lower.contains("<minimax:tool_call>")
             || lower.contains("<invoke name=")
+            || lower.contains("<param name=")
             || lower.contains("<arg_key>")
             || lower.contains("<arg_value>")
     }

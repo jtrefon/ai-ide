@@ -75,4 +75,38 @@ final class TextualToolCallRecoveryTests: XCTestCase {
             )
         )
     }
+
+    func testChatPromptBuilderStripsLegacyToolCodeMarkupFromDisplay() {
+        let raw = """
+        I am checking the project structure.
+        <tool_code>
+        list_files
+        <param name="path">src/services</param>
+        </tool_code>
+        """
+
+        let display = ChatPromptBuilder.contentForDisplay(from: raw)
+
+        XCTAssertFalse(display.contains("<tool_code>"))
+        XCTAssertFalse(display.contains("<param name="))
+        XCTAssertTrue(display.contains("I am checking the project structure."))
+    }
+
+    func testChatPromptBuilderTreatsLegacyToolCodeMarkupAsIncompleteExecution() {
+        let raw = """
+        <tool_code>
+        list_files
+        <param name="path">src/models</param>
+        </tool_code>
+        """
+
+        XCTAssertTrue(ChatPromptBuilder.shouldForceToolFollowup(content: raw))
+        XCTAssertTrue(
+            ChatPromptBuilder.shouldForceExecutionFollowup(
+                userInput: "please continue reviewing the repository structure",
+                content: raw,
+                hasToolCalls: false
+            )
+        )
+    }
 }
