@@ -18,7 +18,6 @@ struct BranchExecutionContinuationDecider: BranchExecutionContinuationDeciding {
         from state: OrchestrationState,
         branchExecution: OrchestrationState.BranchExecution
     ) async -> Bool {
-        guard state.request.mode == .agent else { return false }
         guard !branchExecution.hasAdditionalBranches else { return false }
         guard let response = state.response else { return false }
 
@@ -26,6 +25,14 @@ struct BranchExecutionContinuationDecider: BranchExecutionContinuationDeciding {
             executionSignals
         } else {
             await OrchestrationExecutionSignalBuilder(planStore: planStore).build(for: state)
+        }
+
+        if state.request.mode != .agent {
+            guard signals.hasToolResults else { return false }
+            return signals.hasToolCalls
+                || signals.shouldForceExecutionFollowup
+                || signals.shouldForceToolFollowup
+                || signals.indicatesUnfinishedExecution
         }
 
         if signals.hasIncompletePlan {

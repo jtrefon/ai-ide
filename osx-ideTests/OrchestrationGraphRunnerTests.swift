@@ -328,6 +328,52 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         XCTAssertTrue(shouldResume)
     }
 
+    func testBranchExecutionContinuationDeciderResumesInChatWhenExecutionIsClearlyUnfinished() async throws {
+        let request = makeSendRequest(mode: .chat, userInput: "Add full unit test coverage for src/utils.js")
+        let branchExecution = OrchestrationState.BranchExecution(
+            plan: "1. [x] First\n2. [ ] Second",
+            globalInvariants: [],
+            branches: [
+                .init(id: "branch_1", title: "Second", checklistItems: ["Finish implementation"])
+            ],
+            activeBranchIndex: 0
+        )
+        let decider = BranchExecutionContinuationDecider(planStore: StubPlanStore())
+
+        let shouldResume = await decider.shouldResumeExecution(
+            from: OrchestrationState(
+                request: request,
+                response: AIServiceResponse(
+                    content: """
+                    Looking at the context, I need to create the test file now.
+                    <tool_call>
+                    <tool name="write_files">
+                    <path>tests/utils.test.js</path>
+                    </tool>
+                    </tool_call>
+                    """,
+                    toolCalls: nil
+                ),
+                lastToolResults: [
+                    ChatMessage(
+                        role: .tool,
+                        content: "Successfully wrote 1 file(s):\npackage.json",
+                        tool: ChatMessageToolContext(
+                            toolName: "write_files",
+                            toolStatus: .completed,
+                            target: ToolInvocationTarget(toolCallId: "tool-1")
+                        )
+                    )
+                ],
+                branchExecution: branchExecution,
+                transition: .next("branch_review")
+            ),
+            branchExecution: branchExecution
+        )
+
+        XCTAssertTrue(shouldResume)
+    }
+
     func testExecutionSignalBuilderCapturesIncompletePlanAndExecutionFollowupSignals() async throws {
         let request = makeSendRequest(mode: .agent, userInput: "Implement remaining work")
         let builder = OrchestrationExecutionSignalBuilder(planStore: StubPlanStore(plans: [

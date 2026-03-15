@@ -408,7 +408,11 @@ class ChatPromptBuilder {
 
     static func containsTextualToolCallMarkup(_ content: String) -> Bool {
         let lower = content.lowercased()
-        return lower.contains("<tool_call>") || lower.contains("<arg_key>") || lower.contains("<arg_value>")
+        return lower.contains("<tool_call>")
+            || lower.contains("<minimax:tool_call>")
+            || lower.contains("<invoke name=")
+            || lower.contains("<arg_key>")
+            || lower.contains("<arg_value>")
     }
 
     static func hasMissingClaimedFileArtifacts(content: String, projectRoot: URL) -> Bool {

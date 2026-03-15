@@ -56,4 +56,23 @@ final class TextualToolCallRecoveryTests: XCTestCase {
 
         XCTAssertNil(toolCalls)
     }
+
+    func testChatPromptBuilderTreatsMinimaxInvokeMarkupAsIncompleteExecution() {
+        let raw = """
+        <minimax:tool_call>
+        <invoke name="cli-mcp-server_run_command">
+        <parameter name="command">ls -la /tmp/project</parameter>
+        </invoke>
+        </minimax:tool_call>
+        """
+
+        XCTAssertTrue(ChatPromptBuilder.shouldForceToolFollowup(content: raw))
+        XCTAssertTrue(
+            ChatPromptBuilder.shouldForceExecutionFollowup(
+                userInput: "continue implementing the task",
+                content: raw,
+                hasToolCalls: false
+            )
+        )
+    }
 }

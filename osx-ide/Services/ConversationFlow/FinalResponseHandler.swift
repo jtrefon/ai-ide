@@ -83,11 +83,6 @@ final class FinalResponseHandler {
             "analyzing",
             "gathering context",
         ]
-
-        if content.count < 50 {
-            return true
-        }
-
         return genericPatterns.contains { lowercased.contains($0) }
     }
 
@@ -227,8 +222,10 @@ final class FinalResponseHandler {
         }
 
         let deterministicSummary = await buildDeterministicFinalSummaryFallback(
+            mode: mode,
             toolSummary: toolSummary,
-            conversationId: conversationId
+            conversationId: conversationId,
+            toolResults: toolResults
         )
         return AIServiceResponse(content: deterministicSummary, toolCalls: nil)
     }
@@ -257,42 +254,134 @@ final class FinalResponseHandler {
     }
 
     private func buildDeterministicFinalSummaryFallback(
+        mode: AIMode,
         toolSummary: String,
-        conversationId: String
+        conversationId: String,
+        toolResults: [ChatMessage]
     ) async -> String {
-        let userObjective = historyCoordinator.messages
-            .reversed()
-            .first(where: { $0.role == .user })?
-            .content
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            ?? "Summarize current request"
-
-        let oneLineObjective = userObjective
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
         let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let planProgress = formatPlanProgress(planMarkdown: planMarkdown)
         let checklist = PlanChecklistTracker.progress(in: planMarkdown)
-        let inferredNeedsWork = checklist.total > 0 && !checklist.isComplete
-        let completionStatus = inferredNeedsWork ? "NEEDS_WORK" : "DONE"
-        let workPerformed = toolSummary.isEmpty
-            ? "None (explanation-only)."
-            : "Summarized executed tool outputs from this run."
-        let filesTouched = toolSummary.isEmpty ? "None" : "See tool recap in run logs"
-        let nextSteps = completionStatus == "NEEDS_WORK"
-            ? "Checklist items remain; continue execution for unfinished plan steps."
-            : "None noted."
+        let hasIncompletePlan = checklist.total > 0 && !checklist.isComplete
+        let completedTools = toolResults.filter { $0.isToolExecution && $0.toolStatus == .completed }
+        let completedToolNames = completedTools.compactMap(\.toolName)
+        let hasOnlyReadOnlyInspection = !completedToolNames.isEmpty
+            && completedToolNames.allSatisfy(isReadOnlyInspectionToolName(_:))
+        let touchedFiles = summarizeTouchedFiles(from: completedTools)
+        let filePhrase = joinedList(touchedFiles)
+        let hasReadVerification = completedToolNames.contains("read_file") || completedToolNames.contains("index_read_file")
+        let mutationTools = completedToolNames.filter(isMutationToolName(_:))
 
-        return """
-        Objective: \(oneLineObjective.isEmpty ? "Summarize current request" : oneLineObjective)
-        Work performed: \(workPerformed)
-        Files touched: \(filesTouched)
-        Verification: Not Run
-        Plan status: \(planProgress)
-        Status: \(completionStatus)
-        Next steps: \(nextSteps)
-        """
+        if !mutationTools.isEmpty {
+            let actionSentence: String
+            if touchedFiles.isEmpty {
+                actionSentence = "I completed the recorded file changes for this run."
+            } else if mutationTools.allSatisfy({ $0 == "create_file" || $0 == "write_file" || $0 == "write_files" }) {
+                actionSentence = "I updated \(filePhrase)."
+            } else {
+                actionSentence = "I changed \(filePhrase)."
+            }
+
+            if hasIncompletePlan {
+                return "\(actionSentence) The task is still incomplete (\(planProgress))."
+            }
+
+            if hasReadVerification {
+                return "\(actionSentence) I also re-read the relevant files during the run to verify the recorded result."
+            }
+
+            return actionSentence
+        }
+
+        if mode == .chat {
+            if hasOnlyReadOnlyInspection {
+                if touchedFiles.isEmpty {
+                    return "I inspected the relevant files, but this run did not produce a dependable review or implementation summary."
+                }
+                return "I inspected \(filePhrase), but this run did not produce a dependable review or implementation summary."
+            }
+
+            if hasIncompletePlan {
+                return "I made some progress, but the work is still incomplete (\(planProgress))."
+            }
+
+            if toolSummary.isEmpty {
+                return "I couldn't produce a dependable final answer for this request from the current run."
+            }
+
+            return "I completed some tool work, but I don't want to invent details that were not confirmed in the run output."
+        }
+
+        if hasIncompletePlan {
+            return "I completed part of the task, but work is still remaining (\(planProgress))."
+        }
+
+        if toolSummary.isEmpty {
+            return "I couldn't produce a dependable final answer for this task from the current run."
+        }
+
+        if hasOnlyReadOnlyInspection {
+            if touchedFiles.isEmpty {
+                return "I inspected the relevant files, but I didn't reach a dependable final answer."
+            }
+            return "I inspected \(filePhrase), but I didn't reach a dependable final answer."
+        }
+
+        return "I completed tool work in this run, but I don't want to invent a final summary that the recorded outputs do not support."
+    }
+
+    private func isReadOnlyInspectionToolName(_ toolName: String) -> Bool {
+        [
+            "read_file",
+            "index_read_file",
+            "list_files",
+            "index_list_files",
+            "search_files",
+            "index_search_text",
+            "index_search_symbols",
+            "index_list_symbols",
+            "checkpoint_list",
+            "conversation_fold"
+        ].contains(toolName)
+    }
+
+    private func isMutationToolName(_ toolName: String) -> Bool {
+        [
+            "write_file",
+            "write_files",
+            "create_file",
+            "replace_in_file",
+            "delete_file",
+            "multi_replace_file_content",
+            "write_to_file"
+        ].contains(toolName)
+    }
+
+    private func summarizeTouchedFiles(from toolResults: [ChatMessage]) -> [String] {
+        var files: [String] = []
+        var seen: Set<String> = []
+
+        for result in toolResults {
+            let candidate = result.targetFile?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let candidate, !candidate.isEmpty, seen.insert(candidate).inserted else { continue }
+            files.append(candidate)
+        }
+
+        return files
+    }
+
+    private func joinedList(_ items: [String]) -> String {
+        switch items.count {
+        case 0:
+            return "the relevant files"
+        case 1:
+            return items[0]
+        case 2:
+            return "\(items[0]) and \(items[1])"
+        default:
+            let head = items.dropLast().joined(separator: ", ")
+            return "\(head), and \(items[items.count - 1])"
+        }
     }
 
     private func formatPlanProgress(planMarkdown: String) -> String {
