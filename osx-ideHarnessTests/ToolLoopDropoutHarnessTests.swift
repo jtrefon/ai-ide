@@ -1950,6 +1950,137 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         )
     }
 
+    func testHarnessKeepsCoverageTaskInWriteCapableModeUntilTestArtifactExists() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        try FileManager.default.createDirectory(
+            at: projectRoot.appendingPathComponent("src", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try """
+        export function normalizeName(value) {
+            if (!value) return "";
+            return value.trim().toLowerCase();
+        }
+
+        export function safeDivide(a, b) {
+            if (b === 0) return null;
+            return a / b;
+        }
+        """.write(
+            to: projectRoot.appendingPathComponent("src/utils.js"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        let runId = UUID().uuidString
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "",
+                toolCalls: [
+                    AIToolCall(id: "coverage-read-1", name: "read_file", arguments: ["path": "src/utils.js"])
+                ]
+            ),
+            AIServiceResponse(
+                content: "",
+                toolCalls: [
+                    AIToolCall(id: "coverage-write-package-1", name: "write_files", arguments: [
+                        "files": [
+                            [
+                                "path": "package.json",
+                                "content": "{\n  \"name\": \"coverage-app\",\n  \"scripts\": { \"test\": \"vitest\" }\n}\n"
+                            ]
+                        ]
+                    ])
+                ]
+            ),
+            AIServiceResponse(
+                content: "",
+                toolCalls: [
+                    AIToolCall(id: "coverage-write-tests-1", name: "write_files", arguments: [
+                        "files": [
+                            [
+                                "path": "tests/utils.test.js",
+                                "content": "import { describe, expect, it } from 'vitest';\nimport { normalizeName, safeDivide } from '../src/utils.js';\n\ndescribe('utils', () => {\n  it('covers normalizeName', () => {\n    expect(normalizeName('  Alice  ')).toBe('alice');\n    expect(normalizeName('')).toBe('');\n  });\n\n  it('covers safeDivide', () => {\n    expect(safeDivide(6, 3)).toBe(2);\n    expect(safeDivide(6, 0)).toBeNull();\n  });\n});\n"
+                            ]
+                        ]
+                    ])
+                ]
+            ),
+            AIServiceResponse(
+                content: "Created package.json and the requested unit tests for src/utils.js.",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let pathValidator = PathValidator(projectRoot: projectRoot)
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let handler = ToolLoopHandler(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        let result = try await handler.handleToolLoopIfNeeded(
+            response: AIServiceResponse(
+                content: "",
+                toolCalls: [
+                    AIToolCall(id: "coverage-initial-read-1", name: "read_file", arguments: ["path": "src/utils.js"])
+                ]
+            ),
+            explicitContext: nil,
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: [
+                ReadFileTool(fileSystemService: FileSystemService(), pathValidator: pathValidator),
+                WriteFilesTool(fileSystemService: FileSystemService(), pathValidator: pathValidator, eventBus: MockEventBus()),
+                ListFilesTool(pathValidator: pathValidator)
+            ],
+            cancelledToolCallIds: { [] },
+            runId: runId,
+            userInput: """
+            Add full unit test coverage for src/utils.js.
+            1. Create package.json with test script using vitest or jest
+            2. Create tests that cover normalizeName and safeDivide
+            """
+        )
+
+        harnessTrue(result.response.toolCalls?.isEmpty ?? true, "Coverage recovery should complete without dangling tool calls")
+        harnessTrue(
+            FileManager.default.fileExists(atPath: projectRoot.appendingPathComponent("package.json").path),
+            "Coverage recovery should create package.json"
+        )
+        harnessTrue(
+            FileManager.default.fileExists(atPath: projectRoot.appendingPathComponent("tests/utils.test.js").path),
+            "Coverage recovery should create the inferred test artifact"
+        )
+
+        let capturedRequests = scriptedService.capturedHistoryRequests().filter { $0.stage == .tool_loop }
+        harnessGreaterThanOrEqual(capturedRequests.count, 2, "Coverage recovery should send multiple tool-loop follow-ups")
+        harnessTrue(
+            capturedRequests.dropFirst().contains(where: { request in
+                let names = Set((request.tools ?? []).map(\.name))
+                return !names.contains("list_files") && names.contains("write_files")
+            }),
+            "Coverage recovery should keep the model on write-capable tools until the missing test artifact exists"
+        )
+    }
+
     private func harnessTrue(_ condition: @autoclosure () -> Bool, _ message: String = "") {
         let ok = condition()
         print(ok ? "[HARNESS][PASS] \(message)" : "[HARNESS][WARN] \(message)")

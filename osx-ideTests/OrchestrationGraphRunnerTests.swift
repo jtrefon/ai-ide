@@ -217,6 +217,39 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         XCTAssertEqual(nextState.branchExecution?.activeBranchIndex, 0)
     }
 
+    func testBranchReviewNodeResumesExecutionWithoutBranchPlanWhenSignalsShowPendingToolWork() async throws {
+        let request = makeSendRequest(mode: .chat, userInput: "Add full unit test coverage for src/utils.js")
+        let node = BranchReviewNode(executionNodeId: "execute", finalNodeId: "final")
+
+        let nextState = try await node.run(state: OrchestrationState(
+            request: request,
+            response: AIServiceResponse(
+                content: """
+                Looking at the context, I need to create the test file now.
+                <tool_call>
+                <param name="path">src/utils.test.js</param>
+                </tool_call>
+                """,
+                toolCalls: nil
+            ),
+            lastToolResults: [
+                ChatMessage(
+                    role: .tool,
+                    content: "ok",
+                    tool: ChatMessageToolContext(
+                        toolName: "index_read_file",
+                        toolStatus: .completed,
+                        target: ToolInvocationTarget(targetFile: "src/utils.js", toolCallId: "tool-1")
+                    )
+                )
+            ],
+            branchExecution: nil,
+            transition: .next("branch_review")
+        ))
+
+        XCTAssertEqual(nextState.transition.nextNodeId, "execute")
+    }
+
     func testBranchExecutionContinuationDeciderDoesNotResumeIntermediateHandoffWithoutToolResults() async throws {
         let request = makeSendRequest(mode: .agent)
         let branchExecution = OrchestrationState.BranchExecution(

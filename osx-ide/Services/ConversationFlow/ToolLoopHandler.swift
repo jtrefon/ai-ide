@@ -53,13 +53,20 @@ final class ToolLoopHandler {
         var repeatedCompletedSignatureCount = 0
         var hasObservedSuccessfulMutation = false
         var hasObservedSuccessfulDirectRead = false
+        var mutatedArtifactPaths: Set<String> = []
+        var hasObservedMutationVerificationRead = false
         var consecutivePostMutationNonMutationIterations = 0
         var consecutiveNonRecoverableMutationFailureIterations = 0
         let maxIterations = (mode == .agent) ? ToolLoopConstants.maxAgentIterations : ToolLoopConstants.maxNonAgentIterations
 
         if mode == .agent,
            currentResponse.toolCalls?.isEmpty ?? true,
-           !availableTools.isEmpty {
+           !availableTools.isEmpty,
+           shouldForceInitialExecutionFollowup(
+                userInput: userInput,
+                response: currentResponse,
+                projectRoot: projectRoot
+           ) {
             await AIToolTraceLogger.shared.log(type: "chat.force_execution_followup.pre_loop", data: [
                 "runId": runId,
                 "hasToolCalls": false,
@@ -124,21 +131,19 @@ final class ToolLoopHandler {
             let uniqueToolCalls = deduplicateToolCalls(toolCalls)
             lastToolCalls = uniqueToolCalls
 
-            let currentToolBatchSignature = toolBatchSignature(uniqueToolCalls)
-            let currentToolCallSignatures = Set(uniqueToolCalls.map(toolCallSignature))
-            let repeatedCompletedSignatures = currentToolCallSignatures.intersection(previouslyCompletedToolCallSignatures)
-            if !repeatedCompletedSignatures.isEmpty {
-                if await shouldFinalizeAfterRepeatedCompletedReadOnlyBatch(
-                    toolCalls: uniqueToolCalls,
-                    repeatedCompletedSignatures: repeatedCompletedSignatures,
-                    hasObservedSuccessfulMutation: hasObservedSuccessfulMutation,
-                    conversationId: conversationId
-                ) {
-                    await AIToolTraceLogger.shared.log(type: "chat.tool_loop_post_mutation_read_only_repeat_finalize", data: [
-                        "runId": runId,
-                        "iteration": toolIteration,
-                        "signatureCount": repeatedCompletedSignatures.count
-                    ])
+            let unavailableToolNames = unavailableToolNames(
+                for: uniqueToolCalls,
+                availableTools: currentTurnTools
+            )
+            if !unavailableToolNames.isEmpty {
+                if hasObservedSuccessfulMutation,
+                   !hasOutstandingRequestedArtifacts(
+                        userInput: userInput,
+                        projectRoot: projectRoot
+                   ),
+                   allMutatedArtifactsExist(mutatedArtifactPaths),
+                   unavailableToolNames.allSatisfy(isReadOnlyToolName),
+                   !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }) {
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
                         explicitContext: explicitContext,
                         projectRoot: projectRoot,
@@ -152,7 +157,38 @@ final class ToolLoopHandler {
                     )
                     break
                 }
+                await AIToolTraceLogger.shared.log(type: "chat.tool_loop_unavailable_tool_recovery", data: [
+                    "runId": runId,
+                    "iteration": toolIteration,
+                    "toolNames": unavailableToolNames
+                ])
+                let recoveryTools: [AITool]
+                if requestLikelyRequiresMutation(userInput), !hasObservedSuccessfulMutation {
+                    recoveryTools = hasObservedSuccessfulDirectRead
+                        ? strictMutationExecutionTools(from: availableTools)
+                        : mutationRecoveryTools(from: availableTools)
+                } else {
+                    recoveryTools = currentTurnTools
+                }
+                currentTurnTools = recoveryTools
+                currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
+                    explicitContext: explicitContext,
+                    projectRoot: projectRoot,
+                    mode: mode,
+                    userInput: userInput,
+                    runId: runId,
+                    repeatedSignatures: unavailableToolNames.map { "unavailable_tool:\($0)" },
+                    availableTools: recoveryTools,
+                    conversationId: conversationId
+                )
+                toolIteration = max(0, toolIteration - 1)
+                continue
+            }
 
+            let currentToolBatchSignature = toolBatchSignature(uniqueToolCalls)
+            let currentToolCallSignatures = Set(uniqueToolCalls.map(toolCallSignature))
+            let repeatedCompletedSignatures = currentToolCallSignatures.intersection(previouslyCompletedToolCallSignatures)
+            if !repeatedCompletedSignatures.isEmpty {
                 repeatedCompletedSignatureCount += 1
                 ToolExecutionTelemetry.shared.recordRepeatedToolCallSignatures(count: repeatedCompletedSignatures.count)
                 await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_completed_signature", data: [
@@ -167,6 +203,27 @@ final class ToolLoopHandler {
                         "iteration": toolIteration,
                         "repeatedCount": repeatedCompletedSignatureCount
                     ])
+                    if !hasObservedSuccessfulMutation,
+                       requestLikelyRequiresMutation(userInput),
+                       !currentTurnTools.isEmpty {
+                        let diversifiedTools = hasObservedSuccessfulDirectRead
+                            ? strictMutationExecutionTools(from: availableTools)
+                            : mutationRecoveryTools(from: availableTools)
+                        currentTurnTools = diversifiedTools
+                        currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
+                            explicitContext: explicitContext,
+                            projectRoot: projectRoot,
+                            mode: mode,
+                            userInput: userInput,
+                            runId: runId,
+                            repeatedSignatures: repeatedCompletedSignatures.sorted(),
+                            availableTools: diversifiedTools,
+                            conversationId: conversationId
+                        )
+                        repeatedCompletedSignatureCount = 0
+                        continue
+                    }
+
                     let finalizationTools: [AITool]? =
                         hasObservedSuccessfulMutation ? nil : currentTurnTools
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
@@ -237,7 +294,7 @@ final class ToolLoopHandler {
                 let diversifiedTools: [AITool]
                 if requestLikelyRequiresMutation(userInput), !hasObservedSuccessfulMutation {
                     diversifiedTools = hasObservedSuccessfulDirectRead
-                        ? mutationOnlyTools(from: availableTools)
+                        ? strictMutationExecutionTools(from: availableTools)
                         : mutationRecoveryTools(from: availableTools)
                 } else {
                     diversifiedTools = availableTools
@@ -306,6 +363,26 @@ final class ToolLoopHandler {
                 previousReadOnlyToolBatchSignature: &previousReadOnlyToolBatchSignature,
                 repeatedReadOnlyToolBatchCount: &repeatedReadOnlyToolBatchCount
             ) {
+                if hasObservedSuccessfulMutation,
+                   !hasOutstandingRequestedArtifacts(
+                        userInput: userInput,
+                        projectRoot: projectRoot
+                   ),
+                   hasObservedMutationVerificationRead,
+                   !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }) {
+                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                        explicitContext: explicitContext,
+                        projectRoot: projectRoot,
+                        mode: mode,
+                        userInput: userInput,
+                        toolResults: lastToolResults,
+                        runId: runId,
+                        availableTools: nil,
+                        conversationId: conversationId,
+                        hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
+                    )
+                    break
+                }
                 await AIToolTraceLogger.shared.log(type: "chat.tool_loop_read_only_stall", data: [
                     "runId": runId,
                     "iteration": toolIteration,
@@ -464,7 +541,7 @@ final class ToolLoopHandler {
                         currentTurnTools = contentWriteRecoveryTools(from: availableTools)
                     } else {
                         currentTurnTools = hasObservedSuccessfulDirectRead
-                            ? mutationOnlyTools(from: availableTools)
+                            ? strictMutationExecutionTools(from: availableTools)
                             : mutationRecoveryTools(from: availableTools)
                     }
                     currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
@@ -542,9 +619,24 @@ final class ToolLoopHandler {
             }
             if successfulMutationThisIteration {
                 hasObservedSuccessfulMutation = true
+                mutatedArtifactPaths.formUnion(completedMutationPaths(
+                    toolCalls: uniqueToolCalls,
+                    completedToolCallIds: completedToolCallIds,
+                    projectRoot: projectRoot
+                ))
+                hasObservedMutationVerificationRead = false
                 consecutivePostMutationNonMutationIterations = 0
             } else if hasObservedSuccessfulMutation {
                 consecutivePostMutationNonMutationIterations += 1
+            }
+            if hasObservedSuccessfulMutation,
+               completedReadVerificationHitMutatedArtifacts(
+                    toolCalls: uniqueToolCalls,
+                    completedToolCallIds: completedToolCallIds,
+                    mutatedArtifactPaths: mutatedArtifactPaths,
+                    projectRoot: projectRoot
+               ) {
+                hasObservedMutationVerificationRead = true
             }
             if shouldStopForNonRecoverableMutationFailureStall(
                 toolResults: toolResults,
@@ -574,6 +666,24 @@ final class ToolLoopHandler {
                     "iteration": toolIteration,
                     "count": consecutivePostMutationNonMutationIterations
                 ])
+                if hasOutstandingRequestedArtifacts(
+                    userInput: userInput,
+                    projectRoot: projectRoot
+                ) {
+                    currentTurnTools = contentWriteRecoveryTools(from: availableTools)
+                    currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
+                        explicitContext: explicitContext,
+                        projectRoot: projectRoot,
+                        mode: mode,
+                        userInput: userInput,
+                        runId: runId,
+                        repeatedSignatures: ["post_mutation_non_mutation_stall"],
+                        availableTools: currentTurnTools,
+                        conversationId: conversationId
+                    )
+                    consecutivePostMutationNonMutationIterations = 0
+                    continue
+                }
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     explicitContext: explicitContext,
                     projectRoot: projectRoot,
@@ -582,6 +692,30 @@ final class ToolLoopHandler {
                     toolResults: toolResults,
                     runId: runId,
                     availableTools: nil
+                )
+                break
+            }
+            if hasObservedSuccessfulMutation,
+               completedContentWriteThisIteration,
+               !hasOutstandingRequestedArtifacts(
+                    userInput: userInput,
+                    projectRoot: projectRoot
+               ),
+               !toolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }) {
+                await AIToolTraceLogger.shared.log(type: "chat.tool_loop_requested_artifacts_completed", data: [
+                    "runId": runId,
+                    "iteration": toolIteration
+                ])
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    explicitContext: explicitContext,
+                    projectRoot: projectRoot,
+                    mode: mode,
+                    userInput: userInput,
+                    toolResults: toolResults,
+                    runId: runId,
+                    availableTools: nil,
+                    conversationId: conversationId,
+                    hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
                 )
                 break
             }
@@ -637,6 +771,14 @@ final class ToolLoopHandler {
 
             let followupTools: [AITool]
             if requestLikelyRequiresMutation(userInput),
+               hasOutstandingRequestedArtifacts(
+                    userInput: userInput,
+                    projectRoot: projectRoot
+               ) {
+                followupTools = hasObservedSuccessfulDirectRead || hasObservedSuccessfulMutation
+                    ? contentWriteRecoveryTools(from: availableTools)
+                    : mutationRecoveryTools(from: availableTools)
+            } else if requestLikelyRequiresMutation(userInput),
                completedCreateFileReservationThisIteration,
                !completedContentWriteThisIteration {
                 followupTools = contentWriteRecoveryTools(from: availableTools)
@@ -651,7 +793,7 @@ final class ToolLoopHandler {
                !hasObservedSuccessfulMutation,
                consecutiveReadOnlyToolIterations > 0 {
                 followupTools = hasObservedSuccessfulDirectRead
-                    ? mutationOnlyTools(from: availableTools)
+                    ? strictMutationExecutionTools(from: availableTools)
                     : mutationRecoveryTools(from: availableTools)
             } else {
                 followupTools = availableTools
@@ -684,7 +826,25 @@ final class ToolLoopHandler {
                 ToolExecutionTelemetry.shared.recordRepeatedContent()
                 let hasTextualPattern = isTextualToolCallPattern(currentResponse.content)
                 ToolExecutionTelemetry.shared.recordResponseWithoutToolCalls(hasTextualPattern: hasTextualPattern)
-                // For repeated content stall, skip execution transition and go directly to final response
+                if requestLikelyRequiresMutation(userInput),
+                   !hasObservedSuccessfulMutation {
+                    let recoveryTools = hasObservedSuccessfulDirectRead
+                        ? strictMutationExecutionTools(from: availableTools)
+                        : mutationRecoveryTools(from: availableTools)
+                    currentTurnTools = recoveryTools
+                    currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
+                        explicitContext: explicitContext,
+                        projectRoot: projectRoot,
+                        mode: mode,
+                        userInput: userInput,
+                        runId: runId,
+                        repeatedSignatures: ["repeated_no_tool_call_content"],
+                        availableTools: recoveryTools,
+                        conversationId: conversationId
+                    )
+                    repeatedNoToolCallContentCount = 0
+                    continue
+                }
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     explicitContext: explicitContext,
                     projectRoot: projectRoot,
@@ -692,7 +852,7 @@ final class ToolLoopHandler {
                     userInput: userInput,
                     toolResults: lastToolResults,
                     runId: runId,
-                    availableTools: nil // No tools - skip execution transition for repeated content
+                    availableTools: nil
                 )
                 break
             }
@@ -717,6 +877,28 @@ final class ToolLoopHandler {
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
                hasObservedSuccessfulMutation,
+               !hasOutstandingRequestedArtifacts(
+                    userInput: userInput,
+                    projectRoot: projectRoot
+               ),
+               hasObservedMutationVerificationRead,
+               !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }),
+               !ChatPromptBuilder.containsTextualToolCallMarkup(content),
+               !ChatPromptBuilder.hasMissingClaimedFileArtifacts(
+                    content: content,
+                    projectRoot: projectRoot
+               ) {
+                break
+            }
+
+            if mode == .agent,
+               currentResponse.toolCalls?.isEmpty ?? true,
+               let content = currentResponse.content,
+               hasObservedSuccessfulMutation,
+               !hasOutstandingRequestedArtifacts(
+                    userInput: userInput,
+                    projectRoot: projectRoot
+               ),
                isSyntheticProgressArtifact(content),
                !ChatPromptBuilder.hasMissingClaimedFileArtifacts(
                     content: content,
@@ -729,6 +911,10 @@ final class ToolLoopHandler {
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
                hasObservedSuccessfulMutation,
+               !hasOutstandingRequestedArtifacts(
+                    userInput: userInput,
+                    projectRoot: projectRoot
+               ),
                (
                     ChatPromptBuilder.indicatesWorkWasPerformed(content: content)
                     || isSyntheticProgressArtifact(content)
@@ -1528,28 +1714,9 @@ final class ToolLoopHandler {
             || repeatedReadOnlyToolBatchCount >= ToolLoopConstants.repeatedReadOnlyBatchStallThreshold
     }
 
-    private func shouldFinalizeAfterRepeatedCompletedReadOnlyBatch(
-        toolCalls: [AIToolCall],
-        repeatedCompletedSignatures: Set<String>,
-        hasObservedSuccessfulMutation: Bool,
-        conversationId: String
-    ) async -> Bool {
-        guard hasObservedSuccessfulMutation else { return false }
-        guard !toolCalls.isEmpty else { return false }
-
-        let isReadOnlyBatch = toolCalls.allSatisfy { readOnlyLoopToolNames.contains($0.name) }
-        guard isReadOnlyBatch else { return false }
-
-        let currentSignatures = Set(toolCalls.map(toolCallSignature))
-        guard currentSignatures == repeatedCompletedSignatures else { return false }
-
-        let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
-        let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
-        return planProgress.total == 0 || planProgress.isComplete
-    }
-
     private var readOnlyLoopToolNames: Set<String> {
         [
+            "list_files",
             "read_file",
             "index_read_file",
             "index_find_files",
@@ -1570,8 +1737,7 @@ final class ToolLoopHandler {
             "write_files",
             "create_file",
             "delete_file",
-            "replace_in_file",
-            "run_command"
+            "replace_in_file"
         ]
     }
 
@@ -1579,13 +1745,11 @@ final class ToolLoopHandler {
         [
             "read_file",
             "index_read_file",
-            "list_files",
             "create_file",
             "write_file",
             "write_files",
             "replace_in_file",
-            "delete_file",
-            "run_command"
+            "delete_file"
         ]
     }
 
@@ -1597,8 +1761,7 @@ final class ToolLoopHandler {
             "write_files",
             "create_file",
             "delete_file",
-            "replace_in_file",
-            "run_command"
+            "replace_in_file"
         ]
     }
 
@@ -1608,8 +1771,7 @@ final class ToolLoopHandler {
             "write_files",
             "create_file",
             "delete_file",
-            "replace_in_file",
-            "run_command"
+            "replace_in_file"
         ]
     }
 
@@ -1626,6 +1788,214 @@ final class ToolLoopHandler {
     private func mutationOnlyTools(from availableTools: [AITool]) -> [AITool] {
         let preferredTools = availableTools.filter { mutationOnlyToolNames.contains($0.name) }
         return preferredTools.isEmpty ? availableTools : preferredTools
+    }
+
+    private func strictMutationExecutionTools(from availableTools: [AITool]) -> [AITool] {
+        let preferredTools = mutationOnlyTools(from: availableTools)
+        if preferredTools.isEmpty {
+            return availableTools.filter { !readOnlyLoopToolNames.contains($0.name) }
+        }
+        return preferredTools
+    }
+
+    private func unavailableToolNames(for toolCalls: [AIToolCall], availableTools: [AITool]) -> [String] {
+        guard !toolCalls.isEmpty else { return [] }
+        let availableToolNames = Set(availableTools.map(\.name))
+        return Array(Set(toolCalls.compactMap { toolCall in
+            if availableToolNames.contains(toolCall.name) {
+                return nil
+            }
+            let aliases = toolNameAliases[toolCall.name] ?? []
+            return aliases.contains(where: availableToolNames.contains) ? nil : toolCall.name
+        })).sorted()
+    }
+
+    private func completedMutationPaths(
+        toolCalls: [AIToolCall],
+        completedToolCallIds: Set<String>,
+        projectRoot: URL
+    ) -> Set<String> {
+        var paths: Set<String> = []
+        for toolCall in toolCalls where completedToolCallIds.contains(toolCall.id) {
+            switch toolCall.name {
+            case "write_file", "create_file", "delete_file", "replace_in_file", "write_to_file":
+                if let path = toolCall.arguments["path"] as? String {
+                    paths.insert(normalizeToolPath(path, projectRoot: projectRoot))
+                }
+            case "write_files":
+                if let files = toolCall.arguments["files"] as? [[String: Any]] {
+                    for file in files {
+                        if let path = file["path"] as? String {
+                            paths.insert(normalizeToolPath(path, projectRoot: projectRoot))
+                        }
+                    }
+                }
+            default:
+                continue
+            }
+        }
+        return paths
+    }
+
+    private func completedReadVerificationHitMutatedArtifacts(
+        toolCalls: [AIToolCall],
+        completedToolCallIds: Set<String>,
+        mutatedArtifactPaths: Set<String>,
+        projectRoot: URL
+    ) -> Bool {
+        guard !mutatedArtifactPaths.isEmpty else { return false }
+        for toolCall in toolCalls where completedToolCallIds.contains(toolCall.id) {
+            guard toolCall.name == "read_file" || toolCall.name == "index_read_file" else {
+                continue
+            }
+            guard let path = toolCall.arguments["path"] as? String else { continue }
+            let normalizedPath = normalizeToolPath(path, projectRoot: projectRoot)
+            if mutatedArtifactPaths.contains(normalizedPath) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func allMutatedArtifactsExist(_ mutatedArtifactPaths: Set<String>) -> Bool {
+        guard !mutatedArtifactPaths.isEmpty else { return false }
+        let fileManager = FileManager.default
+        return mutatedArtifactPaths.allSatisfy { fileManager.fileExists(atPath: $0) }
+    }
+
+    private func hasOutstandingRequestedArtifacts(userInput: String, projectRoot: URL) -> Bool {
+        let explicitArtifacts = requestedExplicitArtifacts(from: userInput, projectRoot: projectRoot)
+        if explicitArtifacts.contains(where: { !FileManager.default.fileExists(atPath: $0) }) {
+            return true
+        }
+
+        let sourceArtifacts = explicitArtifacts.filter(isLikelySourceArtifactPath)
+        guard requestSuggestsTestCoverage(userInput), !sourceArtifacts.isEmpty else {
+            return false
+        }
+
+        for sourceArtifact in sourceArtifacts {
+            let candidates = inferredTestArtifactCandidates(for: sourceArtifact, projectRoot: projectRoot)
+            guard !candidates.isEmpty else { continue }
+            if !candidates.contains(where: { FileManager.default.fileExists(atPath: $0) }) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func requestedExplicitArtifacts(from userInput: String, projectRoot: URL) -> Set<String> {
+        let pattern = #"(?<![A-Za-z0-9_./-])([A-Za-z0-9_./-]+\.[A-Za-z0-9]{1,8})(?![A-Za-z0-9_./-])"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(userInput.startIndex..<userInput.endIndex, in: userInput)
+        var results: Set<String> = []
+
+        for match in regex.matches(in: userInput, options: [], range: range) {
+            guard let tokenRange = Range(match.range(at: 1), in: userInput) else { continue }
+            let rawToken = String(userInput[tokenRange])
+            let token = rawToken.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`[](){}<>.,;:"))
+            guard !token.isEmpty else { continue }
+            results.insert(normalizeToolPath(token, projectRoot: projectRoot))
+        }
+
+        return results
+    }
+
+    private func requestSuggestsTestCoverage(_ userInput: String) -> Bool {
+        let normalized = userInput.lowercased()
+        let coverageSignals = [
+            "test",
+            "tests",
+            "spec",
+            "coverage",
+            "unit test",
+            "unit tests"
+        ]
+        return coverageSignals.contains(where: { normalized.contains($0) })
+    }
+
+    private func isLikelySourceArtifactPath(_ path: String) -> Bool {
+        let normalized = path.lowercased()
+        guard normalized.contains("/src/") || normalized.hasPrefix("src/") else {
+            return false
+        }
+        return normalized.hasSuffix(".js")
+            || normalized.hasSuffix(".jsx")
+            || normalized.hasSuffix(".ts")
+            || normalized.hasSuffix(".tsx")
+            || normalized.hasSuffix(".swift")
+            || normalized.hasSuffix(".py")
+    }
+
+    private func inferredTestArtifactCandidates(for sourceArtifact: String, projectRoot: URL) -> Set<String> {
+        let sourceURL = URL(fileURLWithPath: sourceArtifact)
+        let ext = sourceURL.pathExtension
+        guard !ext.isEmpty else { return [] }
+
+        let fileStem = sourceURL.deletingPathExtension().lastPathComponent
+        let sourceDir = sourceURL.deletingLastPathComponent()
+        let projectPath = projectRoot.standardizedFileURL.path
+        let relativeSourceDir = sourceDir.path.hasPrefix(projectPath)
+            ? String(sourceDir.path.dropFirst(projectPath.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            : sourceDir.lastPathComponent
+
+        let baseNames = [
+            "\(fileStem).test.\(ext)",
+            "\(fileStem).spec.\(ext)"
+        ]
+
+        var candidates: Set<String> = []
+        for baseName in baseNames {
+            candidates.insert(projectRoot.appendingPathComponent("tests/\(baseName)").standardizedFileURL.path)
+            candidates.insert(sourceDir.appendingPathComponent(baseName).standardizedFileURL.path)
+            candidates.insert(sourceDir.appendingPathComponent("__tests__/\(baseName)").standardizedFileURL.path)
+            if !relativeSourceDir.isEmpty {
+                candidates.insert(projectRoot.appendingPathComponent("tests/\(relativeSourceDir)/\(baseName)").standardizedFileURL.path)
+            }
+        }
+
+        return candidates
+    }
+
+    private func isReadOnlyToolName(_ toolName: String) -> Bool {
+        readOnlyLoopToolNames.contains(toolName)
+            || toolName == "list_files"
+            || toolName == "read_file"
+            || toolName == "index_read_file"
+    }
+
+    private func normalizeToolPath(_ path: String, projectRoot: URL) -> String {
+        let candidateURL: URL
+        if path.hasPrefix("/") {
+            candidateURL = URL(fileURLWithPath: path)
+        } else {
+            candidateURL = projectRoot.appendingPathComponent(path)
+        }
+        return candidateURL.standardizedFileURL.path
+    }
+
+    private var toolNameAliases: [String: [String]] {
+        [
+            "find_by_name": ["find_file", "index_find_files"],
+            "find": ["find_by_name"],
+            "grep_search": ["grep", "index_search_text"],
+            "grep": ["grep_search"],
+            "list_dir": ["list_files", "index_list_files", "list_all_files"],
+            "list_directory": ["list_files", "index_list_files", "list_all_files"],
+            "get_project_structure": ["list_all_files", "list_files"],
+            "read": ["read_file"],
+            "view_file": ["read_file", "index_read_file"],
+            "write": ["write_file", "write_files"],
+            "write_files": ["write_file"],
+            "write_to_file": ["write_file", "write_files"],
+            "create_file": ["write_file", "write_files"],
+            "edit_file": ["replace_in_file", "write_file"],
+            "apply_patch": ["replace_in_file", "write_file"],
+            "cli-mcp-server_run_command": ["run_command"],
+            "run_terminal_command": ["run_command"],
+            "run_shell_command": ["run_command"]
+        ]
     }
 
     private func contentWriteRecoveryTools(from availableTools: [AITool]) -> [AITool] {
@@ -1943,7 +2313,7 @@ final class ToolLoopHandler {
             return nil
         }
 
-        let executionTools = mutationRecoveryTools(from: availableTools)
+        let executionTools = strictMutationExecutionTools(from: availableTools)
         guard !executionTools.isEmpty else {
             return nil
         }
@@ -2090,7 +2460,9 @@ final class ToolLoopHandler {
             userInput: userInput,
             conversationId: conversationId,
             projectRoot: projectRoot,
-            repeatedSignatures: repeatedSignatures
+            repeatedSignatures: repeatedSignatures,
+            historyMessages: historyCoordinator.messages,
+            availableTools: availableTools
         )
 
         return try await aiInteractionCoordinator
@@ -2155,7 +2527,7 @@ final class ToolLoopHandler {
 
         let continuationTools: [AITool]
         if requestLikelyRequiresMutation(userInput), !hasObservedSuccessfulMutation {
-            continuationTools = mutationRecoveryTools(from: availableTools)
+            continuationTools = strictMutationExecutionTools(from: availableTools)
         } else {
             continuationTools = availableTools
         }
@@ -2234,7 +2606,7 @@ final class ToolLoopHandler {
 
         let recoveryTools: [AITool]
         if requestLikelyRequiresMutation(userInput), !hasObservedSuccessfulMutation {
-            recoveryTools = mutationRecoveryTools(from: availableTools)
+            recoveryTools = strictMutationExecutionTools(from: availableTools)
         } else {
             recoveryTools = availableTools
         }
@@ -2286,6 +2658,45 @@ final class ToolLoopHandler {
             "implement "
         ]
         return mutationSignals.contains { normalized.contains($0) }
+    }
+
+    private func shouldForceInitialExecutionFollowup(
+        userInput: String,
+        response: AIServiceResponse,
+        projectRoot: URL
+    ) -> Bool {
+        guard let content = response.content?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !content.isEmpty else {
+            return true
+        }
+
+        if ChatPromptBuilder.containsTextualToolCallMarkup(content) {
+            return true
+        }
+
+        if ChatPromptBuilder.indicatesWorkWasPerformed(content: content),
+           !hasOutstandingRequestedArtifacts(
+                userInput: userInput,
+                projectRoot: projectRoot
+           ),
+           !ChatPromptBuilder.hasMissingClaimedFileArtifacts(
+                content: content,
+                projectRoot: projectRoot
+           ),
+           !ChatPromptBuilder.shouldForceToolFollowup(content: content),
+           !ChatPromptBuilder.shouldForceExecutionFollowup(
+                userInput: userInput,
+                content: content,
+                hasToolCalls: false
+           ) {
+            return false
+        }
+
+        return ChatPromptBuilder.shouldForceExecutionFollowup(
+            userInput: userInput,
+            content: content,
+            hasToolCalls: false
+        ) || requestLikelyRequiresMutation(userInput)
     }
 
     private func isPureContinuationOrRecoverySummary(_ content: String) -> Bool {
