@@ -88,6 +88,17 @@ struct IndexStatusBarView: View {
         return displayNamesByIdentifier[normalizedIdentifier] ?? "Plain Text"
     }
 
+    @ViewBuilder
+    private func statusLabel(_ text: String, layoutPriority: Double = 0) -> some View {
+        if !text.isEmpty {
+            Text(text)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .layoutPriority(layoutPriority)
+        }
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             if viewModel.isIndexing {
@@ -139,32 +150,10 @@ struct IndexStatusBarView: View {
             }
 
             HStack(spacing: 6) {
-                if !viewModel.openRouterContextUsageText.isEmpty {
-                    Text(viewModel.openRouterContextUsageText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-
-                if !viewModel.remoteAICostText.isEmpty {
-                    Text(viewModel.remoteAICostText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-
-                if !viewModel.remoteAISpendText.isEmpty {
-                    Text(viewModel.remoteAISpendText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .layoutPriority(1)
-                }
-
-                Text(viewModel.metricsText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
+                statusLabel(viewModel.openRouterContextUsageText)
+                statusLabel(viewModel.remoteAICostText)
+                statusLabel(viewModel.remoteAISpendText, layoutPriority: 1)
+                statusLabel(viewModel.metricsText)
 
                 Button {
                     isShowingMetricsInfo.toggle()

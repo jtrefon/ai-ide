@@ -42,157 +42,92 @@ actor ModelRoutingAIService: AIService {
         }
     }
 
-    func sendMessage(_ request: AIServiceMessageWithProjectRootRequest) async throws -> AIServiceResponse {
+    private func selectedService() async -> AIService {
+        let isOfflineMode = await selectionStore.isOfflineModeEnabled()
+        return isOfflineMode ? localService : await selectedRemoteService()
+    }
+
+    private func localOrRemoteResponse(
+        localOperation: (AIService) async throws -> AIServiceResponse,
+        remoteOperation: (AIService) async throws -> AIServiceResponse
+    ) async throws -> AIServiceResponse {
         let isOfflineMode = await selectionStore.isOfflineModeEnabled()
         if isOfflineMode {
-            return try await localService.sendMessage(request)
+            return try await localOperation(localService)
         }
-        return try await selectedRemoteService().sendMessage(request)
+        return try await remoteOperation(await selectedRemoteService())
+    }
+
+    private func localOrRemoteString(
+        localOperation: (AIService) async throws -> String,
+        remoteOperation: (AIService) async throws -> String
+    ) async throws -> String {
+        let isOfflineMode = await selectionStore.isOfflineModeEnabled()
+        if isOfflineMode {
+            return try await localOperation(localService)
+        }
+        return try await remoteOperation(await selectedRemoteService())
+    }
+
+    func sendMessage(_ request: AIServiceMessageWithProjectRootRequest) async throws -> AIServiceResponse {
+        try await localOrRemoteResponse(
+            localOperation: { try await $0.sendMessage(request) },
+            remoteOperation: { try await $0.sendMessage(request) }
+        )
     }
 
     func sendMessage(_ request: AIServiceHistoryRequest) async throws -> AIServiceResponse {
-        let isOfflineMode = await selectionStore.isOfflineModeEnabled()
-        if isOfflineMode {
-            return try await localService.sendMessage(request)
-        }
-        return try await selectedRemoteService().sendMessage(request)
+        try await localOrRemoteResponse(
+            localOperation: { try await $0.sendMessage(request) },
+            remoteOperation: { try await $0.sendMessage(request) }
+        )
     }
 
     /// Streaming version - routes to appropriate service based on offline mode
     func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
-        // Check if offline mode is enabled
         let isOfflineMode = await selectionStore.isOfflineModeEnabled()
-        print("[ROUTER] sendMessageStreaming offline=\(isOfflineMode) localService=\(String(describing: type(of: localService))) openRouterService=\(String(describing: type(of: openRouterService))) stage=\(String(describing: request.stage)) runId=\(runId)")
+        await AppLogger.shared.debug(
+            category: .ai,
+            message: "model_router.send_message_streaming",
+            context: AppLogger.LogCallContext(metadata: [
+                "offlineMode": isOfflineMode,
+                "selectedRemoteProvider": await providerSelectionStore.selectedRemoteProvider().displayName,
+                "stage": String(describing: request.stage),
+                "runId": runId
+            ])
+        )
 
-        // Simple routing: if offline mode, use MLX; otherwise use OpenRouter
         if isOfflineMode {
             return try await localService.sendMessageStreaming(request, runId: runId)
         }
-        
         return try await selectedRemoteService().sendMessageStreaming(request, runId: runId)
     }
 
     func explainCode(_ code: String) async throws -> String {
-        let isOfflineMode = await selectionStore.isOfflineModeEnabled()
-        if isOfflineMode {
-            return try await localService.explainCode(code)
-        }
-        return try await selectedRemoteService().explainCode(code)
+        try await localOrRemoteString(
+            localOperation: { try await $0.explainCode(code) },
+            remoteOperation: { try await $0.explainCode(code) }
+        )
     }
 
     func refactorCode(_ code: String, instructions: String) async throws -> String {
-        let isOfflineMode = await selectionStore.isOfflineModeEnabled()
-        if isOfflineMode {
-            return try await localService.refactorCode(code, instructions: instructions)
-        }
-        return try await selectedRemoteService().refactorCode(code, instructions: instructions)
+        try await localOrRemoteString(
+            localOperation: { try await $0.refactorCode(code, instructions: instructions) },
+            remoteOperation: { try await $0.refactorCode(code, instructions: instructions) }
+        )
     }
 
     func generateCode(_ prompt: String) async throws -> String {
-        let isOfflineMode = await selectionStore.isOfflineModeEnabled()
-        if isOfflineMode {
-            return try await localService.generateCode(prompt)
-        }
-        return try await selectedRemoteService().generateCode(prompt)
+        try await localOrRemoteString(
+            localOperation: { try await $0.generateCode(prompt) },
+            remoteOperation: { try await $0.generateCode(prompt) }
+        )
     }
 
     func fixCode(_ code: String, error: String) async throws -> String {
-        let isOfflineMode = await selectionStore.isOfflineModeEnabled()
-        if isOfflineMode {
-            return try await localService.fixCode(code, error: error)
-        }
-        return try await selectedRemoteService().fixCode(code, error: error)
-    }
-
-    // MARK: - Capability Detection
-
-    /// Returns the appropriate model capability based on configuration
-    private func getCapability(isOfflineMode: Bool, willUseLocal: Bool) -> any ModelCapability {
-        if isOfflineMode || willUseLocal {
-            return MLXCapability()
-        }
-        return OpenRouterCapability()
-    }
-
-    // MARK: - Request Adjustment for MLX
-
-    /// Adjusts a request for MLX by forcing Chat mode and limiting tools
-    /// NOTE: This logs a warning so users know why Agent mode was downgraded
-    private func adjustRequestForMLX(
-        _ request: AIServiceMessageWithProjectRootRequest,
-        capability: any ModelCapability
-    ) -> AIServiceMessageWithProjectRootRequest {
-        // Log the downgrade for debugging
-        let logger = AppLogger.shared
-        Task {
-            await logger.warning(
-                category: .ai,
-                message: "Agent mode requested but local model does not support advanced orchestration. " +
-                "Falling back to Chat mode. Requested: \(request.mode), Using: Chat. " +
-                "Use OpenRouter for Agent mode."
-            )
-        }
-        
-        // Filter tools to only RAG/index tools (read-only)
-        let limitedTools = filterToolsForMLX(request.tools)
-        
-        return AIServiceMessageWithProjectRootRequest(
-            message: request.message,
-            mediaAttachments: request.mediaAttachments,
-            context: request.context,
-            tools: limitedTools,
-            mode: .chat,  // Force Chat mode for MLX
-            projectRoot: request.projectRoot
+        try await localOrRemoteString(
+            localOperation: { try await $0.fixCode(code, error: error) },
+            remoteOperation: { try await $0.fixCode(code, error: error) }
         )
-    }
-
-    /// Adjusts a history request for MLX by forcing Chat mode and limiting tools
-    private func adjustRequestForMLX(
-        _ request: AIServiceHistoryRequest,
-        capability: any ModelCapability
-    ) -> AIServiceHistoryRequest {
-        // Log the downgrade for debugging
-        let logger = AppLogger.shared
-        Task {
-            await logger.warning(
-                category: .ai,
-                message: "Agent mode requested but local model does not support advanced orchestration. " +
-                "Falling back to Chat mode. Requested: \(request.mode), Using: Chat. " +
-                "Use OpenRouter for Agent mode."
-            )
-        }
-        
-        // Filter tools to only RAG/index tools (read-only)
-        let limitedTools = filterToolsForMLX(request.tools)
-        
-        return AIServiceHistoryRequest(
-            messages: request.messages,
-            mediaAttachments: request.mediaAttachments,
-            context: request.context,
-            tools: limitedTools,
-            mode: .chat,  // Force Chat mode for MLX
-            projectRoot: request.projectRoot,
-            runId: request.runId,
-            stage: request.stage,
-            conversationId: request.conversationId
-        )
-    }
-
-    /// Filters tools to only those suitable for MLX (RAG/index read-only tools)
-    private func filterToolsForMLX(_ tools: [AITool]?) -> [AITool]? {
-        guard let tools = tools else { return nil }
-
-        // Reuse mode-based policy to avoid duplicating hardcoded tool lists.
-        return AIMode.chat.allowedTools(from: tools)
-    }
-
-    // MARK: - Local Model Detection
-
-    private func shouldUseLocalModel(tools: [AITool]?) async -> Bool {
-        let selected = await selectionStore.selectedModelId()
-        guard !selected.isEmpty else { return false }
-        guard let model = LocalModelCatalog.model(id: selected) else { return false }
-        guard LocalModelFileStore.isModelInstalled(model) else { return false }
-        return tools?.isEmpty != false
     }
 }

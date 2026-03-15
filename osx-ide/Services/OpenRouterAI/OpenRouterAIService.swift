@@ -297,44 +297,13 @@ actor OpenRouterAIService: AIService {
         let fullContent = sanitizeAssistantContent(results.content)
         let toolCalls = results.toolCalls
         if let usage = results.usage {
-            let promptTokens = usage.promptTokens ?? usage.inputTokens
-            let completionTokens = usage.completionTokens ?? usage.outputTokens
-            let totalTokens = usage.totalTokens ?? {
-                guard let inputTokens = usage.inputTokens, let outputTokens = usage.outputTokens else {
-                    return nil
-                }
-                return inputTokens + outputTokens
-            }()
-            if let promptTokens, let completionTokens, let totalTokens {
-                let estimatedCostMicrodollars = try? await estimateCostMicrodollars(
-                    modelId: preparation.settings.model,
-                    promptTokens: promptTokens,
-                    completionTokens: completionTokens,
-                    apiKey: preparation.settings.apiKey,
-                    baseURL: preparation.settings.baseURL
-                )
-                let costMicrodollars = usage.costMicrodollars ?? estimatedCostMicrodollars
-                let contextLength = try? await fetchContextLength(
-                    modelId: preparation.settings.model,
-                    apiKey: preparation.settings.apiKey,
-                    baseURL: preparation.settings.baseURL
-                )
-                let event = OpenRouterUsageUpdatedEvent(
-                    providerName: providerName,
-                    modelId: preparation.settings.model,
-                    runId: request.runId,
-                    usage: OpenRouterUsageUpdatedEvent.Usage(
-                        promptTokens: promptTokens,
-                        completionTokens: completionTokens,
-                        totalTokens: totalTokens,
-                        costMicrodollars: costMicrodollars
-                    ),
-                    contextLength: contextLength
-                )
-                await MainActor.run {
-                    eventBus.publish(event)
-                }
-            }
+            try await publishUsageUpdateIfAvailable(
+                usage: usage,
+                modelId: preparation.settings.model,
+                apiKey: preparation.settings.apiKey,
+                baseURL: preparation.settings.baseURL,
+                runId: request.runId
+            )
         }
 
         // Log success
@@ -448,38 +417,14 @@ actor OpenRouterAIService: AIService {
             throw AppError.aiServiceError("OpenRouter response was empty.")
         }
 
-        if let usage = response.usage,
-           let promptTokens = usage.promptTokens,
-           let completionTokens = usage.completionTokens,
-           let totalTokens = usage.totalTokens {
-            let estimatedCostMicrodollars = try? await estimateCostMicrodollars(
-                modelId: preparation.settings.model,
-                promptTokens: promptTokens,
-                completionTokens: completionTokens,
-                apiKey: preparation.settings.apiKey,
-                baseURL: preparation.settings.baseURL
-            )
-            let costMicrodollars = usage.costMicrodollars ?? estimatedCostMicrodollars
-            let contextLength = try? await fetchContextLength(
+        if let usage = response.usage {
+            try await publishUsageUpdateIfAvailable(
+                usage: usage,
                 modelId: preparation.settings.model,
                 apiKey: preparation.settings.apiKey,
-                baseURL: preparation.settings.baseURL
+                baseURL: preparation.settings.baseURL,
+                runId: request.runId
             )
-            let event = OpenRouterUsageUpdatedEvent(
-                providerName: providerName,
-                modelId: preparation.settings.model,
-                runId: request.runId,
-                usage: OpenRouterUsageUpdatedEvent.Usage(
-                    promptTokens: promptTokens,
-                    completionTokens: completionTokens,
-                    totalTokens: totalTokens,
-                    costMicrodollars: costMicrodollars
-                ),
-                contextLength: contextLength
-            )
-            await MainActor.run {
-                eventBus.publish(event)
-            }
         }
 
         await logRequestSuccess(
@@ -522,6 +467,63 @@ actor OpenRouterAIService: AIService {
             pricingByModelId[modelId] = pricing
         }
         return model.contextLength
+    }
+
+    private func publishUsageUpdateIfAvailable(
+        usage: OpenRouterChatUsage,
+        modelId: String,
+        apiKey: String,
+        baseURL: String,
+        runId: String?
+    ) async throws {
+        guard let normalizedUsage = normalizeUsage(usage) else {
+            return
+        }
+
+        let estimatedCostMicrodollars = try? await estimateCostMicrodollars(
+            modelId: modelId,
+            promptTokens: normalizedUsage.promptTokens,
+            completionTokens: normalizedUsage.completionTokens,
+            apiKey: apiKey,
+            baseURL: baseURL
+        )
+        let costMicrodollars = usage.costMicrodollars ?? estimatedCostMicrodollars
+        let contextLength = try? await fetchContextLength(
+            modelId: modelId,
+            apiKey: apiKey,
+            baseURL: baseURL
+        )
+        let event = OpenRouterUsageUpdatedEvent(
+            providerName: providerName,
+            modelId: modelId,
+            runId: runId,
+            usage: OpenRouterUsageUpdatedEvent.Usage(
+                promptTokens: normalizedUsage.promptTokens,
+                completionTokens: normalizedUsage.completionTokens,
+                totalTokens: normalizedUsage.totalTokens,
+                costMicrodollars: costMicrodollars
+            ),
+            contextLength: contextLength
+        )
+        await MainActor.run {
+            eventBus.publish(event)
+        }
+    }
+
+    private func normalizeUsage(_ usage: OpenRouterChatUsage) -> (promptTokens: Int, completionTokens: Int, totalTokens: Int)? {
+        let promptTokens = usage.promptTokens ?? usage.inputTokens
+        let completionTokens = usage.completionTokens ?? usage.outputTokens
+        let totalTokens = usage.totalTokens ?? {
+            guard let inputTokens = usage.inputTokens, let outputTokens = usage.outputTokens else {
+                return nil
+            }
+            return inputTokens + outputTokens
+        }()
+
+        guard let promptTokens, let completionTokens, let totalTokens else {
+            return nil
+        }
+        return (promptTokens, completionTokens, totalTokens)
     }
 
     private func estimateCostMicrodollars(

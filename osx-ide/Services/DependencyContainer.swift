@@ -16,7 +16,7 @@ private func earlyDiag(_ msg: String) {
     if let data = line.data(using: .utf8) {
         if fm.fileExists(atPath: tmpLog.path) {
             if let handle = try? FileHandle(forWritingTo: tmpLog) {
-                try? handle.seekToEnd()
+                _ = try? handle.seekToEnd()
                 try? handle.write(contentsOf: data)
                 try? handle.close()
             }
@@ -84,42 +84,11 @@ class DependencyContainer: ObservableObject {
         
         // Note: Test configuration will be set up asynchronously in initializeHeavyServices
 
-        let openRouterService = OpenRouterAIService(
-            settingsStore: OpenRouterSettingsStore(settingsStore: settingsStore),
+        _aiService = Self.makeAIService(
+            launchContext: launchContext,
+            settingsStore: settingsStore,
             eventBus: _eventBus,
-            providerName: "OpenRouter",
-            testConfigurationProvider: TestConfigurationProvider.shared
-        )
-        let alibabaService = OpenRouterAIService(
-            settingsStore: AlibabaSettingsStore(settingsStore: settingsStore),
-            eventBus: _eventBus,
-            providerName: "Alibaba Cloud",
-            supportsStreamingWithTools: false,
-            testConfigurationProvider: TestConfigurationProvider.shared
-        )
-        let kiloCodeService = OpenRouterAIService(
-            settingsStore: KiloCodeSettingsStore(settingsStore: settingsStore),
-            eventBus: _eventBus,
-            providerName: "Kilo Code",
-            supportsStreamingWithTools: true,
-            supportsNativeReasoning: true,
-            testConfigurationProvider: TestConfigurationProvider.shared
-        )
-        let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
-        let providerSelectionStore = AIProviderSelectionStore(settingsStore: settingsStore)
-        let localModelEventBus: EventBusProtocol? = launchContext.isTesting ? nil : _eventBus
-        let localModelService = LocalModelProcessAIService(
-            selectionStore: selectionStore,
-            eventBus: localModelEventBus,
             activityCoordinator: _activityCoordinator
-        )
-        _aiService = ModelRoutingAIService(
-            openRouterService: openRouterService,
-            alibabaService: alibabaService,
-            kiloCodeService: kiloCodeService,
-            localService: localModelService,
-            selectionStore: selectionStore,
-            providerSelectionStore: providerSelectionStore
         )
         earlyDiag(
             "AI services done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
@@ -266,24 +235,69 @@ class DependencyContainer: ObservableObject {
             ])
     }
 
+    private static func makeAIService(
+        launchContext: AppLaunchContext,
+        settingsStore: SettingsStore,
+        eventBus: any EventBusProtocol,
+        activityCoordinator: any AgentActivityCoordinating
+    ) -> any AIService {
+        let openRouterService = OpenRouterAIService(
+            settingsStore: OpenRouterSettingsStore(settingsStore: settingsStore),
+            eventBus: eventBus,
+            providerName: "OpenRouter",
+            testConfigurationProvider: TestConfigurationProvider.shared
+        )
+        let alibabaService = OpenRouterAIService(
+            settingsStore: AlibabaSettingsStore(settingsStore: settingsStore),
+            eventBus: eventBus,
+            providerName: "Alibaba Cloud",
+            supportsStreamingWithTools: false,
+            testConfigurationProvider: TestConfigurationProvider.shared
+        )
+        let kiloCodeService = OpenRouterAIService(
+            settingsStore: KiloCodeSettingsStore(settingsStore: settingsStore),
+            eventBus: eventBus,
+            providerName: "Kilo Code",
+            supportsStreamingWithTools: true,
+            supportsNativeReasoning: true,
+            testConfigurationProvider: TestConfigurationProvider.shared
+        )
+        let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
+        let providerSelectionStore = AIProviderSelectionStore(settingsStore: settingsStore)
+        let localModelEventBus: (any EventBusProtocol)? = launchContext.isTesting ? nil : eventBus
+        let localModelService = LocalModelProcessAIService(
+            selectionStore: selectionStore,
+            eventBus: localModelEventBus,
+            activityCoordinator: activityCoordinator
+        )
+        return ModelRoutingAIService(
+            openRouterService: openRouterService,
+            alibabaService: alibabaService,
+            kiloCodeService: kiloCodeService,
+            localService: localModelService,
+            selectionStore: selectionStore,
+            providerSelectionStore: providerSelectionStore
+        )
+    }
+
     // MARK: - Public Accessors
 
     /// Error manager instance
-    var errorManager: ErrorManagerProtocol {
+    var errorManager: any ErrorManagerProtocol {
         return _errorManager
     }
 
     /// UI service instance
-    var uiService: UIServiceProtocol {
+    var uiService: any UIServiceProtocol {
         return _uiService
     }
 
     /// Workspace service instance
-    var workspaceService: WorkspaceServiceProtocol {
+    var workspaceService: any WorkspaceServiceProtocol {
         return _workspaceService
     }
 
-    var eventBus: EventBusProtocol {
+    var eventBus: any EventBusProtocol {
         return _eventBus
     }
 
@@ -304,7 +318,7 @@ class DependencyContainer: ObservableObject {
     }
 
     /// File editor service instance
-    var fileEditorService: FileEditorServiceProtocol {
+    var fileEditorService: any FileEditorServiceProtocol {
         return _fileEditorService
     }
 
@@ -314,7 +328,7 @@ class DependencyContainer: ObservableObject {
     }
 
     /// File dialog service instance
-    var fileDialogService: FileDialogServiceProtocol {
+    var fileDialogService: any FileDialogServiceProtocol {
         return _fileDialogService
     }
 
@@ -323,12 +337,12 @@ class DependencyContainer: ObservableObject {
     }
 
     /// AI service instance
-    var aiService: AIService {
+    var aiService: any AIService {
         return _aiService
     }
 
     /// Conversation manager instance
-    var conversationManager: ConversationManagerProtocol {
+    var conversationManager: any ConversationManagerProtocol {
         return _conversationManager
     }
 
@@ -419,7 +433,7 @@ class DependencyContainer: ObservableObject {
     }
 
     /// Updates the AI service used by the application
-    func updateAIService(_ newService: AIService) {
+    func updateAIService(_ newService: any AIService) {
         _aiService = newService
         // Update the existing conversation manager's AI service instead of creating a new one
         // to preserve loaded chat history
@@ -430,26 +444,26 @@ class DependencyContainer: ObservableObject {
 
     // MARK: - Stored Services
 
-    private let _errorManager: ErrorManagerProtocol
+    private let _errorManager: any ErrorManagerProtocol
     private let _eventBus: EventBus
     private let _commandRegistry: CommandRegistry
     private let _uiRegistry: UIRegistry
     private let _diagnosticsStore: DiagnosticsStore
     private let _ragTelemetryAggregator: RAGTelemetryAggregator
-    private let _uiService: UIServiceProtocol
-    private let _workspaceService: WorkspaceServiceProtocol
-    private let _fileEditorService: FileEditorServiceProtocol
+    private let _uiService: any UIServiceProtocol
+    private let _workspaceService: any WorkspaceServiceProtocol
+    private let _fileEditorService: any FileEditorServiceProtocol
     private let _fileSystemService: FileSystemService
-    private let _fileDialogService: FileDialogServiceProtocol
+    private let _fileDialogService: any FileDialogServiceProtocol
     private let _windowProvider: WindowProvider
     private let _unifiedLintingFramework: UnifiedLintingFramework
-    private var _aiService: AIService
-    private var _conversationManager: ConversationManagerProtocol
+    private var _aiService: any AIService
+    private var _conversationManager: any ConversationManagerProtocol
     private var _projectCoordinator: ProjectCoordinator
-    private let _activityCoordinator: AgentActivityCoordinating
+    private let _activityCoordinator: any AgentActivityCoordinating
     
     /// Accessor for activity coordinator (for integration with other services)
-    var activityCoordinator: AgentActivityCoordinating {
+    var activityCoordinator: any AgentActivityCoordinating {
         return _activityCoordinator
     }
 }

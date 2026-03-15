@@ -272,22 +272,11 @@ final class IndexStatusBarViewModel: ObservableObject {
 
     private func formatRemoteCost(providerName: String, costMicrodollars: Int?) -> String {
         guard let costMicrodollars else { return "" }
-        let costDollars = Double(costMicrodollars) / 1_000_000
-        if costDollars == 0 {
-            return "\(providerName) $0"
-        }
-        if costDollars < 0.01 {
-            return String(format: "%@ $%.4f", providerName, costDollars)
-        }
-        return String(format: "%@ $%.2f", providerName, costDollars)
+        return "\(providerName) \(CostDisplayFormatter.dollarAmount(fromMicrodollars: costMicrodollars))"
     }
 
     private func formatObservedSpend(providerName: String, accumulatedCostMicrodollars: Int) -> String {
         guard accumulatedCostMicrodollars > 0 else { return "" }
-        let costDollars = Double(accumulatedCostMicrodollars) / 1_000_000
-        if costDollars < 0.01 {
-            return String(format: "%@ spent $%.4f", providerName, costDollars)
-        }
-        return String(format: "%@ spent $%.2f", providerName, costDollars)
+        return "\(providerName) spent \(CostDisplayFormatter.dollarAmount(fromMicrodollars: accumulatedCostMicrodollars))"
     }
 }

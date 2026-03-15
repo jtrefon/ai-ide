@@ -27,6 +27,14 @@ struct AISettingsTab: View {
         }
     }
 
+    private var remoteProviderViewModels: [OpenRouterSettingsViewModel] {
+        [
+            openRouterViewModel,
+            alibabaViewModel,
+            kiloCodeViewModel
+        ]
+    }
+
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }
@@ -82,14 +90,15 @@ struct AISettingsTab: View {
             .padding(.top, 4)
         }
         .onAppear {
-            openRouterViewModel.loadApiKeyIfAvailable()
-            alibabaViewModel.loadApiKeyIfAvailable()
-            kiloCodeViewModel.loadApiKeyIfAvailable()
+            remoteProviderViewModels.forEach { $0.loadApiKeyIfAvailable() }
             Task {
-                async let _ = openRouterViewModel.loadModels()
-                async let _ = alibabaViewModel.loadModels()
-                async let _ = kiloCodeViewModel.loadModels()
-                _ = await ((), (), ())
+                await withTaskGroup(of: Void.self) { group in
+                    for viewModel in remoteProviderViewModels {
+                        group.addTask {
+                            await viewModel.loadModels()
+                        }
+                    }
+                }
             }
         }
     }
