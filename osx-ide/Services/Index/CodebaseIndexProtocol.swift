@@ -24,6 +24,7 @@ public protocol CodebaseIndexProtocol: Sendable {
         path: String, summary: String
     )]
     func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry]
+    func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult]
     func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry
     func getStats() async throws -> IndexStats
 }
@@ -107,6 +108,16 @@ extension CodebaseIndexProtocol {
             return .success(try await getMemories(tier: tier))
         } catch {
             return .failure(mapToAppError(error, context: "getMemories"))
+        }
+    }
+
+    public func getRelevantCodeChunksResult(userInput: String, limit: Int) async -> Result<
+        [CodeChunkSimilarityResult], AppError
+    > {
+        do {
+            return .success(try await getRelevantCodeChunks(userInput: userInput, limit: limit))
+        } catch {
+            return .failure(mapToAppError(error, context: "getRelevantCodeChunks"))
         }
     }
 

@@ -7,13 +7,15 @@ struct IndexStatusBarView: View {
     init(
         appState: AppState,
         codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
-        eventBus: EventBusProtocol
+        eventBus: EventBusProtocol,
+        refreshRemoteAIAccountBalance: @escaping @Sendable (_ runId: String?) async -> Void
     ) {
         self.appState = appState
         self._viewModel = StateObject(
             wrappedValue: IndexStatusBarViewModel(
                 codebaseIndexProvider: codebaseIndexProvider,
-                eventBus: eventBus
+                eventBus: eventBus,
+                refreshRemoteAIAccountBalance: refreshRemoteAIAccountBalance
             )
         )
     }
@@ -88,6 +90,17 @@ struct IndexStatusBarView: View {
         return displayNamesByIdentifier[normalizedIdentifier] ?? "Plain Text"
     }
 
+    @ViewBuilder
+    private func statusLabel(_ text: String, layoutPriority: Double = 0) -> some View {
+        if !text.isEmpty {
+            Text(text)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .layoutPriority(layoutPriority)
+        }
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             if viewModel.isIndexing {
@@ -139,17 +152,11 @@ struct IndexStatusBarView: View {
             }
 
             HStack(spacing: 6) {
-                if !viewModel.openRouterContextUsageText.isEmpty {
-                    Text(viewModel.openRouterContextUsageText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-
-                Text(viewModel.metricsText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
+                statusLabel(viewModel.openRouterContextUsageText)
+                statusLabel(viewModel.remoteAICostText)
+                statusLabel(viewModel.remoteAISpendText, layoutPriority: 1)
+                statusLabel(viewModel.remoteAIBalanceText, layoutPriority: 1)
+                statusLabel(viewModel.metricsText)
 
                 Button {
                     isShowingMetricsInfo.toggle()

@@ -8,6 +8,7 @@ internal struct OpenRouterChatResponse: Decodable {
 /// Streaming chunk response from OpenRouter
 internal struct OpenRouterChatResponseChunk: Decodable {
     let choices: [OpenRouterChatResponseChunkChoice]
+    let usage: OpenRouterChatUsage?
 }
 
 internal struct OpenRouterChatResponseChunkChoice: Decodable {
@@ -65,14 +66,40 @@ internal struct OpenRouterChatResponseChunkFunction: Decodable {
 }
 
 internal struct OpenRouterChatUsage: Decodable {
+    struct CostDetails: Decodable {
+        let upstreamInferenceCost: Decimal?
+
+        enum CodingKeys: String, CodingKey {
+            case upstreamInferenceCost = "upstream_inference_cost"
+        }
+    }
+
     let promptTokens: Int?
     let completionTokens: Int?
     let totalTokens: Int?
+    let inputTokens: Int?
+    let outputTokens: Int?
+    let cacheWriteTokens: Int?
+    let cacheHitTokens: Int?
+    let costMicrodollars: Int?
+    let cost: Decimal?
+    let costDetails: CostDetails?
+    let provider: String?
+    let isByok: Bool?
 
     enum CodingKeys: String, CodingKey {
         case promptTokens = "prompt_tokens"
         case completionTokens = "completion_tokens"
         case totalTokens = "total_tokens"
+        case inputTokens = "input_tokens"
+        case outputTokens = "output_tokens"
+        case cacheWriteTokens = "cache_write_tokens"
+        case cacheHitTokens = "cache_hit_tokens"
+        case costMicrodollars = "cost_microdollars"
+        case cost
+        case costDetails = "cost_details"
+        case provider
+        case isByok = "is_byok"
     }
 }
 

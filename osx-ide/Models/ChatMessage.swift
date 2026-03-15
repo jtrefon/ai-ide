@@ -27,6 +27,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
     public let mediaAttachments: [ChatMessageMediaAttachment]
     public let reasoning: String?
     public let codeContext: String?
+    public let billing: ChatMessageBillingContext?
     public let timestamp: Date
     public let isDraft: Bool // Marks temporary messages during streaming
 
@@ -42,6 +43,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         content: String,
         mediaAttachments: [ChatMessageMediaAttachment] = [],
         context: ChatMessageContentContext = ChatMessageContentContext(),
+        billing: ChatMessageBillingContext? = nil,
         tool: ChatMessageToolContext = ChatMessageToolContext(),
         isDraft: Bool = false
     ) {
@@ -51,6 +53,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         self.mediaAttachments = mediaAttachments
         self.reasoning = context.reasoning
         self.codeContext = context.codeContext
+        self.billing = billing
         self.timestamp = Date()
         self.isDraft = isDraft
         self.toolName = tool.toolName
@@ -67,6 +70,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         mediaAttachments: [ChatMessageMediaAttachment] = [],
         timestamp: Date,
         context: ChatMessageContentContext = ChatMessageContentContext(),
+        billing: ChatMessageBillingContext? = nil,
         tool: ChatMessageToolContext = ChatMessageToolContext(),
         isDraft: Bool = false
     ) {
@@ -76,6 +80,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         self.mediaAttachments = mediaAttachments
         self.reasoning = context.reasoning
         self.codeContext = context.codeContext
+        self.billing = billing
         self.timestamp = timestamp
         self.isDraft = isDraft
         self.toolName = tool.toolName

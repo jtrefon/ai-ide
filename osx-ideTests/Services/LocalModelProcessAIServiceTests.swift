@@ -42,6 +42,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
         private(set) var lastConversationId: String?
         private(set) var lastImageCount: Int?
         private(set) var lastVideoCount: Int?
+        private(set) var lastEnableThinking: Bool?
         private let response: AIServiceResponse
 
         init(response: AIServiceResponse = AIServiceResponse(content: "local-response", toolCalls: nil)) {
@@ -71,11 +72,24 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             lastConversationId = conversationId
             lastImageCount = userInput.images.count
             lastVideoCount = userInput.videos.count
+            lastEnableThinking = userInput.additionalContext?["enable_thinking"] as? Bool
             return response
         }
 
-        func snapshot() -> (URL?, [CapturedMessage]?, [ToolSpec]?, ToolCallFormat?, String?, Int?, Int?, String?, Int?, Int?) {
-            (lastModelDirectory, lastCapturedMessages, lastTools, lastToolCallFormat, lastRunId, lastContextLength, lastMaxOutputTokens, lastConversationId, lastImageCount, lastVideoCount)
+        func snapshot() -> (URL?, [CapturedMessage]?, [ToolSpec]?, ToolCallFormat?, String?, Int?, Int?, String?, Int?, Int?, Bool?) {
+            (
+                lastModelDirectory,
+                lastCapturedMessages,
+                lastTools,
+                lastToolCallFormat,
+                lastRunId,
+                lastContextLength,
+                lastMaxOutputTokens,
+                lastConversationId,
+                lastImageCount,
+                lastVideoCount,
+                lastEnableThinking
+            )
         }
     }
 
@@ -138,7 +152,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
 
         XCTAssertEqual(response.content, "local-response")
 
-        let (capturedDirectory, capturedMessages, capturedTools, capturedToolCallFormat, capturedRunId, capturedContextLength, capturedMaxOutputTokens, _, _, _) = generator.snapshot()
+        let (capturedDirectory, capturedMessages, capturedTools, capturedToolCallFormat, capturedRunId, capturedContextLength, capturedMaxOutputTokens, _, _, _, _) = generator.snapshot()
         XCTAssertEqual(capturedDirectory, modelDirectory)
         XCTAssertEqual(capturedRunId, runId)
         XCTAssertEqual(capturedContextLength, min(LocalModelFileStore.contextLength(for: model), 2048))
@@ -193,7 +207,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             projectRoot: modelDirectory
         ))
 
-        let (_, capturedMessages, _, _, _, _, _, _, _, _) = generator.snapshot()
+        let (_, capturedMessages, _, _, _, _, _, _, _, _, _) = generator.snapshot()
         let messages = try XCTUnwrap(capturedMessages)
         XCTAssertEqual(messages[0].role, "system")
         XCTAssertTrue(messages[0].content.contains("CUSTOM_SYSTEM_PROMPT"))
@@ -226,7 +240,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             stage: .tool_loop
         ))
 
-        let (_, capturedMessages, _, _, _, _, _, _, _, _) = generator.snapshot()
+        let (_, capturedMessages, _, _, _, _, _, _, _, _, _) = generator.snapshot()
         let messages = try XCTUnwrap(capturedMessages)
         XCTAssertEqual(messages[0].role, "system")
         XCTAssertFalse(messages[0].content.contains("<ide_reasoning>"))
@@ -300,13 +314,129 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             projectRoot: modelDirectory
         ))
 
-        let (_, capturedMessages, _, _, _, _, _, _, imageCount, videoCount) = generator.snapshot()
+        let (_, capturedMessages, _, _, _, _, _, _, imageCount, videoCount, _) = generator.snapshot()
         let messages = try XCTUnwrap(capturedMessages)
         XCTAssertEqual(messages.count, 2)
         XCTAssertEqual(messages[1].role, "user")
         XCTAssertEqual(messages[1].content, "Describe this image")
         XCTAssertEqual(imageCount, 1)
         XCTAssertEqual(videoCount, 0)
+    }
+
+    func testQwen35DisablesNativeThinkingWhenReasoningModeExcludesModelReasoning() async throws {
+        let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
+        let selectionStore = LocalModelSelectionStore()
+        await selectionStore.setSelectedModelId(selectedModelId)
+
+        let modelDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileStore = FakeFileStore(installed: true, directory: modelDirectory)
+        let generator = SpyGenerator()
+        let settingsLoader = StubSettingsLoader(settings: OpenRouterSettings(
+            apiKey: "",
+            model: "",
+            baseURL: OpenRouterSettings.empty.baseURL,
+            systemPrompt: "",
+            reasoningMode: .agent,
+            toolPromptMode: .fullStatic,
+            ragEnabledDuringToolLoop: true
+        ))
+
+        let service = LocalModelProcessAIService(
+            selectionStore: selectionStore,
+            fileStore: fileStore,
+            generator: generator,
+            settingsStore: settingsLoader,
+            memoryPressureObserverFactory: { _ in nil }
+        )
+
+        _ = try await service.sendMessage(AIServiceHistoryRequest(
+            messages: [ChatMessage(role: .user, content: "Say hello")],
+            context: nil,
+            tools: nil,
+            mode: .chat,
+            projectRoot: modelDirectory
+        ))
+
+        let (_, _, _, _, _, _, _, _, _, _, enableThinking) = generator.snapshot()
+        XCTAssertEqual(enableThinking, false)
+    }
+
+    func testQwen35SuppressesNativeThinkingDuringToolLoopEvenWhenModelReasoningEnabled() async throws {
+        let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
+        let selectionStore = LocalModelSelectionStore()
+        await selectionStore.setSelectedModelId(selectedModelId)
+
+        let modelDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileStore = FakeFileStore(installed: true, directory: modelDirectory)
+        let generator = SpyGenerator()
+        let settingsLoader = StubSettingsLoader(settings: OpenRouterSettings(
+            apiKey: "",
+            model: "",
+            baseURL: OpenRouterSettings.empty.baseURL,
+            systemPrompt: "",
+            reasoningMode: .modelAndAgent,
+            toolPromptMode: .fullStatic,
+            ragEnabledDuringToolLoop: true
+        ))
+
+        let service = LocalModelProcessAIService(
+            selectionStore: selectionStore,
+            fileStore: fileStore,
+            generator: generator,
+            settingsStore: settingsLoader,
+            memoryPressureObserverFactory: { _ in nil }
+        )
+
+        _ = try await service.sendMessage(AIServiceHistoryRequest(
+            messages: [ChatMessage(role: .user, content: "Use tools")],
+            context: nil,
+            tools: [NoopTool(name: "write_file")],
+            mode: .agent,
+            projectRoot: modelDirectory,
+            stage: .tool_loop
+        ))
+
+        let (_, _, _, _, _, _, _, _, _, _, enableThinking) = generator.snapshot()
+        XCTAssertEqual(enableThinking, false)
+    }
+
+    func testQwen35EnablesNativeThinkingWhenReasoningModeAllowsModelReasoning() async throws {
+        let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
+        let selectionStore = LocalModelSelectionStore()
+        await selectionStore.setSelectedModelId(selectedModelId)
+
+        let modelDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileStore = FakeFileStore(installed: true, directory: modelDirectory)
+        let generator = SpyGenerator()
+        let settingsLoader = StubSettingsLoader(settings: OpenRouterSettings(
+            apiKey: "",
+            model: "",
+            baseURL: OpenRouterSettings.empty.baseURL,
+            systemPrompt: "",
+            reasoningMode: .model,
+            toolPromptMode: .fullStatic,
+            ragEnabledDuringToolLoop: true
+        ))
+
+        let service = LocalModelProcessAIService(
+            selectionStore: selectionStore,
+            fileStore: fileStore,
+            generator: generator,
+            settingsStore: settingsLoader,
+            memoryPressureObserverFactory: { _ in nil }
+        )
+
+        _ = try await service.sendMessage(AIServiceHistoryRequest(
+            messages: [ChatMessage(role: .user, content: "Think first")],
+            context: nil,
+            tools: nil,
+            mode: .chat,
+            projectRoot: modelDirectory,
+            stage: .initial_response
+        ))
+
+        let (_, _, _, _, _, _, _, _, _, _, enableThinking) = generator.snapshot()
+        XCTAssertEqual(enableThinking, true)
     }
 
     func testSendMessagePreservesTextualToolLikeOutputWhenUsingSpyGenerator() async throws {

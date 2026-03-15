@@ -1,6 +1,14 @@
 import Foundation
 import CoreServices
 
+private final class ProjectRootFileWatcherCallbackBox {
+    weak var watcher: ProjectRootFileWatcherActor?
+
+    init(watcher: ProjectRootFileWatcherActor) {
+        self.watcher = watcher
+    }
+}
+
 /// File watcher that monitors project root for changes recursively using FSEvents.
 /// Uses an actor for thread-safe state management to avoid blocking UI.
 actor ProjectRootFileWatcherActor {
@@ -13,6 +21,7 @@ actor ProjectRootFileWatcherActor {
     private var scanTask: Task<Void, Never>?
     private var snapshot: [String: FileSnapshot] = [:]
     private var isActive = false
+    private var callbackBox: ProjectRootFileWatcherCallbackBox?
 
     init(
         rootURL: URL,
@@ -44,14 +53,20 @@ actor ProjectRootFileWatcherActor {
     }
     
     private func startWatching() async {
+        guard isActive else { return }
         let path = rootURL.path as CFString
         let pathsToWatch = [path] as CFArray
-        
+        let callbackBox = ProjectRootFileWatcherCallbackBox(watcher: self)
+        self.callbackBox = callbackBox
+
         var context = FSEventStreamContext(
             version: 0,
-            info: Unmanaged.passUnretained(self).toOpaque(),
+            info: Unmanaged.passRetained(callbackBox).toOpaque(),
             retain: nil,
-            release: nil,
+            release: { info in
+                guard let info else { return }
+                Unmanaged<ProjectRootFileWatcherCallbackBox>.fromOpaque(info).release()
+            },
             copyDescription: nil
         )
 
@@ -63,7 +78,11 @@ actor ProjectRootFileWatcherActor {
             eventFlags,
             eventIds
         ) in
-            let watcher = Unmanaged<ProjectRootFileWatcherActor>.fromOpaque(clientCallBackInfo!).takeUnretainedValue()
+            guard let clientCallBackInfo else { return }
+            let callbackBox = Unmanaged<ProjectRootFileWatcherCallbackBox>
+                .fromOpaque(clientCallBackInfo)
+                .takeUnretainedValue()
+            guard let watcher = callbackBox.watcher else { return }
             Task {
                 await watcher.scheduleScan()
             }
@@ -79,7 +98,10 @@ actor ProjectRootFileWatcherActor {
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
             0.1, // Latency
             flags
-        ) else { return }
+        ) else {
+            self.callbackBox = nil
+            return
+        }
 
         self.stream = stream
         FSEventStreamSetDispatchQueue(stream, DispatchQueue.global(qos: .utility))
@@ -96,12 +118,14 @@ actor ProjectRootFileWatcherActor {
             FSEventStreamRelease(stream)
             self.stream = nil
         }
-        
+
+        callbackBox = nil
         scanTask?.cancel()
         scanTask = nil
     }
 
     private func scheduleScan() {
+        guard isActive else { return }
         scanTask?.cancel()
         scanTask = Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }

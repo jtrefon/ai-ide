@@ -164,8 +164,34 @@ public struct MemorySimilarityResult: Sendable {
     }
 }
 
+public struct CodeChunkSimilarityResult: Sendable {
+    public let filePath: String
+    public let lineStart: Int
+    public let lineEnd: Int
+    public let snippet: String
+    public let similarityScore: Double
+
+    public init(
+        filePath: String,
+        lineStart: Int,
+        lineEnd: Int,
+        snippet: String,
+        similarityScore: Double
+    ) {
+        self.filePath = filePath
+        self.lineStart = lineStart
+        self.lineEnd = lineEnd
+        self.snippet = snippet
+        self.similarityScore = similarityScore
+    }
+}
+
 /// Protocol for services that can search memories by semantic similarity.
 /// NOT isolated to @MainActor to avoid blocking UI during embedding generation.
 public protocol MemoryEmbeddingSearchProviding: Sendable {
     func getRelevantMemories(userInput: String, limit: Int) async throws -> [MemorySimilarityResult]
+}
+
+public protocol CodeChunkEmbeddingSearchProviding: Sendable {
+    func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult]
 }

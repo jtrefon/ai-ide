@@ -218,6 +218,12 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             return longTermMemories
         }
 
+        func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult] {
+            _ = userInput
+            _ = limit
+            return []
+        }
+
         func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
             _ = content
             _ = tier

@@ -251,6 +251,13 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 )
             }
             .store(in: &cancellables)
+
+        eventBus
+            .subscribe(to: OpenRouterUsageUpdatedEvent.self) { [weak self] event in
+                guard let self else { return }
+                self.handleOpenRouterUsageUpdated(event)
+            }
+            .store(in: &cancellables)
     }
 
     private func providerIssueTypeLabel(for statusKind: ProviderIssueStatusEvent.StatusKind) -> String {
@@ -353,6 +360,42 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private func handleLocalModelStreamingStatus(_ event: LocalModelStreamingStatusEvent) {
         guard let runId = activeStreamingRunId, runId == event.runId else { return }
         appendToLiveModelStatusPreview(event.message)
+    }
+
+    private func handleOpenRouterUsageUpdated(_ event: OpenRouterUsageUpdatedEvent) {
+        guard let runId = event.runId, runId == activeStreamingRunId else { return }
+        guard let draftId = draftAssistantMessageId else { return }
+        guard let draftMessage = historyCoordinator.getDraftMessage(id: draftId) else { return }
+
+        historyCoordinator.upsertDraftMessage(
+            ChatMessage(
+                id: draftMessage.id,
+                role: draftMessage.role,
+                content: draftMessage.content,
+                mediaAttachments: draftMessage.mediaAttachments,
+                timestamp: draftMessage.timestamp,
+                context: ChatMessageContentContext(
+                    reasoning: draftMessage.reasoning,
+                    codeContext: draftMessage.codeContext
+                ),
+                billing: ChatMessageBillingContext(
+                    requestCostMicrodollars: event.usage.costMicrodollars,
+                    providerName: event.providerName,
+                    modelId: event.modelId,
+                    runId: event.runId
+                ),
+                tool: ChatMessageToolContext(
+                    toolName: draftMessage.toolName,
+                    toolStatus: draftMessage.toolStatus,
+                    target: ToolInvocationTarget(
+                        targetFile: draftMessage.targetFile,
+                        toolCallId: draftMessage.toolCallId
+                    ),
+                    toolCalls: draftMessage.toolCalls ?? []
+                ),
+                isDraft: draftMessage.isDraft
+            )
+        )
     }
 
     private func setupObservation() {
@@ -635,6 +678,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 self.resetStreamingDraftState()
                 self.providerIssue = nil
                 self.isSending = false
+                self.eventBus.publish(ConversationRunCompletedEvent(runId: runId))
             } catch {
                 // Clean up draft message on error
                 if let draftId = self.draftAssistantMessageId {

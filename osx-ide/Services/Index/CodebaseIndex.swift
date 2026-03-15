@@ -97,7 +97,11 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         // CoreML model loading can take MINUTES on first run (NPU compilation).
         // The async factory method will replace this with CoreML if available.
         self.memoryEmbeddingGenerator = HashingMemoryEmbeddingGenerator()
-        self.indexer = IndexerActor(database: database, config: resolvedConfig.configuration)
+        self.indexer = IndexerActor(
+            database: database,
+            embeddingGenerator: memoryEmbeddingGenerator,
+            config: resolvedConfig.configuration
+        )
         self.memoryManager = MemoryManager(
             database: database,
             eventBus: eventBus,
@@ -229,7 +233,11 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
 
         Swift.print("[DIAG] CodebaseIndex.init creating IndexerActor...")
         let indexerStart = Date()
-        self.indexer = IndexerActor(database: database, config: config.configuration)
+        self.indexer = IndexerActor(
+            database: database,
+            embeddingGenerator: embeddingGenerator,
+            config: config.configuration
+        )
         Swift.print(
             "[DIAG] CodebaseIndex.init IndexerActor created in \(String(format: "%.2f", Date().timeIntervalSince(indexerStart) * 1000))ms"
         )
@@ -273,6 +281,10 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         self.memoryEmbeddingGenerator = generator
         Task {
             await memoryManager.updateEmbeddingGenerator(generator)
+            await indexer.updateEmbeddingGenerator(generator)
+            await MainActor.run {
+                self.reindexProject()
+            }
         }
     }
 
@@ -297,6 +309,8 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         let resolvedConfig = IndexConfiguration(
             enabled: config.enabled,
             debounceMs: config.debounceMs,
+            bulkOperationDebounceMs: config.bulkOperationDebounceMs,
+            bulkOperationThreshold: config.bulkOperationThreshold,
             excludePatterns: resolvedExcludePatterns,
             storageDirectoryPath: config.storageDirectoryPath
         )

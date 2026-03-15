@@ -17,7 +17,7 @@ extension OpenRouterAIService {
                 projectRoot: request.projectRoot,
                 reasoningMode: settings.reasoningMode,
                 stage: request.stage,
-                useNativeReasoning: true
+                useNativeReasoning: supportsNativeReasoning
             )
         )
 
@@ -36,7 +36,9 @@ extension OpenRouterAIService {
             finalMessages: finalMessages,
             toolDefinitions: toolDefinitions,
             toolChoice: toolChoice,
-            nativeReasoningConfiguration: nativeReasoningConfiguration(for: settings.reasoningMode)
+            nativeReasoningConfiguration: supportsNativeReasoning
+                ? nativeReasoningConfiguration(for: settings.reasoningMode)
+                : nil
         )
     }
 

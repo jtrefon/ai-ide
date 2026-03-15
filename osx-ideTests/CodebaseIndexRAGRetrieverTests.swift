@@ -153,6 +153,28 @@ final class CodebaseIndexRAGRetrieverTests: XCTestCase {
         XCTAssertEqual(result.memoryLines, ["- Semantic memory"])
     }
 
+    func testRetrieveSegmentLinesPreferSemanticChunkMatchesWhenAvailable() async {
+        let index = FakeRAGCodebaseIndex()
+        index.stubbedRelevantCodeChunks = [
+            CodeChunkSimilarityResult(
+                filePath: "Sources/RAG.swift",
+                lineStart: 40,
+                lineEnd: 64,
+                snippet: "func retrieveRelevantContext() { semanticSearch() }",
+                similarityScore: 0.93
+            )
+        ]
+
+        let retriever = CodebaseIndexRAGRetriever(index: index)
+        let result = await retriever.retrieve(
+            RAGRetrievalRequest(userInput: "semantic search context", projectRoot: nil)
+        )
+
+        XCTAssertEqual(result.segmentLines.count, 1)
+        XCTAssertTrue(result.segmentLines[0].contains("Sources/RAG.swift"))
+        XCTAssertTrue(result.segmentLines[0].contains("semanticSearch"))
+    }
+
     // MARK: - Combined retrieval
 
     func testFullRetrievalCombinesAllSources() async {
@@ -196,6 +218,7 @@ private final class FakeRAGCodebaseIndex: CodebaseIndexProtocol {
     var stubbedSymbolResults: [SymbolSearchResult] = []
     var stubbedMemories: [MemoryEntry] = []
     var stubbedRelevantMemories: [MemorySimilarityResult] = []
+    var stubbedRelevantCodeChunks: [CodeChunkSimilarityResult] = []
 
     func start() {}
     func stop() {}
@@ -223,6 +246,11 @@ private final class FakeRAGCodebaseIndex: CodebaseIndexProtocol {
 
     func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry] {
         stubbedMemories
+    }
+
+    func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult] {
+        _ = userInput
+        return Array(stubbedRelevantCodeChunks.prefix(max(1, limit)))
     }
 
     func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {

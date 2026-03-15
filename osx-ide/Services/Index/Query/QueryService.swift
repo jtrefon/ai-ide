@@ -38,4 +38,16 @@ public struct QueryService: Sendable {
             tier: tier
         )
     }
+
+    public func searchSimilarCodeChunks(
+        modelId: String,
+        queryVector: [Float],
+        limit: Int
+    ) async throws -> [CodeChunkSimilarityResult] {
+        try await database.searchSimilarCodeChunks(
+            modelId: modelId,
+            queryVector: queryVector,
+            limit: limit
+        )
+    }
 }

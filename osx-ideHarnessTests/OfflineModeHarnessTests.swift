@@ -108,8 +108,12 @@ final class OfflineModeHarnessTests: XCTestCase {
     func testOfflineHarnessMinimalToolSubsetCanCreateFileThroughLocalMLX() async throws {
         let projectRoot = makeTempDir(prefix: "offline_minimal_tools")
         let container = try await makeOfflineContainer(projectRoot: projectRoot)
-        let sendCoordinator = makeMinimalSendCoordinator(projectRoot: projectRoot, container: container)
         let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot, seedGreeting: false)
+        let sendCoordinator = makeMinimalSendCoordinator(
+            projectRoot: projectRoot,
+            container: container,
+            historyCoordinator: historyCoordinator
+        )
         let conversationId = historyCoordinator.currentConversationId
         let fileName = "minimal-offline-\(UUID().uuidString).txt"
 
@@ -144,6 +148,36 @@ final class OfflineModeHarnessTests: XCTestCase {
         XCTAssertTrue(
             listedFiles.contains(fileName),
             "Expected minimal local MLX tool subset to create \(fileName). Files: \(listedFiles)"
+        )
+    }
+
+    func testOfflineHarnessSimpleGreetingProducesAssistantReply() async throws {
+        let runtime = try await makeRuntime(offlineModeEnabled: true)
+        let manager = runtime.manager
+        manager.currentMode = .chat
+
+        manager.currentInput = "Reply with exactly one short greeting sentence and stop."
+        manager.sendMessage()
+
+        let timedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 30)
+        XCTAssertFalse(timedOut, "Expected offline local greeting run to finish")
+
+        let completedToolExecutions = manager.messages.filter { $0.isToolExecution && $0.toolStatus == .completed }
+        let completedToolNames = completedToolExecutions.compactMap(\.toolName)
+        XCTAssertTrue(
+            completedToolExecutions.isEmpty,
+            "Expected simple greeting scenario to complete without tool executions. Tools: \(completedToolNames)"
+        )
+
+        let assistantMessages = manager.messages.filter { $0.role == .assistant && !$0.isDraft }
+        let finalAssistantContent = assistantMessages
+            .last?
+            .content
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        XCTAssertFalse(
+            finalAssistantContent.isEmpty,
+            "Expected offline local greeting run to produce assistant text"
         )
     }
 
@@ -425,8 +459,8 @@ final class OfflineModeHarnessTests: XCTestCase {
             let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmedValue.isEmpty ? nil : trimmedValue
         }
- 
-        if let requestedModelId = explicitCandidateModelIds.first(where: { LocalModelCatalog.model(id: $0) != nil }) {
+
+        if let requestedModelId = explicitCandidateModelIds.first {
             guard let requestedModel = LocalModelCatalog.model(id: requestedModelId) else {
                 throw NSError(
                     domain: "OfflineModeHarnessTests",
@@ -450,9 +484,16 @@ final class OfflineModeHarnessTests: XCTestCase {
             return preferredModel.id
         }
 
-        if let preferredInstalledModel = LocalModelCatalog.model(id: "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"),
-           LocalModelFileStore.isModelInstalled(preferredInstalledModel) {
-            return preferredInstalledModel.id
+        let preferredInstalledFallbackModelIds = [
+            "mlx-community/Qwen3.5-4B-MLX-4bit@main",
+            "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
+        ]
+
+        for fallbackModelId in preferredInstalledFallbackModelIds {
+            if let installedModel = LocalModelCatalog.model(id: fallbackModelId),
+               LocalModelFileStore.isModelInstalled(installedModel) {
+                return installedModel.id
+            }
         }
 
         if let installedModel = LocalModelCatalog.allModels().first(where: { LocalModelFileStore.isModelInstalled($0) }) {
@@ -469,10 +510,22 @@ final class OfflineModeHarnessTests: XCTestCase {
     private func preferredOfflineHarnessModelId(settingsStore: SettingsStore) -> String? {
         let selectedLocalModelId = settingsStore.string(forKey: "LocalModel.SelectedId")?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if let selectedLocalModelId, !selectedLocalModelId.isEmpty {
-            return selectedLocalModelId
+        let candidateModelIds = [
+            "mlx-community/Qwen3.5-4B-MLX-4bit@main",
+            selectedLocalModelId
+        ]
+        .compactMap { value -> String? in
+            guard let value else { return nil }
+            return value.isEmpty ? nil : value
         }
+
+        for candidateModelId in candidateModelIds {
+            if let model = LocalModelCatalog.model(id: candidateModelId),
+               LocalModelFileStore.isModelInstalled(model) {
+                return model.id
+            }
+        }
+
         return nil
     }
 
@@ -489,6 +542,9 @@ final class OfflineModeHarnessTests: XCTestCase {
                 userInfo: [NSLocalizedDescriptionKey: "Unexpected conversation manager type"]
             )
         }
+
+        manager.startNewConversation()
+        manager.clearConversation()
 
         return Runtime(manager: manager)
     }
@@ -552,9 +608,9 @@ final class OfflineModeHarnessTests: XCTestCase {
 
     private func makeMinimalSendCoordinator(
         projectRoot: URL,
-        container: DependencyContainer
+        container: DependencyContainer,
+        historyCoordinator: ChatHistoryCoordinator
     ) -> ConversationSendCoordinator {
-        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot, seedGreeting: false)
         let aiInteractionCoordinator = AIInteractionCoordinator(
             aiService: container.aiService,
             codebaseIndex: nil,

@@ -32,6 +32,10 @@ final class FinalResponseHandler {
             return response
         }
 
+        if mode == .chat && !draft.isEmpty && toolResults.isEmpty {
+            return response
+        }
+
         if mode == .agent && !draft.isEmpty {
             let hasUnresolvedToolCalls = response.toolCalls?.isEmpty == false
             let isGenericContent = isGenericStatusMessage(draft)
@@ -344,6 +348,7 @@ final class FinalResponseHandler {
         if let draftIdString = draftAssistantMessageId,
             let draftId = UUID(uuidString: draftIdString)
         {
+            let draftMessage = historyCoordinator.getDraftMessage(id: draftId)
             let lastMessage = historyCoordinator.messages.last
             let isDraftAtEnd = (lastMessage?.id == draftId && lastMessage?.role == MessageRole.assistant)
 
@@ -359,7 +364,8 @@ final class FinalResponseHandler {
                     ChatMessage(
                         role: MessageRole.assistant,
                         content: displayContent,
-                        context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
+                        context: ChatMessageContentContext(reasoning: splitFinal.reasoning),
+                        billing: draftMessage?.billing
                     )
                 )
             }
@@ -368,7 +374,10 @@ final class FinalResponseHandler {
                 ChatMessage(
                     role: MessageRole.assistant,
                     content: displayContent,
-                    context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
+                    context: ChatMessageContentContext(reasoning: splitFinal.reasoning),
+                    billing: historyCoordinator.messages.reversed().first {
+                        $0.role == .assistant && $0.isDraft
+                    }?.billing
                 )
             )
         }

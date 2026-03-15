@@ -7,6 +7,14 @@ SCHEME="osx-ide"
 DERIVED_DATA_PATH_APP="./.build"
 DERIVED_DATA_PATH_TEST="./.build-tests"
 
+prepare_derived_data_packages() {
+    local derived_data_path=$1
+    xcodebuild -resolvePackageDependencies \
+        -project "$PROJECT_NAME.xcodeproj" \
+        -scheme "$SCHEME" \
+        -derivedDataPath "$derived_data_path" >/dev/null
+}
+
 collect_descendant_pids() {
     local root_pid=$1
     local children
@@ -17,12 +25,83 @@ collect_descendant_pids() {
     done
 }
 
+collect_guarded_family_pids() {
+    local root_pid=$1
+    local root_pgid
+    local derived_data_root
+    root_pgid=$(ps -o pgid= -p "$root_pid" 2>/dev/null | awk '{print $1}')
+    derived_data_root=$(cd "$DERIVED_DATA_PATH_TEST" 2>/dev/null && pwd -P)
+
+    {
+        echo "$root_pid"
+        collect_descendant_pids "$root_pid"
+        if [ -n "$root_pgid" ]; then
+            ps -axo pid=,pgid=,comm= | awk -v pgid="$root_pgid" -v project_name="$PROJECT_NAME" -v derived_data_root="$derived_data_root" '
+                function basename(path, parts, count) {
+                    count = split(path, parts, "/")
+                    return parts[count]
+                }
+
+                {
+                    full_command = $3
+                    command_name = basename(full_command)
+                    is_project_process = 0
+                    is_test_tool = 0
+                    is_derived_data_app = 0
+
+                    if (command_name == project_name ||
+                        command_name == project_name "-Runner" ||
+                        command_name == project_name "Tests" ||
+                        command_name == project_name "HarnessTests") {
+                        is_project_process = 1
+                    }
+
+                    if (command_name == "xcodebuild" || command_name == "xctest") {
+                        is_test_tool = 1
+                    }
+
+                    if (derived_data_root != "" &&
+                        index(full_command, derived_data_root) == 1 &&
+                        is_project_process == 1) {
+                        is_derived_data_app = 1
+                    }
+
+                    if (($2 == pgid && (is_test_tool == 1 || is_project_process == 1)) || is_derived_data_app == 1) {
+                        print $1
+                    }
+                }
+            '
+        fi
+    } | awk 'NF { if (!seen[$1]++) print $1 }'
+}
+
+describe_guarded_family() {
+    local root_pid=$1
+    local family_pids
+    family_pids=$(collect_guarded_family_pids "$root_pid" | paste -sd, -)
+    if [ -z "$family_pids" ]; then
+        return
+    fi
+
+    ps -axo pid=,ppid=,pgid=,rss=,comm= | awk -v family_csv="$family_pids" '
+        BEGIN {
+            split(family_csv, pids, ",")
+            for (pid_index in pids) {
+                tracked[pids[pid_index]] = 1
+            }
+        }
+        tracked[$1] {
+            printf "%s(ppid=%s,pgid=%s,rss_mb=%d,comm=%s)", $1, $2, $3, int($4 / 1024), $5
+        }
+    ' | paste -sd';' -
+}
+
 sum_process_tree_rss_mb() {
     local root_pid=$1
     local rss_kb=0
     local pid
 
-    for pid in "$root_pid" $(collect_descendant_pids "$root_pid"); do
+    for pid in $(collect_guarded_family_pids "$root_pid"); do
         local pid_rss
         pid_rss=$(ps -o rss= -p "$pid" 2>/dev/null | awk '{s+=$1} END {print s+0}')
         rss_kb=$((rss_kb + pid_rss))
@@ -35,13 +114,13 @@ kill_process_tree() {
     local root_pid=$1
     local pid
 
-    for pid in "$root_pid" $(collect_descendant_pids "$root_pid"); do
+    for pid in $(collect_guarded_family_pids "$root_pid"); do
         kill -TERM "$pid" 2>/dev/null || true
     done
 
     sleep 2
 
-    for pid in "$root_pid" $(collect_descendant_pids "$root_pid"); do
+    for pid in $(collect_guarded_family_pids "$root_pid"); do
         kill -KILL "$pid" 2>/dev/null || true
     done
 }
@@ -73,8 +152,10 @@ run_with_memory_guard() {
     (
         while kill -0 "$guarded_pid" 2>/dev/null; do
             local rss_mb
+            local family_description
             rss_mb=$(sum_process_tree_rss_mb "$guarded_pid")
-            echo "[harness-memory] pid=$guarded_pid rss_mb=$rss_mb limit_mb=$rss_limit_mb"
+            family_description=$(describe_guarded_family "$guarded_pid")
+            echo "[harness-memory] pid=$guarded_pid rss_mb=$rss_mb limit_mb=$rss_limit_mb family=${family_description:-unavailable}"
 
             if [ "$rss_mb" -ge "$rss_limit_mb" ]; then
                 echo "[harness-memory] limit exceeded, terminating harness test process tree"
@@ -149,6 +230,7 @@ launch_app() {
 run_tests() {
     local suite=$1
     echo "Running unit tests..."
+    prepare_derived_data_packages "$DERIVED_DATA_PATH_TEST"
     if [ -n "$suite" ]; then
         if [ "$suite" = "json" ]; then
             suite="JSONHighlighterTests"
@@ -175,6 +257,7 @@ run_tests() {
 run_harness() {
     local suite=$1
     echo "Running headless harness tests..."
+    prepare_derived_data_packages "$DERIVED_DATA_PATH_TEST"
     local harness_memory_limit_gb="${HARNESS_MAX_RSS_GB:-6}"
     echo "Harness memory guard enabled: ${harness_memory_limit_gb}GB limit"
     local harness_memory_limit_mb=$((harness_memory_limit_gb * 1024))
@@ -297,6 +380,7 @@ run_harness_offline() {
 run_e2e() {
     local suite=$1
     echo "Running UI tests..."
+    prepare_derived_data_packages "$DERIVED_DATA_PATH_TEST"
     if [ -n "$suite" ]; then
         if [ "$suite" = "json" ]; then
             suite="JSONHighlighterUITests"

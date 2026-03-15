@@ -68,13 +68,15 @@ actor OpenRouterProviderRateLimiter {
     }
 }
 
-actor OpenRouterAIService: AIService {
+actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
     internal let settingsStore: any OpenRouterSettingsLoading
     internal let client: OpenRouterAPIClient
     private let eventBus: EventBusProtocol
     private var contextLengthByModelId: [String: Int] = [:]
+    private var pricingByModelId: [String: OpenRouterModel.Pricing] = [:]
     private let providerName: String
     private let supportsStreamingWithTools: Bool
+    internal let supportsNativeReasoning: Bool
     
     // Rate limiting to prevent 421 errors
     private var minRequestInterval: TimeInterval = 0.5 // 500ms between requests
@@ -91,6 +93,7 @@ actor OpenRouterAIService: AIService {
         eventBus: EventBusProtocol,
         providerName: String = "OpenRouter",
         supportsStreamingWithTools: Bool = true,
+        supportsNativeReasoning: Bool = true,
         testConfigurationProvider: TestConfigurationProvider = TestConfigurationProvider.shared
     ) {
         self.settingsStore = settingsStore
@@ -98,6 +101,7 @@ actor OpenRouterAIService: AIService {
         self.eventBus = eventBus
         self.providerName = providerName
         self.supportsStreamingWithTools = supportsStreamingWithTools
+        self.supportsNativeReasoning = supportsNativeReasoning
         self.testConfigurationProvider = testConfigurationProvider
     }
 
@@ -123,6 +127,9 @@ actor OpenRouterAIService: AIService {
 
         await logRequestStart(RequestStartContext(
             requestId: preparation.requestId,
+            providerName: providerName,
+            baseURL: preparation.settings.baseURL,
+            streaming: true,
             model: preparation.settings.model,
             messageCount: preparation.finalMessages.count,
             toolCount: preparation.toolDefinitions?.count ?? 0,
@@ -152,6 +159,7 @@ actor OpenRouterAIService: AIService {
         // Collect streaming chunks using a thread-safe wrapper
         final class ChunkCollector: @unchecked Sendable {
             var chunks: [String] = []
+            var usage: OpenRouterChatUsage?
             
             struct ToolCallDraft {
                 var id: String
@@ -184,8 +192,14 @@ actor OpenRouterAIService: AIService {
                     toolCallsDrafts[call.index] = draft
                 }
             }
+
+            func setUsage(_ usage: OpenRouterChatUsage) {
+                lock.lock()
+                defer { lock.unlock() }
+                self.usage = usage
+            }
             
-            func getResults() -> (content: String, toolCalls: [AIToolCall]?) {
+            func getResults() -> (content: String, toolCalls: [AIToolCall]?, usage: OpenRouterChatUsage?) {
                 lock.lock()
                 defer { lock.unlock() }
                 let content = chunks.joined()
@@ -200,7 +214,7 @@ actor OpenRouterAIService: AIService {
                 }
                 
                 let tc = toolCalls.isEmpty ? nil : toolCalls
-                return (content, tc)
+                return (content, tc, usage)
             }
 
             private static func parseToolArguments(from raw: String) -> [String: Any]? {
@@ -236,11 +250,7 @@ actor OpenRouterAIService: AIService {
         // Apply rate limiting to prevent 421 errors
         try await enforceRateLimit()
 
-        let requestContext = OpenRouterAPIClient.RequestContext(
-            baseURL: preparation.settings.baseURL,
-            appName: "OSX IDE",
-            referer: ""
-        )
+        let requestContext = requestContext(baseURL: preparation.settings.baseURL)
 
         do {
             try await client.chatCompletionStreaming(
@@ -253,6 +263,9 @@ actor OpenRouterAIService: AIService {
                 // Parse the chunk
                 if let chunkData = chunkJson.data(using: .utf8),
                    let chunk = try? JSONDecoder().decode(OpenRouterChatResponseChunk.self, from: chunkData) {
+                    if let usage = chunk.usage {
+                        collector.setUsage(usage)
+                    }
                     if let delta = chunk.choices.first?.delta {
                         if let content = delta.content {
                             collector.appendChunk(content)
@@ -277,14 +290,31 @@ actor OpenRouterAIService: AIService {
 
         // Get collected results
         let results = collector.getResults()
-        let fullContent = results.content
-        let toolCalls = results.toolCalls
+        let recoveredToolCalls = recoverFallbackToolCalls(
+            from: results.content,
+            structuredToolCalls: results.toolCalls,
+            toolsWereProvided: preparation.toolDefinitions?.isEmpty == false
+        )
+        let displayContent = contentExcludingRecoveredToolCalls(
+            from: results.content,
+            recoveredToolCalls: recoveredToolCalls
+        )
+        let fullContent = sanitizeAssistantContent(displayContent)
+        if let usage = results.usage {
+            try await publishUsageUpdateIfAvailable(
+                usage: usage,
+                modelId: preparation.settings.model,
+                apiKey: preparation.settings.apiKey,
+                baseURL: preparation.settings.baseURL,
+                runId: request.runId
+            )
+        }
 
         // Log success
         await logRequestSuccess(
             requestId: preparation.requestId,
-            contentLength: fullContent.count,
-            toolCalls: toolCalls?.count ?? 0,
+            contentLength: fullContent?.count ?? 0,
+            toolCalls: recoveredToolCalls?.count ?? 0,
             responseBytes: 0
         )
 
@@ -293,7 +323,7 @@ actor OpenRouterAIService: AIService {
 
         return AIServiceResponse(
             content: fullContent,
-            toolCalls: toolCalls
+            toolCalls: recoveredToolCalls
         )
     }
 
@@ -350,6 +380,9 @@ actor OpenRouterAIService: AIService {
 
         await logRequestStart(RequestStartContext(
             requestId: preparation.requestId,
+            providerName: providerName,
+            baseURL: preparation.settings.baseURL,
+            streaming: false,
             model: preparation.settings.model,
             messageCount: preparation.finalMessages.count,
             toolCount: preparation.toolDefinitions?.count ?? 0,
@@ -388,27 +421,14 @@ actor OpenRouterAIService: AIService {
             throw AppError.aiServiceError("OpenRouter response was empty.")
         }
 
-        if let usage = response.usage,
-           let promptTokens = usage.promptTokens,
-           let completionTokens = usage.completionTokens,
-           let totalTokens = usage.totalTokens {
-            let contextLength = try? await fetchContextLength(
+        if let usage = response.usage {
+            try await publishUsageUpdateIfAvailable(
+                usage: usage,
                 modelId: preparation.settings.model,
                 apiKey: preparation.settings.apiKey,
-                baseURL: preparation.settings.baseURL
+                baseURL: preparation.settings.baseURL,
+                runId: request.runId
             )
-            let event = OpenRouterUsageUpdatedEvent(
-                modelId: preparation.settings.model,
-                usage: OpenRouterUsageUpdatedEvent.Usage(
-                    promptTokens: promptTokens,
-                    completionTokens: completionTokens,
-                    totalTokens: totalTokens
-                ),
-                contextLength: contextLength
-            )
-            await MainActor.run {
-                eventBus.publish(event)
-            }
         }
 
         await logRequestSuccess(
@@ -421,12 +441,20 @@ actor OpenRouterAIService: AIService {
         await Self.providerRateLimiter.registerSuccess()
         publishProviderIssueResolved()
 
-        let resolvedToolCalls = request.tools?.isEmpty == false
-            ? choice.message.toolCalls
-            : nil
+        let resolvedToolCalls = recoverFallbackToolCalls(
+            from: choice.message.content,
+            structuredToolCalls: request.tools?.isEmpty == false ? choice.message.toolCalls : nil,
+            toolsWereProvided: request.tools?.isEmpty == false
+        )
+        let sanitizedContent = sanitizeAssistantContent(
+            contentExcludingRecoveredToolCalls(
+                from: choice.message.content,
+                recoveredToolCalls: resolvedToolCalls
+            )
+        )
 
         return AIServiceResponse(
-            content: choice.message.content,
+            content: sanitizedContent,
             toolCalls: resolvedToolCalls
         )
     }
@@ -435,11 +463,7 @@ actor OpenRouterAIService: AIService {
         if let cached = contextLengthByModelId[modelId] {
             return cached
         }
-        let requestContext = OpenRouterAPIClient.RequestContext(
-            baseURL: baseURL,
-            appName: "OSX IDE",
-            referer: ""
-        )
+        let requestContext = requestContext(baseURL: baseURL)
         let models = try await client.fetchModels(apiKey: apiKey, context: requestContext)
         guard let model = models.first(where: { $0.id == modelId }) else {
             return nil
@@ -447,7 +471,136 @@ actor OpenRouterAIService: AIService {
         if let contextLength = model.contextLength {
             contextLengthByModelId[modelId] = contextLength
         }
+        if let pricing = model.pricing {
+            pricingByModelId[modelId] = pricing
+        }
         return model.contextLength
+    }
+
+    private func publishUsageUpdateIfAvailable(
+        usage: OpenRouterChatUsage,
+        modelId: String,
+        apiKey: String,
+        baseURL: String,
+        runId: String?
+    ) async throws {
+        guard let normalizedUsage = normalizeUsage(usage) else {
+            return
+        }
+
+        let estimatedCostMicrodollars = try? await estimateCostMicrodollars(
+            modelId: modelId,
+            promptTokens: normalizedUsage.promptTokens,
+            completionTokens: normalizedUsage.completionTokens,
+            apiKey: apiKey,
+            baseURL: baseURL
+        )
+        let costMicrodollars = resolvedCostMicrodollars(
+            usage: usage,
+            fallback: estimatedCostMicrodollars
+        )
+        let accountBalanceMicrodollars = try? await fetchAccountBalanceMicrodollarsIfAvailable(
+            apiKey: apiKey,
+            baseURL: baseURL
+        )
+        if let accountBalanceMicrodollars {
+            await MainActor.run {
+                eventBus.publish(RemoteAIAccountBalanceUpdatedEvent(
+                    providerName: providerName,
+                    modelId: modelId,
+                    runId: runId,
+                    accountBalanceMicrodollars: accountBalanceMicrodollars
+                ))
+            }
+        }
+        let contextLength = try? await fetchContextLength(
+            modelId: modelId,
+            apiKey: apiKey,
+            baseURL: baseURL
+        )
+        let event = OpenRouterUsageUpdatedEvent(
+            providerName: providerName,
+            modelId: modelId,
+            runId: runId,
+            usage: OpenRouterUsageUpdatedEvent.Usage(
+                promptTokens: normalizedUsage.promptTokens,
+                completionTokens: normalizedUsage.completionTokens,
+                totalTokens: normalizedUsage.totalTokens,
+                costMicrodollars: costMicrodollars,
+                accountBalanceMicrodollars: accountBalanceMicrodollars
+            ),
+            contextLength: contextLength
+        )
+        await MainActor.run {
+            eventBus.publish(event)
+        }
+    }
+
+    private func normalizeUsage(_ usage: OpenRouterChatUsage) -> (promptTokens: Int, completionTokens: Int, totalTokens: Int)? {
+        let promptTokens = usage.promptTokens ?? usage.inputTokens
+        let completionTokens = usage.completionTokens ?? usage.outputTokens
+        let totalTokens = usage.totalTokens ?? {
+            guard let inputTokens = usage.inputTokens, let outputTokens = usage.outputTokens else {
+                return nil
+            }
+            return inputTokens + outputTokens
+        }()
+
+        guard let promptTokens, let completionTokens, let totalTokens else {
+            return nil
+        }
+        return (promptTokens, completionTokens, totalTokens)
+    }
+
+    private func estimateCostMicrodollars(
+        modelId: String,
+        promptTokens: Int,
+        completionTokens: Int,
+        apiKey: String,
+        baseURL: String
+    ) async throws -> Int? {
+        let pricing = try await fetchPricing(modelId: modelId, apiKey: apiKey, baseURL: baseURL)
+        guard let pricing else { return nil }
+        let promptPricePerToken = decimalPrice(from: pricing.prompt)
+        let completionPricePerToken = decimalPrice(from: pricing.completion)
+        guard promptPricePerToken != 0 || completionPricePerToken != 0 else { return 0 }
+
+        let estimatedCostDollars =
+            (promptPricePerToken * Decimal(promptTokens))
+            + (completionPricePerToken * Decimal(completionTokens))
+        let estimatedCostMicrodollars = estimatedCostDollars * Decimal(1_000_000)
+        return NSDecimalNumber(decimal: estimatedCostMicrodollars).intValue
+    }
+
+    private func fetchPricing(
+        modelId: String,
+        apiKey: String,
+        baseURL: String
+    ) async throws -> OpenRouterModel.Pricing? {
+        if let cached = pricingByModelId[modelId] {
+            return cached
+        }
+
+        let requestContext = requestContext(baseURL: baseURL)
+        let models = try await client.fetchModels(apiKey: apiKey, context: requestContext)
+        guard let model = models.first(where: { $0.id == modelId }) else {
+            return nil
+        }
+        if let contextLength = model.contextLength {
+            contextLengthByModelId[modelId] = contextLength
+        }
+        if let pricing = model.pricing {
+            pricingByModelId[modelId] = pricing
+        }
+        return model.pricing
+    }
+
+    private func decimalPrice(from value: String?) -> Decimal {
+        guard let value,
+              let decimal = Decimal(string: value.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return 0
+        }
+        return decimal
     }
 
     private func executeChatCompletion(
@@ -461,11 +614,7 @@ actor OpenRouterAIService: AIService {
         let config = await testConfigurationProvider.configuration
         
         do {
-            let requestContext = OpenRouterAPIClient.RequestContext(
-                baseURL: baseURL,
-                appName: "OSX IDE",
-                referer: ""
-            )
+            let requestContext = requestContext(baseURL: baseURL)
             return try await executeChatCompletionWithTimeout(
                 timeoutSeconds: config.externalAPITimeout,
                 requestId: requestId
@@ -646,7 +795,10 @@ actor OpenRouterAIService: AIService {
         fallback: String
     ) -> String {
         switch error {
-        case let .serverError(_, body):
+        case let .serverError(code, body):
+            if code == 402, let insufficientBalanceMessage = insufficientBalanceMessage(from: body) {
+                return insufficientBalanceMessage
+            }
             let trimmedBody = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if !trimmedBody.isEmpty {
                 return trimmedBody
@@ -655,6 +807,29 @@ actor OpenRouterAIService: AIService {
         default:
             return fallback
         }
+    }
+
+    private func insufficientBalanceMessage(from body: String?) -> String? {
+        guard let body,
+              let data = body.data(using: .utf8),
+              let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let errorObject = jsonObject["error"] as? [String: Any] else {
+            return nil
+        }
+
+        let message = (errorObject["message"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let metadata = errorObject["metadata"] as? [String: Any]
+        let buyCreditsURL = (metadata?["buyCreditsUrl"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let message, !message.isEmpty, let buyCreditsURL, !buyCreditsURL.isEmpty {
+            return "\(message) Add credits: \(buyCreditsURL)"
+        }
+        if let message, !message.isEmpty {
+            return message
+        }
+        return nil
     }
 
     private func decodeResponse(data: Data, requestId: String) async throws -> OpenRouterChatResponse {
@@ -746,5 +921,209 @@ actor OpenRouterAIService: AIService {
         case .warmup, .other, .none:
             return hasTools ? 420 : 640
         }
+    }
+
+    private func sanitizeAssistantContent(_ content: String?) -> String? {
+        guard let content else { return nil }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func refreshAccountBalance(runId: String?) async {
+        let settings = settingsStore.load(includeApiKey: true)
+        let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else { return }
+        guard let accountBalanceMicrodollars = try? await fetchAccountBalanceMicrodollarsIfAvailable(
+            apiKey: apiKey,
+            baseURL: settings.baseURL
+        ) else {
+            return
+        }
+
+        await MainActor.run {
+            eventBus.publish(RemoteAIAccountBalanceUpdatedEvent(
+                providerName: providerName,
+                modelId: settings.model,
+                runId: runId,
+                accountBalanceMicrodollars: accountBalanceMicrodollars
+            ))
+        }
+    }
+
+    private func requestContext(baseURL: String) -> OpenRouterAPIClient.RequestContext {
+        if providerName == "Kilo Code" || baseURL.contains("api.kilo.ai") {
+            return OpenRouterAPIClient.RequestContext(
+                baseURL: baseURL,
+                appName: "Kilo Code",
+                referer: "https://kilocode.ai"
+            )
+        }
+
+        return OpenRouterAPIClient.RequestContext(
+            baseURL: baseURL,
+            appName: "OSX IDE",
+            referer: ""
+        )
+    }
+
+    private func resolvedCostMicrodollars(
+        usage: OpenRouterChatUsage,
+        fallback: Int?
+    ) -> Int? {
+        if let costMicrodollars = usage.costMicrodollars {
+            return costMicrodollars
+        }
+        if providerName == "Kilo Code",
+           let upstreamCost = usage.costDetails?.upstreamInferenceCost {
+            return microdollars(fromDollarAmount: upstreamCost)
+        }
+        if let directCost = usage.cost {
+            return microdollars(fromDollarAmount: directCost)
+        }
+        return fallback
+    }
+
+    private func fetchAccountBalanceMicrodollarsIfAvailable(
+        apiKey: String,
+        baseURL: String
+    ) async throws -> Int? {
+        guard providerName == "Kilo Code" || baseURL.contains("api.kilo.ai") else {
+            return nil
+        }
+        guard let apiBaseURL = kiloAPIBaseURL(from: baseURL) else {
+            return nil
+        }
+        guard let balance = try await client.fetchKiloBalance(apiKey: apiKey, apiBaseURL: apiBaseURL) else {
+            return nil
+        }
+        return microdollars(fromDollarAmount: balance)
+    }
+
+    private func kiloAPIBaseURL(from baseURL: String) -> String? {
+        guard var components = URLComponents(string: baseURL) else { return nil }
+        components.path = ""
+        components.query = nil
+        components.fragment = nil
+        return components.url?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    private func microdollars(fromDollarAmount amount: Decimal) -> Int {
+        NSDecimalNumber(decimal: amount * Decimal(1_000_000)).intValue
+    }
+
+    private func recoverFallbackToolCalls(
+        from content: String?,
+        structuredToolCalls: [AIToolCall]?,
+        toolsWereProvided: Bool
+    ) -> [AIToolCall]? {
+        if let structuredToolCalls, !structuredToolCalls.isEmpty {
+            return structuredToolCalls
+        }
+        guard toolsWereProvided, let content, !content.isEmpty else {
+            return nil
+        }
+        return Self.extractFallbackToolCalls(from: content)
+    }
+
+    private func contentExcludingRecoveredToolCalls(
+        from content: String?,
+        recoveredToolCalls: [AIToolCall]?
+    ) -> String? {
+        guard let content else { return nil }
+        guard recoveredToolCalls?.isEmpty == false else { return content }
+        return Self.stripRecoveredToolCallMarkup(from: content)
+    }
+
+    nonisolated static func extractFallbackToolCalls(from content: String) -> [AIToolCall]? {
+        guard let minimaxCalls = decodeMinimaxToolCalls(from: content), !minimaxCalls.isEmpty else {
+            return nil
+        }
+        return minimaxCalls
+    }
+
+    nonisolated private static func decodeMinimaxToolCalls(from content: String) -> [AIToolCall]? {
+        let pattern = #"<invoke\s+name=\"([^\"]+)\"\s*>(.*?)</invoke>"#
+        guard let regex = try? NSRegularExpression(
+            pattern: pattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else {
+            return nil
+        }
+        let contentRange = NSRange(content.startIndex..<content.endIndex, in: content)
+        let matches = regex.matches(in: content, options: [], range: contentRange)
+        guard !matches.isEmpty else { return nil }
+
+        let parameterPattern = #"<parameter\s+name=\"([^\"]+)\"\s*>(.*?)</parameter>"#
+        guard let parameterRegex = try? NSRegularExpression(
+            pattern: parameterPattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else {
+            return nil
+        }
+
+        let toolCalls = matches.compactMap { match -> AIToolCall? in
+            guard match.numberOfRanges == 3,
+                  let nameRange = Range(match.range(at: 1), in: content),
+                  let bodyRange = Range(match.range(at: 2), in: content) else {
+                return nil
+            }
+
+            let toolName = decodeToolMarkupEntities(String(content[nameRange]))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !toolName.isEmpty else { return nil }
+
+            let body = String(content[bodyRange])
+            let bodyNSRange = NSRange(body.startIndex..<body.endIndex, in: body)
+            let parameters = parameterRegex.matches(in: body, options: [], range: bodyNSRange)
+            var arguments: [String: Any] = [:]
+            for parameter in parameters {
+                guard parameter.numberOfRanges == 3,
+                      let parameterNameRange = Range(parameter.range(at: 1), in: body),
+                      let parameterValueRange = Range(parameter.range(at: 2), in: body) else {
+                    continue
+                }
+                let parameterName = decodeToolMarkupEntities(String(body[parameterNameRange]))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !parameterName.isEmpty else { continue }
+                let parameterValue = decodeToolMarkupEntities(String(body[parameterValueRange]))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                arguments[parameterName] = parameterValue
+            }
+
+            return AIToolCall(
+                id: UUID().uuidString,
+                name: toolName,
+                arguments: arguments
+            )
+        }
+
+        return toolCalls.isEmpty ? nil : toolCalls
+    }
+
+    nonisolated private static func stripRecoveredToolCallMarkup(from content: String) -> String {
+        var output = content
+        let patterns = [
+            #"(?is)<minimax:tool_call>\s*.*?\s*</minimax:tool_call>"#,
+            #"(?is)<invoke\s+name=\"[^\"]+\"\s*>.*?</invoke>"#
+        ]
+
+        for pattern in patterns {
+            output = output.replacingOccurrences(
+                of: pattern,
+                with: "",
+                options: .regularExpression
+            )
+        }
+
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    nonisolated private static func decodeToolMarkupEntities(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
     }
 }

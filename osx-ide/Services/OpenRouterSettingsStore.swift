@@ -8,65 +8,144 @@ protocol OpenRouterSettingsStoring: OpenRouterSettingsLoading {
     func save(_ settings: OpenRouterSettings)
 }
 
-final class OpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sendable {
-    private let settingsStore: SettingsStore
-    private let apiKeyKey = "OpenRouterAPIKey"
-    private let modelKey = "OpenRouterModel"
-    private let baseURLKey = "OpenRouterBaseURL"
-    private let systemPromptKey = "OpenRouterSystemPrompt"
-    private let reasoningModeKey = "OpenRouterReasoningMode"
-    private let reasoningEnabledKey = "OpenRouterReasoningEnabled"
-    private let toolPromptModeKey = "OpenRouterToolPromptMode"
-    private let ragEnabledDuringToolLoopKey = "OpenRouterRAGEnabledDuringToolLoop"
-    private let environment = ProcessInfo.processInfo.environment
+class ProviderOpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sendable {
+    struct Keys {
+        let apiKey: String
+        let model: String
+        let baseURL: String
+        let systemPrompt: String
+        let reasoningMode: String
+        let toolPromptMode: String
+        let ragEnabledDuringToolLoop: String
+    }
+
+    struct HarnessKeys {
+        let apiKeyTestRunner: String
+        let apiKeyFallback: String
+        let modelTestRunner: String
+        let modelFallback: String
+        let baseURLTestRunner: String
+        let baseURLFallback: String
+    }
+
+    let settingsStore: SettingsStore
+    let environment: [String: String]
+    private let keys: Keys
+    private let harnessKeys: HarnessKeys
+    private let defaultModel: String
+    private let defaultBaseURL: String
+    private let defaultReasoningMode: ReasoningMode
+    private let defaultToolPromptMode: ToolPromptMode
+    private let defaultRAGEnabledDuringToolLoop: Bool
 
     init(settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)) {
         self.settingsStore = settingsStore
+        self.environment = ProcessInfo.processInfo.environment
+        self.keys = Keys(
+            apiKey: "",
+            model: "",
+            baseURL: "",
+            systemPrompt: "",
+            reasoningMode: "",
+            toolPromptMode: "",
+            ragEnabledDuringToolLoop: ""
+        )
+        self.harnessKeys = HarnessKeys(
+            apiKeyTestRunner: "",
+            apiKeyFallback: "",
+            modelTestRunner: "",
+            modelFallback: "",
+            baseURLTestRunner: "",
+            baseURLFallback: ""
+        )
+        self.defaultModel = ""
+        self.defaultBaseURL = OpenRouterSettings.empty.baseURL
+        self.defaultReasoningMode = .modelAndAgent
+        self.defaultToolPromptMode = .fullStatic
+        self.defaultRAGEnabledDuringToolLoop = OpenRouterSettings.empty.ragEnabledDuringToolLoop
     }
 
-    // NOTE: Keychain removed due to UX issues (constant password prompts)
-    // Using UserDefaults for API key storage - macOS provides sufficient security
-    
+    init(
+        settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults),
+        keys: Keys,
+        harnessKeys: HarnessKeys,
+        defaultModel: String,
+        defaultBaseURL: String,
+        defaultReasoningMode: ReasoningMode = .modelAndAgent,
+        defaultToolPromptMode: ToolPromptMode = .fullStatic,
+        defaultRAGEnabledDuringToolLoop: Bool = true
+    ) {
+        self.settingsStore = settingsStore
+        self.environment = ProcessInfo.processInfo.environment
+        self.keys = keys
+        self.harnessKeys = harnessKeys
+        self.defaultModel = defaultModel
+        self.defaultBaseURL = defaultBaseURL
+        self.defaultReasoningMode = defaultReasoningMode
+        self.defaultToolPromptMode = defaultToolPromptMode
+        self.defaultRAGEnabledDuringToolLoop = defaultRAGEnabledDuringToolLoop
+    }
+
     func load(includeApiKey: Bool = true) -> OpenRouterSettings {
         let apiKey: String
         if includeApiKey {
-            // Simple UserDefaults storage - no keychain prompts
-            apiKey = environment["TEST_RUNNER_ENV_HARNESS_OPENROUTER_API_KEY"]
-                ?? environment["HARNESS_OPENROUTER_API_KEY"]
-                ?? settingsStore.string(forKey: apiKeyKey)
-                ?? ""
+            apiKey = harnessOverrideValue(
+                testRunnerKey: harnessKeys.apiKeyTestRunner,
+                fallbackKey: harnessKeys.apiKeyFallback,
+                defaultValue: settingsStore.string(forKey: keys.apiKey) ?? ""
+            )
         } else {
             apiKey = ""
         }
 
         let model = harnessOverrideValue(
-            testRunnerKey: "TEST_RUNNER_ENV_HARNESS_MODEL_ID",
-            fallbackKey: "HARNESS_MODEL_ID",
-            defaultValue: settingsStore.string(forKey: modelKey) ?? ""
+            testRunnerKey: harnessKeys.modelTestRunner,
+            fallbackKey: harnessKeys.modelFallback,
+            defaultValue: settingsStore.string(forKey: keys.model) ?? defaultModel
         )
         let baseURL = harnessOverrideValue(
-            testRunnerKey: "TEST_RUNNER_ENV_HARNESS_OPENROUTER_BASE_URL",
-            fallbackKey: "HARNESS_OPENROUTER_BASE_URL",
-            defaultValue: settingsStore.string(forKey: baseURLKey) ?? OpenRouterSettings.empty.baseURL
+            testRunnerKey: harnessKeys.baseURLTestRunner,
+            fallbackKey: harnessKeys.baseURLFallback,
+            defaultValue: settingsStore.string(forKey: keys.baseURL) ?? defaultBaseURL
         )
 
         return OpenRouterSettings(
             apiKey: apiKey,
             model: model,
             baseURL: baseURL,
-            systemPrompt: settingsStore.string(forKey: systemPromptKey) ?? "",
+            systemPrompt: settingsStore.string(forKey: keys.systemPrompt) ?? "",
             reasoningMode: loadReasoningMode(),
-            toolPromptMode: ToolPromptMode(
-                rawValue: settingsStore.string(forKey: toolPromptModeKey) ?? ""
-            ) ?? .fullStatic,
+            toolPromptMode: loadToolPromptMode(),
             ragEnabledDuringToolLoop: settingsStore.bool(
-                forKey: ragEnabledDuringToolLoopKey,
-                default: OpenRouterSettings.empty.ragEnabledDuringToolLoop
+                forKey: keys.ragEnabledDuringToolLoop,
+                default: defaultRAGEnabledDuringToolLoop
             )
         )
     }
 
-    private func harnessOverrideValue(
+    func save(_ settings: OpenRouterSettings) {
+        settingsStore.set(settings.apiKey, forKey: keys.apiKey)
+        settingsStore.set(settings.model, forKey: keys.model)
+        settingsStore.set(settings.baseURL, forKey: keys.baseURL)
+        settingsStore.set(settings.systemPrompt, forKey: keys.systemPrompt)
+        settingsStore.set(settings.reasoningMode.rawValue, forKey: keys.reasoningMode)
+        settingsStore.set(settings.toolPromptMode.rawValue, forKey: keys.toolPromptMode)
+        settingsStore.set(settings.ragEnabledDuringToolLoop, forKey: keys.ragEnabledDuringToolLoop)
+    }
+
+    func loadReasoningMode() -> ReasoningMode {
+        ReasoningMode(
+            rawValue: settingsStore.string(forKey: keys.reasoningMode) ?? ""
+        ) ?? defaultReasoningMode
+    }
+
+    private func loadToolPromptMode() -> ToolPromptMode {
+        ToolPromptMode(
+            rawValue: settingsStore.string(forKey: keys.toolPromptMode) ?? ""
+        ) ?? defaultToolPromptMode
+    }
+
+    func harnessOverrideValue(
         testRunnerKey: String,
         fallbackKey: String,
         defaultValue: String
@@ -81,21 +160,46 @@ final class OpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Senda
         }
         return defaultValue
     }
+}
 
-    func save(_ settings: OpenRouterSettings) {
-        // Store API key in UserDefaults - no keychain prompts
-        settingsStore.set(settings.apiKey, forKey: apiKeyKey)
-        settingsStore.set(settings.model, forKey: modelKey)
-        settingsStore.set(settings.baseURL, forKey: baseURLKey)
-        settingsStore.set(settings.systemPrompt, forKey: systemPromptKey)
-        settingsStore.set(settings.reasoningMode.rawValue, forKey: reasoningModeKey)
-        settingsStore.set(settings.reasoningMode.includesAgentReasoning, forKey: reasoningEnabledKey)
-        settingsStore.set(settings.toolPromptMode.rawValue, forKey: toolPromptModeKey)
-        settingsStore.set(settings.ragEnabledDuringToolLoop, forKey: ragEnabledDuringToolLoopKey)
+final class OpenRouterSettingsStore: ProviderOpenRouterSettingsStore, @unchecked Sendable {
+    private let reasoningEnabledKey = "OpenRouterReasoningEnabled"
+
+    override init(settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)) {
+        super.init(
+            settingsStore: settingsStore,
+            keys: Keys(
+                apiKey: "OpenRouterAPIKey",
+                model: "OpenRouterModel",
+                baseURL: "OpenRouterBaseURL",
+                systemPrompt: "OpenRouterSystemPrompt",
+                reasoningMode: "OpenRouterReasoningMode",
+                toolPromptMode: "OpenRouterToolPromptMode",
+                ragEnabledDuringToolLoop: "OpenRouterRAGEnabledDuringToolLoop"
+            ),
+            harnessKeys: HarnessKeys(
+                apiKeyTestRunner: "TEST_RUNNER_ENV_HARNESS_OPENROUTER_API_KEY",
+                apiKeyFallback: "HARNESS_OPENROUTER_API_KEY",
+                modelTestRunner: "TEST_RUNNER_ENV_HARNESS_MODEL_ID",
+                modelFallback: "HARNESS_MODEL_ID",
+                baseURLTestRunner: "TEST_RUNNER_ENV_HARNESS_OPENROUTER_BASE_URL",
+                baseURLFallback: "HARNESS_OPENROUTER_BASE_URL"
+            ),
+            defaultModel: "",
+            defaultBaseURL: OpenRouterSettings.empty.baseURL,
+            defaultReasoningMode: .modelAndAgent,
+            defaultToolPromptMode: .fullStatic,
+            defaultRAGEnabledDuringToolLoop: OpenRouterSettings.empty.ragEnabledDuringToolLoop
+        )
     }
 
-    private func loadReasoningMode() -> ReasoningMode {
-        if let storedMode = settingsStore.string(forKey: reasoningModeKey),
+    override func save(_ settings: OpenRouterSettings) {
+        super.save(settings)
+        settingsStore.set(settings.reasoningMode.includesAgentReasoning, forKey: reasoningEnabledKey)
+    }
+
+    override func loadReasoningMode() -> ReasoningMode {
+        if let storedMode = settingsStore.string(forKey: "OpenRouterReasoningMode"),
            let reasoningMode = ReasoningMode(rawValue: storedMode) {
             return reasoningMode
         }

@@ -66,6 +66,7 @@ class AppState: ObservableObject, IDEContext {
     private let setCodebaseIndexEnabledImpl: (Bool) -> Void
     private let setAIEnrichmentIndexingEnabledImpl: (Bool) -> Void
     private let reindexProjectNowImpl: () -> Void
+    let refreshRemoteAIAccountBalance: @Sendable (_ runId: String?) async -> Void
     private var eventCancellables = Set<AnyCancellable>()
 
     private lazy var projectSessionCoordinator = ProjectSessionCoordinator(
@@ -159,7 +160,8 @@ class AppState: ObservableObject, IDEContext {
         configureCodebaseIndex: @escaping (URL) -> Void,
         setCodebaseIndexEnabled: @escaping (Bool) -> Void,
         setAIEnrichmentIndexingEnabled: @escaping (Bool) -> Void,
-        reindexProjectNow: @escaping () -> Void
+        reindexProjectNow: @escaping () -> Void,
+        refreshRemoteAIAccountBalance: @escaping @Sendable (_ runId: String?) async -> Void
     ) {
         self.errorManager = errorManager
         self.uiService = uiService
@@ -180,6 +182,7 @@ class AppState: ObservableObject, IDEContext {
         self.setCodebaseIndexEnabledImpl = setCodebaseIndexEnabled
         self.setAIEnrichmentIndexingEnabledImpl = setAIEnrichmentIndexingEnabled
         self.reindexProjectNowImpl = reindexProjectNow
+        self.refreshRemoteAIAccountBalance = refreshRemoteAIAccountBalance
 
         // Initialize specialized state managers
         self.fileEditor = FileEditorStateManager(

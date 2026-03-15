@@ -353,6 +353,7 @@ final class ToolLoopHandler {
                 role: .assistant,
                 content: normalizedProgress.content,
                 context: ChatMessageContentContext(reasoning: normalizedProgress.reasoning),
+                billing: latestDraftAssistantBilling(),
                 tool: ChatMessageToolContext(toolCalls: uniqueToolCalls)
             )
             if hasModelStepUpdate || hasReasoning {
@@ -391,7 +392,8 @@ final class ToolLoopHandler {
                 }
                 historyCoordinator.append(ChatMessage(
                     role: .assistant,
-                    content: statusSummary
+                    content: statusSummary,
+                    billing: latestDraftAssistantBilling()
                 ))
                 previousAssistantUpdateSignature = statusSignature
             }
@@ -690,7 +692,22 @@ final class ToolLoopHandler {
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
                hasObservedSuccessfulMutation,
-               ChatPromptBuilder.indicatesWorkWasPerformed(content: content),
+               isSyntheticProgressArtifact(content),
+               !ChatPromptBuilder.hasMissingClaimedFileArtifacts(
+                    content: content,
+                    projectRoot: projectRoot
+               ) {
+                break
+            }
+
+            if mode == .agent,
+               currentResponse.toolCalls?.isEmpty ?? true,
+               let content = currentResponse.content,
+               hasObservedSuccessfulMutation,
+               (
+                    ChatPromptBuilder.indicatesWorkWasPerformed(content: content)
+                    || isSyntheticProgressArtifact(content)
+               ),
                !ChatPromptBuilder.hasMissingClaimedFileArtifacts(
                     content: content,
                     projectRoot: projectRoot
@@ -1455,7 +1472,16 @@ final class ToolLoopHandler {
         guard let content else { return false }
         let text = content.lowercased()
         if text.isEmpty { return false }
-        return text.contains("tool calls:") || text.contains("tool call:")
+        return text.contains("tool calls:")
+            || text.contains("tool call:")
+            || text.contains("<minimax:tool_call>")
+            || text.contains("<invoke name=")
+    }
+
+    private func latestDraftAssistantBilling() -> ChatMessageBillingContext? {
+        historyCoordinator.messages.reversed().first {
+            $0.role == .assistant && $0.isDraft
+        }?.billing
     }
 
     private func shouldStopForReadOnlyToolLoopStall(
@@ -1802,6 +1828,26 @@ final class ToolLoopHandler {
         let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
         guard planProgress.total > 0 else { return true }
         return !planProgress.isComplete
+    }
+
+    private func isSyntheticProgressArtifact(_ content: String) -> Bool {
+        let normalized = ChatPromptBuilder.contentForDisplay(from: content)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        if normalized.contains("next: reviewing retrieved context and finalizing when the objective is satisfied") {
+            return true
+        }
+
+        let generatedPrefixes = [
+            "done -> next -> path:",
+            "done → next → path:",
+            "completed progress update for step ",
+            "start checkpoint scan.",
+            "checking checkpoints pass "
+        ]
+        return generatedPrefixes.contains { normalized.hasPrefix($0) }
     }
 
     private func requestFocusedExecutionRecoveryIfPlanIncomplete(

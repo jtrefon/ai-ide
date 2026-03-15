@@ -245,6 +245,11 @@ class MockCodebaseIndex: CodebaseIndexProtocol {
 
     func getSummaries(projectRoot: URL, limit: Int) async throws -> [(path: String, summary: String)] { [] }
     func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry] { [] }
+    func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult] {
+        _ = userInput
+        _ = limit
+        return []
+    }
 
     func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
         MemoryEntry(

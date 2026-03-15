@@ -69,7 +69,10 @@ class ChatPromptBuilder {
         let patterns = [
             #"(?is)<tool_call>\s*.*?\s*</tool_call>"#,
             #"(?is)<arg_key>\s*.*?\s*</arg_key>"#,
-            #"(?is)<arg_value>\s*.*?\s*</arg_value>"#
+            #"(?is)<arg_value>\s*.*?\s*</arg_value>"#,
+            #"(?is)<minimax:tool_call>\s*.*?\s*</minimax:tool_call>"#,
+            #"(?is)<invoke\s+name=\"[^\"]+\"\s*>.*?</invoke>"#,
+            #"(?is)</?parameter\s+name=\"[^\"]+\">"#
         ]
 
         for pattern in patterns {
@@ -101,20 +104,53 @@ class ChatPromptBuilder {
     }
 
     private static func splitTaggedReasoning(from text: String) -> (reasoning: String?, content: String)? {
-        let pattern = #"(?is)<ide_reasoning>(.*?)</ide_reasoning>"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
-        guard let match = regex.firstMatch(in: text, options: [], range: fullRange),
-              let reasoningRange = Range(match.range(at: 1), in: text),
-              let removeRange = Range(match.range(at: 0), in: text) else {
-            return nil
+        let tags = [
+            ("<thinking>", "</thinking>"),
+            ("<think>", "</think>"),
+            ("<ide_reasoning>", "</ide_reasoning>")
+        ]
+
+        for (openingTag, closingTag) in tags {
+            guard let openingRange = text.range(of: openingTag, options: [.caseInsensitive]) else {
+                continue
+            }
+
+            let contentBeforeTag = String(text[..<openingRange.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let afterOpeningTag = text[openingRange.upperBound...]
+
+            if let closingRange = afterOpeningTag.range(of: closingTag, options: [.caseInsensitive]) {
+                let reasoning = String(afterOpeningTag[..<closingRange.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let contentAfterTag = String(afterOpeningTag[closingRange.upperBound...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let cleaned = [contentBeforeTag, contentAfterTag]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "\n\n")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return reasoning.isEmpty ? nil : (reasoning, cleaned)
+            }
+
+            let reasoning = String(afterOpeningTag)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return reasoning.isEmpty ? nil : (reasoning, contentBeforeTag)
         }
 
-        let reasoning = String(text[reasoningRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-        var remaining = text
-        remaining.removeSubrange(removeRange)
-        let cleaned = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
-        return reasoning.isEmpty ? nil : (reasoning, cleaned)
+        for (_, closingTag) in tags {
+            guard let closingRange = text.range(of: closingTag, options: [.caseInsensitive]) else {
+                continue
+            }
+
+            let reasoning = String(text[..<closingRange.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let content = String(text[closingRange.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !reasoning.isEmpty {
+                return (reasoning, content)
+            }
+        }
+
+        return nil
     }
 
     /// Checks if a reasoning format correction is needed based on required sections.
@@ -317,7 +353,10 @@ class ChatPromptBuilder {
 
     static func shouldForceExecutionFollowup(userInput: String, content: String, hasToolCalls: Bool) -> Bool {
         guard !hasToolCalls else { return false }
-        guard userRequestRequiresExecution(userInput: userInput) else { return false }
+        guard userRequestRequiresExecution(userInput: userInput)
+                || userRequestRequiresToolBackedInvestigation(userInput: userInput) else {
+            return false
+        }
 
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
@@ -613,6 +652,45 @@ class ChatPromptBuilder {
 
         // Default to analysis-only unless the user explicitly requests execution.
         return false
+    }
+
+    static func userRequestRequiresToolBackedInvestigation(userInput: String) -> Bool {
+        let text = userInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !text.isEmpty else { return false }
+
+        let directTriggers = [
+            "audit",
+            "codebase audit",
+            "project overview",
+            "review the app",
+            "review the project",
+            "review the codebase",
+            "inspect the app",
+            "inspect the project",
+            "inspect the codebase",
+            "analyze the app",
+            "analyze the project",
+            "analyze the codebase",
+            "perform audit",
+            "areas for improvement"
+        ]
+        if directTriggers.contains(where: { text.contains($0) }) {
+            return true
+        }
+
+        let investigationPatterns = [
+            #"\b(review|audit|inspect|analyze)\b.{0,80}\b(app|project|codebase|repository|repo|files|implementation|architecture)\b"#,
+            #"\b(project overview|codebase overview|architecture overview)\b"#,
+            #"\b(constructive critique|areas for improvement|improvement areas)\b"#
+        ]
+
+        return investigationPatterns.contains { pattern in
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                return false
+            }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            return regex.firstMatch(in: text, options: [], range: range) != nil
+        }
     }
 
     static func isRequestingUserInputForNextStep(content: String) -> Bool {

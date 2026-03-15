@@ -9,6 +9,9 @@ extension OpenRouterAIService {
             message: "openrouter.request_start",
             context: AppLogger.LogCallContext(metadata: [
                 "requestId": context.requestId,
+                "providerName": context.providerName,
+                "baseURL": context.baseURL,
+                "streaming": context.streaming,
                 "runId": context.runId as Any,
                 "stage": context.stage?.rawValue as Any,
                 "model": context.model,
@@ -20,6 +23,9 @@ extension OpenRouterAIService {
         )
 
         await AIToolTraceLogger.shared.log(type: "openrouter.request", data: [
+            "providerName": context.providerName,
+            "baseURL": context.baseURL,
+            "streaming": context.streaming,
             "model": context.model,
             "messages": context.messageCount,
             "tools": context.toolCount,

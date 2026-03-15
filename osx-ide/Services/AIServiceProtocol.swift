@@ -14,6 +14,10 @@ public protocol AIService: Sendable {
     func fixCode(_ code: String, error: String) async throws -> String
 }
 
+public protocol RemoteAIAccountStatusRefreshing: Sendable {
+    func refreshAccountBalance(runId: String?) async
+}
+
 // Default implementation for services that don't support streaming
 extension AIService {
     /// Default implementation - falls back to non-streaming

@@ -74,3 +74,23 @@ extension CodebaseIndex: MemoryEmbeddingSearchProviding {
         }
     }
 }
+
+extension CodebaseIndex: CodeChunkEmbeddingSearchProviding {
+    public func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult] {
+        let safeLimit = max(1, limit)
+        let generator = memoryEmbeddingGenerator
+        let queryVector = try await Task.detached(priority: .userInitiated) {
+            try await AgentActivityCoordinator.shared.withActivity(type: .embeddingGeneration) {
+                try await generator.generateEmbedding(for: userInput)
+            }
+        }.value
+
+        guard !queryVector.isEmpty else { return [] }
+        return try await queryService.searchSimilarCodeChunks(
+            modelId: memoryEmbeddingGenerator.modelIdentifier,
+            queryVector: queryVector,
+            limit: safeLimit
+        )
+    }
+}
+

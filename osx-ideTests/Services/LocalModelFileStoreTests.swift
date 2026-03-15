@@ -7,6 +7,11 @@ final class LocalModelFileStoreTests: XCTestCase {
 
     override func tearDownWithError() throws {
         try LocalModelFileStore.deleteModelDirectory(modelId: qwen35ModelId)
+        if let model = LocalModelCatalog.model(id: qwen35ModelId),
+           let legacyDirectory = legacyCacheDirectory(for: model),
+           FileManager.default.fileExists(atPath: legacyDirectory.path) {
+            try FileManager.default.removeItem(at: legacyDirectory)
+        }
         try super.tearDownWithError()
     }
 
@@ -17,11 +22,9 @@ final class LocalModelFileStoreTests: XCTestCase {
         XCTAssertEqual(LocalModelFileStore.contextLength(for: model), 262144)
     }
 
-    func testRuntimeModelDirectoryNormalizesQwen35ConfigForCurrentMLXRuntime() throws {
+    func testRuntimeModelDirectoryUsesInstalledQwen35DirectoryForCurrentMLXRuntime() throws {
         let model = try XCTUnwrap(LocalModelCatalog.model(id: qwen35ModelId))
         try installQwen35FixtureConfig()
-        try installPlaceholderArtifact(named: "model.safetensors")
-        try installPlaceholderArtifact(named: "tokenizer.json")
 
         let runtimeDirectory = try LocalModelFileStore.runtimeModelDirectory(for: model)
         let runtimeConfigURL = runtimeDirectory.appendingPathComponent("config.json")
@@ -29,15 +32,47 @@ final class LocalModelFileStoreTests: XCTestCase {
         let runtimeConfigObject = try XCTUnwrap(
             try JSONSerialization.jsonObject(with: runtimeConfigData) as? [String: Any]
         )
+        let textConfigObject = try XCTUnwrap(runtimeConfigObject["text_config"] as? [String: Any])
 
-        XCTAssertEqual(runtimeDirectory.lastPathComponent, "osx-ide-runtime")
-        XCTAssertEqual(runtimeConfigObject["model_type"] as? String, "qwen3")
-        XCTAssertNil(runtimeConfigObject["text_config"])
-        XCTAssertEqual(runtimeConfigObject["max_position_embeddings"] as? Int, 262144)
-        XCTAssertEqual(runtimeConfigObject["hidden_size"] as? Int, 2560)
+        XCTAssertEqual(runtimeDirectory, try LocalModelFileStore.modelDirectory(modelId: qwen35ModelId))
+        XCTAssertEqual(runtimeConfigObject["model_type"] as? String, "qwen3_5")
+        XCTAssertEqual(textConfigObject["model_type"] as? String, "qwen3")
+        XCTAssertEqual(textConfigObject["max_position_embeddings"] as? Int, 262144)
+        XCTAssertEqual(textConfigObject["hidden_size"] as? Int, 2560)
+    }
 
-        let runtimeTokenizerURL = runtimeDirectory.appendingPathComponent("tokenizer.json")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: runtimeTokenizerURL.path))
+    func testEnsureCanonicalInstallationMovesLegacyCacheDirectory() throws {
+        let model = try XCTUnwrap(LocalModelCatalog.model(id: qwen35ModelId))
+        let canonicalDirectory = try LocalModelFileStore.modelDirectory(modelId: qwen35ModelId)
+        let legacyDirectory = try XCTUnwrap(legacyCacheDirectory(for: model))
+        try installAllArtifacts(for: model, in: legacyDirectory)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: canonicalDirectory.path))
+
+        let installedDirectory = try LocalModelFileStore.ensureCanonicalInstallation(for: model)
+
+        XCTAssertEqual(installedDirectory, canonicalDirectory)
+        XCTAssertTrue(LocalModelFileStore.isModelInstalled(model))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyDirectory.path))
+        XCTAssertFalse(isSymlink(at: canonicalDirectory))
+    }
+
+    func testEnsureCanonicalInstallationMaterializesSymlinkedDirectory() throws {
+        let model = try XCTUnwrap(LocalModelCatalog.model(id: qwen35ModelId))
+        let canonicalDirectory = try LocalModelFileStore.modelDirectory(modelId: qwen35ModelId)
+        let legacyDirectory = try XCTUnwrap(legacyCacheDirectory(for: model))
+        let canonicalParent = canonicalDirectory.deletingLastPathComponent()
+
+        try installAllArtifacts(for: model, in: legacyDirectory)
+        try FileManager.default.createDirectory(at: canonicalParent, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: canonicalDirectory, withDestinationURL: legacyDirectory)
+
+        let installedDirectory = try LocalModelFileStore.ensureCanonicalInstallation(for: model)
+
+        XCTAssertEqual(installedDirectory, canonicalDirectory)
+        XCTAssertTrue(LocalModelFileStore.isModelInstalled(model))
+        XCTAssertFalse(isSymlink(at: canonicalDirectory))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyDirectory.path))
     }
 
     private func installQwen35FixtureConfig() throws {
@@ -78,8 +113,48 @@ final class LocalModelFileStoreTests: XCTestCase {
         )
     }
 
-    private func installPlaceholderArtifact(named fileName: String) throws {
-        let artifactURL = try LocalModelFileStore.artifactURL(modelId: qwen35ModelId, fileName: fileName)
-        try Data("fixture".utf8).write(to: artifactURL)
+    private func installAllArtifacts(for model: LocalModelDefinition, in directory: URL) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for artifact in model.artifacts {
+            try "{}".write(
+                to: directory.appendingPathComponent(artifact.fileName),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+    }
+
+    private func legacyCacheDirectory(for model: LocalModelDefinition) -> URL? {
+        guard let artifactURL = model.artifacts.first?.url,
+              artifactURL.host == "huggingface.co" else {
+            return nil
+        }
+
+        let pathComponents = artifactURL.pathComponents.filter { $0 != "/" }
+        guard pathComponents.count >= 4,
+              pathComponents[2] == "resolve" else {
+            return nil
+        }
+
+        guard let cachesRoot = try? FileManager.default.url(
+            for: .cachesDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        ) else {
+            return nil
+        }
+
+        return cachesRoot
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent(pathComponents[0], isDirectory: true)
+            .appendingPathComponent(pathComponents[1], isDirectory: true)
+    }
+
+    private func isSymlink(at url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isSymbolicLinkKey]) else {
+            return false
+        }
+        return values.isSymbolicLink == true
     }
 }

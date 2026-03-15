@@ -56,7 +56,9 @@ final class LocalModelSettingsViewModel: ObservableObject {
         models = LocalModelCatalog.allModels()
         if models.isEmpty {
             status = Status(kind: .warning, message: "No local models available (catalog returned 0 entries).")
+            return
         }
+        updateOfflineStatusMessage()
     }
 
     func isInstalled(_ model: LocalModelDefinition) -> Bool {
@@ -65,7 +67,7 @@ final class LocalModelSettingsViewModel: ObservableObject {
 
     func selectModel(_ model: LocalModelDefinition) {
         selectedModelId = model.id
-        status = Status(kind: .success, message: "Selected \(model.displayName).")
+        updateOfflineStatusMessage(selectedModel: model)
     }
 
     func downloadModel(_ model: LocalModelDefinition) async {
@@ -84,7 +86,7 @@ final class LocalModelSettingsViewModel: ObservableObject {
                 }
             }
 
-            status = Status(kind: .success, message: "Downloaded \(model.displayName).")
+            updateOfflineStatusMessage(selectedModel: model)
         } catch {
             status = Status(kind: .error, message: error.localizedDescription)
         }
@@ -111,8 +113,26 @@ final class LocalModelSettingsViewModel: ObservableObject {
 
     private func persistOfflineModeEnabled() {
         settingsStore.set(offlineModeEnabled, forKey: offlineModeEnabledKey)
-        if offlineModeEnabled {
-            status = Status(kind: .success, message: "Offline Mode enabled. OpenRouter is disabled.")
+        updateOfflineStatusMessage()
+    }
+
+    private func updateOfflineStatusMessage(selectedModel: LocalModelDefinition? = nil) {
+        guard offlineModeEnabled else {
+            status = Status(kind: .idle, message: "Offline Mode disabled. Chat requests use the selected remote provider.")
+            return
         }
+
+        let activeModel = selectedModel ?? models.first(where: { $0.id == selectedModelId })
+        guard let activeModel else {
+            status = Status(kind: .warning, message: "Offline Mode enabled, but no local model is selected.")
+            return
+        }
+
+        guard isInstalled(activeModel) else {
+            status = Status(kind: .warning, message: "Offline Mode enabled, but \(activeModel.displayName) is not downloaded yet.")
+            return
+        }
+
+        status = Status(kind: .success, message: "Offline Mode enabled. Chat requests route to \(activeModel.displayName).")
     }
 }
