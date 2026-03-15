@@ -22,9 +22,11 @@ final class IndexStatusBarViewModel: ObservableObject {
     @Published private(set) var openRouterContextUsageText: String = ""
     @Published private(set) var remoteAICostText: String = ""
     @Published private(set) var remoteAISpendText: String = ""
+    @Published private(set) var remoteAIBalanceText: String = ""
 
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
     private let eventBus: EventBusProtocol
+    private let refreshRemoteAIAccountBalance: @Sendable (_ runId: String?) async -> Void
     private let statsPollInterval: TimeInterval
     private var cancellables = Set<AnyCancellable>()
     private var statsTimer: AnyCancellable?
@@ -34,16 +36,19 @@ final class IndexStatusBarViewModel: ObservableObject {
     init(
         codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
         eventBus: EventBusProtocol,
+        refreshRemoteAIAccountBalance: @escaping @Sendable (_ runId: String?) async -> Void = { _ in },
         statsPollInterval: TimeInterval = 2.0
     ) {
         self.codebaseIndexProvider = codebaseIndexProvider
         self.eventBus = eventBus
+        self.refreshRemoteAIAccountBalance = refreshRemoteAIAccountBalance
         self.statsPollInterval = max(0.1, statsPollInterval)
 
         subscribeToEvents()
         startStatsPolling()
         refreshStats()
         refreshEmbeddingModel()
+        scheduleInitialRemoteBalanceRefresh()
     }
 
     var statusText: String {
@@ -206,8 +211,37 @@ final class IndexStatusBarViewModel: ObservableObject {
                 providerName: event.providerName,
                 accumulatedCostMicrodollars: self.accumulatedRemoteCostMicrodollars
             )
+            self.remoteAIBalanceText = self.formatAccountBalance(
+                providerName: event.providerName,
+                accountBalanceMicrodollars: event.usage.accountBalanceMicrodollars
+            )
         }
         .store(in: &cancellables)
+
+        eventBus.subscribe(to: RemoteAIAccountBalanceUpdatedEvent.self) { [weak self] event in
+            guard let self else { return }
+            self.remoteAIBalanceText = self.formatAccountBalance(
+                providerName: event.providerName,
+                accountBalanceMicrodollars: event.accountBalanceMicrodollars
+            )
+        }
+        .store(in: &cancellables)
+
+        eventBus.subscribe(to: ConversationRunCompletedEvent.self) { [weak self] event in
+            guard let self else { return }
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                await self.refreshRemoteAIAccountBalance(event.runId)
+            }
+        }
+        .store(in: &cancellables)
+    }
+
+    private func scheduleInitialRemoteBalanceRefresh() {
+        Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            await refreshRemoteAIAccountBalance(nil)
+        }
     }
 
     private func startStatsPolling() {
@@ -272,11 +306,22 @@ final class IndexStatusBarViewModel: ObservableObject {
 
     private func formatRemoteCost(providerName: String, costMicrodollars: Int?) -> String {
         guard let costMicrodollars else { return "" }
+        if providerName == "Kilo Code" {
+            return ""
+        }
         return "\(providerName) \(CostDisplayFormatter.dollarAmount(fromMicrodollars: costMicrodollars))"
     }
 
     private func formatObservedSpend(providerName: String, accumulatedCostMicrodollars: Int) -> String {
         guard accumulatedCostMicrodollars > 0 else { return "" }
         return "\(providerName) spent \(CostDisplayFormatter.dollarAmount(fromMicrodollars: accumulatedCostMicrodollars))"
+    }
+
+    private func formatAccountBalance(
+        providerName: String,
+        accountBalanceMicrodollars: Int?
+    ) -> String {
+        guard let accountBalanceMicrodollars, accountBalanceMicrodollars >= 0 else { return "" }
+        return "\(providerName) balance \(CostDisplayFormatter.dollarAmount(fromMicrodollars: accountBalanceMicrodollars))"
     }
 }

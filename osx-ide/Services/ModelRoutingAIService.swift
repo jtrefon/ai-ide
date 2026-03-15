@@ -7,7 +7,7 @@
 
 import Foundation
 
-actor ModelRoutingAIService: AIService {
+actor ModelRoutingAIService: AIService, RemoteAIAccountStatusRefreshing {
     private let openRouterService: AIService
     private let alibabaService: AIService
     private let kiloCodeService: AIService
@@ -129,5 +129,12 @@ actor ModelRoutingAIService: AIService {
             localOperation: { try await $0.fixCode(code, error: error) },
             remoteOperation: { try await $0.fixCode(code, error: error) }
         )
+    }
+
+    func refreshAccountBalance(runId: String?) async {
+        let isOfflineMode = await selectionStore.isOfflineModeEnabled()
+        guard !isOfflineMode else { return }
+        let remoteService = await selectedRemoteService()
+        await (remoteService as? RemoteAIAccountStatusRefreshing)?.refreshAccountBalance(runId: runId)
     }
 }

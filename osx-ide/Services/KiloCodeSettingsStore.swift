@@ -1,6 +1,9 @@
 import Foundation
 
 final class KiloCodeSettingsStore: OpenRouterSettingsStoring, @unchecked Sendable {
+    static let currentBaseURL = "https://api.kilo.ai/api/openrouter"
+    private static let legacyBaseURLs = ["https://api.kilo.ai/api/gateway"]
+
     private let settingsStore: SettingsStore
     private let apiKeyKey = "KiloCodeAPIKey"
     private let modelKey = "KiloCodeModel"
@@ -35,7 +38,7 @@ final class KiloCodeSettingsStore: OpenRouterSettingsStoring, @unchecked Sendabl
         let baseURL = harnessOverrideValue(
             testRunnerKey: "TEST_RUNNER_ENV_HARNESS_KILOCODE_BASE_URL",
             fallbackKey: "HARNESS_KILOCODE_BASE_URL",
-            defaultValue: settingsStore.string(forKey: baseURLKey) ?? "https://api.kilo.ai/api/gateway"
+            defaultValue: resolvedBaseURL(storedValue: settingsStore.string(forKey: baseURLKey))
         )
 
         return OpenRouterSettings(
@@ -80,5 +83,16 @@ final class KiloCodeSettingsStore: OpenRouterSettingsStoring, @unchecked Sendabl
             return value
         }
         return defaultValue
+    }
+
+    private func resolvedBaseURL(storedValue: String?) -> String {
+        guard let trimmed = storedValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return Self.currentBaseURL
+        }
+        if Self.legacyBaseURLs.contains(trimmed) {
+            return Self.currentBaseURL
+        }
+        return trimmed
     }
 }

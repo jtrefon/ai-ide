@@ -6,17 +6,20 @@ public struct OpenRouterUsageUpdatedEvent: Event {
         public let completionTokens: Int
         public let totalTokens: Int
         public let costMicrodollars: Int?
+        public let accountBalanceMicrodollars: Int?
 
         public init(
             promptTokens: Int,
             completionTokens: Int,
             totalTokens: Int,
-            costMicrodollars: Int? = nil
+            costMicrodollars: Int? = nil,
+            accountBalanceMicrodollars: Int? = nil
         ) {
             self.promptTokens = promptTokens
             self.completionTokens = completionTokens
             self.totalTokens = totalTokens
             self.costMicrodollars = costMicrodollars
+            self.accountBalanceMicrodollars = accountBalanceMicrodollars
         }
     }
 

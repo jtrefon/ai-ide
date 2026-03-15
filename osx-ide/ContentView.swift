@@ -59,7 +59,8 @@ struct ContentView: View {
             IndexStatusBarView(
                 appState: appState,
                 codebaseIndexProvider: { appState.codebaseIndex },
-                eventBus: appState.eventBus
+                eventBus: appState.eventBus,
+                refreshRemoteAIAccountBalance: appState.refreshRemoteAIAccountBalance
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

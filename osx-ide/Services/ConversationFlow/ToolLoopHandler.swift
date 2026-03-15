@@ -353,6 +353,7 @@ final class ToolLoopHandler {
                 role: .assistant,
                 content: normalizedProgress.content,
                 context: ChatMessageContentContext(reasoning: normalizedProgress.reasoning),
+                billing: latestDraftAssistantBilling(),
                 tool: ChatMessageToolContext(toolCalls: uniqueToolCalls)
             )
             if hasModelStepUpdate || hasReasoning {
@@ -391,7 +392,8 @@ final class ToolLoopHandler {
                 }
                 historyCoordinator.append(ChatMessage(
                     role: .assistant,
-                    content: statusSummary
+                    content: statusSummary,
+                    billing: latestDraftAssistantBilling()
                 ))
                 previousAssistantUpdateSignature = statusSignature
             }
@@ -1470,7 +1472,16 @@ final class ToolLoopHandler {
         guard let content else { return false }
         let text = content.lowercased()
         if text.isEmpty { return false }
-        return text.contains("tool calls:") || text.contains("tool call:")
+        return text.contains("tool calls:")
+            || text.contains("tool call:")
+            || text.contains("<minimax:tool_call>")
+            || text.contains("<invoke name=")
+    }
+
+    private func latestDraftAssistantBilling() -> ChatMessageBillingContext? {
+        historyCoordinator.messages.reversed().first {
+            $0.role == .assistant && $0.isDraft
+        }?.billing
     }
 
     private func shouldStopForReadOnlyToolLoopStall(

@@ -69,7 +69,10 @@ class ChatPromptBuilder {
         let patterns = [
             #"(?is)<tool_call>\s*.*?\s*</tool_call>"#,
             #"(?is)<arg_key>\s*.*?\s*</arg_key>"#,
-            #"(?is)<arg_value>\s*.*?\s*</arg_value>"#
+            #"(?is)<arg_value>\s*.*?\s*</arg_value>"#,
+            #"(?is)<minimax:tool_call>\s*.*?\s*</minimax:tool_call>"#,
+            #"(?is)<invoke\s+name=\"[^\"]+\"\s*>.*?</invoke>"#,
+            #"(?is)</?parameter\s+name=\"[^\"]+\">"#
         ]
 
         for pattern in patterns {
@@ -131,6 +134,20 @@ class ChatPromptBuilder {
             let reasoning = String(afterOpeningTag)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return reasoning.isEmpty ? nil : (reasoning, contentBeforeTag)
+        }
+
+        for (_, closingTag) in tags {
+            guard let closingRange = text.range(of: closingTag, options: [.caseInsensitive]) else {
+                continue
+            }
+
+            let reasoning = String(text[..<closingRange.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let content = String(text[closingRange.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !reasoning.isEmpty {
+                return (reasoning, content)
+            }
         }
 
         return nil

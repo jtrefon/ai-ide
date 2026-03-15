@@ -7,13 +7,15 @@ struct IndexStatusBarView: View {
     init(
         appState: AppState,
         codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
-        eventBus: EventBusProtocol
+        eventBus: EventBusProtocol,
+        refreshRemoteAIAccountBalance: @escaping @Sendable (_ runId: String?) async -> Void
     ) {
         self.appState = appState
         self._viewModel = StateObject(
             wrappedValue: IndexStatusBarViewModel(
                 codebaseIndexProvider: codebaseIndexProvider,
-                eventBus: eventBus
+                eventBus: eventBus,
+                refreshRemoteAIAccountBalance: refreshRemoteAIAccountBalance
             )
         )
     }
@@ -153,6 +155,7 @@ struct IndexStatusBarView: View {
                 statusLabel(viewModel.openRouterContextUsageText)
                 statusLabel(viewModel.remoteAICostText)
                 statusLabel(viewModel.remoteAISpendText, layoutPriority: 1)
+                statusLabel(viewModel.remoteAIBalanceText, layoutPriority: 1)
                 statusLabel(viewModel.metricsText)
 
                 Button {

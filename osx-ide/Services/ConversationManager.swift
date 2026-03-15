@@ -678,6 +678,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 self.resetStreamingDraftState()
                 self.providerIssue = nil
                 self.isSending = false
+                self.eventBus.publish(ConversationRunCompletedEvent(runId: runId))
             } catch {
                 // Clean up draft message on error
                 if let draftId = self.draftAssistantMessageId {

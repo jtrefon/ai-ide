@@ -374,7 +374,10 @@ final class FinalResponseHandler {
                 ChatMessage(
                     role: MessageRole.assistant,
                     content: displayContent,
-                    context: ChatMessageContentContext(reasoning: splitFinal.reasoning)
+                    context: ChatMessageContentContext(reasoning: splitFinal.reasoning),
+                    billing: historyCoordinator.messages.reversed().first {
+                        $0.role == .assistant && $0.isDraft
+                    }?.billing
                 )
             )
         }

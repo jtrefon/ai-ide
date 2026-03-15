@@ -428,6 +428,10 @@ class DependencyContainer: ObservableObject {
             },
             reindexProjectNow: { [weak self] in
                 self?.reindexProjectNow()
+            },
+            refreshRemoteAIAccountBalance: { [weak self] runId in
+                guard let self else { return }
+                await (self._aiService as? RemoteAIAccountStatusRefreshing)?.refreshAccountBalance(runId: runId)
             }
         )
     }

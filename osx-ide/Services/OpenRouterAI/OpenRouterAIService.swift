@@ -68,7 +68,7 @@ actor OpenRouterProviderRateLimiter {
     }
 }
 
-actor OpenRouterAIService: AIService {
+actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
     internal let settingsStore: any OpenRouterSettingsLoading
     internal let client: OpenRouterAPIClient
     private let eventBus: EventBusProtocol
@@ -250,11 +250,7 @@ actor OpenRouterAIService: AIService {
         // Apply rate limiting to prevent 421 errors
         try await enforceRateLimit()
 
-        let requestContext = OpenRouterAPIClient.RequestContext(
-            baseURL: preparation.settings.baseURL,
-            appName: "OSX IDE",
-            referer: ""
-        )
+        let requestContext = requestContext(baseURL: preparation.settings.baseURL)
 
         do {
             try await client.chatCompletionStreaming(
@@ -294,8 +290,16 @@ actor OpenRouterAIService: AIService {
 
         // Get collected results
         let results = collector.getResults()
-        let fullContent = sanitizeAssistantContent(results.content)
-        let toolCalls = results.toolCalls
+        let recoveredToolCalls = recoverFallbackToolCalls(
+            from: results.content,
+            structuredToolCalls: results.toolCalls,
+            toolsWereProvided: preparation.toolDefinitions?.isEmpty == false
+        )
+        let displayContent = contentExcludingRecoveredToolCalls(
+            from: results.content,
+            recoveredToolCalls: recoveredToolCalls
+        )
+        let fullContent = sanitizeAssistantContent(displayContent)
         if let usage = results.usage {
             try await publishUsageUpdateIfAvailable(
                 usage: usage,
@@ -310,7 +314,7 @@ actor OpenRouterAIService: AIService {
         await logRequestSuccess(
             requestId: preparation.requestId,
             contentLength: fullContent?.count ?? 0,
-            toolCalls: toolCalls?.count ?? 0,
+            toolCalls: recoveredToolCalls?.count ?? 0,
             responseBytes: 0
         )
 
@@ -319,7 +323,7 @@ actor OpenRouterAIService: AIService {
 
         return AIServiceResponse(
             content: fullContent,
-            toolCalls: toolCalls
+            toolCalls: recoveredToolCalls
         )
     }
 
@@ -437,12 +441,20 @@ actor OpenRouterAIService: AIService {
         await Self.providerRateLimiter.registerSuccess()
         publishProviderIssueResolved()
 
-        let resolvedToolCalls = request.tools?.isEmpty == false
-            ? choice.message.toolCalls
-            : nil
+        let resolvedToolCalls = recoverFallbackToolCalls(
+            from: choice.message.content,
+            structuredToolCalls: request.tools?.isEmpty == false ? choice.message.toolCalls : nil,
+            toolsWereProvided: request.tools?.isEmpty == false
+        )
+        let sanitizedContent = sanitizeAssistantContent(
+            contentExcludingRecoveredToolCalls(
+                from: choice.message.content,
+                recoveredToolCalls: resolvedToolCalls
+            )
+        )
 
         return AIServiceResponse(
-            content: choice.message.content?.trimmingCharacters(in: .whitespacesAndNewlines),
+            content: sanitizedContent,
             toolCalls: resolvedToolCalls
         )
     }
@@ -451,11 +463,7 @@ actor OpenRouterAIService: AIService {
         if let cached = contextLengthByModelId[modelId] {
             return cached
         }
-        let requestContext = OpenRouterAPIClient.RequestContext(
-            baseURL: baseURL,
-            appName: "OSX IDE",
-            referer: ""
-        )
+        let requestContext = requestContext(baseURL: baseURL)
         let models = try await client.fetchModels(apiKey: apiKey, context: requestContext)
         guard let model = models.first(where: { $0.id == modelId }) else {
             return nil
@@ -487,7 +495,24 @@ actor OpenRouterAIService: AIService {
             apiKey: apiKey,
             baseURL: baseURL
         )
-        let costMicrodollars = usage.costMicrodollars ?? estimatedCostMicrodollars
+        let costMicrodollars = resolvedCostMicrodollars(
+            usage: usage,
+            fallback: estimatedCostMicrodollars
+        )
+        let accountBalanceMicrodollars = try? await fetchAccountBalanceMicrodollarsIfAvailable(
+            apiKey: apiKey,
+            baseURL: baseURL
+        )
+        if let accountBalanceMicrodollars {
+            await MainActor.run {
+                eventBus.publish(RemoteAIAccountBalanceUpdatedEvent(
+                    providerName: providerName,
+                    modelId: modelId,
+                    runId: runId,
+                    accountBalanceMicrodollars: accountBalanceMicrodollars
+                ))
+            }
+        }
         let contextLength = try? await fetchContextLength(
             modelId: modelId,
             apiKey: apiKey,
@@ -501,7 +526,8 @@ actor OpenRouterAIService: AIService {
                 promptTokens: normalizedUsage.promptTokens,
                 completionTokens: normalizedUsage.completionTokens,
                 totalTokens: normalizedUsage.totalTokens,
-                costMicrodollars: costMicrodollars
+                costMicrodollars: costMicrodollars,
+                accountBalanceMicrodollars: accountBalanceMicrodollars
             ),
             contextLength: contextLength
         )
@@ -555,11 +581,7 @@ actor OpenRouterAIService: AIService {
             return cached
         }
 
-        let requestContext = OpenRouterAPIClient.RequestContext(
-            baseURL: baseURL,
-            appName: "OSX IDE",
-            referer: ""
-        )
+        let requestContext = requestContext(baseURL: baseURL)
         let models = try await client.fetchModels(apiKey: apiKey, context: requestContext)
         guard let model = models.first(where: { $0.id == modelId }) else {
             return nil
@@ -592,11 +614,7 @@ actor OpenRouterAIService: AIService {
         let config = await testConfigurationProvider.configuration
         
         do {
-            let requestContext = OpenRouterAPIClient.RequestContext(
-                baseURL: baseURL,
-                appName: "OSX IDE",
-                referer: ""
-            )
+            let requestContext = requestContext(baseURL: baseURL)
             return try await executeChatCompletionWithTimeout(
                 timeoutSeconds: config.externalAPITimeout,
                 requestId: requestId
@@ -907,10 +925,205 @@ actor OpenRouterAIService: AIService {
 
     private func sanitizeAssistantContent(_ content: String?) -> String? {
         guard let content else { return nil }
-        let split = ChatPromptBuilder.splitReasoning(from: content)
-        let cleaned = split.content
-            .replacingOccurrences(of: #"(?is)</?think>"#, with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return cleaned.isEmpty ? nil : cleaned
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func refreshAccountBalance(runId: String?) async {
+        let settings = settingsStore.load(includeApiKey: true)
+        let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else { return }
+        guard let accountBalanceMicrodollars = try? await fetchAccountBalanceMicrodollarsIfAvailable(
+            apiKey: apiKey,
+            baseURL: settings.baseURL
+        ) else {
+            return
+        }
+
+        await MainActor.run {
+            eventBus.publish(RemoteAIAccountBalanceUpdatedEvent(
+                providerName: providerName,
+                modelId: settings.model,
+                runId: runId,
+                accountBalanceMicrodollars: accountBalanceMicrodollars
+            ))
+        }
+    }
+
+    private func requestContext(baseURL: String) -> OpenRouterAPIClient.RequestContext {
+        if providerName == "Kilo Code" || baseURL.contains("api.kilo.ai") {
+            return OpenRouterAPIClient.RequestContext(
+                baseURL: baseURL,
+                appName: "Kilo Code",
+                referer: "https://kilocode.ai"
+            )
+        }
+
+        return OpenRouterAPIClient.RequestContext(
+            baseURL: baseURL,
+            appName: "OSX IDE",
+            referer: ""
+        )
+    }
+
+    private func resolvedCostMicrodollars(
+        usage: OpenRouterChatUsage,
+        fallback: Int?
+    ) -> Int? {
+        if let costMicrodollars = usage.costMicrodollars {
+            return costMicrodollars
+        }
+        if providerName == "Kilo Code",
+           let upstreamCost = usage.costDetails?.upstreamInferenceCost {
+            return microdollars(fromDollarAmount: upstreamCost)
+        }
+        if let directCost = usage.cost {
+            return microdollars(fromDollarAmount: directCost)
+        }
+        return fallback
+    }
+
+    private func fetchAccountBalanceMicrodollarsIfAvailable(
+        apiKey: String,
+        baseURL: String
+    ) async throws -> Int? {
+        guard providerName == "Kilo Code" || baseURL.contains("api.kilo.ai") else {
+            return nil
+        }
+        guard let apiBaseURL = kiloAPIBaseURL(from: baseURL) else {
+            return nil
+        }
+        guard let balance = try await client.fetchKiloBalance(apiKey: apiKey, apiBaseURL: apiBaseURL) else {
+            return nil
+        }
+        return microdollars(fromDollarAmount: balance)
+    }
+
+    private func kiloAPIBaseURL(from baseURL: String) -> String? {
+        guard var components = URLComponents(string: baseURL) else { return nil }
+        components.path = ""
+        components.query = nil
+        components.fragment = nil
+        return components.url?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    private func microdollars(fromDollarAmount amount: Decimal) -> Int {
+        NSDecimalNumber(decimal: amount * Decimal(1_000_000)).intValue
+    }
+
+    private func recoverFallbackToolCalls(
+        from content: String?,
+        structuredToolCalls: [AIToolCall]?,
+        toolsWereProvided: Bool
+    ) -> [AIToolCall]? {
+        if let structuredToolCalls, !structuredToolCalls.isEmpty {
+            return structuredToolCalls
+        }
+        guard toolsWereProvided, let content, !content.isEmpty else {
+            return nil
+        }
+        return Self.extractFallbackToolCalls(from: content)
+    }
+
+    private func contentExcludingRecoveredToolCalls(
+        from content: String?,
+        recoveredToolCalls: [AIToolCall]?
+    ) -> String? {
+        guard let content else { return nil }
+        guard recoveredToolCalls?.isEmpty == false else { return content }
+        return Self.stripRecoveredToolCallMarkup(from: content)
+    }
+
+    nonisolated static func extractFallbackToolCalls(from content: String) -> [AIToolCall]? {
+        guard let minimaxCalls = decodeMinimaxToolCalls(from: content), !minimaxCalls.isEmpty else {
+            return nil
+        }
+        return minimaxCalls
+    }
+
+    nonisolated private static func decodeMinimaxToolCalls(from content: String) -> [AIToolCall]? {
+        let pattern = #"<invoke\s+name=\"([^\"]+)\"\s*>(.*?)</invoke>"#
+        guard let regex = try? NSRegularExpression(
+            pattern: pattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else {
+            return nil
+        }
+        let contentRange = NSRange(content.startIndex..<content.endIndex, in: content)
+        let matches = regex.matches(in: content, options: [], range: contentRange)
+        guard !matches.isEmpty else { return nil }
+
+        let parameterPattern = #"<parameter\s+name=\"([^\"]+)\"\s*>(.*?)</parameter>"#
+        guard let parameterRegex = try? NSRegularExpression(
+            pattern: parameterPattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else {
+            return nil
+        }
+
+        let toolCalls = matches.compactMap { match -> AIToolCall? in
+            guard match.numberOfRanges == 3,
+                  let nameRange = Range(match.range(at: 1), in: content),
+                  let bodyRange = Range(match.range(at: 2), in: content) else {
+                return nil
+            }
+
+            let toolName = decodeToolMarkupEntities(String(content[nameRange]))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !toolName.isEmpty else { return nil }
+
+            let body = String(content[bodyRange])
+            let bodyNSRange = NSRange(body.startIndex..<body.endIndex, in: body)
+            let parameters = parameterRegex.matches(in: body, options: [], range: bodyNSRange)
+            var arguments: [String: Any] = [:]
+            for parameter in parameters {
+                guard parameter.numberOfRanges == 3,
+                      let parameterNameRange = Range(parameter.range(at: 1), in: body),
+                      let parameterValueRange = Range(parameter.range(at: 2), in: body) else {
+                    continue
+                }
+                let parameterName = decodeToolMarkupEntities(String(body[parameterNameRange]))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !parameterName.isEmpty else { continue }
+                let parameterValue = decodeToolMarkupEntities(String(body[parameterValueRange]))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                arguments[parameterName] = parameterValue
+            }
+
+            return AIToolCall(
+                id: UUID().uuidString,
+                name: toolName,
+                arguments: arguments
+            )
+        }
+
+        return toolCalls.isEmpty ? nil : toolCalls
+    }
+
+    nonisolated private static func stripRecoveredToolCallMarkup(from content: String) -> String {
+        var output = content
+        let patterns = [
+            #"(?is)<minimax:tool_call>\s*.*?\s*</minimax:tool_call>"#,
+            #"(?is)<invoke\s+name=\"[^\"]+\"\s*>.*?</invoke>"#
+        ]
+
+        for pattern in patterns {
+            output = output.replacingOccurrences(
+                of: pattern,
+                with: "",
+                options: .regularExpression
+            )
+        }
+
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    nonisolated private static func decodeToolMarkupEntities(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
     }
 }

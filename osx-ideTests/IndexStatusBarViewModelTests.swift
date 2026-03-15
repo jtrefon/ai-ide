@@ -8,6 +8,7 @@ final class IndexStatusBarViewModelTests: XCTestCase {
         let viewModel = IndexStatusBarViewModel(
             codebaseIndexProvider: { index },
             eventBus: EventBus(),
+            refreshRemoteAIAccountBalance: { _ in },
             statsPollInterval: 0.1
         )
 
@@ -18,6 +19,55 @@ final class IndexStatusBarViewModelTests: XCTestCase {
 
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
         XCTAssertEqual(viewModel.embeddingModelIdentifier, "nomic")
+    }
+
+    func testRemoteAIUsageDisplaysBalanceWhenProvided() {
+        let eventBus = EventBus()
+        let viewModel = IndexStatusBarViewModel(
+            codebaseIndexProvider: { FakeCodebaseIndex(currentEmbeddingModelIdentifier: "hashing_v1") },
+            eventBus: eventBus,
+            refreshRemoteAIAccountBalance: { _ in },
+            statsPollInterval: 60
+        )
+
+        eventBus.publish(OpenRouterUsageUpdatedEvent(
+            providerName: "Kilo Code",
+            modelId: "kilo-auto/balanced",
+            runId: "run-1",
+            usage: .init(
+                promptTokens: 10,
+                completionTokens: 20,
+                totalTokens: 30,
+                costMicrodollars: 120_000,
+                accountBalanceMicrodollars: 13_450_000
+            ),
+            contextLength: 100
+        ))
+
+        XCTAssertEqual(viewModel.openRouterContextUsageText, "CTX 30/100")
+        XCTAssertEqual(viewModel.remoteAICostText, "")
+        XCTAssertEqual(viewModel.remoteAISpendText, "Kilo Code spent $0.12")
+        XCTAssertEqual(viewModel.remoteAIBalanceText, "Kilo Code balance $13.45")
+    }
+
+    func testConversationCompletionTriggersDelayedBalanceRefresh() {
+        let eventBus = EventBus()
+        let refreshExpectation = expectation(description: "refresh balance")
+        let viewModel = IndexStatusBarViewModel(
+            codebaseIndexProvider: { FakeCodebaseIndex(currentEmbeddingModelIdentifier: "hashing_v1") },
+            eventBus: eventBus,
+            refreshRemoteAIAccountBalance: { runId in
+                if runId == "run-42" {
+                    refreshExpectation.fulfill()
+                }
+            },
+            statsPollInterval: 60
+        )
+
+        _ = viewModel
+        eventBus.publish(ConversationRunCompletedEvent(runId: "run-42"))
+
+        wait(for: [refreshExpectation], timeout: 3.0)
     }
 }
 
