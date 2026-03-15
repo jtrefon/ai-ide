@@ -246,6 +246,183 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         XCTAssertFalse(shouldResume)
     }
 
+    func testBranchExecutionContinuationDeciderResumesForIncompletePlanAfterToolLoopEvenIfResponseIsHandoffText() async throws {
+        let request = makeSendRequest(mode: .agent, userInput: "Implement remaining work")
+        let branchExecution = OrchestrationState.BranchExecution(
+            plan: "1. [x] First\n2. [ ] Second",
+            globalInvariants: [],
+            branches: [
+                .init(id: "branch_1", title: "Second", checklistItems: ["Finish implementation"])
+            ],
+            activeBranchIndex: 0
+        )
+        let decider = BranchExecutionContinuationDecider(planStore: StubPlanStore(plans: [
+            request.conversationId: """
+            # Implementation Plan
+
+            - [x] First
+            - [ ] Second
+            """
+        ]))
+
+        let shouldResume = await decider.shouldResumeExecution(
+            from: OrchestrationState(
+                request: request,
+                response: AIServiceResponse(
+                    content: "Done -> Next -> Path: Continue with remaining implementation.",
+                    toolCalls: nil
+                ),
+                lastToolResults: [
+                    ChatMessage(
+                        role: .tool,
+                        content: "ok",
+                        tool: ChatMessageToolContext(
+                            toolName: "write_file",
+                            toolStatus: .completed,
+                            target: ToolInvocationTarget(toolCallId: "tool-1")
+                        )
+                    )
+                ],
+                branchExecution: branchExecution,
+                transition: .next("branch_review")
+            ),
+            branchExecution: branchExecution
+        )
+
+        XCTAssertTrue(shouldResume)
+    }
+
+    func testBranchExecutionContinuationDeciderResumesWhenToolCallsRemainOnLastBranch() async throws {
+        let request = makeSendRequest(mode: .agent, userInput: "Implement remaining work")
+        let branchExecution = OrchestrationState.BranchExecution(
+            plan: "1. [x] First\n2. [ ] Second",
+            globalInvariants: [],
+            branches: [
+                .init(id: "branch_1", title: "Second", checklistItems: ["Finish implementation"])
+            ],
+            activeBranchIndex: 0
+        )
+        let decider = BranchExecutionContinuationDecider(planStore: StubPlanStore(plans: [
+            request.conversationId: """
+            # Implementation Plan
+
+            - [x] First
+            - [ ] Second
+            """
+        ]))
+
+        let shouldResume = await decider.shouldResumeExecution(
+            from: OrchestrationState(
+                request: request,
+                response: AIServiceResponse(
+                    content: "Proceeding now.",
+                    toolCalls: [AIToolCall(id: "tool-1", name: "write_file", arguments: ["path": "foo.txt", "content": "x"])]
+                ),
+                lastToolResults: [],
+                branchExecution: branchExecution,
+                transition: .next("branch_review")
+            ),
+            branchExecution: branchExecution
+        )
+
+        XCTAssertTrue(shouldResume)
+    }
+
+    func testExecutionSignalBuilderCapturesIncompletePlanAndExecutionFollowupSignals() async throws {
+        let request = makeSendRequest(mode: .agent, userInput: "Implement remaining work")
+        let builder = OrchestrationExecutionSignalBuilder(planStore: StubPlanStore(plans: [
+            request.conversationId: """
+            # Implementation Plan
+
+            - [x] First
+            - [ ] Second
+            """
+        ]))
+
+        let state = OrchestrationState(
+            request: request,
+            response: AIServiceResponse(
+                content: "<ide_reasoning>Reflection: one\nPlanning: continue\nContinuity: pending\nDelivery: NEEDS_WORK</ide_reasoning>Done -> Next -> Path: Continue with remaining implementation.",
+                toolCalls: nil
+            ),
+            lastToolResults: [
+                ChatMessage(
+                    role: .tool,
+                    content: "ok",
+                    tool: ChatMessageToolContext(
+                        toolName: "write_file",
+                        toolStatus: .completed,
+                        target: ToolInvocationTarget(toolCallId: "tool-1")
+                    )
+                )
+            ],
+            transition: .next("branch_review")
+        )
+
+        let signals = await builder.build(for: state)
+
+        XCTAssertTrue(signals.hasToolResults)
+        XCTAssertTrue(signals.hasIncompletePlan)
+        XCTAssertEqual(
+            signals.deliveryState,
+            OrchestrationState.ExecutionSignals.DeliveryState.needsWork
+        )
+        XCTAssertTrue(signals.indicatesUnfinishedExecution)
+    }
+
+    func testBranchExecutionContinuationDeciderUsesPrecomputedExecutionSignals() async throws {
+        let request = makeSendRequest(mode: .agent, userInput: "Implement remaining work")
+        let branchExecution = OrchestrationState.BranchExecution(
+            plan: "1. [x] First\n2. [ ] Second",
+            globalInvariants: [],
+            branches: [
+                .init(id: "branch_1", title: "Second", checklistItems: ["Finish implementation"])
+            ],
+            activeBranchIndex: 0
+        )
+        let decider = BranchExecutionContinuationDecider(planStore: StubPlanStore())
+
+        let signals = OrchestrationState.ExecutionSignals(
+            hasToolCalls: false,
+            hasToolResults: true,
+            deliveryState: OrchestrationState.ExecutionSignals.DeliveryState.needsWork,
+            planProgress: .init(completed: 1, total: 2),
+            missingClaimedArtifacts: false,
+            shouldForceExecutionFollowup: false,
+            shouldForceToolFollowup: false,
+            indicatesUnfinishedExecution: false,
+            isIntermediateExecutionHandoff: false,
+            isSyntheticProgressArtifact: false
+        )
+
+        let shouldResume = await decider.shouldResumeExecution(
+            from: OrchestrationState(
+                request: request,
+                response: AIServiceResponse(
+                    content: "Looks fine.",
+                    toolCalls: nil
+                ),
+                lastToolResults: [
+                    ChatMessage(
+                        role: .tool,
+                        content: "ok",
+                        tool: ChatMessageToolContext(
+                            toolName: "write_file",
+                            toolStatus: .completed,
+                            target: ToolInvocationTarget(toolCallId: "tool-1")
+                        )
+                    )
+                ],
+                branchExecution: branchExecution,
+                executionSignals: signals,
+                transition: .next("branch_review")
+            ),
+            branchExecution: branchExecution
+        )
+
+        XCTAssertTrue(shouldResume)
+    }
+
     func testConversationFlowGraphStartsAtDispatcherForSimpleAgentRequest() {
         let graph = ConversationFlowGraphFactory.makeGraph(
             request: makeSendRequest(mode: .agent),

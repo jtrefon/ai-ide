@@ -128,6 +128,31 @@ final class ToolLoopHandler {
             let currentToolCallSignatures = Set(uniqueToolCalls.map(toolCallSignature))
             let repeatedCompletedSignatures = currentToolCallSignatures.intersection(previouslyCompletedToolCallSignatures)
             if !repeatedCompletedSignatures.isEmpty {
+                if await shouldFinalizeAfterRepeatedCompletedReadOnlyBatch(
+                    toolCalls: uniqueToolCalls,
+                    repeatedCompletedSignatures: repeatedCompletedSignatures,
+                    hasObservedSuccessfulMutation: hasObservedSuccessfulMutation,
+                    conversationId: conversationId
+                ) {
+                    await AIToolTraceLogger.shared.log(type: "chat.tool_loop_post_mutation_read_only_repeat_finalize", data: [
+                        "runId": runId,
+                        "iteration": toolIteration,
+                        "signatureCount": repeatedCompletedSignatures.count
+                    ])
+                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                        explicitContext: explicitContext,
+                        projectRoot: projectRoot,
+                        mode: mode,
+                        userInput: userInput,
+                        toolResults: lastToolResults,
+                        runId: runId,
+                        availableTools: nil,
+                        conversationId: conversationId,
+                        hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
+                    )
+                    break
+                }
+
                 repeatedCompletedSignatureCount += 1
                 ToolExecutionTelemetry.shared.recordRepeatedToolCallSignatures(count: repeatedCompletedSignatures.count)
                 await AIToolTraceLogger.shared.log(type: "chat.tool_loop_repeated_completed_signature", data: [
@@ -1217,8 +1242,9 @@ final class ToolLoopHandler {
         toolCalls: [AIToolCall],
         iteration: Int
     ) -> String {
-        let summary = progressTriplet(toolCalls: toolCalls, modelContent: nil, iteration: iteration)
-        return "\(summary.what) Next: \(summary.how) in \(summary.wherePath)."
+        _ = toolCalls
+        _ = iteration
+        return ""
     }
 
     private func normalizedProgressUpdate(
@@ -1227,27 +1253,11 @@ final class ToolLoopHandler {
         toolCalls: [AIToolCall],
         iteration: Int
     ) -> (content: String, reasoning: String?) {
-        let trimmedContent = modelContent.trimmingCharacters(in: .whitespacesAndNewlines)
-        let summary = progressTriplet(
-            toolCalls: toolCalls,
-            modelContent: trimmedContent.isEmpty ? nil : trimmedContent,
-            iteration: iteration
-        )
-
-        let normalizedContent = "\(summary.what) Next: \(summary.how) in \(summary.wherePath)."
-        let normalizedReasoning: String
-        if let modelReasoning,
-           !modelReasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            normalizedReasoning = modelReasoning
-        } else {
-            normalizedReasoning = [
-                "What: \(summary.what)",
-                "How: \(summary.how)",
-                "Where: \(summary.wherePath)"
-            ].joined(separator: "\n")
-        }
-
-        return (normalizedContent, normalizedReasoning)
+        _ = modelContent
+        _ = modelReasoning
+        _ = toolCalls
+        _ = iteration
+        return ("", nil)
     }
 
     private func progressTriplet(
@@ -1516,6 +1526,26 @@ final class ToolLoopHandler {
 
         return consecutiveReadOnlyToolIterations >= ToolLoopConstants.readOnlyIterationStallThreshold
             || repeatedReadOnlyToolBatchCount >= ToolLoopConstants.repeatedReadOnlyBatchStallThreshold
+    }
+
+    private func shouldFinalizeAfterRepeatedCompletedReadOnlyBatch(
+        toolCalls: [AIToolCall],
+        repeatedCompletedSignatures: Set<String>,
+        hasObservedSuccessfulMutation: Bool,
+        conversationId: String
+    ) async -> Bool {
+        guard hasObservedSuccessfulMutation else { return false }
+        guard !toolCalls.isEmpty else { return false }
+
+        let isReadOnlyBatch = toolCalls.allSatisfy { readOnlyLoopToolNames.contains($0.name) }
+        guard isReadOnlyBatch else { return false }
+
+        let currentSignatures = Set(toolCalls.map(toolCallSignature))
+        guard currentSignatures == repeatedCompletedSignatures else { return false }
+
+        let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
+        return planProgress.total == 0 || planProgress.isComplete
     }
 
     private var readOnlyLoopToolNames: Set<String> {
@@ -1827,7 +1857,7 @@ final class ToolLoopHandler {
         let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
         guard planProgress.total > 0 else { return true }
-        return !planProgress.isComplete
+        return planProgress.isComplete
     }
 
     private func isSyntheticProgressArtifact(_ content: String) -> Bool {
@@ -2105,7 +2135,6 @@ final class ToolLoopHandler {
         let shouldContinueForPlan = planProgress.total > 0 && !planProgress.isComplete
         guard shouldContinueForPlan else { return currentResponse }
         guard !hasSatisfiedClaimedArtifacts else { return currentResponse }
-        guard !isPureContinuationOrRecoverySummary(currentContent) else { return currentResponse }
 
         let followupMessages = try await ToolLoopUtilities.buildPlanContinuationMessages(
             userInput: userInput,
@@ -2164,7 +2193,6 @@ final class ToolLoopHandler {
         let planMarkdown = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let planProgress = PlanChecklistTracker.progress(in: planMarkdown)
         guard planProgress.total > 0, !planProgress.isComplete else { return currentResponse }
-        guard !isPureContinuationOrRecoverySummary(currentContent) else { return currentResponse }
 
         let deliveryStatus = ChatPromptBuilder.deliveryStatus(from: currentContent)
         let deliveryStatusLabel: String

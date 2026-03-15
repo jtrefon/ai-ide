@@ -83,6 +83,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
     func testOfflineAgentHistoryRequestRoutesToLocalService() async throws {
         let openRouterService = SpyAIService()
         let alibabaService = SpyAIService()
+        let kiloCodeService = SpyAIService()
         let localService = SpyAIService()
         await selectionStore.setOfflineModeEnabled(true)
         await providerSelectionStore.setSelectedRemoteProvider(.openRouter)
@@ -90,6 +91,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
         let service = ModelRoutingAIService(
             openRouterService: openRouterService,
             alibabaService: alibabaService,
+            kiloCodeService: kiloCodeService,
             localService: localService,
             selectionStore: selectionStore,
             providerSelectionStore: providerSelectionStore
@@ -117,6 +119,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
     func testOfflineAgentStreamingRequestRoutesToLocalService() async throws {
         let openRouterService = SpyAIService()
         let alibabaService = SpyAIService()
+        let kiloCodeService = SpyAIService()
         let localService = SpyAIService()
         localService.streamingResponse = AIServiceResponse(content: "local-stream", toolCalls: nil)
         await selectionStore.setOfflineModeEnabled(true)
@@ -125,6 +128,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
         let service = ModelRoutingAIService(
             openRouterService: openRouterService,
             alibabaService: alibabaService,
+            kiloCodeService: kiloCodeService,
             localService: localService,
             selectionStore: selectionStore,
             providerSelectionStore: providerSelectionStore
@@ -150,6 +154,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
     func testOnlineAgentHistoryRequestStillRoutesToOpenRouter() async throws {
         let openRouterService = SpyAIService()
         let alibabaService = SpyAIService()
+        let kiloCodeService = SpyAIService()
         let localService = SpyAIService()
         await selectionStore.setOfflineModeEnabled(false)
         await providerSelectionStore.setSelectedRemoteProvider(.openRouter)
@@ -157,6 +162,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
         let service = ModelRoutingAIService(
             openRouterService: openRouterService,
             alibabaService: alibabaService,
+            kiloCodeService: kiloCodeService,
             localService: localService,
             selectionStore: selectionStore,
             providerSelectionStore: providerSelectionStore
@@ -179,6 +185,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
     func testOnlineAgentHistoryRequestRoutesToAlibabaWhenSelected() async throws {
         let openRouterService = SpyAIService()
         let alibabaService = SpyAIService()
+        let kiloCodeService = SpyAIService()
         let localService = SpyAIService()
         await selectionStore.setOfflineModeEnabled(false)
         await providerSelectionStore.setSelectedRemoteProvider(.alibabaCloud)
@@ -186,6 +193,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
         let service = ModelRoutingAIService(
             openRouterService: openRouterService,
             alibabaService: alibabaService,
+            kiloCodeService: kiloCodeService,
             localService: localService,
             selectionStore: selectionStore,
             providerSelectionStore: providerSelectionStore

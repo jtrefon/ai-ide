@@ -24,13 +24,17 @@ struct ConditionalToolLoopNode: OrchestrationNode {
         // If there are no tool calls, do not re-enter ToolLoopHandler (it can force
         // execution followups and create redundant cycles across orchestration phases).
         guard request.mode == .agent, response.toolCalls?.isEmpty == false else {
-            return OrchestrationState(
+            var nextState = OrchestrationState(
                 request: request,
                 response: response,
                 lastToolResults: state.lastToolResults,
                 branchExecution: state.branchExecution,
                 transition: .next(nextNodeId)
             )
+            nextState = nextState.updating(
+                executionSignals: await OrchestrationExecutionSignalBuilder().build(for: nextState)
+            )
+            return nextState
         }
 
         let followupToolLoopResult = try await handler.handleToolLoopIfNeeded(
@@ -45,13 +49,17 @@ struct ConditionalToolLoopNode: OrchestrationNode {
             userInput: request.userInput
         )
 
-        return OrchestrationState(
+        var nextState = OrchestrationState(
             request: request,
             response: followupToolLoopResult.response,
             lastToolResults: followupToolLoopResult.lastToolResults,
             branchExecution: state.branchExecution,
             transition: .next(nextNodeId)
         )
+        nextState = nextState.updating(
+            executionSignals: await OrchestrationExecutionSignalBuilder().build(for: nextState)
+        )
+        return nextState
     }
 
     private func requireResponse(from state: OrchestrationState) throws -> AIServiceResponse {

@@ -2,6 +2,42 @@ import Foundation
 
 @MainActor
 struct OrchestrationState: Sendable {
+    struct ExecutionSignals: Sendable {
+        enum DeliveryState: String, Sendable, Equatable {
+            case done
+            case needsWork
+            case missing
+        }
+
+        struct PlanProgress: Sendable, Equatable {
+            let completed: Int
+            let total: Int
+
+            var isComplete: Bool {
+                total > 0 && completed >= total
+            }
+
+            var hasChecklist: Bool {
+                total > 0
+            }
+        }
+
+        let hasToolCalls: Bool
+        let hasToolResults: Bool
+        let deliveryState: DeliveryState
+        let planProgress: PlanProgress
+        let missingClaimedArtifacts: Bool
+        let shouldForceExecutionFollowup: Bool
+        let shouldForceToolFollowup: Bool
+        let indicatesUnfinishedExecution: Bool
+        let isIntermediateExecutionHandoff: Bool
+        let isSyntheticProgressArtifact: Bool
+
+        var hasIncompletePlan: Bool {
+            planProgress.hasChecklist && !planProgress.isComplete
+        }
+    }
+
     struct BranchExecution: Sendable {
         struct Branch: Sendable, Equatable {
             let id: String
@@ -83,6 +119,7 @@ struct OrchestrationState: Sendable {
     var response: AIServiceResponse?
     var lastToolResults: [ChatMessage]
     var branchExecution: BranchExecution?
+    var executionSignals: ExecutionSignals?
 
     var transition: Transition
 
@@ -94,6 +131,7 @@ struct OrchestrationState: Sendable {
         response: AIServiceResponse? = nil,
         lastToolResults: [ChatMessage]? = nil,
         branchExecution: BranchExecution? = nil,
+        executionSignals: ExecutionSignals? = nil,
         transition: Transition? = nil
     ) -> OrchestrationState {
         OrchestrationState(
@@ -101,6 +139,7 @@ struct OrchestrationState: Sendable {
             response: response ?? self.response,
             lastToolResults: lastToolResults ?? self.lastToolResults,
             branchExecution: branchExecution ?? self.branchExecution,
+            executionSignals: executionSignals ?? self.executionSignals,
             transition: transition ?? self.transition
         )
     }
@@ -109,12 +148,14 @@ struct OrchestrationState: Sendable {
         to nextNodeId: String?,
         response: AIServiceResponse? = nil,
         lastToolResults: [ChatMessage]? = nil,
-        branchExecution: BranchExecution? = nil
+        branchExecution: BranchExecution? = nil,
+        executionSignals: ExecutionSignals? = nil
     ) -> OrchestrationState {
         updating(
             response: response,
             lastToolResults: lastToolResults,
             branchExecution: branchExecution,
+            executionSignals: executionSignals,
             transition: nextNodeId.map(Transition.next) ?? .end
         )
     }
@@ -124,12 +165,14 @@ struct OrchestrationState: Sendable {
         response: AIServiceResponse? = nil,
         lastToolResults: [ChatMessage] = [],
         branchExecution: BranchExecution? = nil,
+        executionSignals: ExecutionSignals? = nil,
         transition: Transition
     ) {
         self.request = request
         self.response = response
         self.lastToolResults = lastToolResults
         self.branchExecution = branchExecution
+        self.executionSignals = executionSignals
         self.transition = transition
     }
 }

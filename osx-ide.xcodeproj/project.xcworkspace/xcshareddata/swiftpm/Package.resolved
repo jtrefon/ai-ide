@@ -29,15 +29,6 @@
       }
     },
     {
-      "identity" : "mlx-swift-lm",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ml-explore/mlx-swift-lm",
-      "state" : {
-        "branch" : "main",
-        "revision" : "83ca9f699ca2090ded4c151b9bd305a246ccd9a5"
-      }
-    },
-    {
       "identity" : "mlx-swift-structured",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/petrukha-ivan/mlx-swift-structured",

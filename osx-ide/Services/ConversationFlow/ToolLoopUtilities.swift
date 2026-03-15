@@ -408,6 +408,7 @@ enum ToolLoopUtilities {
             userInput: payload.userInput,
             assistantDraft: payload.assistantDraft,
             failureReason: payload.failureReason,
+            executionSignals: nil,
             toolCalls: toolCallSummaries(payload.toolCalls),
             toolResults: toolResultSummaries(payload.toolResults)
         )

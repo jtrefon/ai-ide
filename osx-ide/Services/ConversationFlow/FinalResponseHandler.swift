@@ -91,6 +91,17 @@ final class FinalResponseHandler {
         return genericPatterns.contains { lowercased.contains($0) }
     }
 
+    private func containsLiteralToolCallMarkup(_ content: String) -> Bool {
+        let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        return normalized.contains("[tool_call]")
+            || normalized.contains("<tool_name>")
+            || normalized.contains("</tool_call>")
+            || normalized.contains("<minimax:tool_call>")
+            || normalized.contains("<invoke name=")
+    }
+
     private func containsUnfinishedWorkSignals(_ content: String) -> Bool {
         let normalized = content.lowercased()
         let unfinishedSignals = [
@@ -175,11 +186,14 @@ final class FinalResponseHandler {
                     runId: runId,
                     stage: AIRequestStage.final_response
                 )
-            )
-            .get()
+        )
+        .get()
 
         let firstFollowupContent = followup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let firstFollowupContent, !firstFollowupContent.isEmpty, !isGenericStatusMessage(firstFollowupContent) {
+        if let firstFollowupContent,
+           !firstFollowupContent.isEmpty,
+           !isGenericStatusMessage(firstFollowupContent),
+           !containsLiteralToolCallMarkup(firstFollowupContent) {
             return AIServiceResponse(content: followup.content, toolCalls: nil)
         }
 
@@ -205,7 +219,10 @@ final class FinalResponseHandler {
             .get()
 
         let retryFollowupContent = retryFollowup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let retryFollowupContent, !retryFollowupContent.isEmpty, !isGenericStatusMessage(retryFollowupContent) {
+        if let retryFollowupContent,
+           !retryFollowupContent.isEmpty,
+           !isGenericStatusMessage(retryFollowupContent),
+           !containsLiteralToolCallMarkup(retryFollowupContent) {
             return AIServiceResponse(content: retryFollowup.content, toolCalls: nil)
         }
 

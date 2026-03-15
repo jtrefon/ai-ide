@@ -271,7 +271,7 @@
 			mainGroup = 04C2CE002E5C8E9D007A5EF7;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */,
 				6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */,
 				6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */,
 			);
@@ -430,6 +430,7 @@
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
@@ -488,6 +489,7 @@
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 			};
 			name = Release;
 		};
@@ -516,6 +518,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
@@ -545,6 +548,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
@@ -562,6 +566,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/osx-ide.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/osx-ide";
 			};
@@ -580,6 +585,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/osx-ide.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/osx-ide";
 			};
@@ -597,6 +603,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_TARGET_NAME = "osx-ide";
 			};
@@ -614,6 +621,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_TARGET_NAME = "osx-ide";
 			};
@@ -632,6 +640,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideHarnessTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/osx-ide.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/osx-ide";
 			};
@@ -650,6 +659,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideHarnessTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/osx-ide.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/osx-ide";
 			};
@@ -705,15 +715,15 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCLocalSwiftPackageReference;
+			path = "Vendor/mlx-swift-lm";
+			relativePath = "Vendor/mlx-swift-lm";
 		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
 		6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/petrukha-ivan/mlx-swift-structured";
@@ -735,17 +745,17 @@
 /* Begin XCSwiftPackageProductDependency section */
 		6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLLM;
 		};
 		6E8A1B002F9A000100ABC123 /* MLXVLM */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXVLM;
 		};
 		6E8A1B022F9A000100ABC123 /* MLXVLM */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXVLM;
 		};
 		6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */ = {
