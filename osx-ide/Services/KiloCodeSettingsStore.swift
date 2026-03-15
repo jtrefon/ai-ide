@@ -1,88 +1,41 @@
 import Foundation
 
-final class KiloCodeSettingsStore: OpenRouterSettingsStoring, @unchecked Sendable {
+final class KiloCodeSettingsStore: ProviderOpenRouterSettingsStore, @unchecked Sendable {
     static let currentBaseURL = "https://api.kilo.ai/api/openrouter"
     private static let legacyBaseURLs = ["https://api.kilo.ai/api/gateway"]
 
-    private let settingsStore: SettingsStore
-    private let apiKeyKey = "KiloCodeAPIKey"
-    private let modelKey = "KiloCodeModel"
-    private let baseURLKey = "KiloCodeBaseURL"
-    private let systemPromptKey = "KiloCodeSystemPrompt"
-    private let reasoningModeKey = "KiloCodeReasoningMode"
-    private let toolPromptModeKey = "KiloCodeToolPromptMode"
-    private let ragEnabledDuringToolLoopKey = "KiloCodeRAGEnabledDuringToolLoop"
-    private let environment = ProcessInfo.processInfo.environment
-
-    init(settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)) {
-        self.settingsStore = settingsStore
-    }
-
-    func load(includeApiKey: Bool = true) -> OpenRouterSettings {
-        let apiKey: String
-        if includeApiKey {
-            apiKey = environment["TEST_RUNNER_ENV_HARNESS_KILOCODE_API_KEY"]
-                ?? environment["HARNESS_KILOCODE_API_KEY"]
-                ?? settingsStore.string(forKey: apiKeyKey)
-                ?? ""
-        } else {
-            apiKey = ""
-        }
-
-        let model = harnessOverrideValue(
-            testRunnerKey: "TEST_RUNNER_ENV_HARNESS_KILOCODE_MODEL_ID",
-            fallbackKey: "HARNESS_KILOCODE_MODEL_ID",
-            defaultValue: settingsStore.string(forKey: modelKey) ?? "kilo-auto/balanced"
-        )
-
-        let baseURL = harnessOverrideValue(
-            testRunnerKey: "TEST_RUNNER_ENV_HARNESS_KILOCODE_BASE_URL",
-            fallbackKey: "HARNESS_KILOCODE_BASE_URL",
-            defaultValue: resolvedBaseURL(storedValue: settingsStore.string(forKey: baseURLKey))
-        )
-
-        return OpenRouterSettings(
-            apiKey: apiKey,
-            model: model,
-            baseURL: baseURL,
-            systemPrompt: settingsStore.string(forKey: systemPromptKey) ?? "",
-            reasoningMode: ReasoningMode(
-                rawValue: settingsStore.string(forKey: reasoningModeKey) ?? ""
-            ) ?? .modelAndAgent,
-            toolPromptMode: ToolPromptMode(
-                rawValue: settingsStore.string(forKey: toolPromptModeKey) ?? ""
-            ) ?? .fullStatic,
-            ragEnabledDuringToolLoop: settingsStore.bool(
-                forKey: ragEnabledDuringToolLoopKey,
-                default: true
-            )
+    override init(settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)) {
+        super.init(
+            settingsStore: settingsStore,
+            keys: Keys(
+                apiKey: "KiloCodeAPIKey",
+                model: "KiloCodeModel",
+                baseURL: "KiloCodeBaseURL",
+                systemPrompt: "KiloCodeSystemPrompt",
+                reasoningMode: "KiloCodeReasoningMode",
+                toolPromptMode: "KiloCodeToolPromptMode",
+                ragEnabledDuringToolLoop: "KiloCodeRAGEnabledDuringToolLoop"
+            ),
+            harnessKeys: HarnessKeys(
+                apiKeyTestRunner: "TEST_RUNNER_ENV_HARNESS_KILOCODE_API_KEY",
+                apiKeyFallback: "HARNESS_KILOCODE_API_KEY",
+                modelTestRunner: "TEST_RUNNER_ENV_HARNESS_KILOCODE_MODEL_ID",
+                modelFallback: "HARNESS_KILOCODE_MODEL_ID",
+                baseURLTestRunner: "TEST_RUNNER_ENV_HARNESS_KILOCODE_BASE_URL",
+                baseURLFallback: "HARNESS_KILOCODE_BASE_URL"
+            ),
+            defaultModel: "kilo-auto/balanced",
+            defaultBaseURL: Self.currentBaseURL,
+            defaultReasoningMode: .modelAndAgent,
+            defaultToolPromptMode: .fullStatic,
+            defaultRAGEnabledDuringToolLoop: true
         )
     }
 
-    func save(_ settings: OpenRouterSettings) {
-        settingsStore.set(settings.apiKey, forKey: apiKeyKey)
-        settingsStore.set(settings.model, forKey: modelKey)
-        settingsStore.set(settings.baseURL, forKey: baseURLKey)
-        settingsStore.set(settings.systemPrompt, forKey: systemPromptKey)
-        settingsStore.set(settings.reasoningMode.rawValue, forKey: reasoningModeKey)
-        settingsStore.set(settings.toolPromptMode.rawValue, forKey: toolPromptModeKey)
-        settingsStore.set(settings.ragEnabledDuringToolLoop, forKey: ragEnabledDuringToolLoopKey)
-    }
-
-    private func harnessOverrideValue(
-        testRunnerKey: String,
-        fallbackKey: String,
-        defaultValue: String
-    ) -> String {
-        if let value = environment[testRunnerKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !value.isEmpty {
-            return value
-        }
-        if let value = environment[fallbackKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !value.isEmpty {
-            return value
-        }
-        return defaultValue
+    override func load(includeApiKey: Bool = true) -> OpenRouterSettings {
+        var settings = super.load(includeApiKey: includeApiKey)
+        settings.baseURL = resolvedBaseURL(storedValue: settings.baseURL)
+        return settings
     }
 
     private func resolvedBaseURL(storedValue: String?) -> String {

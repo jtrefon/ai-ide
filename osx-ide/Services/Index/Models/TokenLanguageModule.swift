@@ -80,6 +80,16 @@ open class TokenLanguageModule: LanguageModule, HighlightDiagnosticsPaletteProvi
         ]
     }
 
+    public static func makePalette(for language: CodeLanguage) -> HighlightPalette {
+        var palette = HighlightPalette()
+        for role in HighlightRole.allCases {
+            if let color = LanguageKeywordRepository.tokenColor(for: language, role: role) {
+                palette.setColor(color, for: role)
+            }
+        }
+        return palette
+    }
+
     func color(for role: HighlightRole) -> NSColor? {
         if let paletteColor = palette?.color(for: role) {
             return paletteColor

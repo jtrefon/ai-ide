@@ -20,18 +20,8 @@ public final class CSSModule: TokenLanguageModule, @unchecked Sendable {
                 booleanLiterals: Set(configuration.booleanLiterals),
                 nullLiterals: Set(configuration.nullLiterals)
             ),
-            palette: Self.makePalette(language: .css)
+            palette: Self.makePalette(for: .css)
         )
-    }
-
-    private static func makePalette(language: CodeLanguage) -> HighlightPalette {
-        var palette = HighlightPalette()
-        for role in HighlightRole.allCases {
-            if let color = LanguageKeywordRepository.tokenColor(for: language, role: role) {
-                palette.setColor(color, for: role)
-            }
-        }
-        return palette
     }
 
     public override func format(_ code: String) -> String {
