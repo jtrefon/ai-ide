@@ -183,7 +183,7 @@ final class OfflineModeHarnessTests: XCTestCase {
     func testOfflineHarnessInferenceBenchmarkSimpleGreeting() async throws {
         let iterationCount = benchmarkIterationCount()
         let prompt = "Reply with exactly one short greeting sentence and stop."
-        let runtime = try await makeRuntime(offlineModeEnabled: true)
+        let runtime = try await makeRuntime(offlineModeEnabled: true, profile: .benchmark)
         let manager = runtime.manager
         let testId = "offline-greeting-benchmark-\(UUID().uuidString.prefix(8))"
         let inferenceConfiguration = runtime.defaultInferenceConfiguration
@@ -256,7 +256,7 @@ final class OfflineModeHarnessTests: XCTestCase {
     }
 
     func testOfflineHarnessInferenceParameterSweepLongPrompt() async throws {
-        let runtime = try await makeRuntime(offlineModeEnabled: true)
+        let runtime = try await makeRuntime(offlineModeEnabled: true, profile: .benchmark)
         let manager = runtime.manager
         let testId = "offline-parameter-sweep-\(UUID().uuidString.prefix(8))"
         let prompt = try await makeLongBenchmarkPrompt(
@@ -612,6 +612,11 @@ final class OfflineModeHarnessTests: XCTestCase {
         let defaultInferenceConfiguration: LocalModelInferenceConfiguration
     }
 
+    private enum RuntimeProfile {
+        case standard
+        case benchmark
+    }
+
     private struct ScenarioResult {
         let projectRoot: URL
         let manager: ConversationManager
@@ -699,10 +704,15 @@ final class OfflineModeHarnessTests: XCTestCase {
         return nil
     }
 
-    private func makeRuntime(offlineModeEnabled: Bool, projectRoot: URL? = nil) async throws -> Runtime {
+    private func makeRuntime(
+        offlineModeEnabled: Bool,
+        projectRoot: URL? = nil,
+        profile: RuntimeProfile = .standard
+    ) async throws -> Runtime {
         let container = try await makeConfiguredContainer(
             offlineModeEnabled: offlineModeEnabled,
-            projectRoot: projectRoot
+            projectRoot: projectRoot,
+            profile: profile
         )
 
         guard let manager = container.conversationManager as? ConversationManager else {
@@ -727,22 +737,48 @@ final class OfflineModeHarnessTests: XCTestCase {
     }
 
     private func makeOfflineContainer(projectRoot: URL? = nil) async throws -> DependencyContainer {
-        try await makeConfiguredContainer(offlineModeEnabled: true, projectRoot: projectRoot)
+        try await makeConfiguredContainer(
+            offlineModeEnabled: true,
+            projectRoot: projectRoot,
+            profile: .standard
+        )
     }
 
     private func makeConfiguredContainer(
         offlineModeEnabled: Bool,
-        projectRoot: URL?
+        projectRoot: URL?,
+        profile: RuntimeProfile
     ) async throws -> DependencyContainer {
         let environment = ProcessInfo.processInfo.environment
+        let testProfilePath: String?
+        let disableHeavyInit: Bool
+
+        switch profile {
+        case .standard:
+            testProfilePath = environment[TestLaunchKeys.testProfileDir]
+                ?? environment["TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR"]
+            disableHeavyInit = false
+        case .benchmark:
+            let basePath = environment[TestLaunchKeys.testProfileDir]
+                ?? environment["TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR"]
+                ?? NSTemporaryDirectory()
+            let benchmarkProfileDirectory = URL(fileURLWithPath: basePath, isDirectory: true)
+                .appendingPathComponent("benchmark-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: benchmarkProfileDirectory,
+                withIntermediateDirectories: true
+            )
+            testProfilePath = benchmarkProfileDirectory.path
+            disableHeavyInit = true
+        }
+
         let container = DependencyContainer(
             launchContext: AppLaunchContext(
                 mode: .unitTest,
                 isTesting: true,
                 isUITesting: false,
-                testProfilePath: environment[TestLaunchKeys.testProfileDir]
-                    ?? environment["TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR"],
-                disableHeavyInit: false
+                testProfilePath: testProfilePath,
+                disableHeavyInit: disableHeavyInit
             )
         )
 

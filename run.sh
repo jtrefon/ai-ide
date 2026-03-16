@@ -288,6 +288,11 @@ run_harness() {
     local env_args=()
     local runtime_env_args=("OSX_IDE_PROMPTS_ROOT=$resolved_prompts_root" "OSXIDE_TEST_PROFILE_DIR=$test_profile_dir" "TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR=$test_profile_dir" "OSXIDE_LOCAL_MODEL_MAX_RSS_MB=$local_model_memory_limit_mb")
     env_args+=("TEST_RUNNER_ENV_OSXIDE_LOCAL_MODEL_MAX_RSS_MB=$local_model_memory_limit_mb")
+    if [ -n "$OSXIDE_DISABLE_HEAVY_INIT" ]; then
+        env_args+=("TEST_RUNNER_ENV_OSXIDE_DISABLE_HEAVY_INIT=$OSXIDE_DISABLE_HEAVY_INIT")
+        runtime_env_args+=("OSXIDE_DISABLE_HEAVY_INIT=$OSXIDE_DISABLE_HEAVY_INIT" "TEST_RUNNER_ENV_OSXIDE_DISABLE_HEAVY_INIT=$OSXIDE_DISABLE_HEAVY_INIT")
+        echo "Heavy init disabled for test runtime"
+    fi
     if [ -n "$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS" ]; then
         env_args+=("TEST_RUNNER_ENV_OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS=$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS")
         echo "Production parity harness enabled"
@@ -390,11 +395,13 @@ run_benchmark_offline() {
     case "$mode" in
         ""|"greeting")
             echo "Running offline greeting benchmark..."
-            run_harness "OfflineModeHarnessTests/testOfflineHarnessInferenceBenchmarkSimpleGreeting"
+            OSXIDE_DISABLE_HEAVY_INIT=1 TEST_RUNNER_ENV_OSXIDE_DISABLE_HEAVY_INIT=1 \
+                run_harness "OfflineModeHarnessTests/testOfflineHarnessInferenceBenchmarkSimpleGreeting"
             ;;
         "sweep")
             echo "Running offline parameter sweep benchmark..."
-            run_harness "OfflineModeHarnessTests/testOfflineHarnessInferenceParameterSweepLongPrompt"
+            OSXIDE_DISABLE_HEAVY_INIT=1 TEST_RUNNER_ENV_OSXIDE_DISABLE_HEAVY_INIT=1 \
+                run_harness "OfflineModeHarnessTests/testOfflineHarnessInferenceParameterSweepLongPrompt"
             ;;
         *)
             echo "Unknown offline benchmark mode: $mode"

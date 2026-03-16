@@ -21,6 +21,7 @@ actor LocalModelSelectionStore {
 
     func setSelectedModelId(_ modelId: String) {
         let trimmedModelId = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard selectedModelId() != trimmedModelId else { return }
         settingsStore.set(trimmedModelId, forKey: selectedModelKey)
         NotificationCenter.default.post(
             name: .localModelSelectionDidChange,
@@ -34,6 +35,7 @@ actor LocalModelSelectionStore {
     }
 
     func setOfflineModeEnabled(_ enabled: Bool) {
+        guard isOfflineModeEnabled() != enabled else { return }
         settingsStore.set(enabled, forKey: offlineModeEnabledKey)
         NotificationCenter.default.post(
             name: .localModelOfflineModeDidChange,

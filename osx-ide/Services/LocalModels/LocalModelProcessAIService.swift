@@ -110,6 +110,7 @@ actor LocalModelProcessAIService: AIService {
     actor NativeMLXGenerator: LocalModelGenerating {
         private let eventBus: EventBusProtocol
         private var containersByModelDirectory: [URL: ModelContainer] = [:]
+        private var inFlightLoads: [URL: Task<ModelContainer, Error>] = [:]
         private var accessOrder: [URL] = []
         private let maxCachedModels = 1  // Conservative - one model at a time given memory constraints
         private var generationCount: Int = 0
@@ -467,6 +468,7 @@ actor LocalModelProcessAIService: AIService {
         func unloadAllModels() {
             synchronizeMLXStream()
             containersByModelDirectory.removeAll()
+            inFlightLoads.removeAll()
             accessOrder.removeAll()
             Memory.clearCache()
         }
@@ -476,6 +478,7 @@ actor LocalModelProcessAIService: AIService {
             synchronizeMLXStream()
             let cacheKey = modelDirectory.resolvingSymlinksInPath().standardizedFileURL
             containersByModelDirectory.removeValue(forKey: cacheKey)
+            inFlightLoads.removeValue(forKey: cacheKey)
             accessOrder.removeAll { $0 == cacheKey }
             Memory.clearCache()
         }
@@ -492,20 +495,35 @@ actor LocalModelProcessAIService: AIService {
                 return existing
             }
 
+            if let existingTask = inFlightLoads[cacheKey] {
+                print("[LOCAL-MLX] loadContainerCached awaiting in-flight load")
+                return try await existingTask.value
+            }
+
             // Evict oldest if at capacity
             if containersByModelDirectory.count >= maxCachedModels, let oldest = accessOrder.first {
                 containersByModelDirectory.removeValue(forKey: oldest)
                 accessOrder.removeFirst()
             }
 
-            let configuration = ModelConfiguration(
-                directory: cacheKey,
-                toolCallFormat: toolCallFormat
-            )
-            let container = try await loadModelContainer(
-                configuration: configuration,
-                modelDirectory: cacheKey
-            )
+            let configuration = ModelConfiguration(directory: cacheKey, toolCallFormat: toolCallFormat)
+            let loadTask = Task<ModelContainer, Error> {
+                try await self.loadModelContainer(
+                    configuration: configuration,
+                    modelDirectory: cacheKey
+                )
+            }
+            inFlightLoads[cacheKey] = loadTask
+
+            let container: ModelContainer
+            do {
+                container = try await loadTask.value
+            } catch {
+                inFlightLoads.removeValue(forKey: cacheKey)
+                throw error
+            }
+
+            inFlightLoads.removeValue(forKey: cacheKey)
             containersByModelDirectory[cacheKey] = container
             accessOrder.append(cacheKey)
             return container

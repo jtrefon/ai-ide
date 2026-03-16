@@ -1,4 +1,5 @@
 import Foundation
+@testable import osx_ide
 
 /// Performance metrics for local model inference testing
 struct InferencePerformanceMetrics: Sendable {
