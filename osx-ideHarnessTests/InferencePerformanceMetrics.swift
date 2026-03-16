@@ -4,6 +4,11 @@ import Foundation
 struct InferencePerformanceMetrics: Sendable {
     let testId: String
     let modelId: String
+    let configurationLabel: String
+    let contextLength: Int
+    let maxKVSize: Int
+    let maxOutputTokens: Int
+    let prefillStepSize: Int
     let conversationTurn: Int
     let promptTokenCount: Int
     let outputTokenCount: Int
@@ -27,7 +32,12 @@ struct InferencePerformanceMetrics: Sendable {
         """
         [Inference Metrics - \(testId)]
         Model: \(modelId)
+        Config: \(configurationLabel)
         Turn: \(conversationTurn)
+        Context: \(contextLength)
+        Max KV: \(maxKVSize)
+        Max Output: \(maxOutputTokens)
+        Prefill Step: \(prefillStepSize)
         Prompt Tokens: \(promptTokenCount)
         Output Tokens: \(outputTokenCount)
         Time to First Token: \(String(format: "%.3f", timeToFirstToken))s
@@ -39,12 +49,12 @@ struct InferencePerformanceMetrics: Sendable {
     
     /// CSV header for metrics export
     static var csvHeader: String {
-        "test_id,model_id,turn,prompt_tokens,output_tokens,ttft_s,total_s,tokens_per_sec,peak_memory_mb,timestamp"
+        "test_id,model_id,config_label,context_length,max_kv_size,max_output_tokens,prefill_step_size,turn,prompt_tokens,output_tokens,ttft_s,total_s,tokens_per_sec,peak_memory_mb,timestamp"
     }
     
     /// CSV row for metrics export
     var csvRow: String {
-        "\(testId),\(modelId),\(conversationTurn),\(promptTokenCount),\(outputTokenCount),\(String(format: "%.3f", timeToFirstToken)),\(String(format: "%.3f", totalDuration)),\(String(format: "%.1f", tokensPerSecond)),\(peakMemoryMB),\(ISO8601DateFormatter().string(from: timestamp))"
+        "\(testId),\(modelId),\(configurationLabel),\(contextLength),\(maxKVSize),\(maxOutputTokens),\(prefillStepSize),\(conversationTurn),\(promptTokenCount),\(outputTokenCount),\(String(format: "%.3f", timeToFirstToken)),\(String(format: "%.3f", totalDuration)),\(String(format: "%.1f", tokensPerSecond)),\(peakMemoryMB),\(ISO8601DateFormatter().string(from: timestamp))"
     }
 }
 
@@ -158,6 +168,7 @@ struct InferenceTimer {
     func finalize(
         testId: String,
         modelId: String,
+        inferenceConfiguration: LocalModelInferenceConfiguration,
         turn: Int,
         promptTokens: Int,
         outputTokens: Int
@@ -168,6 +179,11 @@ struct InferenceTimer {
         return InferencePerformanceMetrics(
             testId: testId,
             modelId: modelId,
+            configurationLabel: inferenceConfiguration.label,
+            contextLength: inferenceConfiguration.contextLength,
+            maxKVSize: inferenceConfiguration.maxKVSize,
+            maxOutputTokens: inferenceConfiguration.maxOutputTokens,
+            prefillStepSize: inferenceConfiguration.prefillStepSize,
             conversationTurn: turn,
             promptTokenCount: promptTokens,
             outputTokenCount: outputTokens,

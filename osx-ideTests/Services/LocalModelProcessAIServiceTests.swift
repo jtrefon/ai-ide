@@ -32,13 +32,13 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             let content: String
         }
 
+        private(set) var lastModelId: String?
         private(set) var lastModelDirectory: URL?
         private(set) var lastCapturedMessages: [CapturedMessage]?
         private(set) var lastTools: [ToolSpec]?
         private(set) var lastToolCallFormat: ToolCallFormat?
         private(set) var lastRunId: String?
-        private(set) var lastContextLength: Int?
-        private(set) var lastMaxOutputTokens: Int?
+        private(set) var lastInferenceConfiguration: LocalModelInferenceConfiguration?
         private(set) var lastConversationId: String?
         private(set) var lastImageCount: Int?
         private(set) var lastVideoCount: Int?
@@ -49,7 +49,8 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             self.response = response
         }
 
-        func generate(modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, contextLength: Int, maxOutputTokens: Int, conversationId: String?) async throws -> AIServiceResponse {
+        func generate(modelId: String, modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, inferenceConfiguration: LocalModelInferenceConfiguration, conversationId: String?) async throws -> AIServiceResponse {
+            lastModelId = modelId
             lastModelDirectory = modelDirectory
             switch userInput.prompt {
             case .chat(let messages):
@@ -67,8 +68,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             lastTools = tools
             lastToolCallFormat = toolCallFormat
             lastRunId = runId
-            lastContextLength = contextLength
-            lastMaxOutputTokens = maxOutputTokens
+            lastInferenceConfiguration = inferenceConfiguration
             lastConversationId = conversationId
             lastImageCount = userInput.images.count
             lastVideoCount = userInput.videos.count
@@ -76,15 +76,15 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             return response
         }
 
-        func snapshot() -> (URL?, [CapturedMessage]?, [ToolSpec]?, ToolCallFormat?, String?, Int?, Int?, String?, Int?, Int?, Bool?) {
+        func snapshot() -> (String?, URL?, [CapturedMessage]?, [ToolSpec]?, ToolCallFormat?, String?, LocalModelInferenceConfiguration?, String?, Int?, Int?, Bool?) {
             (
+                lastModelId,
                 lastModelDirectory,
                 lastCapturedMessages,
                 lastTools,
                 lastToolCallFormat,
                 lastRunId,
-                lastContextLength,
-                lastMaxOutputTokens,
+                lastInferenceConfiguration,
                 lastConversationId,
                 lastImageCount,
                 lastVideoCount,
@@ -117,6 +117,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
     }
 
     func testSendMessageBuildsPromptAndPassesContextLengthToGenerator() async throws {
+        await LocalModelInferenceOverrides.shared.clear()
         let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
         let selectionStore = LocalModelSelectionStore()
         await selectionStore.setSelectedModelId(selectedModelId)
@@ -152,11 +153,14 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
 
         XCTAssertEqual(response.content, "local-response")
 
-        let (capturedDirectory, capturedMessages, capturedTools, capturedToolCallFormat, capturedRunId, capturedContextLength, capturedMaxOutputTokens, _, _, _, _) = generator.snapshot()
+        let (capturedModelId, capturedDirectory, capturedMessages, capturedTools, capturedToolCallFormat, capturedRunId, capturedInferenceConfiguration, _, _, _, _) = generator.snapshot()
+        XCTAssertEqual(capturedModelId, selectedModelId)
         XCTAssertEqual(capturedDirectory, modelDirectory)
         XCTAssertEqual(capturedRunId, runId)
-        XCTAssertEqual(capturedContextLength, min(LocalModelFileStore.contextLength(for: model), 2048))
-        XCTAssertEqual(capturedMaxOutputTokens, min(768, max(384, (capturedContextLength ?? 0) / 3)))
+        XCTAssertEqual(capturedInferenceConfiguration?.contextLength, min(LocalModelFileStore.contextLength(for: model), 2048))
+        XCTAssertEqual(capturedInferenceConfiguration?.maxKVSize, capturedInferenceConfiguration?.contextLength)
+        XCTAssertEqual(capturedInferenceConfiguration?.maxOutputTokens, min(768, max(384, (capturedInferenceConfiguration?.contextLength ?? 0) / 3)))
+        XCTAssertEqual(capturedInferenceConfiguration?.prefillStepSize, 512)
         
         // Verify tools were passed
         XCTAssertNotNil(capturedTools)
@@ -174,6 +178,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
     }
 
     func testSendMessagePrefersCustomSystemPromptFromSettings() async throws {
+        await LocalModelInferenceOverrides.shared.clear()
         let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
         let selectionStore = LocalModelSelectionStore()
         await selectionStore.setSelectedModelId(selectedModelId)
@@ -207,13 +212,14 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             projectRoot: modelDirectory
         ))
 
-        let (_, capturedMessages, _, _, _, _, _, _, _, _, _) = generator.snapshot()
+        let (_, _, capturedMessages, _, _, _, _, _, _, _, _) = generator.snapshot()
         let messages = try XCTUnwrap(capturedMessages)
         XCTAssertEqual(messages[0].role, "system")
         XCTAssertTrue(messages[0].content.contains("CUSTOM_SYSTEM_PROMPT"))
     }
 
     func testSendMessageDoesNotInjectReasoningPromptDuringToolLoop() async throws {
+        await LocalModelInferenceOverrides.shared.clear()
         let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
         let selectionStore = LocalModelSelectionStore()
         await selectionStore.setSelectedModelId(selectedModelId)
@@ -240,7 +246,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             stage: .tool_loop
         ))
 
-        let (_, capturedMessages, _, _, _, _, _, _, _, _, _) = generator.snapshot()
+        let (_, _, capturedMessages, _, _, _, _, _, _, _, _) = generator.snapshot()
         let messages = try XCTUnwrap(capturedMessages)
         XCTAssertEqual(messages[0].role, "system")
         XCTAssertFalse(messages[0].content.contains("<ide_reasoning>"))
@@ -248,6 +254,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
     }
 
     func testSendMessageReturnsToolCallsFromGenerator() async throws {
+        await LocalModelInferenceOverrides.shared.clear()
         let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
         let selectionStore = LocalModelSelectionStore()
         await selectionStore.setSelectedModelId(selectedModelId)
@@ -281,6 +288,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
     }
 
     func testSendMessagePassesImageAttachmentsIntoUserInput() async throws {
+        await LocalModelInferenceOverrides.shared.clear()
         let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
         let selectionStore = LocalModelSelectionStore()
         await selectionStore.setSelectedModelId(selectedModelId)
@@ -314,7 +322,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             projectRoot: modelDirectory
         ))
 
-        let (_, capturedMessages, _, _, _, _, _, _, imageCount, videoCount, _) = generator.snapshot()
+        let (_, _, capturedMessages, _, _, _, _, _, imageCount, videoCount, _) = generator.snapshot()
         let messages = try XCTUnwrap(capturedMessages)
         XCTAssertEqual(messages.count, 2)
         XCTAssertEqual(messages[1].role, "user")
@@ -324,6 +332,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
     }
 
     func testQwen35DisablesNativeThinkingWhenReasoningModeExcludesModelReasoning() async throws {
+        await LocalModelInferenceOverrides.shared.clear()
         let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
         let selectionStore = LocalModelSelectionStore()
         await selectionStore.setSelectedModelId(selectedModelId)
@@ -362,6 +371,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
     }
 
     func testQwen35SuppressesNativeThinkingDuringToolLoopEvenWhenModelReasoningEnabled() async throws {
+        await LocalModelInferenceOverrides.shared.clear()
         let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
         let selectionStore = LocalModelSelectionStore()
         await selectionStore.setSelectedModelId(selectedModelId)
@@ -401,6 +411,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
     }
 
     func testQwen35EnablesNativeThinkingWhenReasoningModeAllowsModelReasoning() async throws {
+        await LocalModelInferenceOverrides.shared.clear()
         let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
         let selectionStore = LocalModelSelectionStore()
         await selectionStore.setSelectedModelId(selectedModelId)
@@ -437,6 +448,58 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
 
         let (_, _, _, _, _, _, _, _, _, _, enableThinking) = generator.snapshot()
         XCTAssertEqual(enableThinking, true)
+    }
+
+    func testSendMessageAppliesInferenceOverrides() async throws {
+        await LocalModelInferenceOverrides.shared.set(
+            LocalModelInferenceOverrides(
+                contextLength: 3072,
+                maxKVSize: 1536,
+                maxOutputTokens: 640,
+                prefillStepSize: 256
+            )
+        )
+        defer {
+            Task {
+                await LocalModelInferenceOverrides.shared.clear()
+            }
+        }
+
+        let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
+        let selectionStore = LocalModelSelectionStore()
+        await selectionStore.setSelectedModelId(selectedModelId)
+
+        let modelDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileStore = FakeFileStore(installed: true, directory: modelDirectory)
+        let generator = SpyGenerator()
+        let settingsLoader = StubSettingsLoader(settings: .empty)
+
+        let service = LocalModelProcessAIService(
+            selectionStore: selectionStore,
+            fileStore: fileStore,
+            generator: generator,
+            settingsStore: settingsLoader,
+            memoryPressureObserverFactory: { _ in nil }
+        )
+
+        _ = try await service.sendMessage(AIServiceHistoryRequest(
+            messages: [ChatMessage(role: .user, content: "Benchmark me")],
+            context: nil,
+            tools: nil,
+            mode: .chat,
+            projectRoot: modelDirectory
+        ))
+
+        let (_, _, _, _, _, _, capturedInferenceConfiguration, _, _, _, _) = generator.snapshot()
+        XCTAssertEqual(
+            capturedInferenceConfiguration,
+            LocalModelInferenceConfiguration(
+                contextLength: 3072,
+                maxKVSize: 1536,
+                maxOutputTokens: 640,
+                prefillStepSize: 256
+            )
+        )
     }
 
     func testSendMessagePreservesTextualToolLikeOutputWhenUsingSpyGenerator() async throws {

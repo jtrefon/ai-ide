@@ -199,6 +199,8 @@ show_help() {
     echo "         Examples: ./run.sh harness-online | ./run.sh harness-online AgenticHarnessTests"
     echo "  harness-offline Run offline-only harness suites"
     echo "         Examples: ./run.sh harness-offline | ./run.sh harness-offline OfflineModeHarnessTests"
+    echo "  benchmark-offline Run offline inference benchmark harnesses"
+    echo "         Examples: ./run.sh benchmark-offline | ./run.sh benchmark-offline sweep"
     echo "  e2e    Run UI (end-to-end) tests [optional suite]"
     echo "         Examples: ./run.sh e2e | ./run.sh e2e TerminalEchoUITests | ./run.sh e2e json"
     echo "  clean  Clean build artifacts"
@@ -229,6 +231,7 @@ launch_app() {
 
 run_tests() {
     local suite=$1
+    local explicit_modules="${SWIFT_ENABLE_EXPLICIT_MODULES:-NO}"
     echo "Running unit tests..."
     prepare_derived_data_packages "$DERIVED_DATA_PATH_TEST"
     if [ -n "$suite" ]; then
@@ -242,6 +245,7 @@ run_tests() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
+                   SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                    test -only-testing:osx-ideTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideHarnessTests
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
@@ -250,12 +254,14 @@ run_tests() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
+                   SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                    test -only-testing:osx-ideTests -skip-testing:osx-ideUITests -skip-testing:osx-ideHarnessTests
     fi
 }
 
 run_harness() {
     local suite=$1
+    local explicit_modules="${SWIFT_ENABLE_EXPLICIT_MODULES:-NO}"
     echo "Running headless harness tests..."
     prepare_derived_data_packages "$DERIVED_DATA_PATH_TEST"
     local harness_memory_limit_gb="${HARNESS_MAX_RSS_GB:-6}"
@@ -323,6 +329,7 @@ run_harness() {
                   -destination 'platform=macOS' \
                   -parallel-testing-enabled NO \
                   ENABLE_PREVIEWS=NO \
+                  SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                   "${env_args[@]}" \
                   test -only-testing:osx-ideHarnessTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideTests
     else
@@ -342,6 +349,7 @@ run_harness() {
                   -destination 'platform=macOS' \
                   -parallel-testing-enabled NO \
                   ENABLE_PREVIEWS=NO \
+                  SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                   "${env_args[@]}" \
                   "${skip_online_args[@]}" \
                   test \
@@ -377,8 +385,28 @@ run_harness_offline() {
     fi
 }
 
+run_benchmark_offline() {
+    local mode=$1
+    case "$mode" in
+        ""|"greeting")
+            echo "Running offline greeting benchmark..."
+            run_harness "OfflineModeHarnessTests/testOfflineHarnessInferenceBenchmarkSimpleGreeting"
+            ;;
+        "sweep")
+            echo "Running offline parameter sweep benchmark..."
+            run_harness "OfflineModeHarnessTests/testOfflineHarnessInferenceParameterSweepLongPrompt"
+            ;;
+        *)
+            echo "Unknown offline benchmark mode: $mode"
+            echo "Supported modes: greeting, sweep"
+            return 1
+            ;;
+    esac
+}
+
 run_e2e() {
     local suite=$1
+    local explicit_modules="${SWIFT_ENABLE_EXPLICIT_MODULES:-NO}"
     echo "Running UI tests..."
     prepare_derived_data_packages "$DERIVED_DATA_PATH_TEST"
     if [ -n "$suite" ]; then
@@ -392,6 +420,7 @@ run_e2e() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
+                   SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                    test -only-testing:osx-ideUITests/"$suite" -skip-testing:osx-ideTests
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
@@ -400,6 +429,7 @@ run_e2e() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
+                   SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                    test -only-testing:osx-ideUITests -skip-testing:osx-ideTests
     fi
 }
@@ -433,6 +463,9 @@ case "$COMMAND" in
         ;;
     harness-offline)
         run_harness_offline "$2"
+        ;;
+    benchmark-offline)
+        run_benchmark_offline "$2"
         ;;
     e2e)
         run_e2e "$2"

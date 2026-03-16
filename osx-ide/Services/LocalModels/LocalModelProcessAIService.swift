@@ -2,7 +2,6 @@ import Foundation
 import Combine
 import MLX
 @preconcurrency import MLXLMCommon
-import MLXLLM
 import MLXVLM
 import Tokenizers
 import Darwin
@@ -105,7 +104,7 @@ actor LocalModelProcessAIService: AIService {
     }
 
     protocol LocalModelGenerating: Sendable {
-        func generate(modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, contextLength: Int, maxOutputTokens: Int, conversationId: String?) async throws -> AIServiceResponse
+        func generate(modelId: String, modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, inferenceConfiguration: LocalModelInferenceConfiguration, conversationId: String?) async throws -> AIServiceResponse
     }
 
     actor NativeMLXGenerator: LocalModelGenerating {
@@ -127,25 +126,26 @@ actor LocalModelProcessAIService: AIService {
             return try await body()
         }
 
-        func generate(modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat? = nil, runId: String?, contextLength: Int, maxOutputTokens: Int, conversationId: String? = nil) async throws -> AIServiceResponse {
-            print("[LOCAL-MLX] generate modelDirectory=\(modelDirectory.path) toolCallFormat=\(String(describing: toolCallFormat)) contextLength=\(contextLength) maxOutputTokens=\(maxOutputTokens)")
+        func generate(modelId: String, modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat? = nil, runId: String?, inferenceConfiguration: LocalModelInferenceConfiguration, conversationId: String? = nil) async throws -> AIServiceResponse {
+            print("[LOCAL-MLX] generate modelId=\(modelId) modelDirectory=\(modelDirectory.path) toolCallFormat=\(String(describing: toolCallFormat)) contextLength=\(inferenceConfiguration.contextLength) maxKVSize=\(inferenceConfiguration.maxKVSize) maxOutputTokens=\(inferenceConfiguration.maxOutputTokens) prefillStepSize=\(inferenceConfiguration.prefillStepSize)")
             let preparedUserInput = userInput
             let rssLimitMB = Self.resolvedRSSLimitMB()
-
-            // Cap KV cache size to prevent unbounded memory growth during long conversations.
-            // Uses RotatingKVCache which overwrites old entries beyond this limit.
-            let maxKVSize = contextLength
+            let generationStart = ContinuousClock.now
 
             let parameters = GenerateParameters(
-                maxTokens: maxOutputTokens,
-                maxKVSize: maxKVSize
+                maxTokens: inferenceConfiguration.maxOutputTokens,
+                maxKVSize: inferenceConfiguration.maxKVSize,
+                prefillStepSize: inferenceConfiguration.prefillStepSize
             )
             let eventBus = self.eventBus
-
             do {
                 let response = try await performInference {
+                    let rssBeforeLoadMB = Self.currentProcessRSSMB()
                     try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "before_container_load")
+                    let loadStart = ContinuousClock.now
                     let container = try await self.loadContainerCached(modelDirectory: modelDirectory, toolCallFormat: toolCallFormat)
+                    let loadDuration = loadStart.duration(to: ContinuousClock.now)
+                    let rssAfterLoadMB = Self.currentProcessRSSMB()
                     try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "after_container_load")
                     return try await container.perform { context in
                         try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "before_generation")
@@ -159,6 +159,7 @@ actor LocalModelProcessAIService: AIService {
 
                         var output = ""
                         var collectedToolCalls: [AIToolCall] = []
+                        var completionInfo: GenerateCompletionInfo?
 
                         func publishStatus(_ message: String) async {
                             guard let runId else { return }
@@ -192,7 +193,9 @@ actor LocalModelProcessAIService: AIService {
                                     }
                                 }
                             case .info:
-                                break
+                                if case .info(let info) = generation {
+                                    completionInfo = info
+                                }
                             case .toolCall(let toolCall):
                                 collectedToolCalls.append(Self.makeAIToolCall(from: toolCall))
                                 await publishStatus("Structured tool call detected: \(toolCall.function.name)")
@@ -205,6 +208,18 @@ actor LocalModelProcessAIService: AIService {
                             structuredToolCallsWereDetected: !collectedToolCalls.isEmpty,
                             toolCallFormat: toolCallFormat
                         )
+                        Self.logGenerationPerformance(
+                            modelId: modelId,
+                            inferenceConfiguration: inferenceConfiguration,
+                            loadDuration: loadDuration,
+                            totalDuration: generationStart.duration(to: ContinuousClock.now),
+                            completionInfo: completionInfo,
+                            outputCharacterCount: trimmedOutput.count,
+                            toolCallCount: collectedToolCalls.count,
+                            rssBeforeLoadMB: rssBeforeLoadMB,
+                            rssAfterLoadMB: rssAfterLoadMB,
+                            rssAfterGenerationMB: Self.currentProcessRSSMB()
+                        )
                         let resolvedToolCalls = collectedToolCalls.isEmpty ? fallbackToolCalls : collectedToolCalls
                         let shouldSuppressToolCallPayloadFromContent = !(resolvedToolCalls?.isEmpty ?? true)
                         return AIServiceResponse(
@@ -216,7 +231,7 @@ actor LocalModelProcessAIService: AIService {
 
                 generationCount += 1
                 logMLXMemorySnapshot()
-                if AppRuntimeEnvironment.launchContext.isTesting {
+                if Self.shouldUnloadModelAfterGeneration() {
                     unloadModel(modelDirectory: modelDirectory)
                 }
 
@@ -225,6 +240,15 @@ actor LocalModelProcessAIService: AIService {
                 unloadModel(modelDirectory: modelDirectory)
                 throw error
             }
+        }
+
+        func preload(modelId: String, modelDirectory: URL, toolCallFormat: ToolCallFormat?) async throws {
+            let loadStart = ContinuousClock.now
+            _ = try await loadContainerCached(modelDirectory: modelDirectory, toolCallFormat: toolCallFormat)
+            let loadDuration = loadStart.duration(to: ContinuousClock.now)
+            print(
+                "[LOCAL-MLX] preload modelId=\(modelId) load_ms=\(Self.milliseconds(loadDuration))"
+            )
         }
 
         private func synchronizeMLXStream() {
@@ -247,6 +271,60 @@ actor LocalModelProcessAIService: AIService {
             return AppRuntimeEnvironment.launchContext.isTesting
                 ? defaultTestingRSSLimitMB
                 : defaultOperationalRSSLimitMB
+        }
+
+        nonisolated private static func shouldUnloadModelAfterGeneration() -> Bool {
+            let environment = ProcessInfo.processInfo.environment
+            if let configured = environment["OSXIDE_LOCAL_MODEL_UNLOAD_AFTER_GENERATION"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            {
+                switch configured {
+                case "1", "true", "yes":
+                    return true
+                case "0", "false", "no":
+                    return false
+                default:
+                    break
+                }
+            }
+
+            // Keep the model hot by default, even in tests. The harness already enforces
+            // a process RSS budget, and repeated cold loads dominate offline-agent latency.
+            return false
+        }
+
+        nonisolated private static func logGenerationPerformance(
+            modelId: String,
+            inferenceConfiguration: LocalModelInferenceConfiguration,
+            loadDuration: Duration,
+            totalDuration: Duration,
+            completionInfo: GenerateCompletionInfo?,
+            outputCharacterCount: Int,
+            toolCallCount: Int,
+            rssBeforeLoadMB: Int,
+            rssAfterLoadMB: Int,
+            rssAfterGenerationMB: Int
+        ) {
+            let loadMS = milliseconds(loadDuration)
+            let totalMS = milliseconds(totalDuration)
+            if let info = completionInfo {
+                let promptMS = Int((info.promptTime * 1000).rounded())
+                let generateMS = Int((info.generateTime * 1000).rounded())
+                let promptTPS = String(format: "%.1f", info.promptTokensPerSecond)
+                let generationTPS = String(format: "%.1f", info.tokensPerSecond)
+                print(
+                    "[LOCAL-MLX-PERF] model=\(modelId) load_ms=\(loadMS) prompt_tokens=\(info.promptTokenCount) prompt_ms=\(promptMS) prompt_tps=\(promptTPS) gen_tokens=\(info.generationTokenCount) gen_ms=\(generateMS) gen_tps=\(generationTPS) total_ms=\(totalMS) context=\(inferenceConfiguration.contextLength) max_kv=\(inferenceConfiguration.maxKVSize) max_output=\(inferenceConfiguration.maxOutputTokens) prefill_step=\(inferenceConfiguration.prefillStepSize) cache_kind=\(inferenceConfiguration.cacheKind) tool_calls=\(toolCallCount) output_chars=\(outputCharacterCount) rss_before_load_mb=\(rssBeforeLoadMB) rss_after_load_mb=\(rssAfterLoadMB) rss_after_gen_mb=\(rssAfterGenerationMB)"
+                )
+            } else {
+                print(
+                    "[LOCAL-MLX-PERF] model=\(modelId) load_ms=\(loadMS) total_ms=\(totalMS) context=\(inferenceConfiguration.contextLength) max_kv=\(inferenceConfiguration.maxKVSize) max_output=\(inferenceConfiguration.maxOutputTokens) prefill_step=\(inferenceConfiguration.prefillStepSize) cache_kind=\(inferenceConfiguration.cacheKind) tool_calls=\(toolCallCount) output_chars=\(outputCharacterCount) rss_before_load_mb=\(rssBeforeLoadMB) rss_after_load_mb=\(rssAfterLoadMB) rss_after_gen_mb=\(rssAfterGenerationMB) info=missing"
+                )
+            }
+        }
+
+        nonisolated private static func milliseconds(_ duration: Duration) -> Int {
+            Int((Double(duration.components.seconds) * 1000) + (Double(duration.components.attoseconds) / 1_000_000_000_000_000))
         }
 
         nonisolated private static func throwIfProcessRSSExceeded(limitMB: Int, phase: String) throws {
@@ -496,6 +574,7 @@ actor LocalModelProcessAIService: AIService {
     private let generator: LocalModelGenerating
     private let settingsStore: any OpenRouterSettingsLoading
     private var memoryPressureObserver: (any MemoryPressureObserving)?
+    private var lifecycleObservers: [NSObjectProtocol] = []
     private let prefixCache = PromptPrefixCache()
     private let activityCoordinator: (any AgentActivityCoordinating)?
 
@@ -530,6 +609,10 @@ actor LocalModelProcessAIService: AIService {
                 await prefixCacheForPressureHandling.clearAll()
             }
         }
+        Task {
+            await registerLifecycleObservers()
+            await preloadSelectedModelIfNeeded()
+        }
     }
 
     func sendMessage(_ request: AIServiceMessageWithProjectRootRequest) async throws -> AIServiceResponse {
@@ -561,7 +644,10 @@ actor LocalModelProcessAIService: AIService {
             to: request,
             contextLength: LocalModelFileStore.contextLength(for: model)
         )
-        let contextLength = testBudget.contextLength
+        let inferenceConfiguration = await LocalModelInferenceOverrides.shared.resolve(
+            defaultContextLength: testBudget.contextLength,
+            defaultMaxOutputTokens: testBudget.maxOutputTokens
+        )
         let settings = settingsStore.load(includeApiKey: false)
         
         // Build system content for caching
@@ -622,25 +708,25 @@ actor LocalModelProcessAIService: AIService {
         if let coordinator = activityCoordinator {
             response = try await coordinator.withActivity(type: .mlxInference) {
                 try await generator.generate(
+                    modelId: model.id,
                     modelDirectory: modelDirectory,
                     userInput: userInput,
                     tools: toolSpecs,
                     toolCallFormat: model.toolCallFormat,
                     runId: request.runId,
-                    contextLength: contextLength,
-                    maxOutputTokens: testBudget.maxOutputTokens,
+                    inferenceConfiguration: inferenceConfiguration,
                     conversationId: conversationId
                 )
             }
         } else {
             response = try await generator.generate(
+                modelId: model.id,
                 modelDirectory: modelDirectory,
                 userInput: userInput,
                 tools: toolSpecs,
                 toolCallFormat: model.toolCallFormat,
                 runId: request.runId,
-                contextLength: contextLength,
-                maxOutputTokens: testBudget.maxOutputTokens,
+                inferenceConfiguration: inferenceConfiguration,
                 conversationId: conversationId
             )
         }
@@ -666,6 +752,11 @@ actor LocalModelProcessAIService: AIService {
         }
         
         return response
+    }
+
+    func preloadSelectedModelIfNeeded() async {
+        guard await selectionStore.isOfflineModeEnabled() else { return }
+        await preloadCurrentSelection(unloadExistingModels: false)
     }
 
     func explainCode(_ code: String) async throws -> String {
@@ -938,6 +1029,82 @@ actor LocalModelProcessAIService: AIService {
             result[key] = convertValueToSsendable(value)
         }
         return result
+    }
+
+    private func registerLifecycleObservers() {
+        guard lifecycleObservers.isEmpty else { return }
+
+        let offlineObserver = NotificationCenter.default.addObserver(
+            forName: .localModelOfflineModeDidChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let self else { return }
+            let enabled = notification.userInfo?["enabled"] as? Bool ?? false
+            Task {
+                await self.handleOfflineModeChanged(enabled: enabled)
+            }
+        }
+        let selectionObserver = NotificationCenter.default.addObserver(
+            forName: .localModelSelectionDidChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task {
+                await self.handleSelectedModelChanged()
+            }
+        }
+        lifecycleObservers = [offlineObserver, selectionObserver]
+    }
+
+    private func handleOfflineModeChanged(enabled: Bool) async {
+        if enabled {
+            await preloadCurrentSelection(unloadExistingModels: true)
+            return
+        }
+        if let nativeGenerator = generator as? NativeMLXGenerator {
+            await nativeGenerator.unloadAllModels()
+        }
+    }
+
+    private func handleSelectedModelChanged() async {
+        guard await selectionStore.isOfflineModeEnabled() else { return }
+        await preloadCurrentSelection(unloadExistingModels: true)
+    }
+
+    private func preloadCurrentSelection(unloadExistingModels: Bool) async {
+        let modelId = await selectionStore.selectedModelId()
+        guard !modelId.isEmpty,
+              let model = LocalModelCatalog.model(id: modelId),
+              fileStore.isModelInstalled(model),
+              let nativeGenerator = generator as? NativeMLXGenerator else {
+            return
+        }
+
+        do {
+            if unloadExistingModels {
+                await nativeGenerator.unloadAllModels()
+            }
+            let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
+            if let activityCoordinator {
+                try await activityCoordinator.withActivity(type: .mlxInference) {
+                    try await nativeGenerator.preload(
+                        modelId: model.id,
+                        modelDirectory: modelDirectory,
+                        toolCallFormat: model.toolCallFormat
+                    )
+                }
+            } else {
+                try await nativeGenerator.preload(
+                    modelId: model.id,
+                    modelDirectory: modelDirectory,
+                    toolCallFormat: model.toolCallFormat
+                )
+            }
+        } catch {
+            print("[LOCAL-MLX] preload failed modelId=\(model.id) error=\(error)")
+        }
     }
 
     private func convertValueToSsendable(_ value: Any) -> any Sendable {
