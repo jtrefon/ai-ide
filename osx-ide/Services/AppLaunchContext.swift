@@ -12,6 +12,7 @@ struct AppLaunchContext: Equatable {
     let isUITesting: Bool
     let testProfilePath: String?
     let disableHeavyInit: Bool
+    let productionParityHarness: Bool
 
     static func detect(
         processInfo: ProcessInfo = .processInfo,
@@ -31,6 +32,7 @@ struct AppLaunchContext: Equatable {
         }
 
         let disableHeavyInit = env[TestLaunchKeys.disableHeavyInit] == "1" || isUITesting
+        let productionParityHarness = env[TestLaunchKeys.productionParityHarness] == "1"
         let testProfilePath = env[TestLaunchKeys.testProfileDir]
 
         return AppLaunchContext(
@@ -38,7 +40,8 @@ struct AppLaunchContext: Equatable {
             isTesting: hasXCTestConfig || isUITesting,
             isUITesting: isUITesting,
             testProfilePath: testProfilePath,
-            disableHeavyInit: disableHeavyInit
+            disableHeavyInit: disableHeavyInit,
+            productionParityHarness: productionParityHarness
         )
     }
 }

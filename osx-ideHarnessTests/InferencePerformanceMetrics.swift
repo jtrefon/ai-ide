@@ -216,15 +216,16 @@ struct InferenceTimer {
     ) -> InferencePerformanceMetrics {
         let endTime = Date()
         let endMemory = Self.reportMemory()
+        let effectiveConfiguration = performanceSnapshot?.inferenceConfiguration ?? inferenceConfiguration
         
         return InferencePerformanceMetrics(
             testId: testId,
             modelId: modelId,
-            configurationLabel: inferenceConfiguration.label,
-            contextLength: inferenceConfiguration.contextLength,
-            maxKVSize: inferenceConfiguration.maxKVSize,
-            maxOutputTokens: inferenceConfiguration.maxOutputTokens,
-            prefillStepSize: inferenceConfiguration.prefillStepSize,
+            configurationLabel: effectiveConfiguration.label,
+            contextLength: effectiveConfiguration.contextLength,
+            maxKVSize: effectiveConfiguration.maxKVSize,
+            maxOutputTokens: effectiveConfiguration.maxOutputTokens,
+            prefillStepSize: effectiveConfiguration.prefillStepSize,
             conversationTurn: turn,
             promptTokenCount: promptTokens,
             outputTokenCount: outputTokens,

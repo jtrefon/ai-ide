@@ -16,8 +16,13 @@ private struct LocalModelTestBudget {
     let retainedMessages: [ChatMessage]
     let maxOutputTokens: Int
 
-    static func applyIfNeeded(to request: AIServiceHistoryRequest, contextLength: Int) -> LocalModelTestBudget {
-        guard AppRuntimeEnvironment.launchContext.isTesting else {
+    static func applyIfNeeded(
+        to request: AIServiceHistoryRequest,
+        contextLength: Int,
+        launchContext: AppLaunchContext
+    ) -> LocalModelTestBudget {
+        guard launchContext.isTesting,
+              !launchContext.productionParityHarness else {
             let clampedContextLength = min(contextLength, maximumOperationalContextLength)
             let defaultMaxOutputTokens = min(
                 maximumOperationalOutputTokens,
@@ -112,6 +117,13 @@ final class MemoryPressureObserver: MemoryPressureObserving, @unchecked Sendable
 actor LocalModelProcessAIService: AIService {
     typealias MemoryPressureObserverFactory = @Sendable (@escaping @Sendable () -> Void) -> (any MemoryPressureObserving)?
 
+    private struct DefaultSamplingParameters {
+        let temperature: Float
+        let topP: Float
+        let repetitionPenalty: Float?
+        let repetitionContextSize: Int
+    }
+
     struct NoOpEventBus: EventBusProtocol {
         func publish<E: Event>(_ event: E) {}
 
@@ -165,7 +177,7 @@ actor LocalModelProcessAIService: AIService {
         }
 
         func generate(modelId: String, modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat? = nil, runId: String?, inferenceConfiguration: LocalModelInferenceConfiguration, conversationId: String? = nil) async throws -> AIServiceResponse {
-            print("[LOCAL-MLX] generate modelId=\(modelId) modelDirectory=\(modelDirectory.path) toolCallFormat=\(String(describing: toolCallFormat)) contextLength=\(inferenceConfiguration.contextLength) maxKVSize=\(inferenceConfiguration.maxKVSize) maxOutputTokens=\(inferenceConfiguration.maxOutputTokens) prefillStepSize=\(inferenceConfiguration.prefillStepSize)")
+            print("[LOCAL-MLX] generate modelId=\(modelId) modelDirectory=\(modelDirectory.path) toolCallFormat=\(String(describing: toolCallFormat)) contextLength=\(inferenceConfiguration.contextLength) maxKVSize=\(inferenceConfiguration.maxKVSize) maxOutputTokens=\(inferenceConfiguration.maxOutputTokens) prefillStepSize=\(inferenceConfiguration.prefillStepSize) temperature=\(inferenceConfiguration.temperature) topP=\(inferenceConfiguration.topP) repetitionPenalty=\(String(describing: inferenceConfiguration.repetitionPenalty)) repetitionContextSize=\(inferenceConfiguration.repetitionContextSize)")
             let preparedUserInput = userInput
             let rssLimitMB = Self.resolvedRSSLimitMB()
             let generationStart = ContinuousClock.now
@@ -173,6 +185,10 @@ actor LocalModelProcessAIService: AIService {
             let parameters = GenerateParameters(
                 maxTokens: inferenceConfiguration.maxOutputTokens,
                 maxKVSize: inferenceConfiguration.maxKVSize,
+                temperature: inferenceConfiguration.temperature,
+                topP: inferenceConfiguration.topP,
+                repetitionPenalty: inferenceConfiguration.repetitionPenalty,
+                repetitionContextSize: inferenceConfiguration.repetitionContextSize,
                 prefillStepSize: inferenceConfiguration.prefillStepSize
             )
             let eventBus = self.eventBus
@@ -673,6 +689,7 @@ actor LocalModelProcessAIService: AIService {
     private var lifecycleObservers: [NSObjectProtocol] = []
     private let prefixCache = PromptPrefixCache()
     private let activityCoordinator: (any AgentActivityCoordinating)?
+    private let launchContext: AppLaunchContext
 
     init(
         selectionStore: LocalModelSelectionStore = LocalModelSelectionStore(),
@@ -683,7 +700,8 @@ actor LocalModelProcessAIService: AIService {
         memoryPressureObserverFactory: MemoryPressureObserverFactory = { callback in
             MemoryPressureObserver(onMemoryPressure: callback)
         },
-        activityCoordinator: (any AgentActivityCoordinating)? = nil
+        activityCoordinator: (any AgentActivityCoordinating)? = nil,
+        launchContext: AppLaunchContext = AppRuntimeEnvironment.launchContext
     ) {
         self.selectionStore = selectionStore
         self.fileStore = fileStore
@@ -692,6 +710,7 @@ actor LocalModelProcessAIService: AIService {
         self.settingsStore = settingsStore
         self.memoryPressureObserver = nil
         self.activityCoordinator = activityCoordinator
+        self.launchContext = launchContext
         let generatorForPressureHandling = self.generator
         let prefixCacheForPressureHandling = self.prefixCache
 
@@ -735,14 +754,23 @@ actor LocalModelProcessAIService: AIService {
         }
 
         let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
-        let isTesting = AppRuntimeEnvironment.launchContext.isTesting
+        let isTesting = launchContext.isTesting
         let testBudget = LocalModelTestBudget.applyIfNeeded(
             to: request,
-            contextLength: LocalModelFileStore.contextLength(for: model)
+            contextLength: LocalModelFileStore.contextLength(for: model),
+            launchContext: launchContext
+        )
+        let defaultSampling = defaultSamplingParameters(
+            mode: request.mode,
+            stage: request.stage
         )
         let inferenceConfiguration = await LocalModelInferenceOverrides.shared.resolve(
             defaultContextLength: testBudget.contextLength,
-            defaultMaxOutputTokens: testBudget.maxOutputTokens
+            defaultMaxOutputTokens: testBudget.maxOutputTokens,
+            defaultTemperature: defaultSampling.temperature,
+            defaultTopP: defaultSampling.topP,
+            defaultRepetitionPenalty: defaultSampling.repetitionPenalty,
+            defaultRepetitionContextSize: defaultSampling.repetitionContextSize
         )
         let settings = settingsStore.load(includeApiKey: false)
         
@@ -774,8 +802,14 @@ actor LocalModelProcessAIService: AIService {
             }
         }
         
+        let budgetedMessages = budgetMessages(
+            testBudget.retainedMessages,
+            explicitContext: request.context,
+            systemContent: systemContent,
+            inferenceConfiguration: inferenceConfiguration
+        )
         let chatMessages = buildChatMessages(
-            messages: testBudget.retainedMessages,
+            messages: budgetedMessages,
             explicitContext: request.context,
             systemContent: systemContent
         )
@@ -1075,7 +1109,7 @@ actor LocalModelProcessAIService: AIService {
         projectRoot: URL?,
         settings: OpenRouterSettings
     ) throws -> String {
-        return try SystemPromptAssembler().assemble(
+        let systemPrompt = try SystemPromptAssembler().assemble(
             input: .init(
                 systemPromptOverride: settings.systemPrompt,
                 hasTools: tools?.isEmpty == false,
@@ -1087,6 +1121,7 @@ actor LocalModelProcessAIService: AIService {
                 includeModelReasoning: settings.reasoningMode.includesModelReasoning && stage != .tool_loop
             )
         )
+        return systemPrompt + "\n\n" + localModelResponseGuidance(mode: mode, stage: stage)
     }
 
     private func additionalContext(
@@ -1117,6 +1152,78 @@ actor LocalModelProcessAIService: AIService {
                 ] as [String: any Sendable]
             ] as ToolSpec
         }
+    }
+
+    private func localModelResponseGuidance(mode: AIMode?, stage: AIRequestStage?) -> String {
+        var lines = [
+            "Local response guidance:",
+            "- Prefer the shortest response that fully solves the request.",
+            "- Do not narrate obvious steps or repeat the user's request.",
+            "- When the user asks for brevity, match it exactly and stop.",
+            "- For coding help, prioritize code, edits, and direct conclusions over exposition."
+        ]
+        if mode == .agent || stage == .tool_loop {
+            lines.append("- During agent/tool work, keep status text condensed and action-oriented.")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func defaultSamplingParameters(
+        mode: AIMode?,
+        stage: AIRequestStage?
+    ) -> DefaultSamplingParameters {
+        if stage == .tool_loop || mode == .agent {
+            return DefaultSamplingParameters(
+                temperature: 0.2,
+                topP: 0.9,
+                repetitionPenalty: 1.05,
+                repetitionContextSize: 64
+            )
+        }
+
+        return DefaultSamplingParameters(
+            temperature: 0.35,
+            topP: 0.92,
+            repetitionPenalty: 1.03,
+            repetitionContextSize: 64
+        )
+    }
+
+    private func budgetMessages(
+        _ messages: [ChatMessage],
+        explicitContext: String?,
+        systemContent: String,
+        inferenceConfiguration: LocalModelInferenceConfiguration
+    ) -> [ChatMessage] {
+        guard !messages.isEmpty else { return messages }
+
+        let reservedOutputTokens = inferenceConfiguration.maxOutputTokens
+        let systemTokens = approximateTokenCount(systemContent)
+        let explicitContextTokens = approximateTokenCount(explicitContext ?? "")
+        let overheadTokens = 256
+        let availableHistoryBudget = max(
+            256,
+            inferenceConfiguration.contextLength - reservedOutputTokens - systemTokens - explicitContextTokens - overheadTokens
+        )
+
+        var selected: [ChatMessage] = []
+        var consumedTokens = 0
+        for message in messages.reversed() {
+            let messageTokens = approximateTokenCount(message.content) + 16
+            let mustKeep = selected.isEmpty && message.role == .user
+            if !mustKeep && consumedTokens + messageTokens > availableHistoryBudget {
+                continue
+            }
+            selected.append(message)
+            consumedTokens += messageTokens
+        }
+
+        return selected.reversed()
+    }
+
+    private func approximateTokenCount(_ text: String) -> Int {
+        guard !text.isEmpty else { return 0 }
+        return max(1, (text.count + 3) / 4)
     }
 
     private func convertToSendable(_ dictionary: [String: Any]) -> [String: any Sendable] {

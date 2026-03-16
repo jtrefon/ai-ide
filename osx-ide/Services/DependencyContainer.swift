@@ -268,7 +268,8 @@ class DependencyContainer: ObservableObject {
         let localModelService = LocalModelProcessAIService(
             selectionStore: selectionStore,
             eventBus: localModelEventBus,
-            activityCoordinator: activityCoordinator
+            activityCoordinator: activityCoordinator,
+            launchContext: launchContext
         )
         return ModelRoutingAIService(
             openRouterService: openRouterService,

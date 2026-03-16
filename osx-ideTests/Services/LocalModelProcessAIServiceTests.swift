@@ -497,7 +497,11 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
                 contextLength: 3072,
                 maxKVSize: 1536,
                 maxOutputTokens: 640,
-                prefillStepSize: 256
+                prefillStepSize: 256,
+                temperature: 0.35,
+                topP: 0.92,
+                repetitionPenalty: 1.03,
+                repetitionContextSize: 64
             )
         )
     }

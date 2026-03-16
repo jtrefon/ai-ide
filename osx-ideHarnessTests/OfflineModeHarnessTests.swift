@@ -282,14 +282,18 @@ final class OfflineModeHarnessTests: XCTestCase {
         }
 
         for configuration in configurations {
-            await LocalModelInferenceOverrides.shared.set(
-                LocalModelInferenceOverrides(
-                    contextLength: configuration.contextLength,
-                    maxKVSize: configuration.maxKVSize,
-                    maxOutputTokens: configuration.maxOutputTokens,
-                    prefillStepSize: configuration.prefillStepSize
+                await LocalModelInferenceOverrides.shared.set(
+                    LocalModelInferenceOverrides(
+                        contextLength: configuration.contextLength,
+                        maxKVSize: configuration.maxKVSize,
+                        maxOutputTokens: configuration.maxOutputTokens,
+                        prefillStepSize: configuration.prefillStepSize,
+                        temperature: configuration.temperature,
+                        topP: configuration.topP,
+                        repetitionPenalty: .some(configuration.repetitionPenalty),
+                        repetitionContextSize: configuration.repetitionContextSize
+                    )
                 )
-            )
 
             for iteration in 1...benchmarkIterationCount() {
                 manager.startNewConversation()
@@ -747,7 +751,10 @@ final class OfflineModeHarnessTests: XCTestCase {
 
         let modelId = container.settingsStore.string(forKey: "LocalModel.SelectedId")?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let defaultInferenceConfiguration = try defaultInferenceConfiguration(for: modelId)
+        let defaultInferenceConfiguration = try defaultInferenceConfiguration(
+            for: modelId,
+            profile: profile
+        )
         return Runtime(
             manager: manager,
             modelId: modelId,
@@ -797,7 +804,8 @@ final class OfflineModeHarnessTests: XCTestCase {
                 isTesting: true,
                 isUITesting: false,
                 testProfilePath: testProfilePath,
-                disableHeavyInit: disableHeavyInit
+                disableHeavyInit: disableHeavyInit,
+                productionParityHarness: profile == .benchmark
             )
         )
 
@@ -1126,7 +1134,10 @@ final class OfflineModeHarnessTests: XCTestCase {
         return max(128, min(configuredTarget ?? 1024, 12_000))
     }
 
-    private func defaultInferenceConfiguration(for modelId: String) throws -> LocalModelInferenceConfiguration {
+    private func defaultInferenceConfiguration(
+        for modelId: String,
+        profile: RuntimeProfile
+    ) throws -> LocalModelInferenceConfiguration {
         guard let model = LocalModelCatalog.model(id: modelId) else {
             throw NSError(
                 domain: "OfflineModeHarnessTests",
@@ -1135,12 +1146,31 @@ final class OfflineModeHarnessTests: XCTestCase {
             )
         }
 
-        let contextLength = min(LocalModelFileStore.contextLength(for: model), 2048)
+        let maxContextLength: Int
+        switch profile {
+        case .standard:
+            maxContextLength = 2048
+        case .benchmark:
+            maxContextLength = 8192
+        }
+
+        let contextLength = min(LocalModelFileStore.contextLength(for: model), maxContextLength)
+        let defaultMaxOutputTokens: Int
+        switch profile {
+        case .standard:
+            defaultMaxOutputTokens = min(768, max(384, contextLength / 3))
+        case .benchmark:
+            defaultMaxOutputTokens = min(1024, max(512, contextLength / 4))
+        }
         return LocalModelInferenceConfiguration(
             contextLength: contextLength,
             maxKVSize: contextLength,
-            maxOutputTokens: min(768, max(384, contextLength / 3)),
-            prefillStepSize: 512
+            maxOutputTokens: defaultMaxOutputTokens,
+            prefillStepSize: 512,
+            temperature: 0.35,
+            topP: 0.92,
+            repetitionPenalty: 1.03,
+            repetitionContextSize: 64
         )
     }
 
@@ -1159,6 +1189,18 @@ final class OfflineModeHarnessTests: XCTestCase {
         let prefillSteps = parseBenchmarkList(
             benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_PREFILL_STEPS")
         ) ?? [256, 512, 1024]
+        let temperatures = parseBenchmarkFloatList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_TEMPERATURES")
+        ) ?? [defaultConfiguration.temperature]
+        let topPs = parseBenchmarkFloatList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_TOP_P")
+        ) ?? [defaultConfiguration.topP]
+        let repetitionPenalties = parseBenchmarkOptionalFloatList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_REPETITION_PENALTIES")
+        ) ?? [defaultConfiguration.repetitionPenalty]
+        let repetitionContextSizes = parseBenchmarkList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_REPETITION_CONTEXT_SIZES")
+        ) ?? [defaultConfiguration.repetitionContextSize]
 
         var configurations: [LocalModelInferenceConfiguration] = []
         for contextLength in contexts {
@@ -1166,14 +1208,26 @@ final class OfflineModeHarnessTests: XCTestCase {
                 guard maxKVSize <= contextLength else { continue }
                 for maxOutputTokens in maxOutputs {
                     for prefillStepSize in prefillSteps {
-                        configurations.append(
-                            LocalModelInferenceConfiguration(
-                                contextLength: contextLength,
-                                maxKVSize: maxKVSize,
-                                maxOutputTokens: maxOutputTokens,
-                                prefillStepSize: prefillStepSize
-                            )
-                        )
+                        for temperature in temperatures {
+                            for topP in topPs {
+                                for repetitionPenalty in repetitionPenalties {
+                                    for repetitionContextSize in repetitionContextSizes {
+                                        configurations.append(
+                                            LocalModelInferenceConfiguration(
+                                                contextLength: contextLength,
+                                                maxKVSize: maxKVSize,
+                                                maxOutputTokens: maxOutputTokens,
+                                                prefillStepSize: prefillStepSize,
+                                                temperature: temperature,
+                                                topP: topP,
+                                                repetitionPenalty: repetitionPenalty,
+                                                repetitionContextSize: repetitionContextSize
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1189,7 +1243,19 @@ final class OfflineModeHarnessTests: XCTestCase {
             if lhs.maxOutputTokens != rhs.maxOutputTokens {
                 return lhs.maxOutputTokens < rhs.maxOutputTokens
             }
-            return lhs.prefillStepSize < rhs.prefillStepSize
+            if lhs.prefillStepSize != rhs.prefillStepSize {
+                return lhs.prefillStepSize < rhs.prefillStepSize
+            }
+            if lhs.temperature != rhs.temperature {
+                return lhs.temperature < rhs.temperature
+            }
+            if lhs.topP != rhs.topP {
+                return lhs.topP < rhs.topP
+            }
+            if lhs.repetitionPenalty != rhs.repetitionPenalty {
+                return (lhs.repetitionPenalty ?? 0) < (rhs.repetitionPenalty ?? 0)
+            }
+            return lhs.repetitionContextSize < rhs.repetitionContextSize
         }
     }
 
@@ -1199,6 +1265,34 @@ final class OfflineModeHarnessTests: XCTestCase {
             .split(separator: ",")
             .compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
             .filter { $0 > 0 }
+        return values.isEmpty ? nil : values
+    }
+
+    private func parseBenchmarkFloatList(_ rawValue: String?) -> [Float]? {
+        guard let rawValue else { return nil }
+        let values = rawValue
+            .split(separator: ",")
+            .compactMap { token -> Float? in
+                let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                return Float(trimmed)
+            }
+        return values.isEmpty ? nil : values
+    }
+
+    private func parseBenchmarkOptionalFloatList(_ rawValue: String?) -> [Float?]? {
+        guard let rawValue else { return nil }
+        let values = rawValue
+            .split(separator: ",")
+            .compactMap { token -> Float?? in
+                let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard !trimmed.isEmpty else { return nil }
+                if trimmed == "nil" || trimmed == "none" || trimmed == "off" {
+                    return .some(nil)
+                }
+                guard let value = Float(trimmed) else { return nil }
+                return .some(value)
+            }
         return values.isEmpty ? nil : values
     }
 

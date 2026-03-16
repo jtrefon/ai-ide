@@ -5,13 +5,25 @@ struct LocalModelInferenceConfiguration: Sendable, Equatable, Hashable {
     let maxKVSize: Int
     let maxOutputTokens: Int
     let prefillStepSize: Int
+    let temperature: Float
+    let topP: Float
+    let repetitionPenalty: Float?
+    let repetitionContextSize: Int
 
     var cacheKind: String {
         maxKVSize < contextLength ? "rotating-window" : "rotating-full"
     }
 
     var label: String {
-        "ctx\(contextLength)-kv\(maxKVSize)-out\(maxOutputTokens)-prefill\(prefillStepSize)"
+        let tempLabel = Int((temperature * 100).rounded())
+        let topPLabel = Int((topP * 100).rounded())
+        let repetitionLabel: String
+        if let repetitionPenalty {
+            repetitionLabel = "rp\(Int((repetitionPenalty * 100).rounded()))-rc\(repetitionContextSize)"
+        } else {
+            repetitionLabel = "rp0-rc0"
+        }
+        return "ctx\(contextLength)-kv\(maxKVSize)-out\(maxOutputTokens)-prefill\(prefillStepSize)-temp\(tempLabel)-topp\(topPLabel)-\(repetitionLabel)"
     }
 }
 
@@ -20,6 +32,10 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
     var maxKVSize: Int?
     var maxOutputTokens: Int?
     var prefillStepSize: Int?
+    var temperature: Float?
+    var topP: Float?
+    var repetitionPenalty: Float??
+    var repetitionContextSize: Int?
 
     static let shared = Store()
 
@@ -38,10 +54,21 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
             overrides
         }
 
-        func resolve(defaultContextLength: Int, defaultMaxOutputTokens: Int) -> LocalModelInferenceConfiguration {
+        func resolve(
+            defaultContextLength: Int,
+            defaultMaxOutputTokens: Int,
+            defaultTemperature: Float,
+            defaultTopP: Float,
+            defaultRepetitionPenalty: Float?,
+            defaultRepetitionContextSize: Int
+        ) -> LocalModelInferenceConfiguration {
             Self.resolve(
                 defaultContextLength: defaultContextLength,
                 defaultMaxOutputTokens: defaultMaxOutputTokens,
+                defaultTemperature: defaultTemperature,
+                defaultTopP: defaultTopP,
+                defaultRepetitionPenalty: defaultRepetitionPenalty,
+                defaultRepetitionContextSize: defaultRepetitionContextSize,
                 environment: ProcessInfo.processInfo.environment,
                 overrides: overrides
             )
@@ -50,6 +77,10 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
         nonisolated private static func resolve(
             defaultContextLength: Int,
             defaultMaxOutputTokens: Int,
+            defaultTemperature: Float,
+            defaultTopP: Float,
+            defaultRepetitionPenalty: Float?,
+            defaultRepetitionContextSize: Int,
             environment: [String: String],
             overrides: LocalModelInferenceOverrides?
         ) -> LocalModelInferenceConfiguration {
@@ -57,6 +88,10 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
             let envMaxKV = parseInt(environment["OSXIDE_LOCAL_MODEL_MAX_KV_SIZE"])
             let envMaxOutput = parseInt(environment["OSXIDE_LOCAL_MODEL_MAX_OUTPUT_TOKENS"])
             let envPrefill = parseInt(environment["OSXIDE_LOCAL_MODEL_PREFILL_STEP_SIZE"])
+            let envTemperature = parseFloat(environment["OSXIDE_LOCAL_MODEL_TEMPERATURE"])
+            let envTopP = parseFloat(environment["OSXIDE_LOCAL_MODEL_TOP_P"])
+            let envRepetitionPenalty = parseOptionalFloat(environment["OSXIDE_LOCAL_MODEL_REPETITION_PENALTY"])
+            let envRepetitionContextSize = parseInt(environment["OSXIDE_LOCAL_MODEL_REPETITION_CONTEXT_SIZE"])
 
             let contextLength = clamp(
                 overrides?.contextLength ?? envContext ?? defaultContextLength,
@@ -78,12 +113,32 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
                 min: 64,
                 max: 4_096
             )
+            let temperature = clamp(
+                overrides?.temperature ?? envTemperature ?? defaultTemperature,
+                min: 0,
+                max: 2
+            )
+            let topP = clamp(
+                overrides?.topP ?? envTopP ?? defaultTopP,
+                min: 0,
+                max: 1
+            )
+            let repetitionPenalty = overrides?.repetitionPenalty ?? envRepetitionPenalty ?? defaultRepetitionPenalty
+            let repetitionContextSize = clamp(
+                overrides?.repetitionContextSize ?? envRepetitionContextSize ?? defaultRepetitionContextSize,
+                min: 0,
+                max: contextLength
+            )
 
             return LocalModelInferenceConfiguration(
                 contextLength: contextLength,
                 maxKVSize: maxKVSize,
                 maxOutputTokens: maxOutputTokens,
-                prefillStepSize: prefillStepSize
+                prefillStepSize: prefillStepSize,
+                temperature: temperature,
+                topP: topP,
+                repetitionPenalty: repetitionPenalty,
+                repetitionContextSize: repetitionContextSize
             )
         }
 
@@ -99,7 +154,38 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
             return value
         }
 
+        nonisolated private static func parseFloat(_ rawValue: String?) -> Float? {
+            guard let rawValue else {
+                return nil
+            }
+
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let value = Float(trimmed) else {
+                return nil
+            }
+            return value
+        }
+
+        nonisolated private static func parseOptionalFloat(_ rawValue: String?) -> Float?? {
+            guard let rawValue else {
+                return nil
+            }
+
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if trimmed.isEmpty || trimmed == "nil" || trimmed == "none" || trimmed == "off" {
+                return .some(nil)
+            }
+            guard let value = Float(trimmed) else {
+                return nil
+            }
+            return .some(value)
+        }
+
         nonisolated private static func clamp(_ value: Int, min minimum: Int, max maximum: Int) -> Int {
+            Swift.max(minimum, Swift.min(value, maximum))
+        }
+
+        nonisolated private static func clamp(_ value: Float, min minimum: Float, max maximum: Float) -> Float {
             Swift.max(minimum, Swift.min(value, maximum))
         }
     }

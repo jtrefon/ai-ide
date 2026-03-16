@@ -327,7 +327,7 @@ final class EdgeCaseScenariosTests: XCTestCase {
     }
     
     private func makeProductionRuntime(projectRoot: URL) async throws -> ProductionRuntime {
-        let container = DependencyContainer(launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false, testProfilePath: nil, disableHeavyInit: false))
+        let container = DependencyContainer(launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false, testProfilePath: nil, disableHeavyInit: false, productionParityHarness: false))
         
         // Production-parity harness: keep agent mode online-capable.
         let selectionStore = LocalModelSelectionStore(settingsStore: container.settingsStore)
