@@ -74,7 +74,7 @@ class DependencyContainer: ObservableObject {
                 _workspaceService?.currentDirectory
             }
         )
-        _activityCoordinator = AgentActivityCoordinator()
+        _activityCoordinator = AgentActivityCoordinator.shared
         earlyDiag(
             "Lightweight services done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
         )

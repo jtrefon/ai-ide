@@ -10,6 +10,7 @@ public actor IndexCoordinator {
     private let config: IndexConfiguration
     private let projectRoot: URL?
     private let activityCoordinator: (any AgentActivityCoordinating)?
+    private let backgroundWorkGovernor: BackgroundWorkGovernor
     
     private var isEnabled: Bool
     private var reindexTask: Task<Void, Never>?
@@ -38,6 +39,7 @@ public actor IndexCoordinator {
         self.projectRoot = projectRoot?.standardizedFileURL
         // Use shared instance if no coordinator provided
         self.activityCoordinator = activityCoordinator ?? AgentActivityCoordinator.shared
+        self.backgroundWorkGovernor = .shared
 
         // DO NOT start fire-and-forget tasks here!
         // Starting Task.detached or Task {} from actor init can cause
@@ -94,6 +96,12 @@ public actor IndexCoordinator {
     }
 
     private func performReindex(rootURL: URL, localGeneration: UInt64) async {
+        await backgroundWorkGovernor.waitUntilReady(
+            for: .indexing,
+            reason: "full_reindex:\(rootURL.lastPathComponent)"
+        )
+        guard !Task.isCancelled, localGeneration == generation else { return }
+
         // Wrap indexing with power management to prevent sleep during long operations
         if let coordinator = activityCoordinator {
             await coordinator.withActivity(type: .indexing) {
@@ -141,6 +149,11 @@ public actor IndexCoordinator {
                 await IndexLogger.shared.log("Reindex aborted: Indexing was disabled during process")
                 break
             }
+            await backgroundWorkGovernor.waitUntilReady(
+                for: .indexing,
+                reason: "reindex_file:\(file.lastPathComponent)"
+            )
+            if Task.isCancelled || localGeneration != generation { break }
             await publishProgress(processed: processed, total: total, file: file)
             do {
                 try await indexer.indexFile(at: file)
@@ -301,6 +314,10 @@ public actor IndexCoordinator {
                     await IndexLogger.shared.log("Single file index skipped for \(url.path): Indexing disabled")
                     return
                 }
+                await self.backgroundWorkGovernor.waitUntilReady(
+                    for: .indexing,
+                    reason: "single_file:\(url.lastPathComponent)"
+                )
                 await IndexLogger.shared.log("Indexing single file: \(url.path)")
                 await self.eventBus.publish(IndexingStartedEvent())
                 await self.eventBus.publish(IndexingProgressEvent(processedCount: 0, totalCount: 1, currentFile: url))
