@@ -18,11 +18,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Select Xcode 26.1.1
         uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd
         with:
           xcode-version: "26.1.1"
+
+      - name: Require Tag Commit On Main
+        run: |
+          git fetch origin main --depth=1
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
+            echo "::error::Release tags must point to a commit already on origin/main."
+            exit 1
+          fi
 
       - name: Detect Signing Configuration
         id: signing
@@ -169,9 +179,32 @@ jobs:
           xcrun stapler staple "$DMG_NAME"
           spctl --assess --type open --verbose=4 "$DMG_NAME"
 
+      - name: Generate Release Notes
+        run: |
+          cat > RELEASE_NOTES.md <<'EOF'
+          ## Install
+
+          - Download the DMG from this release, open it, and drag `osx-ide.app` into `Applications`.
+          - Homebrew convenience install:
+            `brew install --cask https://raw.githubusercontent.com/jtrefon/ai-ide/main/Casks/osx-ide.rb`
+
+          ## macOS Security Note
+
+          - Free releases may be ad-hoc signed when Apple Developer ID credentials are not configured.
+          - If macOS blocks launch, right-click `osx-ide.app`, choose `Open`, then confirm.
+          - If needed, remove quarantine manually:
+            `xattr -dr com.apple.quarantine /Applications/osx-ide.app`
+
+          ## Assets
+
+          - `osx-ide.dmg`: recommended for most users
+          - `osx-ide.app.zip`: direct app bundle archive
+          EOF
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
         with:
+          body_path: RELEASE_NOTES.md
           files: |
             ${{ env.APP_ZIP }}
             ${{ env.DMG_NAME }}

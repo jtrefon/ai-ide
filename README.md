@@ -104,6 +104,17 @@ Command line build:
 xcodebuild -project osx-ide.xcodeproj -scheme osx-ide -configuration Debug build
 ```
 
+## Install
+
+Free distribution options:
+
+- GitHub Releases:
+  download the latest DMG or ZIP from the releases page
+- Homebrew repo-hosted cask:
+  `brew install --cask https://raw.githubusercontent.com/jtrefon/ai-ide/main/Casks/osx-ide.rb`
+
+Homebrew is only a convenience channel. It does not make unsigned macOS apps trusted by Gatekeeper.
+
 ## Test
 
 ```sh
