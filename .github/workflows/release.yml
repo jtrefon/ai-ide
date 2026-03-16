@@ -11,6 +11,10 @@ permissions:
 jobs:
   build-release:
     runs-on: macos-15
+    env:
+      APP_PATH: build/Build/Products/Release/osx-ide.app
+      APP_ZIP: osx-ide.app.zip
+      DMG_NAME: osx-ide.dmg
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,6 +23,58 @@ jobs:
         uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd
         with:
           xcode-version: "26.1.1"
+
+      - name: Validate Signing Configuration
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          BUILD_KEYCHAIN_PASSWORD: ${{ secrets.BUILD_KEYCHAIN_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          missing=0
+          for var in \
+            BUILD_CERTIFICATE_BASE64 \
+            P12_PASSWORD \
+            BUILD_KEYCHAIN_PASSWORD \
+            APPLE_SIGNING_IDENTITY \
+            APPLE_TEAM_ID \
+            APPLE_ID \
+            APPLE_APP_SPECIFIC_PASSWORD; do
+            if [ -z "${!var}" ]; then
+              echo "::error::$var is not configured"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo "Public macOS releases require Developer ID signing and notarization."
+            exit 1
+          fi
+
+      - name: Import Developer ID Certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          BUILD_KEYCHAIN_PASSWORD: ${{ secrets.BUILD_KEYCHAIN_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+
+          if ! echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH" 2>/dev/null; then
+            echo "$BUILD_CERTIFICATE_BASE64" | base64 -D > "$CERT_PATH"
+          fi
+
+          security create-keychain -p "$BUILD_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$BUILD_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$BUILD_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
       - name: Build Release App
         run: >
@@ -32,25 +88,69 @@ jobs:
           CODE_SIGNING_REQUIRED=NO
           CODE_SIGN_IDENTITY=
 
-      - name: Ad-Hoc Code Sign
+      - name: Sign Release App
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          APP_PATH="build/Build/Products/Release/osx-ide.app"
-          echo "Signing application with ad-hoc identity..."
-          codesign --force --deep --sign - "$APP_PATH"
+          echo "Signing application with Developer ID identity..."
+          codesign \
+            --force \
+            --deep \
+            --options runtime \
+            --entitlements osx-ide/osx_ide.entitlements \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            "$APP_PATH"
           echo "Verifying signature..."
-          codesign --verify --verbose=2 "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          spctl --assess --type exec --verbose=4 "$APP_PATH"
 
-      - name: Package App
+      - name: Package Signed App Zip
         run: |
-          APP_PATH="build/Build/Products/Release/osx-ide.app"
-          ZIP_NAME="osx-ide.app.zip"
-          DMG_NAME="osx-ide.dmg"
-          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_NAME"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
+
+      - name: Notarize Signed App Zip
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool submit "$APP_ZIP" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+      - name: Staple App And Rebuild Zip
+        run: |
+          xcrun stapler staple "$APP_PATH"
+          rm -f "$APP_ZIP"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
+
+      - name: Build And Sign DMG
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
           hdiutil create -volname "osx-ide" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_NAME"
+          codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$DMG_NAME"
+          codesign --verify --verbose=2 "$DMG_NAME"
+
+      - name: Notarize And Staple DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool submit "$DMG_NAME" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$DMG_NAME"
+          spctl --assess --type open --verbose=4 "$DMG_NAME"
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
         with:
           files: |
-            osx-ide.app.zip
-            osx-ide.dmg
+            ${{ env.APP_ZIP }}
+            ${{ env.DMG_NAME }}

@@ -110,6 +110,30 @@ xcodebuild -project osx-ide.xcodeproj -scheme osx-ide -configuration Debug build
 xcodebuild -project osx-ide.xcodeproj -scheme osx-ide -configuration Debug test -destination 'platform=macOS'
 ```
 
+## Release Signing
+
+Public macOS downloads should not use ad-hoc or self-signed builds. For normal download-and-open behavior, the release workflow now expects a `Developer ID Application` certificate and Apple notarization credentials.
+
+Configure these GitHub Actions secrets before pushing a release tag:
+
+- `BUILD_CERTIFICATE_BASE64`: base64-encoded `.p12` certificate export for your Developer ID Application certificate
+- `P12_PASSWORD`: password used when exporting the `.p12`
+- `BUILD_KEYCHAIN_PASSWORD`: temporary keychain password used during CI import
+- `APPLE_SIGNING_IDENTITY`: full signing identity, for example `Developer ID Application: Your Name (TEAMID)`
+- `APPLE_TEAM_ID`: Apple Developer Team ID
+- `APPLE_ID`: Apple ID used for notarization
+- `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for notarization
+
+Once those secrets are present, the release workflow will:
+
+- sign the `.app` with hardened runtime and project entitlements
+- notarize the app bundle archive
+- staple the notarization ticket to the `.app`
+- build and sign the `.dmg`
+- notarize and staple the `.dmg`
+
+If these secrets are missing, tagged release builds now fail instead of silently publishing an ad-hoc-signed artifact.
+
 ## Troubleshooting
 
 ### Xcode/SourceKit "false compile errors"
