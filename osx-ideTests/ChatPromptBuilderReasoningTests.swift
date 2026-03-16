@@ -138,7 +138,33 @@ final class ChatPromptBuilderReasoningTests: XCTestCase {
         XCTAssertNil(split.reasoning)
     }
 
-    func testContentForDisplayLeavesUnsupportedXMLLookingTextUntouched() {
+    func testReasoningForDisplay_insertsBreaksForCollapsedSectionLabels() {
+        let input = "Codebase Review & InsightsArchitecture: Storage Layer. UI Layer: React. Routing: SPA. Strengths: Clean. Potential Issues: None. Recommendations: Ship. Remaining Work: None. Status: Complete."
+
+        let output = ChatPromptBuilder.reasoningForDisplay(input)
+
+        XCTAssertTrue(output.contains("Codebase Review & Insights\n\nArchitecture: Storage Layer."))
+        XCTAssertTrue(output.contains("\n\nUI Layer: React."))
+        XCTAssertTrue(output.contains("\n\nRouting: SPA."))
+        XCTAssertTrue(output.contains("\n\nStrengths: Clean."))
+        XCTAssertTrue(output.contains("\n\nPotential Issues: None."))
+        XCTAssertTrue(output.contains("\n\nRecommendations: Ship."))
+        XCTAssertTrue(output.contains("\n\nRemaining Work: None."))
+        XCTAssertTrue(output.contains("\n\nStatus: Complete."))
+    }
+
+    func testReasoningOutcome_parsesCollapsedLegacySectionsAfterFormatting() {
+        let input = "Analyze: inspect code Plan: update formatter Reflect: low risk Action: patch view Delivery: DONE"
+
+        let output = ChatPromptBuilder.reasoningOutcome(from: input)
+
+        XCTAssertEqual(output?.planDelta, "update formatter")
+        XCTAssertEqual(output?.nextAction, "patch view")
+        XCTAssertEqual(output?.knownRisks, "low risk")
+        XCTAssertEqual(output?.deliveryState, .done)
+    }
+
+    func testContentForDisplayStripsSupportedXMLToolCallMarkup() {
         let input = """
         <tool_call>read_file
         <arg_key>path</arg_key>
@@ -148,18 +174,20 @@ final class ChatPromptBuilderReasoningTests: XCTestCase {
         """
 
         let output = ChatPromptBuilder.contentForDisplay(from: input)
-        XCTAssertTrue(output.contains("<tool_call>read_file"))
+        XCTAssertFalse(output.contains("<tool_call>"))
+        XCTAssertFalse(output.contains("<arg_key>"))
+        XCTAssertFalse(output.contains("<arg_value>"))
         XCTAssertTrue(output.contains("Done exploring structure."))
     }
 
-    func testIsControlMarkupOnlyReturnsFalseForUnsupportedXMLLookingText() {
+    func testIsControlMarkupOnlyReturnsTrueForSupportedXMLToolCallMarkup() {
         let input = """
         <tool_call>list_files
         <arg_key>path</arg_key>
         <arg_value>/tmp</arg_value>
         </tool_call>
         """
-        XCTAssertFalse(ChatPromptBuilder.isControlMarkupOnly(input))
+        XCTAssertTrue(ChatPromptBuilder.isControlMarkupOnly(input))
     }
 
     func testHasMissingClaimedFileArtifactsDetectsMissingFiles() throws {

@@ -39,7 +39,7 @@ enum LocalModelCatalog {
                 artifact("special_tokens_map.json"),
                 artifact("added_tokens.json")
             ],
-            defaultContextLength: 32768,
+            defaultContextLength: 8192,
             toolCallFormat: .json
         )
     }
@@ -93,7 +93,7 @@ enum LocalModelCatalog {
                 artifact("video_preprocessor_config.json"),
                 artifact("vocab.json")
             ],
-            defaultContextLength: 32768,
+            defaultContextLength: 8192,
             toolCallFormat: .json
         )
     }

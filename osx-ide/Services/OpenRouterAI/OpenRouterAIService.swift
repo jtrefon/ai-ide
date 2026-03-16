@@ -1035,10 +1035,214 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
     }
 
     nonisolated static func extractFallbackToolCalls(from content: String) -> [AIToolCall]? {
-        guard let minimaxCalls = decodeMinimaxToolCalls(from: content), !minimaxCalls.isEmpty else {
+        let decoders: [(String) -> [AIToolCall]?] = [
+            decodeStructuredXMLToolCalls,
+            decodeLegacyToolCodeCalls,
+            decodeMinimaxToolCalls
+        ]
+
+        for decoder in decoders {
+            if let toolCalls = decoder(content), !toolCalls.isEmpty {
+                return toolCalls
+            }
+        }
+
+        return nil
+    }
+
+    nonisolated private static func normalizeRecoveredToolName(_ rawName: String) -> String {
+        let normalized = decodeToolMarkupEntities(rawName)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        let aliases: [String: String] = [
+            "list_directory": "list_files",
+            "list_dir": "list_files",
+            "cli-mcp-server_run_command": "run_command",
+            "run_terminal_command": "run_command",
+            "run_shell_command": "run_command",
+            "create_file": "write_file",
+            "write": "write_file",
+            "edit_file": "replace_in_file",
+            "view_file": "read_file",
+            "read": "read_file"
+        ]
+
+        return aliases[normalized] ?? normalized
+    }
+
+    nonisolated private static func decodeStructuredXMLToolCalls(from content: String) -> [AIToolCall]? {
+        let pattern = #"<tool_call>\s*(.*?)\s*</tool_call>"#
+        guard let regex = try? NSRegularExpression(
+            pattern: pattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else {
             return nil
         }
-        return minimaxCalls
+
+        let contentRange = NSRange(content.startIndex..<content.endIndex, in: content)
+        let matches = regex.matches(in: content, options: [], range: contentRange)
+        guard !matches.isEmpty else { return nil }
+
+        let toolPattern = #"<tool\s+name=\"([^\"]+)\"\s*>(.*?)</tool>"#
+        let argPattern = #"<arg\s+name=\"([^\"]+)\"\s*>(.*?)</arg>"#
+        let parameterPattern = #"<parameter\s+name=\"([^\"]+)\"\s*>(.*?)</parameter>"#
+        guard let toolRegex = try? NSRegularExpression(
+                pattern: toolPattern,
+                options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ), let argRegex = try? NSRegularExpression(
+                pattern: argPattern,
+                options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ), let parameterRegex = try? NSRegularExpression(
+                pattern: parameterPattern,
+                options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else {
+            return nil
+        }
+
+        let toolCalls = matches.flatMap { match -> [AIToolCall] in
+            guard match.numberOfRanges == 2,
+                  let bodyRange = Range(match.range(at: 1), in: content) else {
+                return []
+            }
+
+            let body = String(content[bodyRange])
+            let bodyNSRange = NSRange(body.startIndex..<body.endIndex, in: body)
+
+            return toolRegex.matches(in: body, options: [], range: bodyNSRange).compactMap { toolMatch in
+                guard toolMatch.numberOfRanges == 3,
+                      let nameRange = Range(toolMatch.range(at: 1), in: body),
+                      let toolBodyRange = Range(toolMatch.range(at: 2), in: body) else {
+                    return nil
+                }
+
+                let toolName = normalizeRecoveredToolName(String(body[nameRange]))
+                guard !toolName.isEmpty else { return nil }
+
+                let toolBody = String(body[toolBodyRange])
+                let toolBodyNSRange = NSRange(toolBody.startIndex..<toolBody.endIndex, in: toolBody)
+                var arguments = recoverArguments(
+                    in: toolBody,
+                    range: toolBodyNSRange,
+                    regex: argRegex
+                )
+                if arguments.isEmpty {
+                    arguments = recoverArguments(
+                        in: toolBody,
+                        range: toolBodyNSRange,
+                        regex: parameterRegex
+                    )
+                }
+
+                return AIToolCall(
+                    id: UUID().uuidString,
+                    name: toolName,
+                    arguments: arguments
+                )
+            }
+        }
+
+        return toolCalls.isEmpty ? nil : toolCalls
+    }
+
+    nonisolated private static func decodeLegacyToolCodeCalls(from content: String) -> [AIToolCall]? {
+        let pattern = #"<tool_code>\s*(.*?)\s*</tool_code>"#
+        guard let regex = try? NSRegularExpression(
+            pattern: pattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else {
+            return nil
+        }
+
+        let contentRange = NSRange(content.startIndex..<content.endIndex, in: content)
+        let matches = regex.matches(in: content, options: [], range: contentRange)
+        guard !matches.isEmpty else { return nil }
+
+        let paramPattern = #"<param\s+name=\"([^\"]+)\"\s*>(.*?)</param>"#
+        let selfClosingToolPattern = #"<tool\s+name=\"([^\"]+)\"(.*?)/>"#
+        let inlineAttributePattern = #"([a-zA-Z_][a-zA-Z0-9_\-]*)=\"(.*?)\""#
+        guard let paramRegex = try? NSRegularExpression(
+            pattern: paramPattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ), let selfClosingToolRegex = try? NSRegularExpression(
+            pattern: selfClosingToolPattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ), let inlineAttributeRegex = try? NSRegularExpression(
+            pattern: inlineAttributePattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else {
+            return nil
+        }
+
+        let toolCalls = matches.flatMap { match -> [AIToolCall] in
+            guard match.numberOfRanges == 2,
+                  let bodyRange = Range(match.range(at: 1), in: content) else {
+                return []
+            }
+
+            let body = String(content[bodyRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let bodyNSRange = NSRange(body.startIndex..<body.endIndex, in: body)
+
+            let inlineTools = selfClosingToolRegex.matches(in: body, options: [], range: bodyNSRange).compactMap { toolMatch -> AIToolCall? in
+                guard toolMatch.numberOfRanges == 3,
+                      let nameRange = Range(toolMatch.range(at: 1), in: body),
+                      let attributesRange = Range(toolMatch.range(at: 2), in: body) else {
+                    return nil
+                }
+
+                let toolName = normalizeRecoveredToolName(String(body[nameRange]))
+                guard !toolName.isEmpty else { return nil }
+
+                let attributesText = String(body[attributesRange])
+                let attributesNSRange = NSRange(attributesText.startIndex..<attributesText.endIndex, in: attributesText)
+                var arguments: [String: Any] = [:]
+                for attributeMatch in inlineAttributeRegex.matches(in: attributesText, options: [], range: attributesNSRange) {
+                    guard attributeMatch.numberOfRanges == 3,
+                          let keyRange = Range(attributeMatch.range(at: 1), in: attributesText),
+                          let valueRange = Range(attributeMatch.range(at: 2), in: attributesText) else {
+                        continue
+                    }
+                    let key = decodeToolMarkupEntities(String(attributesText[keyRange]))
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard key != "name", !key.isEmpty else { continue }
+                    let value = decodeToolMarkupEntities(String(attributesText[valueRange]))
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    arguments[key] = value
+                }
+
+                return AIToolCall(
+                    id: UUID().uuidString,
+                    name: toolName,
+                    arguments: arguments
+                )
+            }
+            if !inlineTools.isEmpty {
+                return inlineTools
+            }
+
+            let lines = body
+                .split(whereSeparator: \.isNewline)
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            guard let firstLine = lines.first else { return [] }
+
+            let toolName = normalizeRecoveredToolName(firstLine)
+            guard !toolName.isEmpty else { return [] }
+
+            let arguments = recoverArguments(
+                in: body,
+                range: bodyNSRange,
+                regex: paramRegex
+            )
+
+            return [AIToolCall(
+                id: UUID().uuidString,
+                name: toolName,
+                arguments: arguments
+            )]
+        }
+
+        return toolCalls.isEmpty ? nil : toolCalls
     }
 
     nonisolated private static func decodeMinimaxToolCalls(from content: String) -> [AIToolCall]? {
@@ -1068,27 +1272,16 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                 return nil
             }
 
-            let toolName = decodeToolMarkupEntities(String(content[nameRange]))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let toolName = normalizeRecoveredToolName(String(content[nameRange]))
             guard !toolName.isEmpty else { return nil }
 
             let body = String(content[bodyRange])
             let bodyNSRange = NSRange(body.startIndex..<body.endIndex, in: body)
-            let parameters = parameterRegex.matches(in: body, options: [], range: bodyNSRange)
-            var arguments: [String: Any] = [:]
-            for parameter in parameters {
-                guard parameter.numberOfRanges == 3,
-                      let parameterNameRange = Range(parameter.range(at: 1), in: body),
-                      let parameterValueRange = Range(parameter.range(at: 2), in: body) else {
-                    continue
-                }
-                let parameterName = decodeToolMarkupEntities(String(body[parameterNameRange]))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !parameterName.isEmpty else { continue }
-                let parameterValue = decodeToolMarkupEntities(String(body[parameterValueRange]))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                arguments[parameterName] = parameterValue
-            }
+            let arguments = recoverArguments(
+                in: body,
+                range: bodyNSRange,
+                regex: parameterRegex
+            )
 
             return AIToolCall(
                 id: UUID().uuidString,
@@ -1103,8 +1296,14 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
     nonisolated private static func stripRecoveredToolCallMarkup(from content: String) -> String {
         var output = content
         let patterns = [
+            #"(?is)<tool_call>\s*.*?\s*</tool_call>"#,
+            #"(?is)<tool_code>\s*.*?\s*</tool_code>"#,
             #"(?is)<minimax:tool_call>\s*.*?\s*</minimax:tool_call>"#,
-            #"(?is)<invoke\s+name=\"[^\"]+\"\s*>.*?</invoke>"#
+            #"(?is)<invoke\s+name=\"[^\"]+\"\s*>.*?</invoke>"#,
+            #"(?is)<tool\s+name=\"[^\"]+\"\s*>.*?</tool>"#,
+            #"(?is)</?arg\s+name=\"[^\"]+\">"#,
+            #"(?is)</?parameter\s+name=\"[^\"]+\">"#,
+            #"(?is)</?param\s+name=\"[^\"]+\">"#
         ]
 
         for pattern in patterns {
@@ -1125,5 +1324,28 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
             .replacingOccurrences(of: "&lt;", with: "<")
             .replacingOccurrences(of: "&gt;", with: ">")
             .replacingOccurrences(of: "&amp;", with: "&")
+    }
+
+    nonisolated private static func recoverArguments(
+        in body: String,
+        range: NSRange,
+        regex: NSRegularExpression
+    ) -> [String: Any] {
+        let parameters = regex.matches(in: body, options: [], range: range)
+        var arguments: [String: Any] = [:]
+        for parameter in parameters {
+            guard parameter.numberOfRanges == 3,
+                  let parameterNameRange = Range(parameter.range(at: 1), in: body),
+                  let parameterValueRange = Range(parameter.range(at: 2), in: body) else {
+                continue
+            }
+            let parameterName = decodeToolMarkupEntities(String(body[parameterNameRange]))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !parameterName.isEmpty else { continue }
+            let parameterValue = decodeToolMarkupEntities(String(body[parameterValueRange]))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            arguments[parameterName] = parameterValue
+        }
+        return arguments
     }
 }

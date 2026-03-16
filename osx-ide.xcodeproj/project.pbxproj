@@ -9,8 +9,6 @@
 /* Begin PBXBuildFile section */
 		6D2E6F7F2C2F4A7F00A1B2C3 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */; };
 		6E8A1B012F9A000100ABC123 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6E8A1B002F9A000100ABC123 /* MLXVLM */; };
-		6E8A1B032F9A000100ABC123 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6E8A1B022F9A000100ABC123 /* MLXVLM */; };
-		6D2E6F822C2F4A7F00A1B2C6 /* MLXStructured in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */; };
 		6D2E6F852C2F4A7F00A1B2C9 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F842C2F4A7F00A1B2C8 /* MLX */; };
 /* End PBXBuildFile section */
 
@@ -75,7 +73,6 @@
 			files = (
 				6D2E6F7F2C2F4A7F00A1B2C3 /* MLXLLM in Frameworks */,
 				6E8A1B012F9A000100ABC123 /* MLXVLM in Frameworks */,
-				6D2E6F822C2F4A7F00A1B2C6 /* MLXStructured in Frameworks */,
 				6D2E6F852C2F4A7F00A1B2C9 /* MLX in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -98,7 +95,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6E8A1B032F9A000100ABC123 /* MLXVLM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,7 +153,6 @@
 			packageProductDependencies = (
 				6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */,
 				6E8A1B002F9A000100ABC123 /* MLXVLM */,
-				6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */,
 				6D2E6F842C2F4A7F00A1B2C8 /* MLX */,
 			);
 			productName = "osx-ide";
@@ -228,7 +223,6 @@
 			);
 			name = "osx-ideHarnessTests";
 			packageProductDependencies = (
-				6E8A1B022F9A000100ABC123 /* MLXVLM */,
 			);
 			productName = "osx-ideHarnessTests";
 			productReference = 7A11AA032F90000100C0DE01 /* osx-ideHarnessTests.xctest */;
@@ -271,8 +265,7 @@
 			mainGroup = 04C2CE002E5C8E9D007A5EF7;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
-				6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */,
+				6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */,
 				6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -430,6 +423,7 @@
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
@@ -488,6 +482,7 @@
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 			};
 			name = Release;
 		};
@@ -511,11 +506,12 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ide";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
@@ -540,11 +536,12 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ide";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
@@ -562,6 +559,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/osx-ide.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/osx-ide";
 			};
@@ -580,6 +578,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/osx-ide.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/osx-ide";
 			};
@@ -597,6 +596,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_TARGET_NAME = "osx-ide";
 			};
@@ -614,6 +614,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_TARGET_NAME = "osx-ide";
 			};
@@ -632,6 +633,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideHarnessTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/osx-ide.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/osx-ide";
 			};
@@ -650,6 +652,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "tdc.osx-ideHarnessTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/osx-ide.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/osx-ide";
 			};
@@ -705,23 +708,15 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCLocalSwiftPackageReference;
+			path = "Vendor/mlx-swift-lm";
+			relativePath = "Vendor/mlx-swift-lm";
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
-		6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
-		6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/petrukha-ivan/mlx-swift-structured";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
 		6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ml-explore/mlx-swift";
@@ -735,23 +730,13 @@
 /* Begin XCSwiftPackageProductDependency section */
 		6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLLM;
 		};
 		6E8A1B002F9A000100ABC123 /* MLXVLM */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXVLM;
-		};
-		6E8A1B022F9A000100ABC123 /* MLXVLM */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
-			productName = MLXVLM;
-		};
-		6D2E6F812C2F4A7F00A1B2C5 /* MLXStructured */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F802C2F4A7F00A1B2C4 /* XCRemoteSwiftPackageReference "mlx-swift-structured" */;
-			productName = MLXStructured;
 		};
 		6D2E6F842C2F4A7F00A1B2C8 /* MLX */ = {
 			isa = XCSwiftPackageProductDependency;

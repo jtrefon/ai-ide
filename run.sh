@@ -199,6 +199,8 @@ show_help() {
     echo "         Examples: ./run.sh harness-online | ./run.sh harness-online AgenticHarnessTests"
     echo "  harness-offline Run offline-only harness suites"
     echo "         Examples: ./run.sh harness-offline | ./run.sh harness-offline OfflineModeHarnessTests"
+    echo "  benchmark-offline Run offline inference benchmark harnesses"
+    echo "         Examples: ./run.sh benchmark-offline | ./run.sh benchmark-offline sweep"
     echo "  e2e    Run UI (end-to-end) tests [optional suite]"
     echo "         Examples: ./run.sh e2e | ./run.sh e2e TerminalEchoUITests | ./run.sh e2e json"
     echo "  clean  Clean build artifacts"
@@ -229,6 +231,7 @@ launch_app() {
 
 run_tests() {
     local suite=$1
+    local explicit_modules="${SWIFT_ENABLE_EXPLICIT_MODULES:-NO}"
     echo "Running unit tests..."
     prepare_derived_data_packages "$DERIVED_DATA_PATH_TEST"
     if [ -n "$suite" ]; then
@@ -242,6 +245,7 @@ run_tests() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
+                   SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                    test -only-testing:osx-ideTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideHarnessTests
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
@@ -250,12 +254,14 @@ run_tests() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
+                   SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                    test -only-testing:osx-ideTests -skip-testing:osx-ideUITests -skip-testing:osx-ideHarnessTests
     fi
 }
 
 run_harness() {
     local suite=$1
+    local explicit_modules="${SWIFT_ENABLE_EXPLICIT_MODULES:-NO}"
     echo "Running headless harness tests..."
     prepare_derived_data_packages "$DERIVED_DATA_PATH_TEST"
     local harness_memory_limit_gb="${HARNESS_MAX_RSS_GB:-6}"
@@ -282,6 +288,11 @@ run_harness() {
     local env_args=()
     local runtime_env_args=("OSX_IDE_PROMPTS_ROOT=$resolved_prompts_root" "OSXIDE_TEST_PROFILE_DIR=$test_profile_dir" "TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR=$test_profile_dir" "OSXIDE_LOCAL_MODEL_MAX_RSS_MB=$local_model_memory_limit_mb")
     env_args+=("TEST_RUNNER_ENV_OSXIDE_LOCAL_MODEL_MAX_RSS_MB=$local_model_memory_limit_mb")
+    if [ -n "$OSXIDE_DISABLE_HEAVY_INIT" ]; then
+        env_args+=("TEST_RUNNER_ENV_OSXIDE_DISABLE_HEAVY_INIT=$OSXIDE_DISABLE_HEAVY_INIT")
+        runtime_env_args+=("OSXIDE_DISABLE_HEAVY_INIT=$OSXIDE_DISABLE_HEAVY_INIT" "TEST_RUNNER_ENV_OSXIDE_DISABLE_HEAVY_INIT=$OSXIDE_DISABLE_HEAVY_INIT")
+        echo "Heavy init disabled for test runtime"
+    fi
     if [ -n "$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS" ]; then
         env_args+=("TEST_RUNNER_ENV_OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS=$OSXIDE_ENABLE_PRODUCTION_PARITY_HARNESS")
         echo "Production parity harness enabled"
@@ -295,6 +306,32 @@ run_harness() {
         env_args+=("TEST_RUNNER_ENV_HARNESS_USE_OPENROUTER=$HARNESS_USE_OPENROUTER")
         echo "Using OpenRouter: $HARNESS_USE_OPENROUTER"
     fi
+    local passthrough_test_envs=(
+        "OSXIDE_OFFLINE_BENCHMARK_ITERATIONS"
+        "OSXIDE_OFFLINE_BENCHMARK_PROMPT_TOKENS"
+        "OSXIDE_OFFLINE_BENCHMARK_CONTEXTS"
+        "OSXIDE_OFFLINE_BENCHMARK_MAX_KV_SIZES"
+        "OSXIDE_OFFLINE_BENCHMARK_MAX_OUTPUTS"
+        "OSXIDE_OFFLINE_BENCHMARK_PREFILL_STEPS"
+        "OSXIDE_OFFLINE_BENCHMARK_TEMPERATURES"
+        "OSXIDE_OFFLINE_BENCHMARK_TOP_P"
+        "OSXIDE_OFFLINE_BENCHMARK_REPETITION_PENALTIES"
+        "OSXIDE_OFFLINE_BENCHMARK_REPETITION_CONTEXT_SIZES"
+        "OSXIDE_BACKGROUND_WORK_QUIET_MS"
+        "OSXIDE_BACKGROUND_WORK_CPU_LOAD_PER_CORE_THRESHOLD"
+        "OSXIDE_BACKGROUND_WORK_RSS_THRESHOLD_MB"
+        "OSXIDE_LOCAL_MODEL_TEMPERATURE"
+        "OSXIDE_LOCAL_MODEL_TOP_P"
+        "OSXIDE_LOCAL_MODEL_REPETITION_PENALTY"
+        "OSXIDE_LOCAL_MODEL_REPETITION_CONTEXT_SIZE"
+    )
+    local env_name
+    for env_name in "${passthrough_test_envs[@]}"; do
+        if [ -n "${!env_name}" ]; then
+            env_args+=("TEST_RUNNER_ENV_${env_name}=${!env_name}")
+            runtime_env_args+=("${env_name}=${!env_name}" "TEST_RUNNER_ENV_${env_name}=${!env_name}")
+        fi
+    done
     env_args+=("TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR=$test_profile_dir")
     if [ -n "$OSX_IDE_RUN_ONLINE_HARNESS" ]; then
         env_args+=("TEST_RUNNER_ENV_OSX_IDE_RUN_ONLINE_HARNESS=$OSX_IDE_RUN_ONLINE_HARNESS")
@@ -323,6 +360,7 @@ run_harness() {
                   -destination 'platform=macOS' \
                   -parallel-testing-enabled NO \
                   ENABLE_PREVIEWS=NO \
+                  SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                   "${env_args[@]}" \
                   test -only-testing:osx-ideHarnessTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideTests
     else
@@ -342,6 +380,7 @@ run_harness() {
                   -destination 'platform=macOS' \
                   -parallel-testing-enabled NO \
                   ENABLE_PREVIEWS=NO \
+                  SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                   "${env_args[@]}" \
                   "${skip_online_args[@]}" \
                   test \
@@ -377,8 +416,30 @@ run_harness_offline() {
     fi
 }
 
+run_benchmark_offline() {
+    local mode=$1
+    case "$mode" in
+        ""|"greeting")
+            echo "Running offline greeting benchmark..."
+            OSXIDE_DISABLE_HEAVY_INIT=1 TEST_RUNNER_ENV_OSXIDE_DISABLE_HEAVY_INIT=1 \
+                run_harness "OfflineModeHarnessTests/testOfflineHarnessInferenceBenchmarkSimpleGreeting"
+            ;;
+        "sweep")
+            echo "Running offline parameter sweep benchmark..."
+            OSXIDE_DISABLE_HEAVY_INIT=1 TEST_RUNNER_ENV_OSXIDE_DISABLE_HEAVY_INIT=1 \
+                run_harness "OfflineModeHarnessTests/testOfflineHarnessInferenceParameterSweepLongPrompt"
+            ;;
+        *)
+            echo "Unknown offline benchmark mode: $mode"
+            echo "Supported modes: greeting, sweep"
+            return 1
+            ;;
+    esac
+}
+
 run_e2e() {
     local suite=$1
+    local explicit_modules="${SWIFT_ENABLE_EXPLICIT_MODULES:-NO}"
     echo "Running UI tests..."
     prepare_derived_data_packages "$DERIVED_DATA_PATH_TEST"
     if [ -n "$suite" ]; then
@@ -392,6 +453,7 @@ run_e2e() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
+                   SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                    test -only-testing:osx-ideUITests/"$suite" -skip-testing:osx-ideTests
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
@@ -400,6 +462,7 @@ run_e2e() {
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
+                   SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
                    test -only-testing:osx-ideUITests -skip-testing:osx-ideTests
     fi
 }
@@ -433,6 +496,9 @@ case "$COMMAND" in
         ;;
     harness-offline)
         run_harness_offline "$2"
+        ;;
+    benchmark-offline)
+        run_benchmark_offline "$2"
         ;;
     e2e)
         run_e2e "$2"

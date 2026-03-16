@@ -1,2 +1,16 @@
 tools:
     - trivy@0.66.0
+
+exclude:
+  - path: Vendor/**
+  - path: .build/**
+  - path: .git/**
+  - path: "**/*.md"
+  - path: docs/**
+  - path: Documentation/**
+  - path: plans/**
+  - path: LocalModelTemplates/**
+  - path: Prompts/**
+  - path: osx-ideTests/**
+  - path: osx-ideUITests/**
+  - path: osx-ideHarnessTests/**

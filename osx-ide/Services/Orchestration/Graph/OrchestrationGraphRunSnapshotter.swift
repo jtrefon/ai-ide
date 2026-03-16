@@ -16,6 +16,17 @@ struct OrchestrationGraphRunSnapshotter {
             userInput: request.userInput,
             assistantDraft: state.response?.content,
             failureReason: nil,
+            executionSignals: state.executionSignals.map {
+                OrchestrationRunSnapshot.ExecutionSignalsSummary(
+                    deliveryState: $0.deliveryState.rawValue,
+                    hasToolCalls: $0.hasToolCalls,
+                    hasToolResults: $0.hasToolResults,
+                    hasIncompletePlan: $0.hasIncompletePlan,
+                    shouldForceExecutionFollowup: $0.shouldForceExecutionFollowup,
+                    shouldForceToolFollowup: $0.shouldForceToolFollowup,
+                    missingClaimedArtifacts: $0.missingClaimedArtifacts
+                )
+            },
             toolCalls: toolCallSummaries(toolCalls),
             toolResults: toolResultSummaries(toolResults)
         )

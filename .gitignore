@@ -8,6 +8,9 @@ debug_*.swift
 test_*.swift
 debug_*
 old_*.swift
+*.orig
+*.rej
+*.rej.orig
 
 # Build directories
 .build-tests-*/

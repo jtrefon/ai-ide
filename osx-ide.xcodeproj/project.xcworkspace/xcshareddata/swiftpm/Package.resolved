@@ -1,5 +1,5 @@
 {
-  "originHash" : "999f90d5776197b81711720b70707da7860cac7d4c9950774f9cd814a801602a",
+  "originHash" : "1af68cf021dea0caa0eac9a974e4a903b4e1c845263542c8fab7cc80261284b8",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -26,24 +26,6 @@
       "state" : {
         "revision" : "6ba4827fb82c97d012eec9ab4b2de21f85c3b33d",
         "version" : "0.30.6"
-      }
-    },
-    {
-      "identity" : "mlx-swift-lm",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ml-explore/mlx-swift-lm",
-      "state" : {
-        "branch" : "main",
-        "revision" : "83ca9f699ca2090ded4c151b9bd305a246ccd9a5"
-      }
-    },
-    {
-      "identity" : "mlx-swift-structured",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/petrukha-ivan/mlx-swift-structured",
-      "state" : {
-        "branch" : "main",
-        "revision" : "baee5511aefa4ce25022cc2e68cc7ae901f193a0"
       }
     },
     {
@@ -161,15 +143,6 @@
       "state" : {
         "revision" : "d81197f35f41445bc10e94600795e68c6f5e94b0",
         "version" : "2.3.1"
-      }
-    },
-    {
-      "identity" : "swift-json-schema",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/petrukha-ivan/swift-json-schema",
-      "state" : {
-        "revision" : "5d5b410ec67629586255dcb148f98362f6ef4629",
-        "version" : "2.0.2"
       }
     },
     {

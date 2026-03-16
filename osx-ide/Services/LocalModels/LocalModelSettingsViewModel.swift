@@ -37,6 +37,7 @@ final class LocalModelSettingsViewModel: ObservableObject {
 
     private let downloader: LocalModelDownloader
     private let settingsStore: SettingsStore
+    private let selectionStore: LocalModelSelectionStore
 
     private let selectedModelKey = "LocalModel.SelectedId"
     private let offlineModeEnabledKey = "AI.OfflineModeEnabled"
@@ -47,6 +48,7 @@ final class LocalModelSettingsViewModel: ObservableObject {
     ) {
         self.downloader = downloader
         self.settingsStore = settingsStore
+        self.selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
         self.models = LocalModelCatalog.allModels()
         self.selectedModelId = settingsStore.string(forKey: selectedModelKey) ?? ""
         self.offlineModeEnabled = settingsStore.bool(forKey: offlineModeEnabledKey, default: false)
@@ -108,11 +110,17 @@ final class LocalModelSettingsViewModel: ObservableObject {
     }
 
     private func persistSelectedModelId() {
-        settingsStore.set(selectedModelId, forKey: selectedModelKey)
+        let selectedModelId = self.selectedModelId
+        Task {
+            await selectionStore.setSelectedModelId(selectedModelId)
+        }
     }
 
     private func persistOfflineModeEnabled() {
-        settingsStore.set(offlineModeEnabled, forKey: offlineModeEnabledKey)
+        let offlineModeEnabled = self.offlineModeEnabled
+        Task {
+            await selectionStore.setOfflineModeEnabled(offlineModeEnabled)
+        }
         updateOfflineStatusMessage()
     }
 

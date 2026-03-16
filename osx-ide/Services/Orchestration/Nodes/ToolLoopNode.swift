@@ -30,11 +30,15 @@ struct ToolLoopNode: OrchestrationNode {
             userInput: request.userInput
         )
 
-        return state.transitioning(
+        var nextState = state.transitioning(
             to: nextNodeId,
             response: toolLoopResult.response,
             lastToolResults: toolLoopResult.lastToolResults
         )
+        nextState = nextState.updating(
+            executionSignals: await OrchestrationExecutionSignalBuilder().build(for: nextState)
+        )
+        return nextState
     }
 
     private func requireResponse(from state: OrchestrationState) throws -> AIServiceResponse {

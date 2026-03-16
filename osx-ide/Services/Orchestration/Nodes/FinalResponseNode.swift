@@ -29,7 +29,11 @@ struct FinalResponseNode: OrchestrationNode {
             conversationId: request.conversationId
         )
 
-        return state.transitioning(to: nextNodeId, response: final)
+        var nextState = state.transitioning(to: nextNodeId, response: final)
+        nextState = nextState.updating(
+            executionSignals: await OrchestrationExecutionSignalBuilder().build(for: nextState)
+        )
+        return nextState
     }
 
     private func requireResponse(from state: OrchestrationState) throws -> AIServiceResponse {

@@ -69,6 +69,9 @@ public protocol AgentActivityCoordinating: AnyObject, Sendable {
     
     /// Perform a scoped activity that automatically releases when complete
     func withActivity<T>(type: AgentActivityType, _ operation: @Sendable () async throws -> T) async rethrows -> T
+
+    /// Check if a specific activity type is currently active
+    func isActivityTypeActive(_ type: AgentActivityType) -> Bool
 }
 
 /// Coordinates all agent activities to manage power assertions.
@@ -215,5 +218,147 @@ extension AgentActivityCoordinator {
         lock.lock()
         defer { lock.unlock() }
         return (activitiesByType[type]?.count ?? 0) > 0
+    }
+}
+
+enum BackgroundWorkKind: String, Sendable {
+    case indexing
+    case embeddingUpgrade
+}
+
+final class BackgroundWorkGovernor: @unchecked Sendable {
+    static let shared = BackgroundWorkGovernor(activityCoordinator: AgentActivityCoordinator.shared)
+
+    private let activityCoordinator: any AgentActivityCoordinating
+    private let quietPeriodNanoseconds: UInt64
+    private let pollIntervalNanoseconds: UInt64 = 500_000_000
+    private let cpuLoadThresholdPerCore: Double
+    private let rssThresholdMB: Int
+
+    init(activityCoordinator: any AgentActivityCoordinating) {
+        self.activityCoordinator = activityCoordinator
+        let environment = ProcessInfo.processInfo.environment
+        self.quietPeriodNanoseconds = Self.resolveInt(
+            environment["OSXIDE_BACKGROUND_WORK_QUIET_MS"],
+            defaultValue: 4000,
+            minimum: 250
+        ) * 1_000_000
+        self.cpuLoadThresholdPerCore = Self.resolveDouble(
+            environment["OSXIDE_BACKGROUND_WORK_CPU_LOAD_PER_CORE_THRESHOLD"],
+            defaultValue: 0.8,
+            minimum: 0.1
+        )
+        self.rssThresholdMB = Self.resolveInt(
+            environment["OSXIDE_BACKGROUND_WORK_RSS_THRESHOLD_MB"],
+            defaultValue: 2048,
+            minimum: 256
+        )
+    }
+
+    func waitUntilReady(for kind: BackgroundWorkKind, reason: String) async {
+        let quietPeriod = Duration.milliseconds(Int64(quietPeriodNanoseconds / 1_000_000))
+        while true {
+            if let stressReason = currentStressReason(ignoring: kind) {
+                print("[BackgroundWorkGovernor] delaying \(kind.rawValue) reason=\(reason) stress=\(stressReason)")
+                try? await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+                continue
+            }
+
+            let quietStart = ContinuousClock.now
+            while quietStart.duration(to: ContinuousClock.now) < quietPeriod {
+                if Task.isCancelled { return }
+                if let stressReason = currentStressReason(ignoring: kind) {
+                    print("[BackgroundWorkGovernor] paused \(kind.rawValue) reason=\(reason) stress=\(stressReason)")
+                    break
+                }
+                try? await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+            }
+
+            if currentStressReason(ignoring: kind) == nil {
+                return
+            }
+        }
+    }
+
+    private func currentStressReason(ignoring kind: BackgroundWorkKind) -> String? {
+        if activityCoordinator.isActivityTypeActive(.mlxInference) {
+            return "mlx_inference"
+        }
+        if activityCoordinator.isActivityTypeActive(.apiSending) {
+            return "api_sending"
+        }
+        if activityCoordinator.isActivityTypeActive(.toolExecution) {
+            return "tool_execution"
+        }
+        if kind != .embeddingUpgrade && activityCoordinator.isActivityTypeActive(.embeddingGeneration) {
+            return "embedding_generation"
+        }
+
+        switch ProcessInfo.processInfo.thermalState {
+        case .serious:
+            return "thermal_serious"
+        case .critical:
+            return "thermal_critical"
+        default:
+            break
+        }
+
+        let rssMB = Self.currentProcessRSSMB()
+        if rssMB >= rssThresholdMB {
+            return "rss_\(rssMB)mb"
+        }
+
+        let normalizedLoad = Self.normalizedCPULoad()
+        if normalizedLoad >= cpuLoadThresholdPerCore {
+            return String(format: "cpu_load_%.2f", normalizedLoad)
+        }
+
+        return nil
+    }
+
+    private static func normalizedCPULoad() -> Double {
+        var averages = [Double](repeating: 0, count: 3)
+        let samples = getloadavg(&averages, Int32(averages.count))
+        guard samples > 0 else { return 0 }
+        let coreCount = max(1, ProcessInfo.processInfo.processorCount)
+        return averages[0] / Double(coreCount)
+    }
+
+    private static func currentProcessRSSMB() -> Int {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info_data_t>.size / MemoryLayout<natural_t>.size)
+
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { reboundPointer in
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), reboundPointer, &count)
+            }
+        }
+
+        guard result == KERN_SUCCESS else { return 0 }
+        return Int(info.resident_size / 1024 / 1024)
+    }
+
+    private static func resolveInt(_ value: String?, defaultValue: UInt64, minimum: UInt64) -> UInt64 {
+        guard let value,
+              let parsed = UInt64(value.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return defaultValue
+        }
+        return max(minimum, parsed)
+    }
+
+    private static func resolveInt(_ value: String?, defaultValue: Int, minimum: Int) -> Int {
+        guard let value,
+              let parsed = Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return defaultValue
+        }
+        return max(minimum, parsed)
+    }
+
+    private static func resolveDouble(_ value: String?, defaultValue: Double, minimum: Double) -> Double {
+        guard let value,
+              let parsed = Double(value.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return defaultValue
+        }
+        return max(minimum, parsed)
     }
 }

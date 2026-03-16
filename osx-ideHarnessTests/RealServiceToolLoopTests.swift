@@ -172,7 +172,7 @@ final class RealServiceToolLoopTests: XCTestCase {
     
     private func makeProductionRuntime(projectRoot: URL) async throws -> ProductionRuntime {
         // Use the real DependencyContainer with production-parity online routing.
-        let container = DependencyContainer(launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false, testProfilePath: nil, disableHeavyInit: false))
+        let container = DependencyContainer(launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false, testProfilePath: nil, disableHeavyInit: false, productionParityHarness: false))
         container.settingsStore.set(false, forKey: AppConstantsStorage.agentQAReviewEnabledKey)
         
         // Production-parity harness: keep agent mode online-capable so routing uses OpenRouter.

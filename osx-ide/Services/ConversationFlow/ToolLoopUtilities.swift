@@ -275,11 +275,15 @@ enum ToolLoopUtilities {
         userInput: String,
         conversationId: String,
         projectRoot: URL,
-        repeatedSignatures: [String]
+        repeatedSignatures: [String],
+        historyMessages: [ChatMessage],
+        availableTools: [AITool]
     ) async throws -> [ChatMessage] {
         let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
+        let contextSection = focusedConversationContextSection(from: historyMessages)
+        let toolList = availableTools.map(\.name).sorted().joined(separator: ", ")
 
-        let parts: [String] = [
+        var parts: [String] = [
             try PromptRepository.shared.prompt(
                 key: "ConversationFlow/Corrections/tool_loop_focused_execution",
                 projectRoot: projectRoot
@@ -293,6 +297,14 @@ enum ToolLoopUtilities {
                 ]
             )
         ]
+
+        if !contextSection.isEmpty {
+            parts.append(contextSection)
+        }
+
+        if !toolList.isEmpty {
+            parts.append("Only use tools available in this turn: \(toolList). Any other tool call will be rejected.")
+        }
 
         return [
             ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
@@ -408,6 +420,7 @@ enum ToolLoopUtilities {
             userInput: payload.userInput,
             assistantDraft: payload.assistantDraft,
             failureReason: payload.failureReason,
+            executionSignals: nil,
             toolCalls: toolCallSummaries(payload.toolCalls),
             toolResults: toolResultSummaries(payload.toolResults)
         )

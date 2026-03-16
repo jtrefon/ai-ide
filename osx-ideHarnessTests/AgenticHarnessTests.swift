@@ -46,7 +46,7 @@ final class AgenticHarnessTests: XCTestCase {
 
     private func makeProductionRuntime(projectRoot: URL) async throws -> ProductionRuntime {
         // Initialize the app's real DependencyContainer in testing mode
-        let container = DependencyContainer(launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false, testProfilePath: nil, disableHeavyInit: false))
+        let container = DependencyContainer(launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false, testProfilePath: nil, disableHeavyInit: false, productionParityHarness: false))
 
         guard let manager = container.conversationManager as? ConversationManager else {
             throw NSError(
@@ -140,6 +140,34 @@ final class AgenticHarnessTests: XCTestCase {
         return files.sorted()
     }
 
+    private func assertNoRawToolMarkupInFinalAssistantMessage(
+        _ manager: ConversationManager,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let assistantMessages = manager.messages.filter { $0.role == .assistant }
+        guard let lastAssistantMessage = assistantMessages.last else {
+            XCTFail("assistant response exists", file: file, line: line)
+            return
+        }
+
+        let content = lastAssistantMessage.content.lowercased()
+        let containsRawMarkup =
+            content.contains("<tool_code>")
+            || content.contains("<tool_call>")
+            || content.contains("<minimax:tool_call>")
+            || content.contains("<invoke name=")
+            || content.contains("<param name=")
+            || content.contains("<parameter name=")
+
+        XCTAssertFalse(
+            containsRawMarkup,
+            "Final assistant message leaked raw tool markup: \(lastAssistantMessage.content)",
+            file: file,
+            line: line
+        )
+    }
+
     // MARK: - Test: Verify Real OpenRouter Responses
     
     func testHarnessRealOpenRouterVerification() async throws {
@@ -225,6 +253,7 @@ final class AgenticHarnessTests: XCTestCase {
             files.contains("src/App.jsx") || files.contains("src/App.tsx")
                 || files.contains("src/App.js"),
             label: "react scaffold app component created")
+        assertNoRawToolMarkupInFinalAssistantMessage(manager)
     }
 
     // MARK: - Test: Refactor Scenario
@@ -280,6 +309,7 @@ final class AgenticHarnessTests: XCTestCase {
             refactoredCode.contains("reduce") || refactoredCode.contains("filter")
                 || refactoredCode.contains("=>"),
             label: "functional refactor constructs present")
+        assertNoRawToolMarkupInFinalAssistantMessage(manager)
     }
 
     private func logToolTrail(messages: [ChatMessage]) {
@@ -448,6 +478,7 @@ final class AgenticHarnessTests: XCTestCase {
         logHarnessCheck(
             serverCode.contains("renderToString") || serverCode.contains("renderToPipeableStream"),
             label: "SSR rendering API present")
+        assertNoRawToolMarkupInFinalAssistantMessage(manager)
     }
 
     // MARK: - Test: JavaScript to TypeScript Migration Scenario
@@ -490,6 +521,7 @@ final class AgenticHarnessTests: XCTestCase {
         logHarnessCheck(
             migratedCode.contains("export") || migratedCode.contains("function"),
             label: "migration usable TS module exported")
+        assertNoRawToolMarkupInFinalAssistantMessage(manager)
     }
 
     // MARK: - Test: Add Test Coverage Scenario
@@ -562,6 +594,7 @@ final class AgenticHarnessTests: XCTestCase {
                 testCode.contains("0") || testCode.localizedCaseInsensitiveContains("null"),
                 label: "coverage includes divide-by-zero behavior")
         }
+        assertNoRawToolMarkupInFinalAssistantMessage(manager)
     }
 
     // MARK: - Test: Complex Architecture Refactor Scenario
@@ -669,14 +702,17 @@ final class AgenticHarnessTests: XCTestCase {
             serverCode.contains("routes") || serverCode.contains("Route")
                 || serverCode.contains("require("),
             label: "server.js wires modular routes")
+        assertNoRawToolMarkupInFinalAssistantMessage(manager)
     }
 
     private func logHarnessCheck(_ condition: Bool, label: String, detail: String? = nil) {
         let status = condition ? "PASS" : "FAIL"
         if let detail, !detail.isEmpty {
             print("[HARNESS][\(status)] \(label) :: \(detail)")
+            XCTAssertTrue(condition, "\(label) :: \(detail)")
             return
         }
         print("[HARNESS][\(status)] \(label)")
+        XCTAssertTrue(condition, label)
     }
 }

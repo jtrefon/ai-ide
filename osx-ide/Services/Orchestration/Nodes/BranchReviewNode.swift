@@ -22,6 +22,20 @@ struct BranchReviewNode: OrchestrationNode {
 
     func run(state: OrchestrationState) async throws -> OrchestrationState {
         guard let branchExecution = state.branchExecution else {
+            let signals = if let executionSignals = state.executionSignals {
+                executionSignals
+            } else {
+                await OrchestrationExecutionSignalBuilder().build(for: state)
+            }
+
+            if signals.hasToolCalls
+                || signals.shouldForceExecutionFollowup
+                || signals.shouldForceToolFollowup
+                || signals.indicatesUnfinishedExecution
+                || signals.missingClaimedArtifacts {
+                return state.transitioning(to: executionNodeId, executionSignals: signals)
+            }
+
             return state.transitioning(to: finalNodeId)
         }
 

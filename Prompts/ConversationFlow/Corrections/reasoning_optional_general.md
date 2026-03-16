@@ -7,4 +7,4 @@ Reasoning is optional. Use it only when it improves execution quality.
 - In `How`, describe method/intent, not tool function names or call payloads.
 - Do not include tool calls or JSON tool payloads inside reasoning.
 
-Then write one concise Done → Next → Path sentence. If tools are available, transition directly into the necessary tool calls; if tools are unavailable, state the blocker explicitly.
+Do not write `Done → Next → Path`, `Next:`, or synthetic progress-summary prose. If tools are available, transition directly into the necessary tool calls; if tools are unavailable, state the blocker explicitly.

@@ -105,7 +105,7 @@ final class ToolLoopContinuationGuardHarnessTests: XCTestCase {
         }
     }
 
-    func testRecoverySummaryDoesNotTriggerRedundantPlanContinuation() async throws {
+    func testRecoverySummaryWithIncompletePlanTriggersExecutionRecovery() async throws {
         let projectRoot = makeTempDir()
         defer { cleanup(projectRoot) }
 
@@ -114,6 +114,7 @@ final class ToolLoopContinuationGuardHarnessTests: XCTestCase {
         historyCoordinator.append(ChatMessage(role: .user, content: "Finish implementation"))
 
         let firstToolCall = AIToolCall(id: "continuation-guard-1", name: "fake_tool", arguments: [:])
+        let recoveryToolCall = AIToolCall(id: "continuation-guard-2", name: "fake_tool", arguments: [:])
         let scriptedService = ScriptedAIService(responses: [
             AIServiceResponse(
                 content: "<ide_reasoning>Reflection: Need to execute the next step.\nPlanning: Run a single task.\nContinuity: Work remains.\nDelivery: NEEDS_WORK</ide_reasoning>Starting execution now.",
@@ -121,6 +122,14 @@ final class ToolLoopContinuationGuardHarnessTests: XCTestCase {
             ),
             AIServiceResponse(
                 content: "<ide_reasoning>Reflection: First step completed.\nPlanning: Continue remaining work.\nContinuity: Pending tasks remain.\nDelivery: NEEDS_WORK</ide_reasoning>Done -> Next -> Path: Continue with remaining implementation.",
+                toolCalls: nil
+            ),
+            AIServiceResponse(
+                content: "Proceeding with the remaining implementation step now.",
+                toolCalls: [recoveryToolCall]
+            ),
+            AIServiceResponse(
+                content: "Completed the remaining implementation after resuming execution.",
                 toolCalls: nil
             )
         ])
@@ -168,7 +177,7 @@ final class ToolLoopContinuationGuardHarnessTests: XCTestCase {
         let executedToolMessages = historyCoordinator.messages.filter {
             $0.isToolExecution && $0.toolStatus == .completed && $0.toolName == "fake_tool"
         }
-        XCTAssertEqual(executedToolMessages.count, 1)
+        XCTAssertEqual(executedToolMessages.count, 2)
 
         let finalAssistantOutput = historyCoordinator.messages.last(where: {
             $0.role == .assistant && !$0.isToolExecution
@@ -176,14 +185,14 @@ final class ToolLoopContinuationGuardHarnessTests: XCTestCase {
         print("[HARNESS][INFO] finalAssistantOutput=\(finalAssistantOutput ?? "<nil>")")
         XCTAssertEqual(
             finalAssistantOutput?.trimmingCharacters(in: .whitespacesAndNewlines),
-            "Done -> Next -> Path: Continue with remaining implementation."
+            "Completed the remaining implementation after resuming execution."
         )
 
         let followupRequests = scriptedService.capturedHistoryRequests()
         let requestStages = followupRequests.map { $0.stage?.rawValue ?? "nil" }.joined(separator: ",")
         print("[HARNESS][INFO] followupRequestStages=\(requestStages)")
-        XCTAssertEqual(followupRequests.count, 2)
-        XCTAssertEqual(requestStages, "initial_response,tool_loop")
+        XCTAssertEqual(followupRequests.count, 4)
+        XCTAssertEqual(requestStages, "initial_response,tool_loop,tool_loop,tool_loop")
     }
 
     func testMixedExecutionPromiseAndRecoverySummaryTriggersFocusedRecovery() async throws {

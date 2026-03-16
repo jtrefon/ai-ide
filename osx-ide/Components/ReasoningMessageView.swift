@@ -74,7 +74,7 @@ struct ReasoningMessageView: View {
 
     private var reasoningContent: some View {
         VStack(alignment: .leading, spacing: 4) {
-            let text = (message.reasoning ?? "")
+            let text = ChatPromptBuilder.reasoningForDisplay(message.reasoning ?? "")
                 .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 
             if showFullReasoning || text.count <= 300 {

@@ -20,18 +20,8 @@ public final class TypeScriptModule: TokenLanguageModule, @unchecked Sendable {
                 booleanLiterals: Set(configuration.booleanLiterals),
                 nullLiterals: Set(configuration.nullLiterals)
             ),
-            palette: Self.makePalette(language: .typescript)
+            palette: Self.makePalette(for: .typescript)
         )
-    }
-
-    private static func makePalette(language: CodeLanguage) -> HighlightPalette {
-        var palette = HighlightPalette()
-        for role in HighlightRole.allCases {
-            if let color = LanguageKeywordRepository.tokenColor(for: language, role: role) {
-                palette.setColor(color, for: role)
-            }
-        }
-        return palette
     }
 
     public override func parseSymbols(content: String, resourceId: String) -> [Symbol] {

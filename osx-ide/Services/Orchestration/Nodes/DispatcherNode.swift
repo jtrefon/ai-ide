@@ -40,10 +40,14 @@ struct DispatcherNode: OrchestrationNode {
 
         let hasToolCalls = !(response.toolCalls?.isEmpty ?? true)
         let nextNodeId = hasToolCalls ? toolLoopNodeId : finalResponseNodeId
-        return state.transitioning(
+        var nextState = state.transitioning(
             to: nextNodeId,
             response: response,
             lastToolResults: []
         )
+        nextState = nextState.updating(
+            executionSignals: await OrchestrationExecutionSignalBuilder().build(for: nextState)
+        )
+        return nextState
     }
 }

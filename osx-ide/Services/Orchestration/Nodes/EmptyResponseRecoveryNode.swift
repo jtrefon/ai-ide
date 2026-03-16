@@ -20,16 +20,24 @@ struct EmptyResponseRecoveryNode: OrchestrationNode {
         let trimmed = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let hasToolCalls = (response.toolCalls?.isEmpty == false)
         guard trimmed.isEmpty, !hasToolCalls else {
-            return state.transitioning(to: nextNodeId, response: response)
+            var nextState = state.transitioning(to: nextNodeId, response: response)
+            nextState = nextState.updating(
+                executionSignals: await OrchestrationExecutionSignalBuilder().build(for: nextState)
+            )
+            return nextState
         }
 
-        return state.transitioning(
+        var nextState = state.transitioning(
             to: nextNodeId,
             response: AIServiceResponse(
                 content: "I wasn't able to generate a final response. Please retry or clarify the next step.",
                 toolCalls: nil
             )
         )
+        nextState = nextState.updating(
+            executionSignals: await OrchestrationExecutionSignalBuilder().build(for: nextState)
+        )
+        return nextState
     }
 
     private func requireResponse(from state: OrchestrationState) throws -> AIServiceResponse {

@@ -1,6 +1,16 @@
 import Foundation
 
 struct OrchestrationRunSnapshot: Codable {
+    struct ExecutionSignalsSummary: Codable {
+        let deliveryState: String
+        let hasToolCalls: Bool
+        let hasToolResults: Bool
+        let hasIncompletePlan: Bool
+        let shouldForceExecutionFollowup: Bool
+        let shouldForceToolFollowup: Bool
+        let missingClaimedArtifacts: Bool
+    }
+
     struct ToolCallSummary: Codable {
         let id: String
         let name: String
@@ -23,6 +33,7 @@ struct OrchestrationRunSnapshot: Codable {
     let userInput: String
     let assistantDraft: String?
     let failureReason: String?
+    let executionSignals: ExecutionSignalsSummary?
     let toolCalls: [ToolCallSummary]
     let toolResults: [ToolResultSummary]
 }

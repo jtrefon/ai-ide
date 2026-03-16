@@ -4,14 +4,14 @@
 
 Before returning the final answer:
 
-1. If reasoning is needed, keep it as terse plain text using the Reflection/Planning/Continuity schema (single-clause What/Where/How bullets; mention concrete files, commands, or tests).
-2. Immediately follow with **one** sentence covering `Done → Next → Path` so the user sees the closing state at a glance.
+1. If reasoning is needed, keep it terse and invisible to the user-facing summary. Do not emit controller-style schemas or scaffolded labels.
+2. Follow with one terminal status sentence that states either completed work or the concrete blocker/remaining item. Do not use `Done → Next → Path` here.
 3. Do **not** call tools during this stage. This is a summary only.
 
-After the reasoning block, output a concise user-visible final summary in plain text.
-Cover the user objective, the work performed, the verification status, and any remaining next steps or risks.
+After the reasoning block, write a normal assistant reply in plain text.
+State the result directly, mention verification only if it materially matters, and mention remaining work only if something is still unfinished or blocked.
 Mention files only when they materially matter.
-Do not use headings, rigid bullet scaffolds, or the old `### Final Delivery Summary` format.
+Do not use headings, report templates, rigid bullet scaffolds, or the old `### Final Delivery Summary` format.
 
 Context you can reference (do **not** rewrite verbatim):
 

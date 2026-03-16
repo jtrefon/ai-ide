@@ -16,6 +16,7 @@ class ProjectCoordinator: ObservableObject {
     private let eventBus: EventBusProtocol
     private let conversationManager: ConversationManagerProtocol
     private let settingsStore: SettingsStore
+    private let backgroundWorkGovernor: BackgroundWorkGovernor
     private(set) var currentProjectRoot: URL?
     private var rootWatcher: ProjectRootFileWatcher?
 
@@ -37,6 +38,7 @@ class ProjectCoordinator: ObservableObject {
         self.eventBus = eventBus
         self.conversationManager = conversationManager
         self.settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
+        self.backgroundWorkGovernor = .shared
     }
 
     /// Configure project asynchronously - does NOT block the main thread
@@ -84,6 +86,7 @@ class ProjectCoordinator: ObservableObject {
         let aiService = self.aiService
         let settingsStore = self.settingsStore
         let ss = self.settingsStore
+        let backgroundWorkGovernor = self.backgroundWorkGovernor
 
         // CRITICAL: Use Task.detached with [weak self] but WITHOUT immediate guard.
         // This keeps the closure non-isolated while allowing weak access to self for MainActor hops.
@@ -113,7 +116,12 @@ class ProjectCoordinator: ObservableObject {
 
                 // Upgrade to CoreML embeddings in background (if available)
                 // This provides semantic search instead of just keyword matching
+                let backgroundWorkGovernor = BackgroundWorkGovernor.shared
                 Task.detached(priority: .utility) {
+                    await backgroundWorkGovernor.waitUntilReady(
+                        for: .embeddingUpgrade,
+                        reason: "initial_embedding_upgrade"
+                    )
                     let embedStart = Date()
                     let betterGenerator = await MemoryEmbeddingGeneratorFactory.makeDefaultAsync(
                         projectRoot: root
@@ -161,6 +169,10 @@ class ProjectCoordinator: ObservableObject {
                 await index.setEnabled(isIndexEnabled)
 
                 if isIndexEnabled {
+                    await backgroundWorkGovernor.waitUntilReady(
+                        for: .indexing,
+                        reason: "initial_project_reindex"
+                    )
                     // Start reindex in background
                     await index.reindexProject(aiEnrichmentEnabled: false)
                 }
@@ -243,6 +255,7 @@ class ProjectCoordinator: ObservableObject {
         let eventBus = self.eventBus
         let aiService = self.aiService
         let settingsStore = self.settingsStore
+        let backgroundWorkGovernor = self.backgroundWorkGovernor
 
         // CRITICAL: Use Task.detached to escape @MainActor context
         initializationTask = Task.detached(priority: .userInitiated) { [weak self] in
@@ -256,7 +269,12 @@ class ProjectCoordinator: ObservableObject {
                 )
 
                 // Upgrade to CoreML embeddings in background (if available)
+                let backgroundWorkGovernor = BackgroundWorkGovernor.shared
                 Task.detached(priority: .utility) {
+                    await backgroundWorkGovernor.waitUntilReady(
+                        for: .embeddingUpgrade,
+                        reason: "rebuild_embedding_upgrade"
+                    )
                     let betterGenerator = await MemoryEmbeddingGeneratorFactory.makeDefaultAsync(
                         projectRoot: projectRoot
                     )
@@ -294,6 +312,10 @@ class ProjectCoordinator: ObservableObject {
                 await index.setEnabled(isIndexEnabled)
 
                 if isIndexEnabled {
+                    await backgroundWorkGovernor.waitUntilReady(
+                        for: .indexing,
+                        reason: "rebuild_project_reindex"
+                    )
                     await index.reindexProject(aiEnrichmentEnabled: aiEnrichment)
                 } else {
                     await IndexLogger.shared.log(
@@ -328,6 +350,10 @@ class ProjectCoordinator: ObservableObject {
             let aiEnrichmentEnabled = await self.settingsStore.bool(
                 forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, default: false)
             if let index = await self.codebaseIndex {
+                await self.backgroundWorkGovernor.waitUntilReady(
+                    for: .indexing,
+                    reason: "scheduled_auto_reindex"
+                )
                 await index.reindexProject(aiEnrichmentEnabled: aiEnrichmentEnabled)
             }
         }

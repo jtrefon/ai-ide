@@ -14,17 +14,12 @@ struct MessageFilterCoordinator {
 
     /// Filters messages to display, removing empty assistant messages
     func filterMessages(_ messages: [ChatMessage]) -> [ChatMessage] {
-        messages.filter { message in
-            if ChatMessageVisibilityPolicy.isEmptyAssistantMessage(message) {
-                return false
-            }
-            return true
-        }
+        messages.filter { shouldDisplayMessage($0, in: messages) }
     }
 
     /// Determines if a message should be displayed in the list
     func shouldDisplayMessage(_ message: ChatMessage, in messages: [ChatMessage]) -> Bool {
-        if ChatMessageVisibilityPolicy.isEmptyAssistantMessage(message) {
+        if !ChatMessageVisibilityPolicy.shouldDisplayMessage(message) {
             return false
         }
 

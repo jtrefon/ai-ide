@@ -40,6 +40,48 @@ class ChatPromptBuilder {
         return normalizeDisplayWhitespace(withoutToolMarkup)
     }
 
+    static func reasoningForDisplay(_ text: String) -> String {
+        guard !text.isEmpty else { return text }
+
+        var output = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        let sectionLabels = [
+            "Codebase Review & Insights",
+            "Architecture:",
+            "UI Layer:",
+            "Routing:",
+            "Strengths:",
+            "Potential Issues:",
+            "Recommendations:",
+            "Remaining Work:",
+            "Status:",
+            "Reflection:",
+            "Planning:",
+            "Continuity:",
+            "Analyze:",
+            "Research:",
+            "Plan:",
+            "Reflect:",
+            "Action:",
+            "Delivery:"
+        ]
+
+        for label in sectionLabels {
+            let escaped = NSRegularExpression.escapedPattern(for: label)
+            let pattern = #"(?<!^)(?<!\n)(\s*)\#(escaped)"#
+            output = output.replacingOccurrences(
+                of: pattern,
+                with: "\n\n\(label)",
+                options: .regularExpression
+            )
+        }
+
+        output = output.replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     static func isReasoningOutcomePayload(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
@@ -68,11 +110,13 @@ class ChatPromptBuilder {
         var output = text
         let patterns = [
             #"(?is)<tool_call>\s*.*?\s*</tool_call>"#,
+            #"(?is)<tool_code>\s*.*?\s*</tool_code>"#,
             #"(?is)<arg_key>\s*.*?\s*</arg_key>"#,
             #"(?is)<arg_value>\s*.*?\s*</arg_value>"#,
             #"(?is)<minimax:tool_call>\s*.*?\s*</minimax:tool_call>"#,
             #"(?is)<invoke\s+name=\"[^\"]+\"\s*>.*?</invoke>"#,
-            #"(?is)</?parameter\s+name=\"[^\"]+\">"#
+            #"(?is)</?parameter\s+name=\"[^\"]+\">"#,
+            #"(?is)</?param\s+name=\"[^\"]+\">"#
         ]
 
         for pattern in patterns {
@@ -250,7 +294,7 @@ class ChatPromptBuilder {
     }
 
     static func reasoningOutcome(from reasoning: String) -> ReasoningOutcome? {
-        let trimmed = reasoning.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = reasoningForDisplay(reasoning).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
         let sections = extractReasoningSections(trimmed)
@@ -408,7 +452,13 @@ class ChatPromptBuilder {
 
     static func containsTextualToolCallMarkup(_ content: String) -> Bool {
         let lower = content.lowercased()
-        return lower.contains("<tool_call>") || lower.contains("<arg_key>") || lower.contains("<arg_value>")
+        return lower.contains("<tool_call>")
+            || lower.contains("<tool_code>")
+            || lower.contains("<minimax:tool_call>")
+            || lower.contains("<invoke name=")
+            || lower.contains("<param name=")
+            || lower.contains("<arg_key>")
+            || lower.contains("<arg_value>")
     }
 
     static func hasMissingClaimedFileArtifacts(content: String, projectRoot: URL) -> Bool {

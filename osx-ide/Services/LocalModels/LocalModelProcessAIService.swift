@@ -2,7 +2,6 @@ import Foundation
 import Combine
 import MLX
 @preconcurrency import MLXLMCommon
-import MLXLLM
 import MLXVLM
 import Tokenizers
 import Darwin
@@ -17,8 +16,13 @@ private struct LocalModelTestBudget {
     let retainedMessages: [ChatMessage]
     let maxOutputTokens: Int
 
-    static func applyIfNeeded(to request: AIServiceHistoryRequest, contextLength: Int) -> LocalModelTestBudget {
-        guard AppRuntimeEnvironment.launchContext.isTesting else {
+    static func applyIfNeeded(
+        to request: AIServiceHistoryRequest,
+        contextLength: Int,
+        launchContext: AppLaunchContext
+    ) -> LocalModelTestBudget {
+        guard launchContext.isTesting,
+              !launchContext.productionParityHarness else {
             let clampedContextLength = min(contextLength, maximumOperationalContextLength)
             let defaultMaxOutputTokens = min(
                 maximumOperationalOutputTokens,
@@ -43,6 +47,43 @@ private struct LocalModelTestBudget {
     private static func trimMessages(_ messages: [ChatMessage], maxMessages: Int) -> [ChatMessage] {
         guard messages.count > maxMessages else { return messages }
         return Array(messages.suffix(maxMessages))
+    }
+}
+
+struct LocalModelGenerationPerformanceSnapshot: Sendable {
+    let modelId: String
+    let inferenceConfiguration: LocalModelInferenceConfiguration
+    let loadMilliseconds: Int
+    let totalMilliseconds: Int
+    let promptTokenCount: Int?
+    let promptMilliseconds: Int?
+    let promptTokensPerSecond: Double?
+    let generationTokenCount: Int?
+    let generationMilliseconds: Int?
+    let generationTokensPerSecond: Double?
+    let toolCallCount: Int
+    let outputCharacterCount: Int
+    let rssBeforeLoadMB: Int
+    let rssAfterLoadMB: Int
+    let rssAfterGenerationMB: Int
+    let timestamp: Date
+}
+
+actor LocalModelGenerationPerformanceRecorder {
+    static let shared = LocalModelGenerationPerformanceRecorder()
+
+    private var snapshots: [LocalModelGenerationPerformanceSnapshot] = []
+
+    func clear() {
+        snapshots.removeAll()
+    }
+
+    func record(_ snapshot: LocalModelGenerationPerformanceSnapshot) {
+        snapshots.append(snapshot)
+    }
+
+    func latest() -> LocalModelGenerationPerformanceSnapshot? {
+        snapshots.last
     }
 }
 
@@ -76,6 +117,13 @@ final class MemoryPressureObserver: MemoryPressureObserving, @unchecked Sendable
 actor LocalModelProcessAIService: AIService {
     typealias MemoryPressureObserverFactory = @Sendable (@escaping @Sendable () -> Void) -> (any MemoryPressureObserving)?
 
+    private struct DefaultSamplingParameters {
+        let temperature: Float
+        let topP: Float
+        let repetitionPenalty: Float?
+        let repetitionContextSize: Int
+    }
+
     struct NoOpEventBus: EventBusProtocol {
         func publish<E: Event>(_ event: E) {}
 
@@ -105,12 +153,13 @@ actor LocalModelProcessAIService: AIService {
     }
 
     protocol LocalModelGenerating: Sendable {
-        func generate(modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, contextLength: Int, maxOutputTokens: Int, conversationId: String?) async throws -> AIServiceResponse
+        func generate(modelId: String, modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, inferenceConfiguration: LocalModelInferenceConfiguration, conversationId: String?) async throws -> AIServiceResponse
     }
 
     actor NativeMLXGenerator: LocalModelGenerating {
         private let eventBus: EventBusProtocol
         private var containersByModelDirectory: [URL: ModelContainer] = [:]
+        private var inFlightLoads: [URL: Task<ModelContainer, Error>] = [:]
         private var accessOrder: [URL] = []
         private let maxCachedModels = 1  // Conservative - one model at a time given memory constraints
         private var generationCount: Int = 0
@@ -127,25 +176,30 @@ actor LocalModelProcessAIService: AIService {
             return try await body()
         }
 
-        func generate(modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat? = nil, runId: String?, contextLength: Int, maxOutputTokens: Int, conversationId: String? = nil) async throws -> AIServiceResponse {
-            print("[LOCAL-MLX] generate modelDirectory=\(modelDirectory.path) toolCallFormat=\(String(describing: toolCallFormat)) contextLength=\(contextLength) maxOutputTokens=\(maxOutputTokens)")
+        func generate(modelId: String, modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat? = nil, runId: String?, inferenceConfiguration: LocalModelInferenceConfiguration, conversationId: String? = nil) async throws -> AIServiceResponse {
+            print("[LOCAL-MLX] generate modelId=\(modelId) modelDirectory=\(modelDirectory.path) toolCallFormat=\(String(describing: toolCallFormat)) contextLength=\(inferenceConfiguration.contextLength) maxKVSize=\(inferenceConfiguration.maxKVSize) maxOutputTokens=\(inferenceConfiguration.maxOutputTokens) prefillStepSize=\(inferenceConfiguration.prefillStepSize) temperature=\(inferenceConfiguration.temperature) topP=\(inferenceConfiguration.topP) repetitionPenalty=\(String(describing: inferenceConfiguration.repetitionPenalty)) repetitionContextSize=\(inferenceConfiguration.repetitionContextSize)")
             let preparedUserInput = userInput
             let rssLimitMB = Self.resolvedRSSLimitMB()
-
-            // Cap KV cache size to prevent unbounded memory growth during long conversations.
-            // Uses RotatingKVCache which overwrites old entries beyond this limit.
-            let maxKVSize = contextLength
+            let generationStart = ContinuousClock.now
 
             let parameters = GenerateParameters(
-                maxTokens: maxOutputTokens,
-                maxKVSize: maxKVSize
+                maxTokens: inferenceConfiguration.maxOutputTokens,
+                maxKVSize: inferenceConfiguration.maxKVSize,
+                temperature: inferenceConfiguration.temperature,
+                topP: inferenceConfiguration.topP,
+                repetitionPenalty: inferenceConfiguration.repetitionPenalty,
+                repetitionContextSize: inferenceConfiguration.repetitionContextSize,
+                prefillStepSize: inferenceConfiguration.prefillStepSize
             )
             let eventBus = self.eventBus
-
             do {
                 let response = try await performInference {
+                    let rssBeforeLoadMB = Self.currentProcessRSSMB()
                     try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "before_container_load")
+                    let loadStart = ContinuousClock.now
                     let container = try await self.loadContainerCached(modelDirectory: modelDirectory, toolCallFormat: toolCallFormat)
+                    let loadDuration = loadStart.duration(to: ContinuousClock.now)
+                    let rssAfterLoadMB = Self.currentProcessRSSMB()
                     try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "after_container_load")
                     return try await container.perform { context in
                         try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "before_generation")
@@ -159,6 +213,7 @@ actor LocalModelProcessAIService: AIService {
 
                         var output = ""
                         var collectedToolCalls: [AIToolCall] = []
+                        var completionInfo: GenerateCompletionInfo?
 
                         func publishStatus(_ message: String) async {
                             guard let runId else { return }
@@ -192,7 +247,9 @@ actor LocalModelProcessAIService: AIService {
                                     }
                                 }
                             case .info:
-                                break
+                                if case .info(let info) = generation {
+                                    completionInfo = info
+                                }
                             case .toolCall(let toolCall):
                                 collectedToolCalls.append(Self.makeAIToolCall(from: toolCall))
                                 await publishStatus("Structured tool call detected: \(toolCall.function.name)")
@@ -205,6 +262,18 @@ actor LocalModelProcessAIService: AIService {
                             structuredToolCallsWereDetected: !collectedToolCalls.isEmpty,
                             toolCallFormat: toolCallFormat
                         )
+                        Self.logGenerationPerformance(
+                            modelId: modelId,
+                            inferenceConfiguration: inferenceConfiguration,
+                            loadDuration: loadDuration,
+                            totalDuration: generationStart.duration(to: ContinuousClock.now),
+                            completionInfo: completionInfo,
+                            outputCharacterCount: trimmedOutput.count,
+                            toolCallCount: collectedToolCalls.count,
+                            rssBeforeLoadMB: rssBeforeLoadMB,
+                            rssAfterLoadMB: rssAfterLoadMB,
+                            rssAfterGenerationMB: Self.currentProcessRSSMB()
+                        )
                         let resolvedToolCalls = collectedToolCalls.isEmpty ? fallbackToolCalls : collectedToolCalls
                         let shouldSuppressToolCallPayloadFromContent = !(resolvedToolCalls?.isEmpty ?? true)
                         return AIServiceResponse(
@@ -216,7 +285,7 @@ actor LocalModelProcessAIService: AIService {
 
                 generationCount += 1
                 logMLXMemorySnapshot()
-                if AppRuntimeEnvironment.launchContext.isTesting {
+                if Self.shouldUnloadModelAfterGeneration() {
                     unloadModel(modelDirectory: modelDirectory)
                 }
 
@@ -225,6 +294,15 @@ actor LocalModelProcessAIService: AIService {
                 unloadModel(modelDirectory: modelDirectory)
                 throw error
             }
+        }
+
+        func preload(modelId: String, modelDirectory: URL, toolCallFormat: ToolCallFormat?) async throws {
+            let loadStart = ContinuousClock.now
+            _ = try await loadContainerCached(modelDirectory: modelDirectory, toolCallFormat: toolCallFormat)
+            let loadDuration = loadStart.duration(to: ContinuousClock.now)
+            print(
+                "[LOCAL-MLX] preload modelId=\(modelId) load_ms=\(Self.milliseconds(loadDuration))"
+            )
         }
 
         private func synchronizeMLXStream() {
@@ -247,6 +325,101 @@ actor LocalModelProcessAIService: AIService {
             return AppRuntimeEnvironment.launchContext.isTesting
                 ? defaultTestingRSSLimitMB
                 : defaultOperationalRSSLimitMB
+        }
+
+        nonisolated private static func shouldUnloadModelAfterGeneration() -> Bool {
+            let environment = ProcessInfo.processInfo.environment
+            if let configured = environment["OSXIDE_LOCAL_MODEL_UNLOAD_AFTER_GENERATION"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            {
+                switch configured {
+                case "1", "true", "yes":
+                    return true
+                case "0", "false", "no":
+                    return false
+                default:
+                    break
+                }
+            }
+
+            // Keep the model hot by default, even in tests. The harness already enforces
+            // a process RSS budget, and repeated cold loads dominate offline-agent latency.
+            return false
+        }
+
+        nonisolated private static func logGenerationPerformance(
+            modelId: String,
+            inferenceConfiguration: LocalModelInferenceConfiguration,
+            loadDuration: Duration,
+            totalDuration: Duration,
+            completionInfo: GenerateCompletionInfo?,
+            outputCharacterCount: Int,
+            toolCallCount: Int,
+            rssBeforeLoadMB: Int,
+            rssAfterLoadMB: Int,
+            rssAfterGenerationMB: Int
+        ) {
+            let loadMS = milliseconds(loadDuration)
+            let totalMS = milliseconds(totalDuration)
+            let snapshot: LocalModelGenerationPerformanceSnapshot
+            if let info = completionInfo {
+                let promptMS = Int((info.promptTime * 1000).rounded())
+                let generateMS = Int((info.generateTime * 1000).rounded())
+                let promptTPS = String(format: "%.1f", info.promptTokensPerSecond)
+                let generationTPS = String(format: "%.1f", info.tokensPerSecond)
+                snapshot = LocalModelGenerationPerformanceSnapshot(
+                    modelId: modelId,
+                    inferenceConfiguration: inferenceConfiguration,
+                    loadMilliseconds: loadMS,
+                    totalMilliseconds: totalMS,
+                    promptTokenCount: info.promptTokenCount,
+                    promptMilliseconds: promptMS,
+                    promptTokensPerSecond: info.promptTokensPerSecond,
+                    generationTokenCount: info.generationTokenCount,
+                    generationMilliseconds: generateMS,
+                    generationTokensPerSecond: info.tokensPerSecond,
+                    toolCallCount: toolCallCount,
+                    outputCharacterCount: outputCharacterCount,
+                    rssBeforeLoadMB: rssBeforeLoadMB,
+                    rssAfterLoadMB: rssAfterLoadMB,
+                    rssAfterGenerationMB: rssAfterGenerationMB,
+                    timestamp: Date()
+                )
+                print(
+                    "[LOCAL-MLX-PERF] model=\(modelId) load_ms=\(loadMS) prompt_tokens=\(info.promptTokenCount) prompt_ms=\(promptMS) prompt_tps=\(promptTPS) gen_tokens=\(info.generationTokenCount) gen_ms=\(generateMS) gen_tps=\(generationTPS) total_ms=\(totalMS) context=\(inferenceConfiguration.contextLength) max_kv=\(inferenceConfiguration.maxKVSize) max_output=\(inferenceConfiguration.maxOutputTokens) prefill_step=\(inferenceConfiguration.prefillStepSize) cache_kind=\(inferenceConfiguration.cacheKind) tool_calls=\(toolCallCount) output_chars=\(outputCharacterCount) rss_before_load_mb=\(rssBeforeLoadMB) rss_after_load_mb=\(rssAfterLoadMB) rss_after_gen_mb=\(rssAfterGenerationMB)"
+                )
+            } else {
+                snapshot = LocalModelGenerationPerformanceSnapshot(
+                    modelId: modelId,
+                    inferenceConfiguration: inferenceConfiguration,
+                    loadMilliseconds: loadMS,
+                    totalMilliseconds: totalMS,
+                    promptTokenCount: nil,
+                    promptMilliseconds: nil,
+                    promptTokensPerSecond: nil,
+                    generationTokenCount: nil,
+                    generationMilliseconds: nil,
+                    generationTokensPerSecond: nil,
+                    toolCallCount: toolCallCount,
+                    outputCharacterCount: outputCharacterCount,
+                    rssBeforeLoadMB: rssBeforeLoadMB,
+                    rssAfterLoadMB: rssAfterLoadMB,
+                    rssAfterGenerationMB: rssAfterGenerationMB,
+                    timestamp: Date()
+                )
+                print(
+                    "[LOCAL-MLX-PERF] model=\(modelId) load_ms=\(loadMS) total_ms=\(totalMS) context=\(inferenceConfiguration.contextLength) max_kv=\(inferenceConfiguration.maxKVSize) max_output=\(inferenceConfiguration.maxOutputTokens) prefill_step=\(inferenceConfiguration.prefillStepSize) cache_kind=\(inferenceConfiguration.cacheKind) tool_calls=\(toolCallCount) output_chars=\(outputCharacterCount) rss_before_load_mb=\(rssBeforeLoadMB) rss_after_load_mb=\(rssAfterLoadMB) rss_after_gen_mb=\(rssAfterGenerationMB) info=missing"
+                )
+            }
+
+            Task {
+                await LocalModelGenerationPerformanceRecorder.shared.record(snapshot)
+            }
+        }
+
+        nonisolated private static func milliseconds(_ duration: Duration) -> Int {
+            Int((Double(duration.components.seconds) * 1000) + (Double(duration.components.attoseconds) / 1_000_000_000_000_000))
         }
 
         nonisolated private static func throwIfProcessRSSExceeded(limitMB: Int, phase: String) throws {
@@ -389,6 +562,7 @@ actor LocalModelProcessAIService: AIService {
         func unloadAllModels() {
             synchronizeMLXStream()
             containersByModelDirectory.removeAll()
+            inFlightLoads.removeAll()
             accessOrder.removeAll()
             Memory.clearCache()
         }
@@ -398,6 +572,7 @@ actor LocalModelProcessAIService: AIService {
             synchronizeMLXStream()
             let cacheKey = modelDirectory.resolvingSymlinksInPath().standardizedFileURL
             containersByModelDirectory.removeValue(forKey: cacheKey)
+            inFlightLoads.removeValue(forKey: cacheKey)
             accessOrder.removeAll { $0 == cacheKey }
             Memory.clearCache()
         }
@@ -414,20 +589,35 @@ actor LocalModelProcessAIService: AIService {
                 return existing
             }
 
+            if let existingTask = inFlightLoads[cacheKey] {
+                print("[LOCAL-MLX] loadContainerCached awaiting in-flight load")
+                return try await existingTask.value
+            }
+
             // Evict oldest if at capacity
             if containersByModelDirectory.count >= maxCachedModels, let oldest = accessOrder.first {
                 containersByModelDirectory.removeValue(forKey: oldest)
                 accessOrder.removeFirst()
             }
 
-            let configuration = ModelConfiguration(
-                directory: cacheKey,
-                toolCallFormat: toolCallFormat
-            )
-            let container = try await loadModelContainer(
-                configuration: configuration,
-                modelDirectory: cacheKey
-            )
+            let configuration = ModelConfiguration(directory: cacheKey, toolCallFormat: toolCallFormat)
+            let loadTask = Task<ModelContainer, Error> {
+                try await self.loadModelContainer(
+                    configuration: configuration,
+                    modelDirectory: cacheKey
+                )
+            }
+            inFlightLoads[cacheKey] = loadTask
+
+            let container: ModelContainer
+            do {
+                container = try await loadTask.value
+            } catch {
+                inFlightLoads.removeValue(forKey: cacheKey)
+                throw error
+            }
+
+            inFlightLoads.removeValue(forKey: cacheKey)
             containersByModelDirectory[cacheKey] = container
             accessOrder.append(cacheKey)
             return container
@@ -496,8 +686,10 @@ actor LocalModelProcessAIService: AIService {
     private let generator: LocalModelGenerating
     private let settingsStore: any OpenRouterSettingsLoading
     private var memoryPressureObserver: (any MemoryPressureObserving)?
+    private var lifecycleObservers: [NSObjectProtocol] = []
     private let prefixCache = PromptPrefixCache()
     private let activityCoordinator: (any AgentActivityCoordinating)?
+    private let launchContext: AppLaunchContext
 
     init(
         selectionStore: LocalModelSelectionStore = LocalModelSelectionStore(),
@@ -508,7 +700,8 @@ actor LocalModelProcessAIService: AIService {
         memoryPressureObserverFactory: MemoryPressureObserverFactory = { callback in
             MemoryPressureObserver(onMemoryPressure: callback)
         },
-        activityCoordinator: (any AgentActivityCoordinating)? = nil
+        activityCoordinator: (any AgentActivityCoordinating)? = nil,
+        launchContext: AppLaunchContext = AppRuntimeEnvironment.launchContext
     ) {
         self.selectionStore = selectionStore
         self.fileStore = fileStore
@@ -517,6 +710,7 @@ actor LocalModelProcessAIService: AIService {
         self.settingsStore = settingsStore
         self.memoryPressureObserver = nil
         self.activityCoordinator = activityCoordinator
+        self.launchContext = launchContext
         let generatorForPressureHandling = self.generator
         let prefixCacheForPressureHandling = self.prefixCache
 
@@ -529,6 +723,10 @@ actor LocalModelProcessAIService: AIService {
                 // Also clear prefix cache on memory pressure
                 await prefixCacheForPressureHandling.clearAll()
             }
+        }
+        Task {
+            await registerLifecycleObservers()
+            await preloadSelectedModelIfNeeded()
         }
     }
 
@@ -556,12 +754,24 @@ actor LocalModelProcessAIService: AIService {
         }
 
         let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
-        let isTesting = AppRuntimeEnvironment.launchContext.isTesting
+        let isTesting = launchContext.isTesting
         let testBudget = LocalModelTestBudget.applyIfNeeded(
             to: request,
-            contextLength: LocalModelFileStore.contextLength(for: model)
+            contextLength: LocalModelFileStore.contextLength(for: model),
+            launchContext: launchContext
         )
-        let contextLength = testBudget.contextLength
+        let defaultSampling = defaultSamplingParameters(
+            mode: request.mode,
+            stage: request.stage
+        )
+        let inferenceConfiguration = await LocalModelInferenceOverrides.shared.resolve(
+            defaultContextLength: testBudget.contextLength,
+            defaultMaxOutputTokens: testBudget.maxOutputTokens,
+            defaultTemperature: defaultSampling.temperature,
+            defaultTopP: defaultSampling.topP,
+            defaultRepetitionPenalty: defaultSampling.repetitionPenalty,
+            defaultRepetitionContextSize: defaultSampling.repetitionContextSize
+        )
         let settings = settingsStore.load(includeApiKey: false)
         
         // Build system content for caching
@@ -592,8 +802,14 @@ actor LocalModelProcessAIService: AIService {
             }
         }
         
+        let budgetedMessages = budgetMessages(
+            testBudget.retainedMessages,
+            explicitContext: request.context,
+            systemContent: systemContent,
+            inferenceConfiguration: inferenceConfiguration
+        )
         let chatMessages = buildChatMessages(
-            messages: testBudget.retainedMessages,
+            messages: budgetedMessages,
             explicitContext: request.context,
             systemContent: systemContent
         )
@@ -622,25 +838,25 @@ actor LocalModelProcessAIService: AIService {
         if let coordinator = activityCoordinator {
             response = try await coordinator.withActivity(type: .mlxInference) {
                 try await generator.generate(
+                    modelId: model.id,
                     modelDirectory: modelDirectory,
                     userInput: userInput,
                     tools: toolSpecs,
                     toolCallFormat: model.toolCallFormat,
                     runId: request.runId,
-                    contextLength: contextLength,
-                    maxOutputTokens: testBudget.maxOutputTokens,
+                    inferenceConfiguration: inferenceConfiguration,
                     conversationId: conversationId
                 )
             }
         } else {
             response = try await generator.generate(
+                modelId: model.id,
                 modelDirectory: modelDirectory,
                 userInput: userInput,
                 tools: toolSpecs,
                 toolCallFormat: model.toolCallFormat,
                 runId: request.runId,
-                contextLength: contextLength,
-                maxOutputTokens: testBudget.maxOutputTokens,
+                inferenceConfiguration: inferenceConfiguration,
                 conversationId: conversationId
             )
         }
@@ -666,6 +882,11 @@ actor LocalModelProcessAIService: AIService {
         }
         
         return response
+    }
+
+    func preloadSelectedModelIfNeeded() async {
+        guard await selectionStore.isOfflineModeEnabled() else { return }
+        await preloadCurrentSelection(unloadExistingModels: false)
     }
 
     func explainCode(_ code: String) async throws -> String {
@@ -888,7 +1109,7 @@ actor LocalModelProcessAIService: AIService {
         projectRoot: URL?,
         settings: OpenRouterSettings
     ) throws -> String {
-        return try SystemPromptAssembler().assemble(
+        let systemPrompt = try SystemPromptAssembler().assemble(
             input: .init(
                 systemPromptOverride: settings.systemPrompt,
                 hasTools: tools?.isEmpty == false,
@@ -900,6 +1121,7 @@ actor LocalModelProcessAIService: AIService {
                 includeModelReasoning: settings.reasoningMode.includesModelReasoning && stage != .tool_loop
             )
         )
+        return systemPrompt + "\n\n" + localModelResponseGuidance(mode: mode, stage: stage)
     }
 
     private func additionalContext(
@@ -932,12 +1154,160 @@ actor LocalModelProcessAIService: AIService {
         }
     }
 
+    private func localModelResponseGuidance(mode: AIMode?, stage: AIRequestStage?) -> String {
+        var lines = [
+            "Local response guidance:",
+            "- Prefer the shortest response that fully solves the request.",
+            "- Do not narrate obvious steps or repeat the user's request.",
+            "- When the user asks for brevity, match it exactly and stop.",
+            "- For coding help, prioritize code, edits, and direct conclusions over exposition."
+        ]
+        if mode == .agent || stage == .tool_loop {
+            lines.append("- During agent/tool work, keep status text condensed and action-oriented.")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func defaultSamplingParameters(
+        mode: AIMode?,
+        stage: AIRequestStage?
+    ) -> DefaultSamplingParameters {
+        if stage == .tool_loop || mode == .agent {
+            return DefaultSamplingParameters(
+                temperature: 0.2,
+                topP: 0.9,
+                repetitionPenalty: 1.05,
+                repetitionContextSize: 64
+            )
+        }
+
+        return DefaultSamplingParameters(
+            temperature: 0.35,
+            topP: 0.92,
+            repetitionPenalty: 1.03,
+            repetitionContextSize: 64
+        )
+    }
+
+    private func budgetMessages(
+        _ messages: [ChatMessage],
+        explicitContext: String?,
+        systemContent: String,
+        inferenceConfiguration: LocalModelInferenceConfiguration
+    ) -> [ChatMessage] {
+        guard !messages.isEmpty else { return messages }
+
+        let reservedOutputTokens = inferenceConfiguration.maxOutputTokens
+        let systemTokens = approximateTokenCount(systemContent)
+        let explicitContextTokens = approximateTokenCount(explicitContext ?? "")
+        let overheadTokens = 256
+        let availableHistoryBudget = max(
+            256,
+            inferenceConfiguration.contextLength - reservedOutputTokens - systemTokens - explicitContextTokens - overheadTokens
+        )
+
+        var selected: [ChatMessage] = []
+        var consumedTokens = 0
+        for message in messages.reversed() {
+            let messageTokens = approximateTokenCount(message.content) + 16
+            let mustKeep = selected.isEmpty && message.role == .user
+            if !mustKeep && consumedTokens + messageTokens > availableHistoryBudget {
+                continue
+            }
+            selected.append(message)
+            consumedTokens += messageTokens
+        }
+
+        return selected.reversed()
+    }
+
+    private func approximateTokenCount(_ text: String) -> Int {
+        guard !text.isEmpty else { return 0 }
+        return max(1, (text.count + 3) / 4)
+    }
+
     private func convertToSendable(_ dictionary: [String: Any]) -> [String: any Sendable] {
         var result: [String: any Sendable] = [:]
         for (key, value) in dictionary {
             result[key] = convertValueToSsendable(value)
         }
         return result
+    }
+
+    private func registerLifecycleObservers() {
+        guard lifecycleObservers.isEmpty else { return }
+
+        let offlineObserver = NotificationCenter.default.addObserver(
+            forName: .localModelOfflineModeDidChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let self else { return }
+            let enabled = notification.userInfo?["enabled"] as? Bool ?? false
+            Task {
+                await self.handleOfflineModeChanged(enabled: enabled)
+            }
+        }
+        let selectionObserver = NotificationCenter.default.addObserver(
+            forName: .localModelSelectionDidChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task {
+                await self.handleSelectedModelChanged()
+            }
+        }
+        lifecycleObservers = [offlineObserver, selectionObserver]
+    }
+
+    private func handleOfflineModeChanged(enabled: Bool) async {
+        if enabled {
+            await preloadCurrentSelection(unloadExistingModels: true)
+            return
+        }
+        if let nativeGenerator = generator as? NativeMLXGenerator {
+            await nativeGenerator.unloadAllModels()
+        }
+    }
+
+    private func handleSelectedModelChanged() async {
+        guard await selectionStore.isOfflineModeEnabled() else { return }
+        await preloadCurrentSelection(unloadExistingModels: true)
+    }
+
+    private func preloadCurrentSelection(unloadExistingModels: Bool) async {
+        let modelId = await selectionStore.selectedModelId()
+        guard !modelId.isEmpty,
+              let model = LocalModelCatalog.model(id: modelId),
+              fileStore.isModelInstalled(model),
+              let nativeGenerator = generator as? NativeMLXGenerator else {
+            return
+        }
+
+        do {
+            if unloadExistingModels {
+                await nativeGenerator.unloadAllModels()
+            }
+            let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
+            if let activityCoordinator {
+                try await activityCoordinator.withActivity(type: .mlxInference) {
+                    try await nativeGenerator.preload(
+                        modelId: model.id,
+                        modelDirectory: modelDirectory,
+                        toolCallFormat: model.toolCallFormat
+                    )
+                }
+            } else {
+                try await nativeGenerator.preload(
+                    modelId: model.id,
+                    modelDirectory: modelDirectory,
+                    toolCallFormat: model.toolCallFormat
+                )
+            }
+        } catch {
+            print("[LOCAL-MLX] preload failed modelId=\(model.id) error=\(error)")
+        }
     }
 
     private func convertValueToSsendable(_ value: Any) -> any Sendable {

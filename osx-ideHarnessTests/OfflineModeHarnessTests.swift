@@ -1,5 +1,4 @@
 import XCTest
-import MLXVLM
 @testable import osx_ide
 
 /// Dedicated offline harness tests.
@@ -179,6 +178,198 @@ final class OfflineModeHarnessTests: XCTestCase {
             finalAssistantContent.isEmpty,
             "Expected offline local greeting run to produce assistant text"
         )
+    }
+
+    func testOfflineHarnessInferenceBenchmarkSimpleGreeting() async throws {
+        let iterationCount = benchmarkIterationCount()
+        let prompt = "Reply with exactly one short greeting sentence and stop."
+        let runtime = try await makeRuntime(offlineModeEnabled: true, profile: .benchmark)
+        let manager = runtime.manager
+        let testId = "offline-greeting-benchmark-\(UUID().uuidString.prefix(8))"
+        let inferenceConfiguration = runtime.defaultInferenceConfiguration
+
+        await LocalModelInferenceOverrides.shared.clear()
+
+        await InferenceMetricsCollector.shared.clearMetrics()
+        await InferenceMetricsCollector.shared.startTest(testId: testId)
+        defer {
+            Task {
+                await InferenceMetricsCollector.shared.endTest()
+            }
+        }
+
+        for iteration in 1...iterationCount {
+            manager.startNewConversation()
+            manager.clearConversation()
+            manager.currentMode = .chat
+            manager.currentInput = prompt
+            await LocalModelGenerationPerformanceRecorder.shared.clear()
+
+            let turn = await InferenceMetricsCollector.shared.incrementTurn()
+            var timer = InferenceTimer()
+            manager.sendMessage()
+
+            let sawFirstToken = try await waitForAssistantFirstToken(in: manager, timeoutSeconds: 60)
+            XCTAssertTrue(sawFirstToken, "Expected benchmark run \(iteration) to emit assistant output")
+            timer.recordFirstToken()
+
+            let timedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 60)
+            XCTAssertFalse(timedOut, "Expected benchmark run \(iteration) to finish")
+
+            let finalAssistantContent = manager.messages
+                .filter { $0.role == .assistant && !$0.isDraft }
+                .last?
+                .content
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            XCTAssertFalse(finalAssistantContent.isEmpty, "Expected benchmark run \(iteration) to produce text")
+
+            let promptTokenCount = try await LocalModelTokenCounter.shared.tokenCount(
+                text: prompt,
+                modelId: runtime.modelId
+            )
+            let outputTokenCount = try await LocalModelTokenCounter.shared.tokenCount(
+                text: finalAssistantContent,
+                modelId: runtime.modelId
+            )
+            let performanceSnapshot = try await waitForLatestLocalPerformanceSnapshot()
+            let metric = timer.finalize(
+                testId: testId,
+                modelId: runtime.modelId,
+                inferenceConfiguration: inferenceConfiguration,
+                turn: turn,
+                promptTokens: promptTokenCount,
+                outputTokens: outputTokenCount,
+                performanceSnapshot: performanceSnapshot
+            )
+            await InferenceMetricsCollector.shared.recordMetrics(metric)
+            print(metric.summary)
+        }
+
+        guard let aggregateStats = await InferenceMetricsCollector.shared.aggregateStats() else {
+            XCTFail("Expected aggregate benchmark statistics")
+            return
+        }
+
+        print(aggregateStats.summary)
+        XCTAssertGreaterThan(aggregateStats.avgTokensPerSecond, 0)
+
+        let csv = await InferenceMetricsCollector.shared.exportCSV()
+        let csvURL = try saveBenchmarkCSV(csv, testId: testId)
+        print("[Inference Metrics] CSV saved to \(csvURL.path)")
+    }
+
+    func testOfflineHarnessInferenceParameterSweepLongPrompt() async throws {
+        let runtime = try await makeRuntime(offlineModeEnabled: true, profile: .benchmark)
+        let manager = runtime.manager
+        let testId = "offline-parameter-sweep-\(UUID().uuidString.prefix(8))"
+        let prompt = try await makeLongBenchmarkPrompt(
+            modelId: runtime.modelId,
+            targetTokens: benchmarkPromptTargetTokenCount()
+        )
+        let promptTokenCount = try await LocalModelTokenCounter.shared.tokenCount(
+            text: prompt,
+            modelId: runtime.modelId
+        )
+        let configurations = benchmarkConfigurations(defaultConfiguration: runtime.defaultInferenceConfiguration)
+
+        await InferenceMetricsCollector.shared.clearMetrics()
+        await InferenceMetricsCollector.shared.startTest(testId: testId)
+        defer {
+            Task {
+                await LocalModelInferenceOverrides.shared.clear()
+                await InferenceMetricsCollector.shared.endTest()
+            }
+        }
+
+        for configuration in configurations {
+                await LocalModelInferenceOverrides.shared.set(
+                    LocalModelInferenceOverrides(
+                        contextLength: configuration.contextLength,
+                        maxKVSize: configuration.maxKVSize,
+                        maxOutputTokens: configuration.maxOutputTokens,
+                        prefillStepSize: configuration.prefillStepSize,
+                        temperature: configuration.temperature,
+                        topP: configuration.topP,
+                        repetitionPenalty: .some(configuration.repetitionPenalty),
+                        repetitionContextSize: configuration.repetitionContextSize
+                    )
+                )
+
+            for iteration in 1...benchmarkIterationCount() {
+                manager.startNewConversation()
+                manager.clearConversation()
+                manager.currentMode = .chat
+                manager.currentInput = prompt
+                await LocalModelGenerationPerformanceRecorder.shared.clear()
+
+                let turn = await InferenceMetricsCollector.shared.incrementTurn()
+                var timer = InferenceTimer()
+                manager.sendMessage()
+
+                let sawFirstToken = try await waitForAssistantFirstToken(in: manager, timeoutSeconds: 90)
+                XCTAssertTrue(
+                    sawFirstToken,
+                    "Expected parameter-sweep run \(configuration.label) iteration \(iteration) to emit assistant output"
+                )
+                timer.recordFirstToken()
+
+                let timedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 120)
+                XCTAssertFalse(
+                    timedOut,
+                    "Expected parameter-sweep run \(configuration.label) iteration \(iteration) to finish"
+                )
+
+                let finalAssistantContent = manager.messages
+                    .filter { $0.role == .assistant && !$0.isDraft }
+                    .last?
+                    .content
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                XCTAssertFalse(
+                    finalAssistantContent.isEmpty,
+                    "Expected parameter-sweep run \(configuration.label) iteration \(iteration) to produce text"
+                )
+
+                let outputTokenCount = try await LocalModelTokenCounter.shared.tokenCount(
+                    text: finalAssistantContent,
+                    modelId: runtime.modelId
+                )
+                let performanceSnapshot = try await waitForLatestLocalPerformanceSnapshot()
+                let metric = timer.finalize(
+                    testId: testId,
+                    modelId: runtime.modelId,
+                    inferenceConfiguration: configuration,
+                    turn: turn,
+                    promptTokens: promptTokenCount,
+                    outputTokens: outputTokenCount,
+                    performanceSnapshot: performanceSnapshot
+                )
+                await InferenceMetricsCollector.shared.recordMetrics(metric)
+                print(metric.summary)
+            }
+        }
+
+        guard let aggregateStats = await InferenceMetricsCollector.shared.aggregateStats() else {
+            XCTFail("Expected aggregate sweep statistics")
+            return
+        }
+
+        print(aggregateStats.summary)
+        let csv = await InferenceMetricsCollector.shared.exportCSV()
+        let csvURL = try saveBenchmarkCSV(csv, testId: testId)
+        print("[Inference Metrics] CSV saved to \(csvURL.path)")
+    }
+
+    private func waitForLatestLocalPerformanceSnapshot(timeoutSeconds: TimeInterval = 5) async throws
+        -> LocalModelGenerationPerformanceSnapshot
+    {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if let snapshot = await LocalModelGenerationPerformanceRecorder.shared.latest() {
+                return snapshot
+            }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        throw XCTSkip("Timed out waiting for local MLX performance snapshot")
     }
 
     func testOfflineHarnessDirectMinimalToolCallProducesAndExecutesCreateFile() async throws {
@@ -440,6 +631,13 @@ final class OfflineModeHarnessTests: XCTestCase {
 
     private struct Runtime {
         let manager: ConversationManager
+        let modelId: String
+        let defaultInferenceConfiguration: LocalModelInferenceConfiguration
+    }
+
+    private enum RuntimeProfile {
+        case standard
+        case benchmark
     }
 
     private struct ScenarioResult {
@@ -529,10 +727,15 @@ final class OfflineModeHarnessTests: XCTestCase {
         return nil
     }
 
-    private func makeRuntime(offlineModeEnabled: Bool, projectRoot: URL? = nil) async throws -> Runtime {
+    private func makeRuntime(
+        offlineModeEnabled: Bool,
+        projectRoot: URL? = nil,
+        profile: RuntimeProfile = .standard
+    ) async throws -> Runtime {
         let container = try await makeConfiguredContainer(
             offlineModeEnabled: offlineModeEnabled,
-            projectRoot: projectRoot
+            projectRoot: projectRoot,
+            profile: profile
         )
 
         guard let manager = container.conversationManager as? ConversationManager else {
@@ -546,26 +749,63 @@ final class OfflineModeHarnessTests: XCTestCase {
         manager.startNewConversation()
         manager.clearConversation()
 
-        return Runtime(manager: manager)
+        let modelId = container.settingsStore.string(forKey: "LocalModel.SelectedId")?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let defaultInferenceConfiguration = try defaultInferenceConfiguration(
+            for: modelId,
+            profile: profile
+        )
+        return Runtime(
+            manager: manager,
+            modelId: modelId,
+            defaultInferenceConfiguration: defaultInferenceConfiguration
+        )
     }
 
     private func makeOfflineContainer(projectRoot: URL? = nil) async throws -> DependencyContainer {
-        try await makeConfiguredContainer(offlineModeEnabled: true, projectRoot: projectRoot)
+        try await makeConfiguredContainer(
+            offlineModeEnabled: true,
+            projectRoot: projectRoot,
+            profile: .standard
+        )
     }
 
     private func makeConfiguredContainer(
         offlineModeEnabled: Bool,
-        projectRoot: URL?
+        projectRoot: URL?,
+        profile: RuntimeProfile
     ) async throws -> DependencyContainer {
         let environment = ProcessInfo.processInfo.environment
+        let testProfilePath: String?
+        let disableHeavyInit: Bool
+
+        switch profile {
+        case .standard:
+            testProfilePath = environment[TestLaunchKeys.testProfileDir]
+                ?? environment["TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR"]
+            disableHeavyInit = false
+        case .benchmark:
+            let basePath = environment[TestLaunchKeys.testProfileDir]
+                ?? environment["TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR"]
+                ?? NSTemporaryDirectory()
+            let benchmarkProfileDirectory = URL(fileURLWithPath: basePath, isDirectory: true)
+                .appendingPathComponent("benchmark-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: benchmarkProfileDirectory,
+                withIntermediateDirectories: true
+            )
+            testProfilePath = benchmarkProfileDirectory.path
+            disableHeavyInit = true
+        }
+
         let container = DependencyContainer(
             launchContext: AppLaunchContext(
                 mode: .unitTest,
                 isTesting: true,
                 isUITesting: false,
-                testProfilePath: environment[TestLaunchKeys.testProfileDir]
-                    ?? environment["TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR"],
-                disableHeavyInit: false
+                testProfilePath: testProfilePath,
+                disableHeavyInit: disableHeavyInit,
+                productionParityHarness: profile == .benchmark
             )
         )
 
@@ -746,6 +986,25 @@ final class OfflineModeHarnessTests: XCTestCase {
         return true
     }
 
+    private func waitForAssistantFirstToken(
+        in manager: ConversationManager,
+        timeoutSeconds: TimeInterval
+    ) async throws -> Bool {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            let assistantText = manager.messages
+                .filter { $0.role == .assistant }
+                .map(\.content)
+                .joined()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !assistantText.isEmpty {
+                return true
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return false
+    }
+
     private func waitForCompletedToolExecution(
         named toolName: String,
         in manager: ConversationManager,
@@ -861,5 +1120,209 @@ final class OfflineModeHarnessTests: XCTestCase {
             }
         }
         return files.sorted()
+    }
+
+    private func benchmarkIterationCount() -> Int {
+        let configuredIterations = benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_ITERATIONS")
+            .flatMap(Int.init)
+        return max(1, min(configuredIterations ?? 3, 20))
+    }
+
+    private func benchmarkPromptTargetTokenCount() -> Int {
+        let configuredTarget = benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_PROMPT_TOKENS")
+            .flatMap(Int.init)
+        return max(128, min(configuredTarget ?? 1024, 12_000))
+    }
+
+    private func defaultInferenceConfiguration(
+        for modelId: String,
+        profile: RuntimeProfile
+    ) throws -> LocalModelInferenceConfiguration {
+        guard let model = LocalModelCatalog.model(id: modelId) else {
+            throw NSError(
+                domain: "OfflineModeHarnessTests",
+                code: 6,
+                userInfo: [NSLocalizedDescriptionKey: "Missing local model definition for \(modelId)"]
+            )
+        }
+
+        let maxContextLength: Int
+        switch profile {
+        case .standard:
+            maxContextLength = 2048
+        case .benchmark:
+            maxContextLength = 8192
+        }
+
+        let contextLength = min(LocalModelFileStore.contextLength(for: model), maxContextLength)
+        let defaultMaxOutputTokens: Int
+        switch profile {
+        case .standard:
+            defaultMaxOutputTokens = min(768, max(384, contextLength / 3))
+        case .benchmark:
+            defaultMaxOutputTokens = min(1024, max(512, contextLength / 4))
+        }
+        return LocalModelInferenceConfiguration(
+            contextLength: contextLength,
+            maxKVSize: contextLength,
+            maxOutputTokens: defaultMaxOutputTokens,
+            prefillStepSize: 512,
+            temperature: 0.35,
+            topP: 0.92,
+            repetitionPenalty: 1.03,
+            repetitionContextSize: 64
+        )
+    }
+
+    private func benchmarkConfigurations(
+        defaultConfiguration: LocalModelInferenceConfiguration
+    ) -> [LocalModelInferenceConfiguration] {
+        let contexts = parseBenchmarkList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_CONTEXTS")
+        ) ?? [defaultConfiguration.contextLength, min(4096, max(defaultConfiguration.contextLength, 3072))]
+        let maxKVSizes = parseBenchmarkList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_MAX_KV_SIZES")
+        ) ?? [min(defaultConfiguration.maxKVSize, 2048), defaultConfiguration.maxKVSize]
+        let maxOutputs = parseBenchmarkList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_MAX_OUTPUTS")
+        ) ?? [defaultConfiguration.maxOutputTokens]
+        let prefillSteps = parseBenchmarkList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_PREFILL_STEPS")
+        ) ?? [256, 512, 1024]
+        let temperatures = parseBenchmarkFloatList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_TEMPERATURES")
+        ) ?? [defaultConfiguration.temperature]
+        let topPs = parseBenchmarkFloatList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_TOP_P")
+        ) ?? [defaultConfiguration.topP]
+        let repetitionPenalties = parseBenchmarkOptionalFloatList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_REPETITION_PENALTIES")
+        ) ?? [defaultConfiguration.repetitionPenalty]
+        let repetitionContextSizes = parseBenchmarkList(
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_REPETITION_CONTEXT_SIZES")
+        ) ?? [defaultConfiguration.repetitionContextSize]
+
+        var configurations: [LocalModelInferenceConfiguration] = []
+        for contextLength in contexts {
+            for maxKVSize in maxKVSizes {
+                guard maxKVSize <= contextLength else { continue }
+                for maxOutputTokens in maxOutputs {
+                    for prefillStepSize in prefillSteps {
+                        for temperature in temperatures {
+                            for topP in topPs {
+                                for repetitionPenalty in repetitionPenalties {
+                                    for repetitionContextSize in repetitionContextSizes {
+                                        configurations.append(
+                                            LocalModelInferenceConfiguration(
+                                                contextLength: contextLength,
+                                                maxKVSize: maxKVSize,
+                                                maxOutputTokens: maxOutputTokens,
+                                                prefillStepSize: prefillStepSize,
+                                                temperature: temperature,
+                                                topP: topP,
+                                                repetitionPenalty: repetitionPenalty,
+                                                repetitionContextSize: repetitionContextSize
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return Array(Set(configurations)).sorted { lhs, rhs in
+            if lhs.contextLength != rhs.contextLength {
+                return lhs.contextLength < rhs.contextLength
+            }
+            if lhs.maxKVSize != rhs.maxKVSize {
+                return lhs.maxKVSize < rhs.maxKVSize
+            }
+            if lhs.maxOutputTokens != rhs.maxOutputTokens {
+                return lhs.maxOutputTokens < rhs.maxOutputTokens
+            }
+            if lhs.prefillStepSize != rhs.prefillStepSize {
+                return lhs.prefillStepSize < rhs.prefillStepSize
+            }
+            if lhs.temperature != rhs.temperature {
+                return lhs.temperature < rhs.temperature
+            }
+            if lhs.topP != rhs.topP {
+                return lhs.topP < rhs.topP
+            }
+            if lhs.repetitionPenalty != rhs.repetitionPenalty {
+                return (lhs.repetitionPenalty ?? 0) < (rhs.repetitionPenalty ?? 0)
+            }
+            return lhs.repetitionContextSize < rhs.repetitionContextSize
+        }
+    }
+
+    private func parseBenchmarkList(_ rawValue: String?) -> [Int]? {
+        guard let rawValue else { return nil }
+        let values = rawValue
+            .split(separator: ",")
+            .compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            .filter { $0 > 0 }
+        return values.isEmpty ? nil : values
+    }
+
+    private func parseBenchmarkFloatList(_ rawValue: String?) -> [Float]? {
+        guard let rawValue else { return nil }
+        let values = rawValue
+            .split(separator: ",")
+            .compactMap { token -> Float? in
+                let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                return Float(trimmed)
+            }
+        return values.isEmpty ? nil : values
+    }
+
+    private func parseBenchmarkOptionalFloatList(_ rawValue: String?) -> [Float?]? {
+        guard let rawValue else { return nil }
+        let values = rawValue
+            .split(separator: ",")
+            .compactMap { token -> Float?? in
+                let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard !trimmed.isEmpty else { return nil }
+                if trimmed == "nil" || trimmed == "none" || trimmed == "off" {
+                    return .some(nil)
+                }
+                guard let value = Float(trimmed) else { return nil }
+                return .some(value)
+            }
+        return values.isEmpty ? nil : values
+    }
+
+    private func benchmarkEnvironmentValue(_ key: String) -> String? {
+        let environment = ProcessInfo.processInfo.environment
+        return environment[key] ?? environment["TEST_RUNNER_ENV_\(key)"]
+    }
+
+    private func makeLongBenchmarkPrompt(modelId: String, targetTokens: Int) async throws -> String {
+        let instruction = "Read the following context carefully. Then reply with exactly one short sentence that starts with READY: and contains at most eight words.\n\n"
+        let chunk = "Project context block: This repository runs a local MLX model, we are tuning context length, KV cache size, and prefill chunking to avoid swap and maximize throughput on Apple silicon.\n"
+        var prompt = instruction
+
+        while try await LocalModelTokenCounter.shared.tokenCount(text: prompt, modelId: modelId) < targetTokens {
+            prompt += chunk
+        }
+
+        return prompt
+    }
+
+    private func saveBenchmarkCSV(_ csv: String, testId: String) throws -> URL {
+        let environment = ProcessInfo.processInfo.environment
+        let preferredDirectory = environment[TestLaunchKeys.testProfileDir]
+            ?? environment["TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR"]
+        let baseDirectory = preferredDirectory.map(URL.init(fileURLWithPath:))
+            ?? FileManager.default.temporaryDirectory
+        let benchmarkDirectory = baseDirectory.appendingPathComponent("inference-benchmarks", isDirectory: true)
+        try FileManager.default.createDirectory(at: benchmarkDirectory, withIntermediateDirectories: true)
+        let csvURL = benchmarkDirectory.appendingPathComponent("\(testId).csv")
+        try csv.write(to: csvURL, atomically: true, encoding: .utf8)
+        return csvURL
     }
 }

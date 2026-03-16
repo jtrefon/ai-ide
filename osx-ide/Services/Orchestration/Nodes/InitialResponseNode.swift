@@ -35,13 +35,17 @@ struct InitialResponseNode: OrchestrationNode {
             let displayContent = ChatPromptBuilder.contentForDisplay(from: content)
             let hasReasoning = !(split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
             guard !displayContent.isEmpty || hasReasoning else {
-                return OrchestrationState(
+                var nextState = OrchestrationState(
                     request: request,
                     response: response,
                     lastToolResults: [],
                     branchExecution: state.branchExecution,
                     transition: .next(nextNodeId)
                 )
+                nextState = nextState.updating(
+                    executionSignals: await OrchestrationExecutionSignalBuilder().build(for: nextState)
+                )
+                return nextState
             }
             historyCoordinator.append(ChatMessage(
                 role: .assistant,
@@ -50,12 +54,16 @@ struct InitialResponseNode: OrchestrationNode {
             ))
         }
 
-        return OrchestrationState(
+        var nextState = OrchestrationState(
             request: request,
             response: response,
             lastToolResults: [],
             branchExecution: state.branchExecution,
             transition: .next(nextNodeId)
         )
+        nextState = nextState.updating(
+            executionSignals: await OrchestrationExecutionSignalBuilder().build(for: nextState)
+        )
+        return nextState
     }
 }
