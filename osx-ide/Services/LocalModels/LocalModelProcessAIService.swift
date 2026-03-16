@@ -45,6 +45,43 @@ private struct LocalModelTestBudget {
     }
 }
 
+struct LocalModelGenerationPerformanceSnapshot: Sendable {
+    let modelId: String
+    let inferenceConfiguration: LocalModelInferenceConfiguration
+    let loadMilliseconds: Int
+    let totalMilliseconds: Int
+    let promptTokenCount: Int?
+    let promptMilliseconds: Int?
+    let promptTokensPerSecond: Double?
+    let generationTokenCount: Int?
+    let generationMilliseconds: Int?
+    let generationTokensPerSecond: Double?
+    let toolCallCount: Int
+    let outputCharacterCount: Int
+    let rssBeforeLoadMB: Int
+    let rssAfterLoadMB: Int
+    let rssAfterGenerationMB: Int
+    let timestamp: Date
+}
+
+actor LocalModelGenerationPerformanceRecorder {
+    static let shared = LocalModelGenerationPerformanceRecorder()
+
+    private var snapshots: [LocalModelGenerationPerformanceSnapshot] = []
+
+    func clear() {
+        snapshots.removeAll()
+    }
+
+    func record(_ snapshot: LocalModelGenerationPerformanceSnapshot) {
+        snapshots.append(snapshot)
+    }
+
+    func latest() -> LocalModelGenerationPerformanceSnapshot? {
+        snapshots.last
+    }
+}
+
 /// Helper class to manage memory pressure observation with a closure callback
 final class MemoryPressureObserver: MemoryPressureObserving, @unchecked Sendable {
     private var observer: NSObjectProtocol?
@@ -309,18 +346,59 @@ actor LocalModelProcessAIService: AIService {
         ) {
             let loadMS = milliseconds(loadDuration)
             let totalMS = milliseconds(totalDuration)
+            let snapshot: LocalModelGenerationPerformanceSnapshot
             if let info = completionInfo {
                 let promptMS = Int((info.promptTime * 1000).rounded())
                 let generateMS = Int((info.generateTime * 1000).rounded())
                 let promptTPS = String(format: "%.1f", info.promptTokensPerSecond)
                 let generationTPS = String(format: "%.1f", info.tokensPerSecond)
+                snapshot = LocalModelGenerationPerformanceSnapshot(
+                    modelId: modelId,
+                    inferenceConfiguration: inferenceConfiguration,
+                    loadMilliseconds: loadMS,
+                    totalMilliseconds: totalMS,
+                    promptTokenCount: info.promptTokenCount,
+                    promptMilliseconds: promptMS,
+                    promptTokensPerSecond: info.promptTokensPerSecond,
+                    generationTokenCount: info.generationTokenCount,
+                    generationMilliseconds: generateMS,
+                    generationTokensPerSecond: info.tokensPerSecond,
+                    toolCallCount: toolCallCount,
+                    outputCharacterCount: outputCharacterCount,
+                    rssBeforeLoadMB: rssBeforeLoadMB,
+                    rssAfterLoadMB: rssAfterLoadMB,
+                    rssAfterGenerationMB: rssAfterGenerationMB,
+                    timestamp: Date()
+                )
                 print(
                     "[LOCAL-MLX-PERF] model=\(modelId) load_ms=\(loadMS) prompt_tokens=\(info.promptTokenCount) prompt_ms=\(promptMS) prompt_tps=\(promptTPS) gen_tokens=\(info.generationTokenCount) gen_ms=\(generateMS) gen_tps=\(generationTPS) total_ms=\(totalMS) context=\(inferenceConfiguration.contextLength) max_kv=\(inferenceConfiguration.maxKVSize) max_output=\(inferenceConfiguration.maxOutputTokens) prefill_step=\(inferenceConfiguration.prefillStepSize) cache_kind=\(inferenceConfiguration.cacheKind) tool_calls=\(toolCallCount) output_chars=\(outputCharacterCount) rss_before_load_mb=\(rssBeforeLoadMB) rss_after_load_mb=\(rssAfterLoadMB) rss_after_gen_mb=\(rssAfterGenerationMB)"
                 )
             } else {
+                snapshot = LocalModelGenerationPerformanceSnapshot(
+                    modelId: modelId,
+                    inferenceConfiguration: inferenceConfiguration,
+                    loadMilliseconds: loadMS,
+                    totalMilliseconds: totalMS,
+                    promptTokenCount: nil,
+                    promptMilliseconds: nil,
+                    promptTokensPerSecond: nil,
+                    generationTokenCount: nil,
+                    generationMilliseconds: nil,
+                    generationTokensPerSecond: nil,
+                    toolCallCount: toolCallCount,
+                    outputCharacterCount: outputCharacterCount,
+                    rssBeforeLoadMB: rssBeforeLoadMB,
+                    rssAfterLoadMB: rssAfterLoadMB,
+                    rssAfterGenerationMB: rssAfterGenerationMB,
+                    timestamp: Date()
+                )
                 print(
                     "[LOCAL-MLX-PERF] model=\(modelId) load_ms=\(loadMS) total_ms=\(totalMS) context=\(inferenceConfiguration.contextLength) max_kv=\(inferenceConfiguration.maxKVSize) max_output=\(inferenceConfiguration.maxOutputTokens) prefill_step=\(inferenceConfiguration.prefillStepSize) cache_kind=\(inferenceConfiguration.cacheKind) tool_calls=\(toolCallCount) output_chars=\(outputCharacterCount) rss_before_load_mb=\(rssBeforeLoadMB) rss_after_load_mb=\(rssAfterLoadMB) rss_after_gen_mb=\(rssAfterGenerationMB) info=missing"
                 )
+            }
+
+            Task {
+                await LocalModelGenerationPerformanceRecorder.shared.record(snapshot)
             }
         }
 

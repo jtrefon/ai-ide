@@ -306,6 +306,24 @@ run_harness() {
         env_args+=("TEST_RUNNER_ENV_HARNESS_USE_OPENROUTER=$HARNESS_USE_OPENROUTER")
         echo "Using OpenRouter: $HARNESS_USE_OPENROUTER"
     fi
+    local passthrough_test_envs=(
+        "OSXIDE_OFFLINE_BENCHMARK_ITERATIONS"
+        "OSXIDE_OFFLINE_BENCHMARK_PROMPT_TOKENS"
+        "OSXIDE_OFFLINE_BENCHMARK_CONTEXTS"
+        "OSXIDE_OFFLINE_BENCHMARK_MAX_KV_SIZES"
+        "OSXIDE_OFFLINE_BENCHMARK_MAX_OUTPUTS"
+        "OSXIDE_OFFLINE_BENCHMARK_PREFILL_STEPS"
+        "OSXIDE_BACKGROUND_WORK_QUIET_MS"
+        "OSXIDE_BACKGROUND_WORK_CPU_LOAD_PER_CORE_THRESHOLD"
+        "OSXIDE_BACKGROUND_WORK_RSS_THRESHOLD_MB"
+    )
+    local env_name
+    for env_name in "${passthrough_test_envs[@]}"; do
+        if [ -n "${!env_name}" ]; then
+            env_args+=("TEST_RUNNER_ENV_${env_name}=${!env_name}")
+            runtime_env_args+=("${env_name}=${!env_name}" "TEST_RUNNER_ENV_${env_name}=${!env_name}")
+        fi
+    done
     env_args+=("TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR=$test_profile_dir")
     if [ -n "$OSX_IDE_RUN_ONLINE_HARNESS" ]; then
         env_args+=("TEST_RUNNER_ENV_OSX_IDE_RUN_ONLINE_HARNESS=$OSX_IDE_RUN_ONLINE_HARNESS")

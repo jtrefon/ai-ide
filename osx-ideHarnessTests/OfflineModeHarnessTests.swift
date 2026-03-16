@@ -203,6 +203,7 @@ final class OfflineModeHarnessTests: XCTestCase {
             manager.clearConversation()
             manager.currentMode = .chat
             manager.currentInput = prompt
+            await LocalModelGenerationPerformanceRecorder.shared.clear()
 
             let turn = await InferenceMetricsCollector.shared.incrementTurn()
             var timer = InferenceTimer()
@@ -230,13 +231,15 @@ final class OfflineModeHarnessTests: XCTestCase {
                 text: finalAssistantContent,
                 modelId: runtime.modelId
             )
+            let performanceSnapshot = try await waitForLatestLocalPerformanceSnapshot()
             let metric = timer.finalize(
                 testId: testId,
                 modelId: runtime.modelId,
                 inferenceConfiguration: inferenceConfiguration,
                 turn: turn,
                 promptTokens: promptTokenCount,
-                outputTokens: outputTokenCount
+                outputTokens: outputTokenCount,
+                performanceSnapshot: performanceSnapshot
             )
             await InferenceMetricsCollector.shared.recordMetrics(metric)
             print(metric.summary)
@@ -293,6 +296,7 @@ final class OfflineModeHarnessTests: XCTestCase {
                 manager.clearConversation()
                 manager.currentMode = .chat
                 manager.currentInput = prompt
+                await LocalModelGenerationPerformanceRecorder.shared.clear()
 
                 let turn = await InferenceMetricsCollector.shared.incrementTurn()
                 var timer = InferenceTimer()
@@ -325,13 +329,15 @@ final class OfflineModeHarnessTests: XCTestCase {
                     text: finalAssistantContent,
                     modelId: runtime.modelId
                 )
+                let performanceSnapshot = try await waitForLatestLocalPerformanceSnapshot()
                 let metric = timer.finalize(
                     testId: testId,
                     modelId: runtime.modelId,
                     inferenceConfiguration: configuration,
                     turn: turn,
                     promptTokens: promptTokenCount,
-                    outputTokens: outputTokenCount
+                    outputTokens: outputTokenCount,
+                    performanceSnapshot: performanceSnapshot
                 )
                 await InferenceMetricsCollector.shared.recordMetrics(metric)
                 print(metric.summary)
@@ -347,6 +353,19 @@ final class OfflineModeHarnessTests: XCTestCase {
         let csv = await InferenceMetricsCollector.shared.exportCSV()
         let csvURL = try saveBenchmarkCSV(csv, testId: testId)
         print("[Inference Metrics] CSV saved to \(csvURL.path)")
+    }
+
+    private func waitForLatestLocalPerformanceSnapshot(timeoutSeconds: TimeInterval = 5) async throws
+        -> LocalModelGenerationPerformanceSnapshot
+    {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if let snapshot = await LocalModelGenerationPerformanceRecorder.shared.latest() {
+                return snapshot
+            }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        throw XCTSkip("Timed out waiting for local MLX performance snapshot")
     }
 
     func testOfflineHarnessDirectMinimalToolCallProducesAndExecutesCreateFile() async throws {
@@ -1096,13 +1115,13 @@ final class OfflineModeHarnessTests: XCTestCase {
     }
 
     private func benchmarkIterationCount() -> Int {
-        let configuredIterations = ProcessInfo.processInfo.environment["OSXIDE_OFFLINE_BENCHMARK_ITERATIONS"]
+        let configuredIterations = benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_ITERATIONS")
             .flatMap(Int.init)
         return max(1, min(configuredIterations ?? 3, 20))
     }
 
     private func benchmarkPromptTargetTokenCount() -> Int {
-        let configuredTarget = ProcessInfo.processInfo.environment["OSXIDE_OFFLINE_BENCHMARK_PROMPT_TOKENS"]
+        let configuredTarget = benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_PROMPT_TOKENS")
             .flatMap(Int.init)
         return max(128, min(configuredTarget ?? 1024, 12_000))
     }
@@ -1128,18 +1147,17 @@ final class OfflineModeHarnessTests: XCTestCase {
     private func benchmarkConfigurations(
         defaultConfiguration: LocalModelInferenceConfiguration
     ) -> [LocalModelInferenceConfiguration] {
-        let environment = ProcessInfo.processInfo.environment
         let contexts = parseBenchmarkList(
-            environment["OSXIDE_OFFLINE_BENCHMARK_CONTEXTS"]
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_CONTEXTS")
         ) ?? [defaultConfiguration.contextLength, min(4096, max(defaultConfiguration.contextLength, 3072))]
         let maxKVSizes = parseBenchmarkList(
-            environment["OSXIDE_OFFLINE_BENCHMARK_MAX_KV_SIZES"]
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_MAX_KV_SIZES")
         ) ?? [min(defaultConfiguration.maxKVSize, 2048), defaultConfiguration.maxKVSize]
         let maxOutputs = parseBenchmarkList(
-            environment["OSXIDE_OFFLINE_BENCHMARK_MAX_OUTPUTS"]
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_MAX_OUTPUTS")
         ) ?? [defaultConfiguration.maxOutputTokens]
         let prefillSteps = parseBenchmarkList(
-            environment["OSXIDE_OFFLINE_BENCHMARK_PREFILL_STEPS"]
+            benchmarkEnvironmentValue("OSXIDE_OFFLINE_BENCHMARK_PREFILL_STEPS")
         ) ?? [256, 512, 1024]
 
         var configurations: [LocalModelInferenceConfiguration] = []
@@ -1182,6 +1200,11 @@ final class OfflineModeHarnessTests: XCTestCase {
             .compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
             .filter { $0 > 0 }
         return values.isEmpty ? nil : values
+    }
+
+    private func benchmarkEnvironmentValue(_ key: String) -> String? {
+        let environment = ProcessInfo.processInfo.environment
+        return environment[key] ?? environment["TEST_RUNNER_ENV_\(key)"]
     }
 
     private func makeLongBenchmarkPrompt(modelId: String, targetTokens: Int) async throws -> String {
