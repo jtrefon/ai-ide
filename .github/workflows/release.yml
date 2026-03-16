@@ -24,7 +24,8 @@ jobs:
         with:
           xcode-version: "26.1.1"
 
-      - name: Validate Signing Configuration
+      - name: Detect Signing Configuration
+        id: signing
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
@@ -44,17 +45,20 @@ jobs:
             APPLE_ID \
             APPLE_APP_SPECIFIC_PASSWORD; do
             if [ -z "${!var}" ]; then
-              echo "::error::$var is not configured"
               missing=1
             fi
           done
 
-          if [ "$missing" -ne 0 ]; then
-            echo "Public macOS releases require Developer ID signing and notarization."
-            exit 1
+          if [ "$missing" -eq 0 ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Developer ID signing and notarization are enabled."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Release signing secrets are not fully configured. Falling back to ad-hoc signing; users may need to bypass Gatekeeper manually."
           fi
 
       - name: Import Developer ID Certificate
+        if: steps.signing.outputs.enabled == 'true'
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
@@ -89,6 +93,7 @@ jobs:
           CODE_SIGN_IDENTITY=
 
       - name: Sign Release App
+        if: steps.signing.outputs.enabled == 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
@@ -104,11 +109,19 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           spctl --assess --type exec --verbose=4 "$APP_PATH"
 
+      - name: Ad-Hoc Sign Release App
+        if: steps.signing.outputs.enabled != 'true'
+        run: |
+          echo "Signing application with ad-hoc identity..."
+          codesign --force --deep --sign - "$APP_PATH"
+          codesign --verify --verbose=2 "$APP_PATH"
+
       - name: Package Signed App Zip
         run: |
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
 
       - name: Notarize Signed App Zip
+        if: steps.signing.outputs.enabled == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -121,12 +134,14 @@ jobs:
             --wait
 
       - name: Staple App And Rebuild Zip
+        if: steps.signing.outputs.enabled == 'true'
         run: |
           xcrun stapler staple "$APP_PATH"
           rm -f "$APP_ZIP"
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
 
       - name: Build And Sign DMG
+        if: steps.signing.outputs.enabled == 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
@@ -134,7 +149,13 @@ jobs:
           codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$DMG_NAME"
           codesign --verify --verbose=2 "$DMG_NAME"
 
+      - name: Build DMG
+        if: steps.signing.outputs.enabled != 'true'
+        run: |
+          hdiutil create -volname "osx-ide" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_NAME"
+
       - name: Notarize And Staple DMG
+        if: steps.signing.outputs.enabled == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}

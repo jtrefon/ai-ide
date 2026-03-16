@@ -112,9 +112,12 @@ xcodebuild -project osx-ide.xcodeproj -scheme osx-ide -configuration Debug test 
 
 ## Release Signing
 
-Public macOS downloads should not use ad-hoc or self-signed builds. For normal download-and-open behavior, the release workflow now expects a `Developer ID Application` certificate and Apple notarization credentials.
+macOS distribution has two modes in this repository:
 
-Configure these GitHub Actions secrets before pushing a release tag:
+- Free mode: the release workflow publishes ad-hoc-signed artifacts. This does not avoid Gatekeeper warnings for internet downloads.
+- Developer ID mode: if signing secrets are configured, the workflow signs and notarizes the app for smoother download-and-open behavior.
+
+Configure these GitHub Actions secrets only if you want the paid `Developer ID Application` path:
 
 - `BUILD_CERTIFICATE_BASE64`: base64-encoded `.p12` certificate export for your Developer ID Application certificate
 - `P12_PASSWORD`: password used when exporting the `.p12`
@@ -124,7 +127,7 @@ Configure these GitHub Actions secrets before pushing a release tag:
 - `APPLE_ID`: Apple ID used for notarization
 - `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for notarization
 
-Once those secrets are present, the release workflow will:
+When those secrets are present, the release workflow will:
 
 - sign the `.app` with hardened runtime and project entitlements
 - notarize the app bundle archive
@@ -132,7 +135,13 @@ Once those secrets are present, the release workflow will:
 - build and sign the `.dmg`
 - notarize and staple the `.dmg`
 
-If these secrets are missing, tagged release builds now fail instead of silently publishing an ad-hoc-signed artifact.
+If these secrets are missing, tagged release builds fall back to ad-hoc signing and still publish release artifacts.
+
+For free distribution, set user expectations clearly:
+
+- GitHub Releases can host unsigned or ad-hoc-signed `.zip` and `.dmg` files for free.
+- Homebrew can make installation more convenient, but it does not remove macOS Gatekeeper checks for unsigned downloads.
+- Users may still need to right-click the app and choose `Open`, or remove quarantine manually with `xattr -dr com.apple.quarantine /Applications/osx-ide.app`.
 
 ## Troubleshooting
 
