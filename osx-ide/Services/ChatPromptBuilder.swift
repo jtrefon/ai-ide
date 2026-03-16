@@ -40,6 +40,48 @@ class ChatPromptBuilder {
         return normalizeDisplayWhitespace(withoutToolMarkup)
     }
 
+    static func reasoningForDisplay(_ text: String) -> String {
+        guard !text.isEmpty else { return text }
+
+        var output = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        let sectionLabels = [
+            "Codebase Review & Insights",
+            "Architecture:",
+            "UI Layer:",
+            "Routing:",
+            "Strengths:",
+            "Potential Issues:",
+            "Recommendations:",
+            "Remaining Work:",
+            "Status:",
+            "Reflection:",
+            "Planning:",
+            "Continuity:",
+            "Analyze:",
+            "Research:",
+            "Plan:",
+            "Reflect:",
+            "Action:",
+            "Delivery:"
+        ]
+
+        for label in sectionLabels {
+            let escaped = NSRegularExpression.escapedPattern(for: label)
+            let pattern = #"(?<!^)(?<!\n)(\s*)\#(escaped)"#
+            output = output.replacingOccurrences(
+                of: pattern,
+                with: "\n\n\(label)",
+                options: .regularExpression
+            )
+        }
+
+        output = output.replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     static func isReasoningOutcomePayload(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
@@ -252,7 +294,7 @@ class ChatPromptBuilder {
     }
 
     static func reasoningOutcome(from reasoning: String) -> ReasoningOutcome? {
-        let trimmed = reasoning.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = reasoningForDisplay(reasoning).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
         let sections = extractReasoningSections(trimmed)
