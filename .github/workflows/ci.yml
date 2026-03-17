@@ -49,7 +49,10 @@ jobs:
           test
           -destination 'platform=macOS'
           -only-testing:osx-ideTests
+          -parallelize-tests
+          -maximum-test-concurrency 4
           CODE_SIGNING_ALLOWED=NO
+          TEST_AFTER_BUILD=YES
 
   ui-smoke-uitest:
     runs-on: macos-15
