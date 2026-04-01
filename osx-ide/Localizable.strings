@@ -156,6 +156,7 @@
 "menu.editor" = "Editor";
 "menu.editor.find" = "Find";
 "menu.editor.replace" = "Replace";
+"menu.editor.trigger_inline_completion" = "Trigger Inline Completion";
 "menu.editor.ai_inline_assist" = "AI Inline Assist";
 "menu.editor.close_tab" = "Close Tab";
 "menu.editor.close_all_tabs" = "Close All Tabs";

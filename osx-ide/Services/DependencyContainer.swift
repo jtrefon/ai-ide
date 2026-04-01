@@ -121,11 +121,17 @@ class DependencyContainer: ObservableObject {
         // Create project coordinator
         earlyDiag("Creating project coordinator...")
 
-        _projectCoordinator = ProjectCoordinator(
+        let projectCoordinator = ProjectCoordinator(
             aiService: _aiService,
             errorManager: errorManager,
             eventBus: _eventBus,
             conversationManager: _conversationManager
+        )
+        _projectCoordinator = projectCoordinator
+        _inlineCompletionEngine = Self.makeInlineCompletionEngine(
+            aiServiceProvider: { [_aiService] in _aiService },
+            projectRootProvider: { [weak projectCoordinator] in projectCoordinator?.currentProjectRoot },
+            codebaseIndexProvider: { [weak projectCoordinator] in projectCoordinator?.codebaseIndex }
         )
         earlyDiag(
             "Project coordinator done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
@@ -314,6 +320,10 @@ class DependencyContainer: ObservableObject {
         return _diagnosticsStore
     }
 
+    var inlineCompletionEngine: InlineCompletionEngine {
+        return _inlineCompletionEngine
+    }
+
     var ragTelemetryAggregator: RAGTelemetryAggregator {
         return _ragTelemetryAggregator
     }
@@ -414,6 +424,7 @@ class DependencyContainer: ObservableObject {
             commandRegistry: commandRegistry,
             uiRegistry: uiRegistry,
             diagnosticsStore: diagnosticsStore,
+            inlineCompletionEngine: inlineCompletionEngine,
             windowProvider: windowProvider,
             codebaseIndexProvider: { [weak self] in
                 self?.codebaseIndex
@@ -447,6 +458,26 @@ class DependencyContainer: ObservableObject {
         }
     }
 
+    private static func makeInlineCompletionEngine(
+        aiServiceProvider: @escaping () -> (any AIService)?,
+        projectRootProvider: @escaping () -> URL?,
+        codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?
+    ) -> InlineCompletionEngine {
+        InlineCompletionEngine(
+            settingsStore: InlineCompletionSettingsStore(),
+            triggerPolicy: CompletionTriggerPolicy(),
+            contextAssembler: CompletionContextAssembler(),
+            retrievalLayer: CompletionRetrievalLayer(
+                projectRootProvider: projectRootProvider,
+                codebaseIndexProvider: codebaseIndexProvider
+            ),
+            inferenceService: CompletionInferenceService(
+                provider: AIServiceInlineCompletionProvider(aiServiceProvider: aiServiceProvider)
+            ),
+            ranker: SuggestionRanker()
+        )
+    }
+
     // MARK: - Stored Services
 
     private let _errorManager: any ErrorManagerProtocol
@@ -465,6 +496,7 @@ class DependencyContainer: ObservableObject {
     private var _aiService: any AIService
     private var _conversationManager: any ConversationManagerProtocol
     private var _projectCoordinator: ProjectCoordinator
+    private let _inlineCompletionEngine: InlineCompletionEngine
     private let _activityCoordinator: any AgentActivityCoordinating
     
     /// Accessor for activity coordinator (for integration with other services)

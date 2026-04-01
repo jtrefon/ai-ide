@@ -247,6 +247,7 @@ extension TextViewRepresentable.Coordinator {
         updateSelectionContext(from: textView)
 
         scheduleHighlightForCurrentEditorText(in: textView)
+        scheduleAutomaticInlineCompletionIfNeeded(for: textView)
     }
 
     @MainActor
@@ -255,6 +256,8 @@ extension TextViewRepresentable.Coordinator {
         guard let textView = notification.object as? NSTextView else { return }
         self.parent.selectedRange = textView.selectedRange
         updateSelectionContext(from: textView)
+        (textView as? CodeEditorTextView)?.clearInlineSuggestion()
+        invalidateInlineCompletion()
     }
 
     @MainActor

@@ -11,6 +11,14 @@ struct UISettings {
     let showLineNumbers: Bool
     let wordWrap: Bool
     let minimapVisible: Bool
+    let inlineCompletionEnabled: Bool
+    let inlineCompletionDebounceMilliseconds: Int
+    let inlineCompletionAggressiveness: Double
+    let inlineCompletionMaxSuggestionLength: Int
+    let inlineCompletionMultilineEnabled: Bool
+    let inlineCompletionRetrievalEnabled: Bool
+    let inlineCompletionRoutingMode: InlineCompletionRoutingMode
+    let inlineCompletionDebugOverlayEnabled: Bool
     let sidebarWidth: Double
     let terminalHeight: Double
     let chatPanelWidth: Double

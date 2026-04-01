@@ -34,6 +34,7 @@ extension CommandID {
     public static let editorAddCursorAbove: CommandID = "editor.addCursorAbove"
     public static let editorAddCursorBelow: CommandID = "editor.addCursorBelow"
 
+    public static let editorTriggerInlineCompletion: CommandID = "editor.triggerInlineCompletion"
     public static let editorAIInlineAssist: CommandID = "editor.aiInlineAssist"
 
     public static let viewToggleMinimap: CommandID = "view.toggleMinimap"

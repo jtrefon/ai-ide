@@ -11,10 +11,13 @@ import AppKit
 // CodeSelectionContext moved to Services/CodeSelectionContext.swift
 
 struct CodeEditorView: View {
+    let paneID: FileEditorStateManager.PaneID
     @Binding var text: String
+    let filePath: String?
     var language: String
     @Binding var selectedRange: NSRange?
     @ObservedObject var selectionContext: CodeSelectionContext
+    let inlineCompletionEngine: InlineCompletionEngine
     var showLineNumbers: Bool = true
     var wordWrap: Bool = false
     var fontSize: Double = AppConstantsEditor.defaultFontSize
@@ -25,10 +28,13 @@ struct CodeEditorView: View {
         GeometryReader { geometry in
             // Text editor (use AppKit's own NSScrollView; avoid nesting in SwiftUI ScrollView)
             TextViewRepresentable(
+                paneID: paneID,
                 text: $text,
+                filePath: filePath,
                 language: language,
                 selectedRange: $selectedRange,
                 selectionContext: selectionContext,
+                inlineCompletionEngine: inlineCompletionEngine,
                 showLineNumbers: showLineNumbers,
                 wordWrap: wordWrap,
                 fontSize: fontSize,

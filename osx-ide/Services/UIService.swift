@@ -79,6 +79,38 @@ final class UIService: UIServiceProtocol {
         // Project-scoped setting. Persisted via .ide/session.json
     }
 
+    func setInlineCompletionEnabled(_ enabled: Bool) {
+        settingsStore.set(enabled, forKey: AppConstantsStorage.inlineCompletionEnabledKey)
+    }
+
+    func setInlineCompletionDebounceMilliseconds(_ milliseconds: Int) {
+        settingsStore.set(max(50, min(800, milliseconds)), forKey: AppConstantsStorage.inlineCompletionDebounceMsKey)
+    }
+
+    func setInlineCompletionAggressiveness(_ aggressiveness: Double) {
+        settingsStore.set(max(0.05, min(1.0, aggressiveness)), forKey: AppConstantsStorage.inlineCompletionAggressivenessKey)
+    }
+
+    func setInlineCompletionMaxSuggestionLength(_ length: Int) {
+        settingsStore.set(max(16, min(512, length)), forKey: AppConstantsStorage.inlineCompletionMaxLengthKey)
+    }
+
+    func setInlineCompletionMultilineEnabled(_ enabled: Bool) {
+        settingsStore.set(enabled, forKey: AppConstantsStorage.inlineCompletionMultilineEnabledKey)
+    }
+
+    func setInlineCompletionRetrievalEnabled(_ enabled: Bool) {
+        settingsStore.set(enabled, forKey: AppConstantsStorage.inlineCompletionRetrievalEnabledKey)
+    }
+
+    func setInlineCompletionRoutingMode(_ mode: InlineCompletionRoutingMode) {
+        settingsStore.set(mode.rawValue, forKey: AppConstantsStorage.inlineCompletionRoutingModeKey)
+    }
+
+    func setInlineCompletionDebugOverlayEnabled(_ enabled: Bool) {
+        settingsStore.set(enabled, forKey: AppConstantsStorage.inlineCompletionDebugOverlayKey)
+    }
+
     // MARK: - Layout Settings
 
     /// Update sidebar width
@@ -139,6 +171,7 @@ final class UIService: UIServiceProtocol {
         let showLineNumbers: Bool = true
         let wordWrap: Bool = false
         let minimapVisible: Bool = false
+        let inlineCompletionSettings = InlineCompletionSettingsStore(settingsStore: settingsStore).load()
 
         let indentationStyle = IndentationStyle.current(userDefaults: AppRuntimeEnvironment.userDefaults)
 
@@ -168,6 +201,14 @@ final class UIService: UIServiceProtocol {
             showLineNumbers: showLineNumbers,
             wordWrap: wordWrap,
             minimapVisible: minimapVisible,
+            inlineCompletionEnabled: inlineCompletionSettings.isEnabled,
+            inlineCompletionDebounceMilliseconds: inlineCompletionSettings.debounceMilliseconds,
+            inlineCompletionAggressiveness: inlineCompletionSettings.aggressiveness,
+            inlineCompletionMaxSuggestionLength: inlineCompletionSettings.maxSuggestionLength,
+            inlineCompletionMultilineEnabled: inlineCompletionSettings.multilineEnabled,
+            inlineCompletionRetrievalEnabled: inlineCompletionSettings.retrievalEnabled,
+            inlineCompletionRoutingMode: inlineCompletionSettings.routingMode,
+            inlineCompletionDebugOverlayEnabled: inlineCompletionSettings.debugOverlayEnabled,
             sidebarWidth: sidebarWidth,
             terminalHeight: terminalHeight,
             chatPanelWidth: chatPanelWidth,
@@ -191,6 +232,14 @@ final class UIService: UIServiceProtocol {
         setShowLineNumbers(settings.showLineNumbers)
         setWordWrap(settings.wordWrap)
         setMinimapVisible(settings.minimapVisible)
+        setInlineCompletionEnabled(settings.inlineCompletionEnabled)
+        setInlineCompletionDebounceMilliseconds(settings.inlineCompletionDebounceMilliseconds)
+        setInlineCompletionAggressiveness(settings.inlineCompletionAggressiveness)
+        setInlineCompletionMaxSuggestionLength(settings.inlineCompletionMaxSuggestionLength)
+        setInlineCompletionMultilineEnabled(settings.inlineCompletionMultilineEnabled)
+        setInlineCompletionRetrievalEnabled(settings.inlineCompletionRetrievalEnabled)
+        setInlineCompletionRoutingMode(settings.inlineCompletionRoutingMode)
+        setInlineCompletionDebugOverlayEnabled(settings.inlineCompletionDebugOverlayEnabled)
         setSidebarWidth(settings.sidebarWidth)
         setTerminalHeight(settings.terminalHeight)
         setChatPanelWidth(settings.chatPanelWidth)
@@ -211,7 +260,15 @@ final class UIService: UIServiceProtocol {
             AppConstantsStorage.indentationStyleKey,
             AppConstantsStorage.cliTimeoutSecondsKey,
             AppConstantsStorage.agentMemoryEnabledKey,
-            AppConstantsStorage.agentQAReviewEnabledKey
+            AppConstantsStorage.agentQAReviewEnabledKey,
+            AppConstantsStorage.inlineCompletionEnabledKey,
+            AppConstantsStorage.inlineCompletionDebounceMsKey,
+            AppConstantsStorage.inlineCompletionAggressivenessKey,
+            AppConstantsStorage.inlineCompletionMaxLengthKey,
+            AppConstantsStorage.inlineCompletionMultilineEnabledKey,
+            AppConstantsStorage.inlineCompletionRetrievalEnabledKey,
+            AppConstantsStorage.inlineCompletionRoutingModeKey,
+            AppConstantsStorage.inlineCompletionDebugOverlayKey
         ]
         keys.forEach { settingsStore.removeObject(forKey: $0) }
     }
@@ -230,6 +287,14 @@ final class UIService: UIServiceProtocol {
             "showLineNumbers": settings.showLineNumbers,
             "wordWrap": settings.wordWrap,
             "minimapVisible": settings.minimapVisible,
+            "inlineCompletionEnabled": settings.inlineCompletionEnabled,
+            "inlineCompletionDebounceMilliseconds": settings.inlineCompletionDebounceMilliseconds,
+            "inlineCompletionAggressiveness": settings.inlineCompletionAggressiveness,
+            "inlineCompletionMaxSuggestionLength": settings.inlineCompletionMaxSuggestionLength,
+            "inlineCompletionMultilineEnabled": settings.inlineCompletionMultilineEnabled,
+            "inlineCompletionRetrievalEnabled": settings.inlineCompletionRetrievalEnabled,
+            "inlineCompletionRoutingMode": settings.inlineCompletionRoutingMode.rawValue,
+            "inlineCompletionDebugOverlayEnabled": settings.inlineCompletionDebugOverlayEnabled,
             "sidebarWidth": settings.sidebarWidth,
             "terminalHeight": settings.terminalHeight,
             "chatPanelWidth": settings.chatPanelWidth,
@@ -253,6 +318,14 @@ final class UIService: UIServiceProtocol {
         applyShowLineNumbers(from: settings)
         applyWordWrap(from: settings)
         applyMinimapVisible(from: settings)
+        applyInlineCompletionEnabled(from: settings)
+        applyInlineCompletionDebounceMilliseconds(from: settings)
+        applyInlineCompletionAggressiveness(from: settings)
+        applyInlineCompletionMaxSuggestionLength(from: settings)
+        applyInlineCompletionMultilineEnabled(from: settings)
+        applyInlineCompletionRetrievalEnabled(from: settings)
+        applyInlineCompletionRoutingMode(from: settings)
+        applyInlineCompletionDebugOverlayEnabled(from: settings)
         applySidebarWidth(from: settings)
         applyTerminalHeight(from: settings)
         applyChatPanelWidth(from: settings)
@@ -319,6 +392,49 @@ final class UIService: UIServiceProtocol {
     private func applyMinimapVisible(from settings: [String: Any]) {
         guard let visible = settings["minimapVisible"] as? Bool else { return }
         setMinimapVisible(visible)
+    }
+
+    private func applyInlineCompletionEnabled(from settings: [String: Any]) {
+        guard let enabled = settings["inlineCompletionEnabled"] as? Bool else { return }
+        setInlineCompletionEnabled(enabled)
+    }
+
+    private func applyInlineCompletionDebounceMilliseconds(from settings: [String: Any]) {
+        guard let milliseconds = settings["inlineCompletionDebounceMilliseconds"] as? Int else { return }
+        setInlineCompletionDebounceMilliseconds(milliseconds)
+    }
+
+    private func applyInlineCompletionAggressiveness(from settings: [String: Any]) {
+        guard let aggressiveness = settings["inlineCompletionAggressiveness"] as? Double else { return }
+        setInlineCompletionAggressiveness(aggressiveness)
+    }
+
+    private func applyInlineCompletionMaxSuggestionLength(from settings: [String: Any]) {
+        guard let length = settings["inlineCompletionMaxSuggestionLength"] as? Int else { return }
+        setInlineCompletionMaxSuggestionLength(length)
+    }
+
+    private func applyInlineCompletionMultilineEnabled(from settings: [String: Any]) {
+        guard let enabled = settings["inlineCompletionMultilineEnabled"] as? Bool else { return }
+        setInlineCompletionMultilineEnabled(enabled)
+    }
+
+    private func applyInlineCompletionRetrievalEnabled(from settings: [String: Any]) {
+        guard let enabled = settings["inlineCompletionRetrievalEnabled"] as? Bool else { return }
+        setInlineCompletionRetrievalEnabled(enabled)
+    }
+
+    private func applyInlineCompletionRoutingMode(from settings: [String: Any]) {
+        guard let rawValue = settings["inlineCompletionRoutingMode"] as? String,
+              let mode = InlineCompletionRoutingMode(rawValue: rawValue) else {
+            return
+        }
+        setInlineCompletionRoutingMode(mode)
+    }
+
+    private func applyInlineCompletionDebugOverlayEnabled(from settings: [String: Any]) {
+        guard let enabled = settings["inlineCompletionDebugOverlayEnabled"] as? Bool else { return }
+        setInlineCompletionDebugOverlayEnabled(enabled)
     }
 
     private func applySidebarWidth(from settings: [String: Any]) {

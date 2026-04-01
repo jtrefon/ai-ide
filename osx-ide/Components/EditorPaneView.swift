@@ -2,10 +2,12 @@ import SwiftUI
 import AppKit
 
 struct EditorPaneView: View {
+    let paneID: FileEditorStateManager.PaneID
     @ObservedObject var pane: EditorPaneStateManager
     let isFocused: Bool
     let onFocus: () -> Void
     let selectionContext: CodeSelectionContext
+    let inlineCompletionEngine: InlineCompletionEngine
     let showLineNumbers: Bool
     let wordWrap: Bool
     let minimapVisible: Bool
@@ -73,10 +75,13 @@ struct EditorPaneView: View {
 
             HStack(spacing: 0) {
                 CodeEditorView(
+                    paneID: paneID,
                     text: $pane.editorContent,
+                    filePath: pane.selectedFile,
                     language: pane.editorLanguage,
                     selectedRange: $pane.selectedRange,
                     selectionContext: selectionContext,
+                    inlineCompletionEngine: inlineCompletionEngine,
                     showLineNumbers: showLineNumbers,
                     wordWrap: wordWrap,
                     fontSize: fontSize,

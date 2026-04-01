@@ -4,9 +4,81 @@ import AppKit
 final class CodeEditorTextView: NSTextView {
     let foldingManager = CodeFoldingManager()
     private lazy var foldingDelegate = FoldingLayoutManagerDelegate(manager: foldingManager)
+    private let ghostTextField = NSTextField(labelWithString: "")
+    private var ghostPresentation: InlineSuggestionPresentation?
+
+    var hasInlineSuggestion: Bool {
+        ghostPresentation != nil
+    }
+
+    override func viewWillMove(toSuperview newSuperview: NSView?) {
+        super.viewWillMove(toSuperview: newSuperview)
+        if ghostTextField.superview == nil {
+            ghostTextField.isHidden = true
+            ghostTextField.lineBreakMode = .byClipping
+            ghostTextField.textColor = .placeholderTextColor
+            ghostTextField.backgroundColor = .clear
+            ghostTextField.isBordered = false
+            ghostTextField.drawsBackground = false
+            addSubview(ghostTextField)
+        }
+    }
 
     func configureFolding() {
         layoutManager?.delegate = foldingDelegate
+    }
+
+    override func layout() {
+        super.layout()
+        updateGhostTextFrame()
+    }
+
+    func updateGhostSuggestion(_ presentation: InlineSuggestionPresentation) {
+        ghostPresentation = presentation
+        ghostTextField.font = font
+        ghostTextField.stringValue = String(presentation.suggestionText.prefix(200))
+        ghostTextField.toolTip = presentation.source.rawValue + " • " + String(Int(presentation.latencyMs)) + "ms"
+        ghostTextField.isHidden = false
+        updateGhostTextFrame()
+    }
+
+    func clearInlineSuggestion() {
+        ghostPresentation = nil
+        ghostTextField.stringValue = ""
+        ghostTextField.toolTip = nil
+        ghostTextField.isHidden = true
+    }
+
+    @discardableResult
+    func acceptInlineSuggestion() -> Bool {
+        guard let suggestion = ghostPresentation?.suggestionText, !suggestion.isEmpty else {
+            return false
+        }
+
+        clearInlineSuggestion()
+        insertText(suggestion, replacementRange: selectedRange)
+        return true
+    }
+
+    private func updateGhostTextFrame() {
+        guard let suggestion = ghostPresentation, !ghostTextField.isHidden else { return }
+        guard let window else { return }
+
+        let screenRect = firstRect(forCharacterRange: selectedRange, actualRange: nil)
+        let windowRect = window.convertFromScreen(screenRect)
+        let localRect = convert(windowRect, from: nil)
+        let size = ghostTextField.intrinsicContentSize
+
+        ghostTextField.frame = NSRect(
+            x: localRect.origin.x,
+            y: localRect.origin.y + 1,
+            width: min(max(bounds.width - localRect.origin.x - 8, 60), size.width + 8),
+            height: max(size.height, font?.pointSize ?? 12)
+        )
+
+        if suggestion.isMultiline {
+            ghostTextField.stringValue = suggestion.suggestionText.components(separatedBy: .newlines).first ?? suggestion.suggestionText
+        }
     }
 
     @IBAction func toggleFoldAtCursor(_ sender: Any?) {
