@@ -115,7 +115,6 @@ public actor IndexCoordinator {
     private func performReindexInternal(rootURL: URL, localGeneration: UInt64) async {
         let start = Date()
         await IndexLogger.shared.log("Starting project reindex for: \(rootURL.path)")
-        await eventBus.publish(IndexingStartedEvent())
 
         // Run file enumeration off main thread
         let excludePatterns = config.excludePatterns
@@ -128,6 +127,17 @@ public actor IndexCoordinator {
         let total = files.count
         await IndexLogger.shared.log("Found \(total) files to index")
 
+        // Clean up stale entries for files that no longer exist on disk
+        await cleanupStaleEntries(files: files, rootURL: rootURL)
+
+        // Check which files actually need work before publishing events
+        let filesNeedingWork = await countFilesNeedingWork(files: files)
+
+        // Only publish indexing events if there's actual work to do
+        if filesNeedingWork > 0 {
+            await eventBus.publish(IndexingStartedEvent())
+        }
+
         let processed = await processIndexFiles(files, total: total, localGeneration: localGeneration)
 
         if Task.isCancelled || localGeneration != generation { return }
@@ -137,8 +147,11 @@ public actor IndexCoordinator {
             "Reindex completed: \(processed)/\(total) files in " +
                 "\(String(format: "%.2f", duration))s"
         )
-        await eventBus.publish(IndexingCompletedEvent(indexedCount: processed, duration: duration))
-        await eventBus.publish(ProjectReindexCompletedEvent(indexedCount: processed, duration: duration))
+        // Only publish completion events if we published start events
+        if filesNeedingWork > 0 || processed > 0 {
+            await eventBus.publish(IndexingCompletedEvent(indexedCount: processed, duration: duration))
+            await eventBus.publish(ProjectReindexCompletedEvent(indexedCount: processed, duration: duration))
+        }
     }
 
     private func processIndexFiles(_ files: [URL], total: Int, localGeneration: UInt64) async -> Int {
@@ -348,5 +361,45 @@ public actor IndexCoordinator {
         let candidate = url.standardizedFileURL.path
         let rootPath = projectRoot.path
         return candidate == rootPath || candidate.hasPrefix(rootPath + "/")
+    }
+
+    private func cleanupStaleEntries(files: [URL], rootURL: URL) async {
+        let knownPaths = Set(files.map { $0.path })
+        do {
+            let removed = try await indexer.pruneResourcesNotInPaths(knownPaths)
+            if removed > 0 {
+                await IndexLogger.shared.log("Cleaned up \(removed) stale index entries for deleted files")
+            }
+        } catch {
+            await IndexLogger.shared.log("Failed to clean up stale index entries: \(error)")
+        }
+    }
+
+    private func countFilesNeedingWork(files: [URL]) async -> Int {
+        var count = 0
+        for file in files {
+            let resourceId = file.absoluteString
+            let fileModTime = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
+            guard let fileModTime else {
+                count += 1
+                continue
+            }
+            let existingModTime = try? await indexer.getResourceLastModified(resourceId: resourceId)
+            if let existingModTime, abs(existingModTime - fileModTime) < 0.001 {
+                continue
+            }
+            let content = try? String(contentsOf: file, encoding: .utf8)
+            guard let content else {
+                count += 1
+                continue
+            }
+            let currentHash = await indexer.computeHash(for: content)
+            let existingHash = try? await indexer.getResourceContentHash(resourceId: resourceId)
+            if let existingHash, !existingHash.isEmpty, existingHash == currentHash {
+                continue
+            }
+            count += 1
+        }
+        return count
     }
 }

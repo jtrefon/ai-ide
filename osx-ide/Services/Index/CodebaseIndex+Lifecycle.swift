@@ -12,7 +12,6 @@ extension CodebaseIndex {
         print("CodebaseIndex service started")
         Task {
             await coordinator.start(projectRoot: projectRoot)
-            await coordinator.reindexProject(rootURL: projectRoot)
         }
         Task {
             await pruneOutOfScopeResourcesIfNeeded()

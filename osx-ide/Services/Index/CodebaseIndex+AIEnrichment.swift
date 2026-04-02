@@ -82,13 +82,13 @@ extension CodebaseIndex {
         await eventBus.publish(AIEnrichmentCompletedEvent(processedCount: processed, duration: duration))
     }
 
-    private func aiEnrichmentFiles() -> [URL] {
+    internal func aiEnrichmentFiles() -> [URL] {
         IndexFileEnumerator
             .enumerateProjectFiles(rootURL: projectRoot, excludePatterns: excludePatterns)
             .filter { Self.isAIEnrichableFile($0) }
     }
 
-    private func shouldSkipAIEnrichment(for file: URL) async -> Bool {
+    internal func shouldSkipAIEnrichment(for file: URL) async -> Bool {
         let fileModTime = (try? file.resourceValues(
             forKeys: [.contentModificationDateKey]
         ))?.contentModificationDate?.timeIntervalSince1970
@@ -100,7 +100,7 @@ extension CodebaseIndex {
         return (try? await database.isResourceAIEnriched(resourceId: file.absoluteString)) == true
     }
 
-    private func enrichFileForAI(_ file: URL, scoringEngine: QualityScoringEngine) async {
+    internal func enrichFileForAI(_ file: URL, scoringEngine: QualityScoringEngine) async {
         do {
             let content = try String(contentsOf: file, encoding: .utf8)
             let relPath = makeRelativePath(file)

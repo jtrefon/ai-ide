@@ -169,6 +169,10 @@ public class DatabaseManager {
         try queryExecutor.pruneResourcesOutside(projectRoot: projectRoot)
     }
 
+    public func pruneResourcesNotInPaths(_ knownPaths: Set<String>) throws -> Int {
+        try queryExecutor.pruneResourcesNotInPaths(knownPaths)
+    }
+
     public func getResourceLastModified(resourceId: String) throws -> Double? {
         try queryExecutor.getResourceLastModified(resourceId: resourceId)
     }
