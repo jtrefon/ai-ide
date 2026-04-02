@@ -35,6 +35,7 @@ final class InlineCompletionEngineTests: XCTestCase {
             buffer: "let ",
             cursorPosition: 4,
             selectionLength: 0,
+            isComposingText: false,
             triggerReason: .manual
         )
         let second = InlineCompletionEditorSnapshot(
@@ -44,6 +45,7 @@ final class InlineCompletionEngineTests: XCTestCase {
             buffer: "return ",
             cursorPosition: 7,
             selectionLength: 0,
+            isComposingText: false,
             triggerReason: .manual
         )
 
@@ -54,10 +56,249 @@ final class InlineCompletionEngineTests: XCTestCase {
         XCTAssertEqual(received.last, "second")
         XCTAssertFalse(received.contains("first"))
     }
+
+    func testDisabledRetrievalIsSkippedByEngine() async {
+        let retrieval = CountingRetrievalLayer()
+        let inference = TestInferenceService()
+        inference.responses = [.immediate("value")]
+
+        let engine = InlineCompletionEngine(
+            settingsStore: DisabledRetrievalSettingsStore(),
+            triggerPolicy: CompletionTriggerPolicy(),
+            contextAssembler: CompletionContextAssembler(),
+            retrievalLayer: retrieval,
+            inferenceService: inference,
+            ranker: SuggestionRanker(),
+            telemetryService: CompletionTelemetryService()
+        )
+
+        let snapshot = InlineCompletionEditorSnapshot(
+            paneID: .primary,
+            filePath: "/tmp/Test.swift",
+            language: "swift",
+            buffer: "return ",
+            cursorPosition: 7,
+            selectionLength: 0,
+            isComposingText: false,
+            triggerReason: .manual
+        )
+
+        engine.requestCompletion(for: snapshot)
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertEqual(retrieval.invocationCount, 0)
+    }
+
+    func testInvalidateClearsActiveSuggestion() async {
+        let retrieval = TestRetrievalLayer()
+        let inference = TestInferenceService()
+        inference.responses = [.immediate("value")]
+
+        let engine = InlineCompletionEngine(
+            settingsStore: TestInlineCompletionSettingsStore(),
+            triggerPolicy: CompletionTriggerPolicy(),
+            contextAssembler: CompletionContextAssembler(),
+            retrievalLayer: retrieval,
+            inferenceService: inference,
+            ranker: SuggestionRanker(),
+            telemetryService: CompletionTelemetryService()
+        )
+
+        var latest: InlineSuggestionPresentation?
+        engine.registerSuggestionHandler(for: .primary) { presentation in
+            latest = presentation
+        }
+
+        let snapshot = InlineCompletionEditorSnapshot(
+            paneID: .primary,
+            filePath: "/tmp/Test.swift",
+            language: "swift",
+            buffer: "return ",
+            cursorPosition: 7,
+            selectionLength: 0,
+            isComposingText: false,
+            triggerReason: .manual
+        )
+
+        engine.requestCompletion(for: snapshot)
+        try? await Task.sleep(nanoseconds: 80_000_000)
+        XCTAssertEqual(latest?.suggestionText, "value")
+
+        engine.invalidate(.primary)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertNil(latest)
+    }
+
+    func testImmediateRepeatAfterAcceptIsSuppressed() async {
+        let retrieval = TestRetrievalLayer()
+        let inference = TestInferenceService()
+        inference.responses = [
+            .immediate("isAdmin: Bool"),
+            .immediate("isAdmin: Bool")
+        ]
+
+        let engine = InlineCompletionEngine(
+            settingsStore: TestInlineCompletionSettingsStore(),
+            triggerPolicy: CompletionTriggerPolicy(),
+            contextAssembler: CompletionContextAssembler(),
+            retrievalLayer: retrieval,
+            inferenceService: inference,
+            ranker: SuggestionRanker(),
+            telemetryService: CompletionTelemetryService()
+        )
+
+        var latest: InlineSuggestionPresentation?
+        engine.registerSuggestionHandler(for: .primary) { presentation in
+            latest = presentation
+        }
+
+        let firstSnapshot = InlineCompletionEditorSnapshot(
+            paneID: .primary,
+            filePath: "/tmp/User.swift",
+            language: "swift",
+            buffer: "struct User {\n    let ",
+            cursorPosition: 22,
+            selectionLength: 0,
+            isComposingText: false,
+            triggerReason: .manual
+        )
+
+        engine.requestCompletion(for: firstSnapshot)
+        try? await Task.sleep(nanoseconds: 80_000_000)
+        XCTAssertEqual(latest?.suggestionText, "isAdmin: Bool")
+
+        engine.markAccepted(on: .primary, suggestionText: "isAdmin: Bool")
+
+        let repeatedSnapshot = InlineCompletionEditorSnapshot(
+            paneID: .primary,
+            filePath: "/tmp/User.swift",
+            language: "swift",
+            buffer: "struct User {\n    let isAdmin: Bool",
+            cursorPosition: 35,
+            selectionLength: 0,
+            isComposingText: false,
+            triggerReason: .manual
+        )
+
+        engine.requestCompletion(for: repeatedSnapshot)
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertNil(latest)
+    }
+
+    func testRepeatAfterAcceptIsSuppressedWhenWhitespaceDiffers() async {
+        let retrieval = TestRetrievalLayer()
+        let inference = TestInferenceService()
+        inference.responses = [
+            .immediate("isAdmin: Bool"),
+            .immediate("  isAdmin: Bool  ")
+        ]
+
+        let engine = InlineCompletionEngine(
+            settingsStore: TestInlineCompletionSettingsStore(),
+            triggerPolicy: CompletionTriggerPolicy(),
+            contextAssembler: CompletionContextAssembler(),
+            retrievalLayer: retrieval,
+            inferenceService: inference,
+            ranker: SuggestionRanker(),
+            telemetryService: CompletionTelemetryService()
+        )
+
+        var latest: InlineSuggestionPresentation?
+        engine.registerSuggestionHandler(for: .primary) { presentation in
+            latest = presentation
+        }
+
+        let firstSnapshot = InlineCompletionEditorSnapshot(
+            paneID: .primary,
+            filePath: "/tmp/User.swift",
+            language: "swift",
+            buffer: "struct User {\n    let ",
+            cursorPosition: 22,
+            selectionLength: 0,
+            isComposingText: false,
+            triggerReason: .manual
+        )
+
+        engine.requestCompletion(for: firstSnapshot)
+        try? await Task.sleep(nanoseconds: 80_000_000)
+        XCTAssertEqual(latest?.suggestionText, "isAdmin: Bool")
+
+        engine.markAccepted(on: .primary, suggestionText: "isAdmin: Bool")
+
+        let repeatedSnapshot = InlineCompletionEditorSnapshot(
+            paneID: .primary,
+            filePath: "/tmp/User.swift",
+            language: "swift",
+            buffer: "struct User {\n    let   isAdmin: Bool  ",
+            cursorPosition: 38,
+            selectionLength: 0,
+            isComposingText: false,
+            triggerReason: .manual
+        )
+
+        engine.requestCompletion(for: repeatedSnapshot)
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertNil(latest)
+    }
+
+    func testSlowAutomaticSuggestionIsDroppedByLatencyBudget() async {
+        let retrieval = TestRetrievalLayer()
+        let inference = TestInferenceService()
+        inference.responses = [.delayed("slowValue", 2_700_000_000)]
+
+        let engine = InlineCompletionEngine(
+            settingsStore: TestInlineCompletionSettingsStore(),
+            triggerPolicy: CompletionTriggerPolicy(),
+            contextAssembler: CompletionContextAssembler(),
+            retrievalLayer: retrieval,
+            inferenceService: inference,
+            ranker: SuggestionRanker(),
+            telemetryService: CompletionTelemetryService()
+        )
+
+        var latest: InlineSuggestionPresentation?
+        engine.registerSuggestionHandler(for: .primary) { presentation in
+            latest = presentation
+        }
+
+        let snapshot = InlineCompletionEditorSnapshot(
+            paneID: .primary,
+            filePath: "/tmp/Test.swift",
+            language: "swift",
+            buffer: "return ",
+            cursorPosition: 7,
+            selectionLength: 0,
+            isComposingText: false,
+            triggerReason: .automatic
+        )
+
+        engine.requestCompletion(for: snapshot)
+        try? await Task.sleep(nanoseconds: 2_900_000_000)
+
+        XCTAssertNil(latest)
+    }
 }
 
 @MainActor
 private final class TestInlineCompletionSettingsStore: InlineCompletionSettingsStore {
+    override func load() -> InlineCompletionSettings {
+        InlineCompletionSettings(
+            isEnabled: true,
+            debounceMilliseconds: 0,
+            aggressiveness: 0.4,
+            maxSuggestionLength: 120,
+            multilineEnabled: false,
+            retrievalEnabled: false,
+            routingMode: .localOnly,
+            debugOverlayEnabled: false
+        )
+    }
+}
+
+@MainActor
+private final class DisabledRetrievalSettingsStore: InlineCompletionSettingsStore {
     override func load() -> InlineCompletionSettings {
         InlineCompletionSettings(
             isEnabled: true,
@@ -81,6 +322,21 @@ private final class TestRetrievalLayer: CompletionRetrieving {
         reduceWorkload: Bool
     ) async -> [String] {
         []
+    }
+}
+
+@MainActor
+final class CountingRetrievalLayer: CompletionRetrieving {
+    private(set) var invocationCount = 0
+
+    func retrieveContext(
+        for snapshot: InlineCompletionEditorSnapshot,
+        request: CompletionContextPayload,
+        settings: InlineCompletionSettings,
+        reduceWorkload: Bool
+    ) async -> [String] {
+        invocationCount += 1
+        return []
     }
 }
 
@@ -116,7 +372,7 @@ private final class TestInferenceService: CompletionInferring {
                 suggestionText: text,
                 confidenceScore: 0.8,
                 source: .local,
-                latencyMs: 100
+                latencyMs: Double(delay) / 1_000_000
             )
         }
     }

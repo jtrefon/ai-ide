@@ -13,7 +13,7 @@ struct OrchestrationExecutionSignalBuilder {
         let hasToolResults = !state.lastToolResults.isEmpty
 
         let deliveryState: OrchestrationState.ExecutionSignals.DeliveryState
-        switch ChatPromptBuilder.deliveryStatus(from: content) {
+        switch ChatPromptBuilder.deliveryStatus(from: state.response?.content ?? "") {
         case .done:
             deliveryState = .done
         case .needsWork:

@@ -35,6 +35,7 @@ struct EditorPaneCoordinator {
             onFocus: { fileEditor.focus(paneID) },
             selectionContext: appState.selectionContext,
             inlineCompletionEngine: appState.inlineCompletionEngine,
+            inlineCompletionDebugOverlayEnabled: ui.inlineCompletionDebugOverlayEnabled,
             showLineNumbers: ui.showLineNumbers,
             wordWrap: ui.wordWrap,
             minimapVisible: ui.minimapVisible,
@@ -73,6 +74,7 @@ struct EditorPaneCoordinator {
         let onFocus: () -> Void
         let selectionContext: CodeSelectionContext
         let inlineCompletionEngine: InlineCompletionEngine
+        let inlineCompletionDebugOverlayEnabled: Bool
         let showLineNumbers: Bool
         let wordWrap: Bool
         let minimapVisible: Bool
@@ -139,6 +141,7 @@ struct EditorPaneCoordinator {
                         selectedRange: $pane.selectedRange,
                         selectionContext: selectionContext,
                         inlineCompletionEngine: inlineCompletionEngine,
+                        inlineCompletionDebugOverlayEnabled: inlineCompletionDebugOverlayEnabled,
                         showLineNumbers: showLineNumbers,
                         wordWrap: wordWrap,
                         fontSize: fontSize,

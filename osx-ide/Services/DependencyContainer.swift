@@ -8,6 +8,16 @@
 import Combine
 import SwiftUI
 
+private struct AIServiceBundle {
+    let openRouterService: OpenRouterAIService
+    let alibabaService: OpenRouterAIService
+    let kiloCodeService: OpenRouterAIService
+    let localModelService: LocalModelProcessAIService
+    let selectionStore: LocalModelSelectionStore
+    let providerSelectionStore: AIProviderSelectionStore
+    let router: ModelRoutingAIService
+}
+
 private func earlyDiag(_ msg: String) {
     let ts = ISO8601DateFormatter().string(from: Date())
     let line = "[\(ts)] \(msg)\n"
@@ -84,12 +94,13 @@ class DependencyContainer: ObservableObject {
         
         // Note: Test configuration will be set up asynchronously in initializeHeavyServices
 
-        _aiService = Self.makeAIService(
+        let aiServices = Self.makeAIServices(
             launchContext: launchContext,
             settingsStore: settingsStore,
             eventBus: _eventBus,
             activityCoordinator: _activityCoordinator
         )
+        _aiService = aiServices.router
         earlyDiag(
             "AI services done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
         )
@@ -129,7 +140,7 @@ class DependencyContainer: ObservableObject {
         )
         _projectCoordinator = projectCoordinator
         _inlineCompletionEngine = Self.makeInlineCompletionEngine(
-            aiServiceProvider: { [_aiService] in _aiService },
+            aiServices: aiServices,
             projectRootProvider: { [weak projectCoordinator] in projectCoordinator?.currentProjectRoot },
             codebaseIndexProvider: { [weak projectCoordinator] in projectCoordinator?.codebaseIndex }
         )
@@ -241,12 +252,12 @@ class DependencyContainer: ObservableObject {
             ])
     }
 
-    private static func makeAIService(
+    private static func makeAIServices(
         launchContext: AppLaunchContext,
         settingsStore: SettingsStore,
         eventBus: any EventBusProtocol,
         activityCoordinator: any AgentActivityCoordinating
-    ) -> any AIService {
+    ) -> AIServiceBundle {
         let openRouterService = OpenRouterAIService(
             settingsStore: OpenRouterSettingsStore(settingsStore: settingsStore),
             eventBus: eventBus,
@@ -277,13 +288,22 @@ class DependencyContainer: ObservableObject {
             activityCoordinator: activityCoordinator,
             launchContext: launchContext
         )
-        return ModelRoutingAIService(
+        let router = ModelRoutingAIService(
             openRouterService: openRouterService,
             alibabaService: alibabaService,
             kiloCodeService: kiloCodeService,
             localService: localModelService,
             selectionStore: selectionStore,
             providerSelectionStore: providerSelectionStore
+        )
+        return AIServiceBundle(
+            openRouterService: openRouterService,
+            alibabaService: alibabaService,
+            kiloCodeService: kiloCodeService,
+            localModelService: localModelService,
+            selectionStore: selectionStore,
+            providerSelectionStore: providerSelectionStore,
+            router: router
         )
     }
 
@@ -459,11 +479,11 @@ class DependencyContainer: ObservableObject {
     }
 
     private static func makeInlineCompletionEngine(
-        aiServiceProvider: @escaping () -> (any AIService)?,
+        aiServices: AIServiceBundle,
         projectRootProvider: @escaping () -> URL?,
         codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?
     ) -> InlineCompletionEngine {
-        InlineCompletionEngine(
+        return InlineCompletionEngine(
             settingsStore: InlineCompletionSettingsStore(),
             triggerPolicy: CompletionTriggerPolicy(),
             contextAssembler: CompletionContextAssembler(),
@@ -472,7 +492,20 @@ class DependencyContainer: ObservableObject {
                 codebaseIndexProvider: codebaseIndexProvider
             ),
             inferenceService: CompletionInferenceService(
-                provider: AIServiceInlineCompletionProvider(aiServiceProvider: aiServiceProvider)
+                provider: AIServiceInlineCompletionProvider(
+                    remoteServiceProvider: {
+                        switch await aiServices.providerSelectionStore.selectedRemoteProvider() {
+                        case .openRouter:
+                            return aiServices.openRouterService
+                        case .alibabaCloud:
+                            return aiServices.alibabaService
+                        case .kiloCode:
+                            return aiServices.kiloCodeService
+                        }
+                    },
+                    localServiceProvider: { aiServices.localModelService },
+                    localModelSelectionStore: aiServices.selectionStore
+                )
             ),
             ranker: SuggestionRanker()
         )

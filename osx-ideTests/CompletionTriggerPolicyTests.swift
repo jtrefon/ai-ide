@@ -15,6 +15,7 @@ final class CompletionTriggerPolicyTests: XCTestCase {
             buffer: "let value = ",
             cursorPosition: 12,
             selectionLength: 0,
+            isComposingText: false,
             triggerReason: .automatic
         )
 
@@ -25,6 +26,7 @@ final class CompletionTriggerPolicyTests: XCTestCase {
             buffer: "let value = 42",
             cursorPosition: 0,
             selectionLength: 2,
+            isComposingText: false,
             triggerReason: .automatic
         )
 
@@ -42,12 +44,49 @@ final class CompletionTriggerPolicyTests: XCTestCase {
             buffer: "foo",
             cursorPosition: 3,
             selectionLength: 0,
+            isComposingText: false,
             triggerReason: .manual
         )
 
         let decision = policy.decision(for: snapshot, settings: .default, recentSlowCompletions: 0)
         XCTAssertTrue(decision.shouldRequest)
         XCTAssertEqual(decision.debounceMilliseconds, 0)
+    }
+
+    func testAutomaticRequestIsSuppressedDuringTextComposition() {
+        let policy = CompletionTriggerPolicy()
+        let snapshot = InlineCompletionEditorSnapshot(
+            paneID: .primary,
+            filePath: "/tmp/Test.swift",
+            language: "swift",
+            buffer: "let value =",
+            cursorPosition: 11,
+            selectionLength: 0,
+            isComposingText: true,
+            triggerReason: .automatic
+        )
+
+        let decision = policy.decision(for: snapshot, settings: .default, recentSlowCompletions: 0)
+        XCTAssertFalse(decision.shouldRequest)
+    }
+
+    func testSlowCompletionsIncreaseAutomaticDebounce() {
+        let policy = CompletionTriggerPolicy()
+        let snapshot = InlineCompletionEditorSnapshot(
+            paneID: .primary,
+            filePath: "/tmp/Test.swift",
+            language: "swift",
+            buffer: "let value = ",
+            cursorPosition: 12,
+            selectionLength: 0,
+            isComposingText: false,
+            triggerReason: .automatic
+        )
+
+        let decision = policy.decision(for: snapshot, settings: .default, recentSlowCompletions: 3)
+
+        XCTAssertTrue(decision.shouldRequest)
+        XCTAssertGreaterThan(decision.debounceMilliseconds, InlineCompletionSettings.default.debounceMilliseconds)
     }
 }
 

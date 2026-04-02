@@ -76,7 +76,7 @@ struct InlineCompletionSettings: Equatable, Sendable {
         maxSuggestionLength: 120,
         multilineEnabled: false,
         retrievalEnabled: false,
-        routingMode: .localOnly,
+        routingMode: .hybridPreferLocal,
         debugOverlayEnabled: false
     )
 }
@@ -88,6 +88,7 @@ struct InlineCompletionEditorSnapshot: Sendable {
     let buffer: String
     let cursorPosition: Int
     let selectionLength: Int
+    let isComposingText: Bool
     let triggerReason: CompletionTriggerReason
 
     var hasSelection: Bool {

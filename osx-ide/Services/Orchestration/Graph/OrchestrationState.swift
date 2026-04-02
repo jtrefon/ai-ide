@@ -120,6 +120,7 @@ struct OrchestrationState: Sendable {
     var lastToolResults: [ChatMessage]
     var branchExecution: BranchExecution?
     var executionSignals: ExecutionSignals?
+    var thinkingTurnsCount: Int = 0
 
     var transition: Transition
 
@@ -132,6 +133,7 @@ struct OrchestrationState: Sendable {
         lastToolResults: [ChatMessage]? = nil,
         branchExecution: BranchExecution? = nil,
         executionSignals: ExecutionSignals? = nil,
+        thinkingTurnsCount: Int? = nil,
         transition: Transition? = nil
     ) -> OrchestrationState {
         OrchestrationState(
@@ -140,8 +142,17 @@ struct OrchestrationState: Sendable {
             lastToolResults: lastToolResults ?? self.lastToolResults,
             branchExecution: branchExecution ?? self.branchExecution,
             executionSignals: executionSignals ?? self.executionSignals,
+            thinkingTurnsCount: thinkingTurnsCount ?? self.thinkingTurnsCount,
             transition: transition ?? self.transition
         )
+    }
+
+    func incrementingThinkingTurns() -> OrchestrationState {
+        updating(thinkingTurnsCount: thinkingTurnsCount + 1)
+    }
+
+    func resettingThinkingTurns() -> OrchestrationState {
+        updating(thinkingTurnsCount: 0)
     }
 
     func transitioning(
@@ -166,6 +177,7 @@ struct OrchestrationState: Sendable {
         lastToolResults: [ChatMessage] = [],
         branchExecution: BranchExecution? = nil,
         executionSignals: ExecutionSignals? = nil,
+        thinkingTurnsCount: Int = 0,
         transition: Transition
     ) {
         self.request = request
@@ -173,6 +185,7 @@ struct OrchestrationState: Sendable {
         self.lastToolResults = lastToolResults
         self.branchExecution = branchExecution
         self.executionSignals = executionSignals
+        self.thinkingTurnsCount = thinkingTurnsCount
         self.transition = transition
     }
 }

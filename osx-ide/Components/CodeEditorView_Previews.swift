@@ -23,6 +23,7 @@ struct CodeEditorView_Previews: PreviewProvider {
             selectedRange: .constant(nil),
             selectionContext: CodeSelectionContext(),
             inlineCompletionEngine: previewInlineCompletionEngine,
+            inlineCompletionDebugOverlayEnabled: true,
             showLineNumbers: true,
             wordWrap: false,
             fontSize: AppConstantsEditor.defaultFontSize,

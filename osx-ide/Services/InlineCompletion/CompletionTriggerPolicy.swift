@@ -26,6 +26,10 @@ struct CompletionTriggerPolicy {
             return CompletionTriggerPolicyDecision(shouldRequest: false, debounceMilliseconds: settings.debounceMilliseconds)
         }
 
+        guard snapshot.triggerReason == .manual || !snapshot.isComposingText else {
+            return CompletionTriggerPolicyDecision(shouldRequest: false, debounceMilliseconds: settings.debounceMilliseconds)
+        }
+
         guard !snapshot.buffer.isEmpty else {
             return CompletionTriggerPolicyDecision(shouldRequest: false, debounceMilliseconds: settings.debounceMilliseconds)
         }
@@ -49,4 +53,3 @@ struct CompletionTriggerPolicy {
         return CompletionTriggerPolicyDecision(shouldRequest: true, debounceMilliseconds: computedDebounce)
     }
 }
-

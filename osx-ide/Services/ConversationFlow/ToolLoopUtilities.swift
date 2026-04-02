@@ -129,7 +129,7 @@ enum ToolLoopUtilities {
     private static func focusedConversationContextSection(from historyMessages: [ChatMessage]) -> String {
         let recentMessages = historyMessages
             .filter { !$0.isDraft }
-            .suffix(16)
+            .suffix(64)
 
         let recentConversationLines = recentMessages.compactMap { message -> String? in
             guard !message.isToolExecution else { return nil }
@@ -148,7 +148,7 @@ enum ToolLoopUtilities {
                 roleLabel = "Tool"
             }
 
-            return "- \(roleLabel): \(truncate(trimmed, limit: 220))"
+            return "- \(roleLabel): \(truncate(trimmed, limit: 40000))"
         }
 
         let recentToolLines = recentMessages.compactMap { message -> String? in
@@ -156,7 +156,7 @@ enum ToolLoopUtilities {
             let status = message.toolStatus?.rawValue ?? "unknown"
             let toolName = message.toolName ?? "unknown_tool"
             let toolOutput = toolOutputText(from: message).trimmingCharacters(in: .whitespacesAndNewlines)
-            let compactOutput = toolOutput.isEmpty ? "No output recorded." : truncate(toolOutput, limit: 220)
+            let compactOutput = toolOutput.isEmpty ? "No output recorded." : truncate(toolOutput, limit: 40000)
             return "- \(toolName) [\(status)]: \(compactOutput)"
         }
 
@@ -196,17 +196,18 @@ enum ToolLoopUtilities {
             parts.append("Plan:\n\(plan)")
         }
 
-        return [
-            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
-            ChatMessage(role: .user, content: userInput)
-        ]
+        var messages = historyMessages.filter { $0.role == .system && !$0.content.contains("focused execution mode") }
+        messages.append(ChatMessage(role: .system, content: parts.joined(separator: "\n\n")))
+        messages.append(ChatMessage(role: .user, content: userInput))
+        return messages
     }
 
     static func buildStalledExecutionTransitionMessages(
         userInput: String,
         conversationId: String,
         projectRoot: URL,
-        toolSummary: String
+        toolSummary: String,
+        historyMessages: [ChatMessage]
     ) async throws -> [ChatMessage] {
         let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
         let parts: [String] = [
@@ -224,10 +225,10 @@ enum ToolLoopUtilities {
             )
         ]
 
-        return [
-            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
-            ChatMessage(role: .user, content: userInput)
-        ]
+        var messages = historyMessages.filter { $0.role == .system && !$0.content.contains("focused execution mode") }
+        messages.append(ChatMessage(role: .system, content: parts.joined(separator: "\n\n")))
+        messages.append(ChatMessage(role: .user, content: userInput))
+        return messages
     }
 
     static func buildAutonomousNoUserInputMessages(
@@ -235,7 +236,8 @@ enum ToolLoopUtilities {
         conversationId: String?,
         projectRoot: URL,
         existingAssistantContent: String,
-        toolsAvailable: Bool
+        toolsAvailable: Bool,
+        historyMessages: [ChatMessage]
     ) async throws -> [ChatMessage] {
         let plan: String
         if let conversationId {
@@ -265,10 +267,10 @@ enum ToolLoopUtilities {
             ))
         }
 
-        return [
-            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
-            ChatMessage(role: .user, content: userInput)
-        ]
+        var messages = historyMessages.filter { $0.role == .system && !$0.content.contains("focused execution mode") }
+        messages.append(ChatMessage(role: .system, content: parts.joined(separator: "\n\n")))
+        messages.append(ChatMessage(role: .user, content: userInput))
+        return messages
     }
 
     static func buildRepeatedSignatureDiversionMessages(
@@ -306,17 +308,18 @@ enum ToolLoopUtilities {
             parts.append("Only use tools available in this turn: \(toolList). Any other tool call will be rejected.")
         }
 
-        return [
-            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
-            ChatMessage(role: .user, content: userInput)
-        ]
+        var messages = historyMessages.filter { $0.role == .system && !$0.content.contains("focused execution mode") }
+        messages.append(ChatMessage(role: .system, content: parts.joined(separator: "\n\n")))
+        messages.append(ChatMessage(role: .user, content: userInput))
+        return messages
     }
 
     static func buildRepeatedWriteTargetDiversionMessages(
         userInput: String,
         conversationId: String,
         projectRoot: URL,
-        writeTargetSignature: String
+        writeTargetSignature: String,
+        historyMessages: [ChatMessage]
     ) async throws -> [ChatMessage] {
         let plan = await ConversationPlanStore.shared.get(conversationId: conversationId) ?? ""
 
@@ -335,10 +338,10 @@ enum ToolLoopUtilities {
             )
         ]
 
-        return [
-            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
-            ChatMessage(role: .user, content: userInput)
-        ]
+        var messages = historyMessages.filter { $0.role == .system && !$0.content.contains("focused execution mode") }
+        messages.append(ChatMessage(role: .system, content: parts.joined(separator: "\n\n")))
+        messages.append(ChatMessage(role: .user, content: userInput))
+        return messages
     }
 
     static func buildPlanContinuationMessages(
@@ -376,16 +379,17 @@ enum ToolLoopUtilities {
                 ]
             ))
 
-        return [
-            ChatMessage(role: .system, content: parts.joined(separator: "\n\n")),
-            ChatMessage(role: .user, content: userInput)
-        ]
+        var messages = historyMessages.filter { $0.role == .system && !$0.content.contains("focused execution mode") }
+        messages.append(ChatMessage(role: .system, content: parts.joined(separator: "\n\n")))
+        messages.append(ChatMessage(role: .user, content: userInput))
+        return messages
     }
 
     static func buildStalledFinalResponseMessages(
         userInput: String,
         toolSummary: String,
-        projectRoot: URL
+        projectRoot: URL,
+        historyMessages: [ChatMessage]
     ) throws -> [ChatMessage] {
         let systemContent = try PromptRepository.shared.prompt(
             key: "ConversationFlow/Corrections/stalled_final_response_system",
@@ -400,10 +404,10 @@ enum ToolLoopUtilities {
             ]
         )
 
-        return [
-            ChatMessage(role: .system, content: systemContent),
-            ChatMessage(role: .user, content: userContent)
-        ]
+        var messages = historyMessages.filter { $0.role == .system && !$0.content.contains("focused execution mode") }
+        messages.append(ChatMessage(role: .system, content: systemContent))
+        messages.append(ChatMessage(role: .user, content: userContent))
+        return messages
     }
     
     // MARK: - Snapshot Persistence

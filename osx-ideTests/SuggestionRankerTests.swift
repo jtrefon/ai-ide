@@ -57,4 +57,61 @@ final class SuggestionRankerTests: XCTestCase {
         let presentation = ranker.rank(result, for: request, aggressiveness: 0.5)
         XCTAssertEqual(presentation?.suggestionText, "value")
     }
+
+    func testRankerRejectsMultilineGhostSuggestion() {
+        let ranker = SuggestionRanker()
+        let request = InlineCompletionRequest(
+            requestId: UUID(),
+            filePath: nil,
+            language: "swift",
+            prefix: "if condition {",
+            suffix: "\n}",
+            cursorPosition: 14,
+            scopeSummary: nil,
+            symbols: [],
+            retrievalContext: [],
+            triggerReason: .automatic,
+            maxSuggestionLength: 80,
+            allowMultiline: false
+        )
+        let result = InlineCompletionResult(
+            requestId: request.requestId,
+            suggestionText: "\n\treturn value",
+            confidenceScore: 0.9,
+            source: .local,
+            latencyMs: 20
+        )
+
+        XCTAssertNil(ranker.rank(result, for: request, aggressiveness: 0.5))
+    }
+
+    func testRankerAllowsMultilineSuggestionWhenEnabled() {
+        let ranker = SuggestionRanker()
+        let request = InlineCompletionRequest(
+            requestId: UUID(),
+            filePath: nil,
+            language: "swift",
+            prefix: "if condition {\n    ",
+            suffix: "\n}",
+            cursorPosition: 19,
+            scopeSummary: nil,
+            symbols: [],
+            retrievalContext: [],
+            triggerReason: .manual,
+            maxSuggestionLength: 80,
+            allowMultiline: true
+        )
+        let result = InlineCompletionResult(
+            requestId: request.requestId,
+            suggestionText: "\n    return value\n    print(value)",
+            confidenceScore: 0.9,
+            source: .local,
+            latencyMs: 20
+        )
+
+        XCTAssertEqual(
+            ranker.rank(result, for: request, aggressiveness: 0.5)?.suggestionText,
+            "return value\n    print(value)"
+        )
+    }
 }

@@ -56,6 +56,7 @@ extension TextViewRepresentable {
             Task { @MainActor in
                 inlineCompletionEngine.unregisterSuggestionHandler(for: paneID)
                 inlineCompletionEngine.unregisterManualTriggerHandler(for: paneID)
+                InlineCompletionDebugStore.shared.update(paneID: paneID, presentation: nil)
             }
         }
 
@@ -116,10 +117,19 @@ extension TextViewRepresentable {
                 return false
             }
 
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                let shouldAllowDefault = handleContextualNewline(in: textView)
+                return !shouldAllowDefault
+            }
+
             if commandSelector == #selector(NSResponder.insertTab(_:)), codeEditorTextView.hasInlineSuggestion {
+                let acceptedSuggestion = codeEditorTextView.inlineSuggestionText
                 let accepted = codeEditorTextView.acceptInlineSuggestion()
                 if accepted {
-                    parent.inlineCompletionEngine.markAccepted()
+                    parent.inlineCompletionEngine.markAccepted(
+                        on: parent.paneID,
+                        suggestionText: acceptedSuggestion
+                    )
                     parent.text = textView.string
                     parent.selectedRange = textView.selectedRange
                     updateSelectionContext(from: textView)

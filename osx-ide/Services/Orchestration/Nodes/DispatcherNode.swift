@@ -39,15 +39,30 @@ struct DispatcherNode: OrchestrationNode {
         )
 
         let hasToolCalls = !(response.toolCalls?.isEmpty ?? true)
-        let nextNodeId = hasToolCalls ? toolLoopNodeId : finalResponseNodeId
-        var nextState = state.transitioning(
+        let signals = await OrchestrationExecutionSignalBuilder().build(for: state.updating(response: response))
+        
+        let nextNodeId: String
+        var updatedState = state.updating(response: response, executionSignals: signals)
+        
+        if hasToolCalls {
+            nextNodeId = toolLoopNodeId
+            updatedState = updatedState.resettingThinkingTurns()
+        } else if signals.deliveryState == .needsWork && signals.planProgress.hasChecklist && state.thinkingTurnsCount < 2 {
+            // Self-correction: model says it needs work AND we have a plan context - retry tool loop
+            nextNodeId = toolLoopNodeId
+            updatedState = updatedState.incrementingThinkingTurns()
+        } else if signals.shouldForceToolFollowup || signals.shouldForceExecutionFollowup {
+            // Model indicated intent to use tools or execute actions but failed to emit actual tool calls
+            nextNodeId = toolLoopNodeId
+            updatedState = updatedState.incrementingThinkingTurns()
+        } else {
+            nextNodeId = finalResponseNodeId
+            updatedState = updatedState.resettingThinkingTurns()
+        }
+        
+        return updatedState.transitioning(
             to: nextNodeId,
-            response: response,
             lastToolResults: []
         )
-        nextState = nextState.updating(
-            executionSignals: await OrchestrationExecutionSignalBuilder().build(for: nextState)
-        )
-        return nextState
     }
 }

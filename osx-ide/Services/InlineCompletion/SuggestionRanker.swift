@@ -1,5 +1,10 @@
 import Foundation
 
+enum SuggestionRankerEvaluation {
+    case accepted(InlineSuggestionPresentation)
+    case rejected(String)
+}
+
 @MainActor
 struct SuggestionRanker {
     func rank(
@@ -7,39 +12,53 @@ struct SuggestionRanker {
         for request: InlineCompletionRequest,
         aggressiveness: Double
     ) -> InlineSuggestionPresentation? {
-        guard let sanitized = sanitizedSuggestion(from: result.suggestionText, allowMultiline: request.allowMultiline) else {
+        switch evaluate(result, for: request, aggressiveness: aggressiveness) {
+        case let .accepted(presentation):
+            return presentation
+        case .rejected:
             return nil
         }
+    }
 
-        guard !sanitized.isEmpty else { return nil }
-        guard !request.suffix.hasPrefix(sanitized) else { return nil }
-        guard !duplicatesLeadingSuffix(sanitized, suffix: request.suffix) else { return nil }
-        guard respectsIndentation(sanitized, prefix: request.prefix) else { return nil }
-        guard sanitized.count <= request.maxSuggestionLength else { return nil }
+    func evaluate(
+        _ result: InlineCompletionResult,
+        for request: InlineCompletionRequest,
+        aggressiveness: Double
+    ) -> SuggestionRankerEvaluation {
+        guard let sanitized = sanitizedSuggestion(from: result.suggestionText, allowMultiline: request.allowMultiline) else {
+            return .rejected("sanitized_nil")
+        }
+
+        guard !sanitized.isEmpty else { return .rejected("empty") }
+        guard !request.suffix.hasPrefix(sanitized) else { return .rejected("suffix_prefix_duplicate") }
+        guard !duplicatesLeadingSuffix(sanitized, suffix: request.suffix) else { return .rejected("leading_suffix_duplicate") }
+        guard respectsIndentation(sanitized, prefix: request.prefix) else { return .rejected("indentation") }
+        guard sanitized.count <= request.maxSuggestionLength else { return .rejected("too_long") }
 
         let score = min(0.98, max(aggressiveness, result.confidenceScore))
-        return InlineSuggestionPresentation(
+        return .accepted(InlineSuggestionPresentation(
             requestId: result.requestId,
             suggestionText: sanitized,
             source: result.source,
             confidenceScore: score,
             latencyMs: result.latencyMs
-        )
+        ))
     }
 
     private func sanitizedSuggestion(from raw: String, allowMultiline: Bool) -> String? {
-        var text = raw
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedRaw = raw.replacingOccurrences(of: "\r\n", with: "\n")
+        var text = normalizedRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isCodeFenceWrapped = text.hasPrefix("```")
 
-        if text.hasPrefix("```") {
+        if isCodeFenceWrapped {
             text = text.replacingOccurrences(of: #"^```[A-Za-z0-9_-]*\n?"#, with: "", options: .regularExpression)
             text = text.replacingOccurrences(of: #"\n?```$"#, with: "", options: .regularExpression)
             text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        if !allowMultiline, let firstLine = text.components(separatedBy: .newlines).first {
-            text = firstLine
+        if !allowMultiline {
+            if !isCodeFenceWrapped, normalizedRaw.contains("\n") { return nil }
+            if text.contains("\n") { return nil }
         }
 
         if text.lowercased().hasPrefix("here") || text.lowercased().hasPrefix("the ") {
@@ -66,4 +85,3 @@ struct SuggestionRanker {
         }
     }
 }
-

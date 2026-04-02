@@ -17,6 +17,11 @@ final class InlineCompletionEngine {
     private var manualTriggerHandlers: [FileEditorStateManager.PaneID: ManualTriggerHandler] = [:]
     private var activeRequestIDs: [FileEditorStateManager.PaneID: UUID] = [:]
     private var requestTasks: [FileEditorStateManager.PaneID: Task<Void, Never>] = [:]
+    private var lastAcceptedSuggestions: [FileEditorStateManager.PaneID: String] = [:]
+    private var lastAcceptedAt: [FileEditorStateManager.PaneID: Date] = [:]
+
+    private let automaticAcceptanceCooldownMs: Double = 1_200
+    private let automaticLatencyBudgetMs: Double = 2_500
 
     init(
         settingsStore: InlineCompletionSettingsStore,
@@ -71,6 +76,36 @@ final class InlineCompletionEngine {
 
         requestTasks[snapshot.paneID] = Task { [weak self] in
             guard let self else { return }
+            await AppLogger.shared.debug(
+                category: .ai,
+                message: "inline_completion.request_received",
+                context: AppLogger.LogCallContext(metadata: [
+                    "paneID": String(describing: snapshot.paneID),
+                    "trigger": snapshot.triggerReason.rawValue,
+                    "language": snapshot.language,
+                    "cursorPosition": snapshot.cursorPosition,
+                    "selectionLength": snapshot.selectionLength,
+                    "bufferLength": snapshot.buffer.count,
+                    "routingMode": settings.routingMode.rawValue,
+                    "retrievalEnabled": settings.retrievalEnabled
+                ])
+            )
+
+            if snapshot.triggerReason == .automatic,
+               let acceptedAt = self.lastAcceptedAt[snapshot.paneID],
+               Date().timeIntervalSince(acceptedAt) * 1_000 < self.automaticAcceptanceCooldownMs {
+                await AppLogger.shared.debug(
+                    category: .ai,
+                    message: "inline_completion.suppressed.acceptance_cooldown",
+                    context: AppLogger.LogCallContext(metadata: [
+                        "paneID": String(describing: snapshot.paneID),
+                        "cooldownMs": self.automaticAcceptanceCooldownMs
+                    ])
+                )
+                self.publish(nil, for: snapshot.paneID)
+                return
+            }
+
             let slowCount = await self.telemetryService.recentSlowCompletions()
             let decision = self.triggerPolicy.decision(
                 for: snapshot,
@@ -78,17 +113,52 @@ final class InlineCompletionEngine {
                 recentSlowCompletions: slowCount
             )
             guard decision.shouldRequest else {
+                await AppLogger.shared.debug(
+                    category: .ai,
+                    message: "inline_completion.suppressed.trigger_policy",
+                    context: AppLogger.LogCallContext(metadata: [
+                        "paneID": String(describing: snapshot.paneID),
+                        "trigger": snapshot.triggerReason.rawValue,
+                        "recentSlowCompletions": slowCount
+                    ])
+                )
                 self.publish(nil, for: snapshot.paneID)
                 return
             }
 
             let context = self.contextAssembler.buildContext(from: snapshot)
+            await AppLogger.shared.debug(
+                category: .ai,
+                message: "inline_completion.context_built",
+                context: AppLogger.LogCallContext(metadata: [
+                    "paneID": String(describing: snapshot.paneID),
+                    "prefixLength": context.prefix.count,
+                    "suffixLength": context.suffix.count,
+                    "symbolsCount": context.symbols.count,
+                    "hasScopeSummary": context.scopeSummary != nil
+                ])
+            )
             let reduceWorkload = await self.telemetryService.shouldReduceWorkload()
-            let retrievalContext = await self.retrievalLayer.retrieveContext(
-                for: snapshot,
-                request: context,
-                settings: settings,
-                reduceWorkload: reduceWorkload
+            let retrievalContext: [String]
+            if settings.retrievalEnabled {
+                retrievalContext = await self.retrievalLayer.retrieveContext(
+                    for: snapshot,
+                    request: context,
+                    settings: settings,
+                    reduceWorkload: reduceWorkload
+                )
+            } else {
+                retrievalContext = []
+            }
+            await AppLogger.shared.debug(
+                category: .ai,
+                message: "inline_completion.retrieval_complete",
+                context: AppLogger.LogCallContext(metadata: [
+                    "paneID": String(describing: snapshot.paneID),
+                    "retrievalEnabled": settings.retrievalEnabled,
+                    "reduceWorkload": reduceWorkload,
+                    "retrievalItems": retrievalContext.count
+                ])
             )
 
             let request = InlineCompletionRequest(
@@ -107,7 +177,27 @@ final class InlineCompletionEngine {
             )
 
             do {
+                await AppLogger.shared.debug(
+                    category: .ai,
+                    message: "inline_completion.inference_start",
+                    context: AppLogger.LogCallContext(metadata: [
+                        "paneID": String(describing: snapshot.paneID),
+                        "requestId": requestID.uuidString,
+                        "trigger": request.triggerReason.rawValue,
+                        "routingMode": settings.routingMode.rawValue,
+                        "allowMultiline": request.allowMultiline,
+                        "maxSuggestionLength": request.maxSuggestionLength
+                    ])
+                )
                 guard let result = try await self.inferenceService.infer(for: request, settings: settings) else {
+                    await AppLogger.shared.debug(
+                        category: .ai,
+                        message: "inline_completion.inference_empty",
+                        context: AppLogger.LogCallContext(metadata: [
+                            "paneID": String(describing: snapshot.paneID),
+                            "requestId": requestID.uuidString
+                        ])
+                    )
                     self.publish(nil, for: snapshot.paneID)
                     return
                 }
@@ -115,12 +205,83 @@ final class InlineCompletionEngine {
                 guard !Task.isCancelled else { return }
                 guard self.activeRequestIDs[snapshot.paneID] == requestID else { return }
 
-                let presentation = self.ranker.rank(result, for: request, aggressiveness: settings.aggressiveness)
+                await AppLogger.shared.debug(
+                    category: .ai,
+                    message: "inline_completion.inference_result",
+                    context: AppLogger.LogCallContext(metadata: [
+                        "paneID": String(describing: snapshot.paneID),
+                        "requestId": requestID.uuidString,
+                        "source": result.source.rawValue,
+                        "latencyMs": result.latencyMs,
+                        "rawLength": result.suggestionText.count
+                    ])
+                )
+                await self.telemetryService.recordObservedLatency(result.latencyMs)
+
+                if request.triggerReason == .automatic,
+                   result.latencyMs > self.automaticLatencyBudgetMs {
+                    await AppLogger.shared.debug(
+                        category: .ai,
+                        message: "inline_completion.suppressed.latency_budget_exceeded",
+                        context: AppLogger.LogCallContext(metadata: [
+                            "paneID": String(describing: snapshot.paneID),
+                            "requestId": requestID.uuidString,
+                            "latencyMs": result.latencyMs,
+                            "budgetMs": self.automaticLatencyBudgetMs,
+                            "source": result.source.rawValue
+                        ])
+                    )
+                    self.publish(nil, for: snapshot.paneID)
+                    return
+                }
+
+                let evaluation = self.ranker.evaluate(result, for: request, aggressiveness: settings.aggressiveness)
+                let presentation: InlineSuggestionPresentation?
+                switch evaluation {
+                case let .accepted(candidate):
+                    if let lastAccepted = self.lastAcceptedSuggestions[snapshot.paneID],
+                       self.normalizedTrailingPrefix(request.prefix, candidate: candidate.suggestionText).hasSuffix(self.normalizedSuggestion(lastAccepted)),
+                       self.normalizedSuggestion(candidate.suggestionText) == self.normalizedSuggestion(lastAccepted) {
+                        await AppLogger.shared.debug(
+                            category: .ai,
+                            message: "inline_completion.suppressed.repeated_after_accept",
+                            context: AppLogger.LogCallContext(metadata: [
+                                "paneID": String(describing: snapshot.paneID),
+                                "requestId": requestID.uuidString,
+                                "suggestionPreview": String(candidate.suggestionText.prefix(80))
+                            ])
+                        )
+                        presentation = nil
+                    } else {
+                        presentation = candidate
+                    }
+                case let .rejected(reason):
+                    await AppLogger.shared.debug(
+                        category: .ai,
+                        message: "inline_completion.rank_rejected",
+                        context: AppLogger.LogCallContext(metadata: [
+                            "paneID": String(describing: snapshot.paneID),
+                            "requestId": requestID.uuidString,
+                            "reason": reason
+                        ])
+                    )
+                    presentation = nil
+                }
+
                 if let presentation {
                     await self.telemetryService.recordShown(presentation)
                 }
                 self.publish(presentation, for: snapshot.paneID)
             } catch {
+                await AppLogger.shared.error(
+                    category: .ai,
+                    message: "inline_completion.inference_error",
+                    context: AppLogger.LogCallContext(metadata: [
+                        "paneID": String(describing: snapshot.paneID),
+                        "requestId": requestID.uuidString,
+                        "error": String(describing: error)
+                    ])
+                )
                 self.publish(nil, for: snapshot.paneID)
             }
         }
@@ -137,14 +298,33 @@ final class InlineCompletionEngine {
         }
     }
 
-    func markAccepted() {
+    func markAccepted(
+        on paneID: FileEditorStateManager.PaneID,
+        suggestionText: String?
+    ) {
+        if let suggestionText, !suggestionText.isEmpty {
+            lastAcceptedSuggestions[paneID] = suggestionText
+            lastAcceptedAt[paneID] = Date()
+        }
         Task {
+            await AppLogger.shared.debug(
+                category: .ai,
+                message: "inline_completion.accepted",
+                context: AppLogger.LogCallContext(metadata: [
+                    "paneID": String(describing: paneID),
+                    "suggestionPreview": String((suggestionText ?? "").prefix(80))
+                ])
+            )
             await telemetryService.recordAccepted()
         }
     }
 
     func markDismissed() {
         Task {
+            await AppLogger.shared.debug(
+                category: .ai,
+                message: "inline_completion.dismissed"
+            )
             await telemetryService.recordDismissed()
         }
     }
@@ -153,7 +333,31 @@ final class InlineCompletionEngine {
         _ presentation: InlineSuggestionPresentation?,
         for paneID: FileEditorStateManager.PaneID
     ) {
+        Task {
+            await AppLogger.shared.debug(
+                category: .ai,
+                message: "inline_completion.publish",
+                context: AppLogger.LogCallContext(metadata: [
+                    "paneID": String(describing: paneID),
+                    "hasSuggestion": presentation != nil,
+                    "source": presentation?.source.rawValue ?? "none",
+                    "latencyMs": presentation?.latencyMs ?? -1,
+                    "suggestionPreview": String((presentation?.suggestionText ?? "").prefix(80))
+                ])
+            )
+        }
         suggestionHandlers[paneID]?(presentation)
     }
-}
 
+    private func normalizedSuggestion(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizedTrailingPrefix(_ prefix: String, candidate: String) -> String {
+        let candidateLength = max(candidate.count * 2, 64)
+        let trailingPrefix = String(prefix.suffix(candidateLength))
+        return normalizedSuggestion(trailingPrefix)
+    }
+}

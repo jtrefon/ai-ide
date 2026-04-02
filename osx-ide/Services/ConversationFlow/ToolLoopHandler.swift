@@ -97,31 +97,54 @@ final class ToolLoopHandler {
         if mode == .agent,
            currentResponse.toolCalls?.isEmpty ?? true,
            !availableTools.isEmpty,
-           let content = currentResponse.content,
-           ChatPromptBuilder.shouldForceExecutionFollowup(
+           let content = currentResponse.content {
+            
+            let forceToolFollowup = ChatPromptBuilder.shouldForceToolFollowup(content: content)
+            let forceExecutionFollowup = ChatPromptBuilder.shouldForceExecutionFollowup(
                userInput: userInput,
                content: content,
                hasToolCalls: false
-           ) {
-            let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
-                userInput: userInput,
-                conversationId: conversationId,
-                projectRoot: projectRoot,
-                historyMessages: historyCoordinator.messages
             )
-            currentTurnTools = availableTools
-            currentResponse = try await aiInteractionCoordinator
-                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                    messages: focusedMessages,
-                    explicitContext: explicitContext,
-                    tools: currentTurnTools,
-                    mode: mode,
+            
+            var shouldRecover = false
+            if forceToolFollowup {
+                // If it output textual tool calls, we ALWAYS want to recover to get proper JSON
+                shouldRecover = true
+            } else if forceExecutionFollowup {
+                let planStore = ConversationPlanStore.shared
+                if let planMarkdown = await planStore.get(conversationId: conversationId) {
+                   let progress = PlanChecklistTracker.progress(in: planMarkdown)
+                   if progress.total > 0 { // Trust AI if a plan checklist exists
+                        shouldRecover = true
+                   }
+                }
+            }
+
+            if shouldRecover {
+                await AIToolTraceLogger.shared.log(type: "chat.tool_loop_needs_work_recovery_pre", data: [
+                    "runId": runId
+                ])
+                
+                let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
+                    userInput: userInput,
+                    conversationId: conversationId,
                     projectRoot: projectRoot,
-                    runId: runId,
-                    stage: AIRequestStage.tool_loop,
-                    conversationId: conversationId
-                ))
-                .get()
+                    historyMessages: historyCoordinator.messages
+                )
+                currentTurnTools = availableTools
+                currentResponse = try await aiInteractionCoordinator
+                    .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                        messages: focusedMessages,
+                        explicitContext: explicitContext,
+                        tools: currentTurnTools,
+                        mode: mode,
+                        projectRoot: projectRoot,
+                        runId: runId,
+                        stage: AIRequestStage.tool_loop,
+                        conversationId: conversationId
+                    ))
+                    .get()
+            }
         }
 
         while let toolCalls = currentResponse.toolCalls,
@@ -808,9 +831,55 @@ final class ToolLoopHandler {
                     mode: mode,
                     projectRoot: projectRoot,
                     runId: runId,
-                    stage: AIRequestStage.tool_loop
+                    stage: AIRequestStage.tool_loop,
+                    conversationId: conversationId
                 ))
                 .get()
+
+            // Special case: if the AI follow-up (currentResponse) produced no tool calls but indicated 
+            // unfinished execution (NEEDS_WORK), and we have an incomplete plan, attempt a focused recovery.
+            let followUpContent = currentResponse.content ?? ""
+            if (currentResponse.toolCalls?.isEmpty ?? true) &&
+               ChatPromptBuilder.shouldForceExecutionFollowup(userInput: userInput, content: followUpContent, hasToolCalls: false) &&
+               consecutiveEmptyToolCallResponses < 1 {
+                
+                let planStore = ConversationPlanStore.shared
+                if let planMarkdown = await planStore.get(conversationId: conversationId) {
+                    let progress = PlanChecklistTracker.progress(in: planMarkdown)
+                    if progress.total > 0 { // Trust AI if a plan checklist exists
+                        await AIToolTraceLogger.shared.log(type: "chat.tool_loop_needs_work_recovery", data: [
+                            "runId": runId,
+                            "iteration": toolIteration
+                        ])
+                        
+                        consecutiveEmptyToolCallResponses += 1
+                        let focusedMessages = try await ToolLoopUtilities.buildFocusedExecutionMessages(
+                            userInput: userInput,
+                            conversationId: conversationId,
+                            projectRoot: projectRoot,
+                            historyMessages: historyCoordinator.messages
+                        )
+                        
+                        currentTurnTools = availableTools
+                        currentResponse = try await aiInteractionCoordinator
+                            .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                                messages: focusedMessages,
+                                explicitContext: explicitContext,
+                                tools: availableTools,
+                                mode: mode,
+                                projectRoot: projectRoot,
+                                runId: runId,
+                                stage: AIRequestStage.tool_loop,
+                                conversationId: conversationId
+                            ))
+                            .get()
+                    }
+                }
+            }
+
+            if !(currentResponse.toolCalls?.isEmpty ?? true) {
+                consecutiveEmptyToolCallResponses = 0
+            }
 
             if updateRepeatedNoToolCallContentState(
                 response: currentResponse,
@@ -1130,7 +1199,8 @@ final class ToolLoopHandler {
                      conversationId: conversationId,
                      projectRoot: projectRoot,
                      existingAssistantContent: content,
-                     toolsAvailable: false
+                     toolsAvailable: false,
+                     historyMessages: historyCoordinator.messages
                  )
                  currentTurnTools = availableTools
                  currentResponse = try await aiInteractionCoordinator
@@ -1793,7 +1863,7 @@ final class ToolLoopHandler {
     private func strictMutationExecutionTools(from availableTools: [AITool]) -> [AITool] {
         let preferredTools = mutationOnlyTools(from: availableTools)
         if preferredTools.isEmpty {
-            return availableTools.filter { !readOnlyLoopToolNames.contains($0.name) }
+        return availableTools.filter { !readOnlyLoopToolNames.contains($0.name) || $0.name.hasPrefix("index_") }
         }
         return preferredTools
     }
@@ -2152,7 +2222,8 @@ final class ToolLoopHandler {
                     userInput: userInput,
                     conversationId: conversationId,
                     projectRoot: projectRoot,
-                    toolSummary: toolSummary
+                    toolSummary: toolSummary,
+                    historyMessages: historyCoordinator.messages
                 )
 
                 let executionResponse = try await aiInteractionCoordinator
@@ -2195,7 +2266,8 @@ final class ToolLoopHandler {
         let finalResponseMessages = try ToolLoopUtilities.buildStalledFinalResponseMessages(
             userInput: userInput,
             toolSummary: toolSummary,
-            projectRoot: projectRoot
+            projectRoot: projectRoot,
+            historyMessages: historyCoordinator.messages
         )
 
         let followupMode: AIMode = (mode == .agent) ? .agent : .chat
@@ -2429,7 +2501,8 @@ final class ToolLoopHandler {
             userInput: userInput,
             conversationId: conversationId,
             projectRoot: projectRoot,
-            writeTargetSignature: writeTargetSignature
+            writeTargetSignature: writeTargetSignature,
+            historyMessages: historyCoordinator.messages
         )
 
         return try await aiInteractionCoordinator

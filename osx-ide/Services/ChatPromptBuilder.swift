@@ -151,6 +151,7 @@ class ChatPromptBuilder {
         let tags = [
             ("<thinking>", "</thinking>"),
             ("<think>", "</think>"),
+            ("<thought>", "</thought>"),
             ("<ide_reasoning>", "</ide_reasoning>")
         ]
 
@@ -232,6 +233,11 @@ class ChatPromptBuilder {
 
         if containsPlaceholderText(reasoning) {
             return true
+        }
+
+        // If it's tagged reasoning (e.g. <thought>), don't enforce strict header counts
+        if splitTaggedReasoning(from: text) != nil {
+            return false
         }
 
         let sections = extractReasoningSections(reasoning)
@@ -798,10 +804,30 @@ class ChatPromptBuilder {
         ]
 
         if containsAnyToken(needsWorkTokens, in: normalized) {
+            // Check for conflicting completion signals in the reasoning text itself
+            let lowerReasoning = reasoning.lowercased()
+            if lowerReasoning.contains("all set") ||
+                lowerReasoning.contains("done for now") ||
+                (lowerReasoning.contains("no pending tasks") && !lowerReasoning.contains("remaining")) {
+                return .done
+            }
+            return .needsWork
+        }
+        
+        if containsAnyToken(doneTokens, in: normalized) {
+            return .done
+        }
+
+        // Fallback: search entire raw text (case-insensitive)
+        let overall = text.lowercased()
+        if overall.contains("delivery: done") || overall.contains("delivery: complete") {
+            return .done
+        }
+        if overall.contains("delivery: needs_work") || overall.contains("delivery: needs work") {
             return .needsWork
         }
 
-        return containsAnyToken(doneTokens, in: normalized) ? .done : .needsWork
+        return nil
     }
 
     private static func containsAnyToken(_ tokens: [String], in text: String) -> Bool {

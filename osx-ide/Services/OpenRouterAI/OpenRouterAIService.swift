@@ -159,6 +159,7 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
         // Collect streaming chunks using a thread-safe wrapper
         final class ChunkCollector: @unchecked Sendable {
             var chunks: [String] = []
+            var reasoningChunks: [String] = []
             var usage: OpenRouterChatUsage?
             
             struct ToolCallDraft {
@@ -175,6 +176,12 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                 lock.lock()
                 defer { lock.unlock() }
                 chunks.append(content)
+            }
+            
+            func appendReasoningChunk(_ content: String) {
+                lock.lock()
+                defer { lock.unlock() }
+                reasoningChunks.append(content)
             }
             
             func appendToolCalls(_ calls: [OpenRouterChatResponseChunkToolCall]) {
@@ -199,10 +206,11 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                 self.usage = usage
             }
             
-            func getResults() -> (content: String, toolCalls: [AIToolCall]?, usage: OpenRouterChatUsage?) {
+            func getResults() -> (content: String, reasoning: String?, toolCalls: [AIToolCall]?, usage: OpenRouterChatUsage?) {
                 lock.lock()
                 defer { lock.unlock() }
                 let content = chunks.joined()
+                let reasoning = reasoningChunks.joined()
                 
                 let toolCalls = toolCallsDrafts.sorted(by: { $0.key < $1.key }).compactMap { (_, draft) -> AIToolCall? in
                     var argsDict = Self.parseToolArguments(from: draft.arguments) ?? [:]
@@ -214,7 +222,7 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                 }
                 
                 let tc = toolCalls.isEmpty ? nil : toolCalls
-                return (content, tc, usage)
+                return (content: content, reasoning: reasoning.isEmpty ? nil : reasoning, toolCalls: tc, usage: usage)
             }
 
             private static func parseToolArguments(from raw: String) -> [String: Any]? {
@@ -267,6 +275,15 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                         collector.setUsage(usage)
                     }
                     if let delta = chunk.choices.first?.delta {
+                        if let reasoning = delta.reasoning {
+                            collector.appendReasoningChunk(reasoning)
+                            Task { @MainActor in
+                                self.eventBus.publish(LocalModelStreamingReasoningChunkEvent(
+                                    runId: runId,
+                                    chunk: reasoning
+                                ))
+                            }
+                        }
                         if let content = delta.content {
                             collector.appendChunk(content)
                             // Publish streaming chunk event
@@ -323,7 +340,8 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
 
         return AIServiceResponse(
             content: fullContent,
-            toolCalls: recoveredToolCalls
+            toolCalls: recoveredToolCalls,
+            reasoning: results.reasoning
         )
     }
 
@@ -455,7 +473,8 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
 
         return AIServiceResponse(
             content: sanitizedContent,
-            toolCalls: resolvedToolCalls
+            toolCalls: resolvedToolCalls,
+            reasoning: choice.message.reasoning
         )
     }
 

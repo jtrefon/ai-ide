@@ -2,7 +2,7 @@ import Foundation
 
 /// List files in a directory
 struct ListFilesTool: AITool {
-    let name = "list_files"
+    let name = "list_dir"
     let description = "List files and directories under a project path. Supports optional filtering and limit."
     var parameters: [String: Any] {
         FileToolParameterSchemaBuilder.objectSchema(

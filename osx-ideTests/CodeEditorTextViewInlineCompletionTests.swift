@@ -41,4 +41,23 @@ final class CodeEditorTextViewInlineCompletionTests: XCTestCase {
         XCTAssertEqual(textView.string, "let answer = 42")
         XCTAssertFalse(textView.hasInlineSuggestion)
     }
+
+    func testAcceptMultilineSuggestionPreservesFormatting() {
+        let textView = CodeEditorTextView()
+        textView.string = "if condition {\n    "
+        textView.setSelectedRange(NSRange(location: textView.string.count, length: 0))
+        textView.updateGhostSuggestion(
+            InlineSuggestionPresentation(
+                requestId: UUID(),
+                suggestionText: "return value\n    print(value)",
+                source: .local,
+                confidenceScore: 0.9,
+                latencyMs: 8
+            )
+        )
+
+        XCTAssertTrue(textView.acceptInlineSuggestion())
+        XCTAssertEqual(textView.string, "if condition {\n    return value\n    print(value)")
+        XCTAssertFalse(textView.hasInlineSuggestion)
+    }
 }

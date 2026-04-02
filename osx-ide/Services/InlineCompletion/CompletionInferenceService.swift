@@ -1,5 +1,11 @@
 import Foundation
 
+protocol OfflineModeChecking: Sendable {
+    func isOfflineModeEnabled() async -> Bool
+}
+
+extension LocalModelSelectionStore: OfflineModeChecking {}
+
 @MainActor
 protocol InlineCompletionProviding {
     func complete(
@@ -12,14 +18,33 @@ protocol InlineCompletionProviding {
 @MainActor
 final class AIServiceInlineCompletionProvider: InlineCompletionProviding {
     private let aiServiceProvider: () -> AIService?
-    private let localModelSelectionStore: LocalModelSelectionStore
+    private let remoteServiceProvider: (@Sendable () async -> AIService?)?
+    private let localServiceProvider: (@Sendable () async -> AIService?)?
+    private let offlineModeChecker: OfflineModeChecking
+    private let localModelSelectionStore: LocalModelSelectionStore?
 
     init(
         aiServiceProvider: @escaping () -> AIService?,
-        localModelSelectionStore: LocalModelSelectionStore = LocalModelSelectionStore()
+        offlineModeChecker: OfflineModeChecking = LocalModelSelectionStore()
     ) {
         self.aiServiceProvider = aiServiceProvider
+        self.remoteServiceProvider = nil
+        self.localServiceProvider = nil
+        self.offlineModeChecker = offlineModeChecker
+        self.localModelSelectionStore = nil
+    }
+
+    init(
+        remoteServiceProvider: @escaping @Sendable () async -> AIService?,
+        localServiceProvider: @escaping @Sendable () async -> AIService?,
+        localModelSelectionStore: LocalModelSelectionStore,
+        offlineModeChecker: OfflineModeChecking? = nil
+    ) {
+        self.aiServiceProvider = { nil }
+        self.remoteServiceProvider = remoteServiceProvider
+        self.localServiceProvider = localServiceProvider
         self.localModelSelectionStore = localModelSelectionStore
+        self.offlineModeChecker = offlineModeChecker ?? localModelSelectionStore
     }
 
     func complete(
@@ -27,7 +52,57 @@ final class AIServiceInlineCompletionProvider: InlineCompletionProviding {
         triggerReason: CompletionTriggerReason,
         routingMode: InlineCompletionRoutingMode
     ) async throws -> (text: String, source: InlineCompletionSource)? {
-        let offlineMode = await localModelSelectionStore.isOfflineModeEnabled()
+        let offlineMode = await offlineModeChecker.isOfflineModeEnabled()
+        let hasLocalModel = if let localModelSelectionStore {
+            !(await localModelSelectionStore.selectedModelId().trimmingCharacters(in: .whitespacesAndNewlines)).isEmpty
+        } else {
+            offlineMode
+        }
+
+        await AppLogger.shared.debug(
+            category: .ai,
+            message: "inline_completion.provider_route",
+            context: AppLogger.LogCallContext(metadata: [
+                "trigger": triggerReason.rawValue,
+                "routingMode": routingMode.rawValue,
+                "offlineMode": offlineMode,
+                "hasLocalModel": hasLocalModel
+            ])
+        )
+
+        if let localServiceProvider, let remoteServiceProvider {
+            if offlineMode {
+                return try await completeWith(service: await localServiceProvider(), source: .local, prompt: prompt)
+            }
+
+            switch routingMode {
+            case .localOnly:
+                guard hasLocalModel else { return nil }
+                return try await completeWith(service: await localServiceProvider(), source: .local, prompt: prompt)
+            case .remoteOnly:
+                return try await completeWith(service: await remoteServiceProvider(), source: .remote, prompt: prompt)
+            case .hybridPreferLocal:
+                if hasLocalModel,
+                   let localResult = try await attemptCompletion(
+                        with: await localServiceProvider(),
+                        source: .local,
+                        prompt: prompt
+                   ) {
+                    return localResult
+                }
+                return try await completeWith(service: await remoteServiceProvider(), source: .remote, prompt: prompt)
+            case .hybridPreferRemote:
+                if let remoteResult = try await attemptCompletion(
+                    with: await remoteServiceProvider(),
+                    source: .remote,
+                    prompt: prompt
+                ) {
+                    return remoteResult
+                }
+                guard hasLocalModel else { return nil }
+                return try await completeWith(service: await localServiceProvider(), source: .local, prompt: prompt)
+            }
+        }
 
         if triggerReason == .automatic && routingMode == .localOnly && !offlineMode {
             return nil
@@ -44,11 +119,39 @@ final class AIServiceInlineCompletionProvider: InlineCompletionProviding {
             }
         }()
 
-        guard let aiService = aiServiceProvider() else {
+        return try await completeWith(service: aiServiceProvider(), source: source, prompt: prompt)
+    }
+
+    private func attemptCompletion(
+        with service: AIService?,
+        source: InlineCompletionSource,
+        prompt: String
+    ) async throws -> (text: String, source: InlineCompletionSource)? {
+        do {
+            return try await completeWith(service: service, source: source, prompt: prompt)
+        } catch {
+            await AppLogger.shared.warning(
+                category: .ai,
+                message: "inline_completion.provider_attempt_failed",
+                context: AppLogger.LogCallContext(metadata: [
+                    "source": source.rawValue,
+                    "error": String(describing: error)
+                ])
+            )
+            return nil
+        }
+    }
+
+    private func completeWith(
+        service: AIService?,
+        source: InlineCompletionSource,
+        prompt: String
+    ) async throws -> (text: String, source: InlineCompletionSource)? {
+        guard let service else {
             return nil
         }
 
-        let text = try await aiService.generateCode(prompt)
+        let text = try await service.generateCode(prompt)
         return (text, source)
     }
 }

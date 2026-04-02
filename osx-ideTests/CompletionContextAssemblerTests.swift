@@ -20,6 +20,7 @@ final class CompletionContextAssemblerTests: XCTestCase {
             buffer: buffer,
             cursorPosition: cursor,
             selectionLength: 0,
+            isComposingText: false,
             triggerReason: .automatic
         )
 

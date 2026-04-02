@@ -9,7 +9,11 @@ actor CompletionTelemetryService {
 
     func recordShown(_ presentation: InlineSuggestionPresentation) {
         shownCount += 1
-        recordLatency(presentation.latencyMs)
+        recordObservedLatency(presentation.latencyMs)
+    }
+
+    func recordObservedLatency(_ latency: Double) {
+        recordLatency(latency)
     }
 
     func recordAccepted() {
@@ -39,4 +43,3 @@ actor CompletionTelemetryService {
         }
     }
 }
-

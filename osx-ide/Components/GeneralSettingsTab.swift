@@ -137,6 +137,134 @@ struct GeneralSettingsTab: View {
                 }
 
                 SettingsCard(
+                    title: NSLocalizedString("settings.inline_completion.title", comment: ""),
+                    subtitle: NSLocalizedString("settings.inline_completion.subtitle", comment: "")
+                ) {
+                    SettingsRow(
+                        title: NSLocalizedString("settings.inline_completion.enabled.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.inline_completion.enabled.subtitle", comment: ""),
+                        systemImage: "sparkles"
+                    ) {
+                        Toggle("", isOn: inlineCompletionEnabledBinding)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .accessibilityIdentifier("Settings.InlineCompletion.Enabled")
+                    }
+
+                    SettingsRow(
+                        title: NSLocalizedString("settings.inline_completion.debounce.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.inline_completion.debounce.subtitle", comment: ""),
+                        systemImage: "timer"
+                    ) {
+                        Stepper(
+                            value: inlineCompletionDebounceBinding,
+                            in: 50...800,
+                            step: 25
+                        ) {
+                            Text("\(ui.inlineCompletionDebounceMilliseconds) ms")
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(width: 180)
+                        .accessibilityIdentifier("Settings.InlineCompletion.Debounce")
+                    }
+                    .disabled(!ui.inlineCompletionEnabled)
+
+                    SettingsRow(
+                        title: NSLocalizedString("settings.inline_completion.aggressiveness.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.inline_completion.aggressiveness.subtitle", comment: ""),
+                        systemImage: "dial.medium"
+                    ) {
+                        HStack(spacing: 12) {
+                            Slider(
+                                value: inlineCompletionAggressivenessBinding,
+                                in: 0.05...1.0,
+                                step: 0.05
+                            )
+                            .frame(width: AppConstants.Settings.sliderWidth)
+                            .accessibilityIdentifier("Settings.InlineCompletion.Aggressiveness")
+
+                            Text("\(Int(ui.inlineCompletionAggressiveness * 100))%")
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .disabled(!ui.inlineCompletionEnabled)
+
+                    SettingsRow(
+                        title: NSLocalizedString("settings.inline_completion.max_length.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.inline_completion.max_length.subtitle", comment: ""),
+                        systemImage: "text.append"
+                    ) {
+                        Stepper(
+                            value: inlineCompletionMaxSuggestionLengthBinding,
+                            in: 16...512,
+                            step: 8
+                        ) {
+                            Text("\(ui.inlineCompletionMaxSuggestionLength)")
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(width: 160)
+                        .accessibilityIdentifier("Settings.InlineCompletion.MaxLength")
+                    }
+                    .disabled(!ui.inlineCompletionEnabled)
+
+                    SettingsRow(
+                        title: NSLocalizedString("settings.inline_completion.multiline.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.inline_completion.multiline.subtitle", comment: ""),
+                        systemImage: "text.justify.left"
+                    ) {
+                        Toggle("", isOn: inlineCompletionMultilineBinding)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .accessibilityIdentifier("Settings.InlineCompletion.Multiline")
+                    }
+                    .disabled(!ui.inlineCompletionEnabled)
+
+                    SettingsRow(
+                        title: NSLocalizedString("settings.inline_completion.retrieval.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.inline_completion.retrieval.subtitle", comment: ""),
+                        systemImage: "magnifyingglass"
+                    ) {
+                        Toggle("", isOn: inlineCompletionRetrievalBinding)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .accessibilityIdentifier("Settings.InlineCompletion.Retrieval")
+                    }
+                    .disabled(!ui.inlineCompletionEnabled)
+
+                    SettingsRow(
+                        title: NSLocalizedString("settings.inline_completion.routing.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.inline_completion.routing.subtitle", comment: ""),
+                        systemImage: "point.3.connected.trianglepath.dotted"
+                    ) {
+                        Picker("", selection: inlineCompletionRoutingModeBinding) {
+                            ForEach(InlineCompletionRoutingMode.allCases, id: \.self) { mode in
+                                Text(mode.settingsDisplayName)
+                                    .tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 220)
+                        .accessibilityIdentifier("Settings.InlineCompletion.Routing")
+                    }
+                    .disabled(!ui.inlineCompletionEnabled)
+
+                    SettingsRow(
+                        title: NSLocalizedString("settings.inline_completion.debug_overlay.title", comment: ""),
+                        subtitle: NSLocalizedString("settings.inline_completion.debug_overlay.subtitle", comment: ""),
+                        systemImage: "ladybug"
+                    ) {
+                        Toggle("", isOn: inlineCompletionDebugOverlayBinding)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .accessibilityIdentifier("Settings.InlineCompletion.DebugOverlay")
+                    }
+                    .disabled(!ui.inlineCompletionEnabled)
+                }
+
+                SettingsCard(
                     title: NSLocalizedString("settings.workspace.title", comment: ""),
                     subtitle: NSLocalizedString("settings.workspace.subtitle", comment: "")
                 ) {
@@ -230,10 +358,81 @@ struct GeneralSettingsTab: View {
         )
     }
 
+    private var inlineCompletionEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { ui.inlineCompletionEnabled },
+            set: { ui.setInlineCompletionEnabled($0) }
+        )
+    }
+
+    private var inlineCompletionDebounceBinding: Binding<Int> {
+        Binding(
+            get: { ui.inlineCompletionDebounceMilliseconds },
+            set: { ui.setInlineCompletionDebounceMilliseconds($0) }
+        )
+    }
+
+    private var inlineCompletionAggressivenessBinding: Binding<Double> {
+        Binding(
+            get: { ui.inlineCompletionAggressiveness },
+            set: { ui.setInlineCompletionAggressiveness($0) }
+        )
+    }
+
+    private var inlineCompletionMaxSuggestionLengthBinding: Binding<Int> {
+        Binding(
+            get: { ui.inlineCompletionMaxSuggestionLength },
+            set: { ui.setInlineCompletionMaxSuggestionLength($0) }
+        )
+    }
+
+    private var inlineCompletionMultilineBinding: Binding<Bool> {
+        Binding(
+            get: { ui.inlineCompletionMultilineEnabled },
+            set: { ui.setInlineCompletionMultilineEnabled($0) }
+        )
+    }
+
+    private var inlineCompletionRetrievalBinding: Binding<Bool> {
+        Binding(
+            get: { ui.inlineCompletionRetrievalEnabled },
+            set: { ui.setInlineCompletionRetrievalEnabled($0) }
+        )
+    }
+
+    private var inlineCompletionRoutingModeBinding: Binding<InlineCompletionRoutingMode> {
+        Binding(
+            get: { ui.inlineCompletionRoutingMode },
+            set: { ui.setInlineCompletionRoutingMode($0) }
+        )
+    }
+
+    private var inlineCompletionDebugOverlayBinding: Binding<Bool> {
+        Binding(
+            get: { ui.inlineCompletionDebugOverlayEnabled },
+            set: { ui.setInlineCompletionDebugOverlayEnabled($0) }
+        )
+    }
+
     private var sidebarBinding: Binding<Bool> {
         Binding(
             get: { ui.isSidebarVisible },
             set: { ui.setSidebarVisible($0) }
         )
+    }
+}
+
+private extension InlineCompletionRoutingMode {
+    var settingsDisplayName: String {
+        switch self {
+        case .localOnly:
+            NSLocalizedString("settings.inline_completion.routing.local_only", comment: "")
+        case .remoteOnly:
+            NSLocalizedString("settings.inline_completion.routing.remote_only", comment: "")
+        case .hybridPreferLocal:
+            NSLocalizedString("settings.inline_completion.routing.hybrid_local", comment: "")
+        case .hybridPreferRemote:
+            NSLocalizedString("settings.inline_completion.routing.hybrid_remote", comment: "")
+        }
     }
 }

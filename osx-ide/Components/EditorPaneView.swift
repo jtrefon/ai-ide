@@ -8,6 +8,7 @@ struct EditorPaneView: View {
     let onFocus: () -> Void
     let selectionContext: CodeSelectionContext
     let inlineCompletionEngine: InlineCompletionEngine
+    let inlineCompletionDebugOverlayEnabled: Bool
     let showLineNumbers: Bool
     let wordWrap: Bool
     let minimapVisible: Bool
@@ -82,6 +83,7 @@ struct EditorPaneView: View {
                     selectedRange: $pane.selectedRange,
                     selectionContext: selectionContext,
                     inlineCompletionEngine: inlineCompletionEngine,
+                    inlineCompletionDebugOverlayEnabled: inlineCompletionDebugOverlayEnabled,
                     showLineNumbers: showLineNumbers,
                     wordWrap: wordWrap,
                     fontSize: fontSize,
