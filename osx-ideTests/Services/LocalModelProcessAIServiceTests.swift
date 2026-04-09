@@ -500,9 +500,10 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
                 prefillStepSize: 256,
                 temperature: 0.35,
                 topP: 0.92,
-                repetitionPenalty: 1.03,
-                repetitionContextSize: 64
-            )
+                repetitionPenalty: 1.1,
+                repetitionContextSize: 64,
+                turboQuantEnabled: false
+            ),
         )
     }
 

@@ -8,6 +8,17 @@ struct LocalModelSettingsView: View {
             Toggle("Offline Mode (disable OpenRouter)", isOn: $viewModel.offlineModeEnabled)
                 .toggleStyle(.switch)
 
+            Toggle("Turbo Quant (4-bit KV Cache)", isOn: $viewModel.turboQuantEnabled)
+                .toggleStyle(.switch)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Context Length: \(Int(viewModel.contextLength)) tokens")
+                Slider(value: $viewModel.contextLength, in: 2048...32768, step: 1024) {
+                    Text("Context Length")
+                }
+            }
+            .padding(.top, 4)
+
             Text("Available local models: \(viewModel.models.count)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -48,6 +59,7 @@ struct LocalModelSettingsView: View {
                 status: viewModel.status,
                 progressFraction: viewModel.progressFraction,
                 currentFileName: viewModel.currentFileName,
+                progressText: viewModel.progressText,
                 isDownloading: viewModel.isDownloading
             )
         }
@@ -116,6 +128,7 @@ private struct LocalModelStatusLine: View {
     let status: LocalModelSettingsViewModel.Status
     let progressFraction: Double
     let currentFileName: String?
+    let progressText: String?
     let isDownloading: Bool
 
     var body: some View {
@@ -125,9 +138,16 @@ private struct LocalModelStatusLine: View {
                     .frame(width: 420)
 
                 if let currentFileName {
-                    Text(currentFileName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack {
+                        Text(currentFileName)
+                        Spacer()
+                        if let progressText {
+                            Text(progressText)
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 420)
                 }
             }
 

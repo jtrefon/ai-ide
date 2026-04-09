@@ -185,6 +185,7 @@ actor LocalModelProcessAIService: AIService {
             let parameters = GenerateParameters(
                 maxTokens: inferenceConfiguration.maxOutputTokens,
                 maxKVSize: inferenceConfiguration.maxKVSize,
+                kvBits: inferenceConfiguration.turboQuantEnabled ? 4 : nil,
                 temperature: inferenceConfiguration.temperature,
                 topP: inferenceConfiguration.topP,
                 repetitionPenalty: inferenceConfiguration.repetitionPenalty,
@@ -754,10 +755,11 @@ actor LocalModelProcessAIService: AIService {
         }
 
         let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
-        let isTesting = launchContext.isTesting
+        let storedContextLength = await selectionStore.contextLength()
+        let turboQuantEnabled = await selectionStore.isTurboQuantEnabled()
         let testBudget = LocalModelTestBudget.applyIfNeeded(
             to: request,
-            contextLength: LocalModelFileStore.contextLength(for: model),
+            contextLength: storedContextLength ?? LocalModelFileStore.contextLength(for: model),
             launchContext: launchContext
         )
         let defaultSampling = defaultSamplingParameters(
@@ -770,8 +772,10 @@ actor LocalModelProcessAIService: AIService {
             defaultTemperature: defaultSampling.temperature,
             defaultTopP: defaultSampling.topP,
             defaultRepetitionPenalty: defaultSampling.repetitionPenalty,
-            defaultRepetitionContextSize: defaultSampling.repetitionContextSize
+            defaultRepetitionContextSize: defaultSampling.repetitionContextSize,
+            defaultTurboQuantEnabled: turboQuantEnabled
         )
+        let isTesting = launchContext.isTesting
         let settings = settingsStore.load(includeApiKey: false)
         
         // Build system content for caching

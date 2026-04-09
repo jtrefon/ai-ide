@@ -9,6 +9,7 @@ struct LocalModelInferenceConfiguration: Sendable, Equatable, Hashable {
     let topP: Float
     let repetitionPenalty: Float?
     let repetitionContextSize: Int
+    let turboQuantEnabled: Bool
 
     var cacheKind: String {
         maxKVSize < contextLength ? "rotating-window" : "rotating-full"
@@ -23,7 +24,8 @@ struct LocalModelInferenceConfiguration: Sendable, Equatable, Hashable {
         } else {
             repetitionLabel = "rp0-rc0"
         }
-        return "ctx\(contextLength)-kv\(maxKVSize)-out\(maxOutputTokens)-prefill\(prefillStepSize)-temp\(tempLabel)-topp\(topPLabel)-\(repetitionLabel)"
+        let tqLabel = turboQuantEnabled ? "TQ" : "noTQ"
+        return "ctx\(contextLength)-kv\(maxKVSize)-out\(maxOutputTokens)-prefill\(prefillStepSize)-temp\(tempLabel)-topp\(topPLabel)-\(repetitionLabel)-\(tqLabel)"
     }
 }
 
@@ -36,6 +38,7 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
     var topP: Float?
     var repetitionPenalty: Float??
     var repetitionContextSize: Int?
+    var turboQuantEnabled: Bool?
 
     static let shared = Store()
 
@@ -60,7 +63,8 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
             defaultTemperature: Float,
             defaultTopP: Float,
             defaultRepetitionPenalty: Float?,
-            defaultRepetitionContextSize: Int
+            defaultRepetitionContextSize: Int,
+            defaultTurboQuantEnabled: Bool
         ) -> LocalModelInferenceConfiguration {
             Self.resolve(
                 defaultContextLength: defaultContextLength,
@@ -69,6 +73,7 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
                 defaultTopP: defaultTopP,
                 defaultRepetitionPenalty: defaultRepetitionPenalty,
                 defaultRepetitionContextSize: defaultRepetitionContextSize,
+                defaultTurboQuantEnabled: defaultTurboQuantEnabled,
                 environment: ProcessInfo.processInfo.environment,
                 overrides: overrides
             )
@@ -81,6 +86,7 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
             defaultTopP: Float,
             defaultRepetitionPenalty: Float?,
             defaultRepetitionContextSize: Int,
+            defaultTurboQuantEnabled: Bool,
             environment: [String: String],
             overrides: LocalModelInferenceOverrides?
         ) -> LocalModelInferenceConfiguration {
@@ -129,6 +135,7 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
                 min: 0,
                 max: contextLength
             )
+            let turboQuantEnabled = overrides?.turboQuantEnabled ?? (environment["OSXIDE_LOCAL_MODEL_TURBO_QUANT"] == "1" ? true : defaultTurboQuantEnabled)
 
             return LocalModelInferenceConfiguration(
                 contextLength: contextLength,
@@ -138,7 +145,8 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
                 temperature: temperature,
                 topP: topP,
                 repetitionPenalty: repetitionPenalty,
-                repetitionContextSize: repetitionContextSize
+                repetitionContextSize: repetitionContextSize,
+                turboQuantEnabled: turboQuantEnabled
             )
         }
 

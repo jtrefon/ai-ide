@@ -4,6 +4,7 @@ import Foundation
 enum LocalModelCatalog {
     static func allModels() -> [LocalModelDefinition] {
         [
+            gemma_4_e4b_it_4bit(),
             qwen3_4B_Instruct_2507(),
             qwen3_5_4B_MLX_4bit(),
             granite_4_0_h_micro_4bit()
@@ -92,6 +93,31 @@ enum LocalModelCatalog {
                 artifact("tokenizer_config.json"),
                 artifact("video_preprocessor_config.json"),
                 artifact("vocab.json")
+            ],
+            defaultContextLength: 8192,
+            toolCallFormat: .json
+        )
+    }
+
+    private static func gemma_4_e4b_it_4bit() -> LocalModelDefinition {
+        let base = "https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit/resolve/62b0e4e/"
+
+        func artifact(_ fileName: String) -> LocalModelArtifact {
+            LocalModelArtifact(fileName: fileName, url: URL(string: base + fileName)!)
+        }
+
+        return LocalModelDefinition(
+            id: "mlx-community/gemma-4-e4b-it-4bit@62b0e4e",
+            displayName: "Gemma-4-E4B-IT-4bit (62b0e4e)",
+            artifacts: [
+                artifact("chat_template.jinja"),
+                artifact("config.json"),
+                artifact("generation_config.json"),
+                artifact("model.safetensors"),
+                artifact("model.safetensors.index.json"),
+                artifact("processor_config.json"),
+                artifact("tokenizer.json"),
+                artifact("tokenizer_config.json")
             ],
             defaultContextLength: 8192,
             toolCallFormat: .json
