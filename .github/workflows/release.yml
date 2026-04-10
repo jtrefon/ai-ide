@@ -98,9 +98,8 @@ jobs:
           -configuration Release
           -derivedDataPath build
           build
-          CODE_SIGNING_ALLOWED=NO
-          CODE_SIGNING_REQUIRED=NO
-          CODE_SIGN_IDENTITY=
+          CODE_SIGN_IDENTITY="-"
+          CODE_SIGNING_REQUIRED=YES
 
       - name: Sign Release App
         if: steps.signing.outputs.enabled == 'true'
@@ -190,9 +189,12 @@ jobs:
 
           ## macOS Security Note
 
-          - Free releases may be ad-hoc signed when Apple Developer ID credentials are not configured.
-          - If macOS blocks launch, right-click `osx-ide.app`, choose `Open`, then confirm.
-          - If needed, remove quarantine manually:
+          - This release is ad-hoc signed. Right-click `osx-ide.app`, choose **Open**, then confirm again to launch.
+          - If you see the "cannot verify" message:
+            1.  Right-click the app in Finder
+            2.  Select "Open" from the context menu
+            3.  Click "Open" in the confirmation dialog
+          - To bypass completely (advanced):
             `xattr -dr com.apple.quarantine /Applications/osx-ide.app`
 
           ## Assets
