@@ -7,6 +7,8 @@ on:
 jobs:
   build:
     runs-on: macos-15
+    env:
+      DERIVED_DATA_PATH: ./.build-ci
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,18 +21,29 @@ jobs:
       - name: Xcode Version
         run: xcodebuild -version
 
+      - name: Resolve Package Dependencies
+        run: >
+          xcodebuild
+          -resolvePackageDependencies
+          -project osx-ide.xcodeproj
+          -scheme osx-ide
+          -derivedDataPath "$DERIVED_DATA_PATH"
+
       - name: Build
         run: >
           xcodebuild
           -project osx-ide.xcodeproj
           -scheme osx-ide
           -configuration Debug
+          -derivedDataPath "$DERIVED_DATA_PATH"
           build
           CODE_SIGNING_ALLOWED=NO
 
   ui-unit:
     runs-on: macos-15
     needs: build
+    env:
+      DERIVED_DATA_PATH: ./.build-ci
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,12 +53,21 @@ jobs:
         with:
           xcode-version: "26.1.1"
 
+      - name: Resolve Package Dependencies
+        run: >
+          xcodebuild
+          -resolvePackageDependencies
+          -project osx-ide.xcodeproj
+          -scheme osx-ide
+          -derivedDataPath "$DERIVED_DATA_PATH"
+
       - name: Test (UI Unit + Integration)
         run: >
           xcodebuild
           -project osx-ide.xcodeproj
           -scheme osx-ide
           -configuration Debug
+          -derivedDataPath "$DERIVED_DATA_PATH"
           test
           -destination 'platform=macOS'
           -only-testing:osx-ideTests
@@ -59,6 +81,8 @@ jobs:
   ui-smoke-uitest:
     runs-on: macos-15
     needs: ui-unit
+    env:
+      DERIVED_DATA_PATH: ./.build-ci
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,12 +99,21 @@ jobs:
             exit 1
           fi
 
+      - name: Resolve Package Dependencies
+        run: >
+          xcodebuild
+          -resolvePackageDependencies
+          -project osx-ide.xcodeproj
+          -scheme osx-ide
+          -derivedDataPath "$DERIVED_DATA_PATH"
+
       - name: Test (UI Smoke)
         run: >
           xcodebuild
           -project osx-ide.xcodeproj
           -scheme osx-ide
           -configuration Debug
+          -derivedDataPath "$DERIVED_DATA_PATH"
           test
           -destination 'platform=macOS'
           -only-testing:osx-ideUITests/OSXIDEUITests
@@ -92,6 +125,8 @@ jobs:
   ui-full-uitest:
     runs-on: macos-15
     needs: ui-smoke-uitest
+    env:
+      DERIVED_DATA_PATH: ./.build-ci
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -101,12 +136,21 @@ jobs:
         with:
           xcode-version: "26.1.1"
 
+      - name: Resolve Package Dependencies
+        run: >
+          xcodebuild
+          -resolvePackageDependencies
+          -project osx-ide.xcodeproj
+          -scheme osx-ide
+          -derivedDataPath "$DERIVED_DATA_PATH"
+
       - name: Test (Full UI Suite)
         run: >
           xcodebuild
           -project osx-ide.xcodeproj
           -scheme osx-ide
           -configuration Debug
+          -derivedDataPath "$DERIVED_DATA_PATH"
           test
           -destination 'platform=macOS'
           -only-testing:osx-ideUITests
