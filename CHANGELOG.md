@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-10
+
+### Added
+- ✨ Turbo Quant inference engine support
+- ✨ Google Gemma 4 model integration
+- ✨ Inline code completion
+- 🚀 Improved code generation quality and performance
+
+### Improvements
+- Faster model loading times
+- Reduced memory usage
+- Better context window handling
+- Improved error handling
+
+### Bug Fixes
+- Fixed model unload memory leak
+- Fixed completion cancellation
+- Fixed UI freeze during generation
+
 ## [0.5.0] - 2026-03-16
 
 ### Added
