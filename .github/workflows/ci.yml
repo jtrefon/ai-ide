@@ -51,6 +51,8 @@ jobs:
           -only-testing:osx-ideTests
           -parallel-testing-enabled YES
           -maximum-parallel-testing-workers 4
+          ENABLE_PREVIEWS=NO
+          SWIFT_ENABLE_EXPLICIT_MODULES=NO
           CODE_SIGNING_ALLOWED=NO
           TEST_AFTER_BUILD=YES
 

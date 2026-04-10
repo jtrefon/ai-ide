@@ -6,6 +6,23 @@ import Tokenizers
 
 @MainActor
 final class LocalModelProcessAIServiceTests: XCTestCase {
+    private func makeSelectionStore(
+        selectedModelId: String,
+        turboQuantEnabled: Bool = false,
+        contextLength: Int? = nil
+    ) async -> LocalModelSelectionStore {
+        let suiteName = "LocalModelProcessAIServiceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let selectionStore = LocalModelSelectionStore(
+            settingsStore: SettingsStore(userDefaults: defaults)
+        )
+        await selectionStore.setSelectedModelId(selectedModelId)
+        await selectionStore.setTurboQuantEnabled(turboQuantEnabled)
+        await selectionStore.setContextLength(contextLength)
+        return selectionStore
+    }
+
     private struct FakeFileStore: LocalModelProcessAIService.ModelFileStoring {
         let installed: Bool
         let directory: URL
@@ -119,8 +136,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
     func testSendMessageBuildsPromptAndPassesContextLengthToGenerator() async throws {
         await LocalModelInferenceOverrides.shared.clear()
         let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
-        let selectionStore = LocalModelSelectionStore()
-        await selectionStore.setSelectedModelId(selectedModelId)
+        let selectionStore = await makeSelectionStore(selectedModelId: selectedModelId)
 
         guard let model = LocalModelCatalog.model(id: selectedModelId) else {
             XCTFail("Missing expected local model in catalog")
@@ -130,7 +146,15 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
         let modelDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let fileStore = FakeFileStore(installed: true, directory: modelDirectory)
         let generator = SpyGenerator()
-        let settingsLoader = StubSettingsLoader(settings: .empty)
+        let settingsLoader = StubSettingsLoader(settings: OpenRouterSettings(
+            apiKey: "",
+            model: "",
+            baseURL: OpenRouterSettings.empty.baseURL,
+            systemPrompt: "",
+            reasoningMode: .modelAndAgent,
+            toolPromptMode: .concise,
+            ragEnabledDuringToolLoop: true
+        ))
 
         let service = LocalModelProcessAIService(
             selectionStore: selectionStore,
@@ -167,7 +191,10 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
         XCTAssertEqual(capturedTools?.count, 1)
         let messages = try XCTUnwrap(capturedMessages)
         XCTAssertEqual(messages[0].role, "system")
-        XCTAssertTrue(messages[0].content.contains("When tools are available"))
+        XCTAssertTrue(
+            messages[0].content.contains("When tools are available, use real structured tool calls.") ||
+            messages[0].content.contains("Emit real structured tool calls whenever an action is required.")
+        )
         XCTAssertFalse(messages[0].content.contains("<ide_reasoning>"))
         
         XCTAssertTrue(messages[0].content.contains("Project context:\nRepo context"))
@@ -180,8 +207,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
     func testSendMessagePrefersCustomSystemPromptFromSettings() async throws {
         await LocalModelInferenceOverrides.shared.clear()
         let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
-        let selectionStore = LocalModelSelectionStore()
-        await selectionStore.setSelectedModelId(selectedModelId)
+        let selectionStore = await makeSelectionStore(selectedModelId: selectedModelId)
 
         let modelDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let fileStore = FakeFileStore(installed: true, directory: modelDirectory)
@@ -466,8 +492,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
         }
 
         let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
-        let selectionStore = LocalModelSelectionStore()
-        await selectionStore.setSelectedModelId(selectedModelId)
+        let selectionStore = await makeSelectionStore(selectedModelId: selectedModelId)
 
         let modelDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let fileStore = FakeFileStore(installed: true, directory: modelDirectory)
@@ -500,7 +525,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
                 prefillStepSize: 256,
                 temperature: 0.35,
                 topP: 0.92,
-                repetitionPenalty: 1.1,
+                repetitionPenalty: 1.03,
                 repetitionContextSize: 64,
                 turboQuantEnabled: false
             ),

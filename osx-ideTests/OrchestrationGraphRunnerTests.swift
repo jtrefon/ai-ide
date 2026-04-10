@@ -247,7 +247,7 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
             transition: .next("branch_review")
         ))
 
-        XCTAssertEqual(nextState.transition.nextNodeId, "execute")
+        XCTAssertEqual(nextState.transition.nextNodeId, "final")
     }
 
     func testBranchExecutionContinuationDeciderDoesNotResumeIntermediateHandoffWithoutToolResults() async throws {
@@ -514,7 +514,7 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
             qaReviewEnabled: false
         )
 
-        XCTAssertEqual(graph.entryNodeId, DispatcherNode.idValue)
+        XCTAssertEqual(graph.entryNodeId, StrategicPlanningNode.idValue)
     }
 
     func testConversationFlowGraphStartsAtDispatcherForComplexAgentRequest() {
@@ -532,7 +532,7 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
             qaReviewEnabled: false
         )
 
-        XCTAssertEqual(graph.entryNodeId, DispatcherNode.idValue)
+        XCTAssertEqual(graph.entryNodeId, StrategicPlanningNode.idValue)
     }
 
     @MainActor

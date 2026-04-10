@@ -211,7 +211,7 @@ struct IndexAndToolsTests {
         #expect(result.isEmpty, "Missing project-relative directories should return an empty listing instead of failing")
     }
 
-    @Test func testCreateFileReturnsInformationalMessageWhenPathAlreadyExists() async throws {
+    @Test func testCreateFileThrowsWhenProjectRelativePathAlreadyExists() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_existing_create_file_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -220,11 +220,14 @@ struct IndexAndToolsTests {
         try "{}".write(to: existingURL, atomically: true, encoding: .utf8)
 
         let createFileTool = CreateFileTool(pathValidator: PathValidator(projectRoot: tempRoot), eventBus: EventBus())
-        let result = try await createFileTool.execute(arguments: ToolArguments([
-            "path": "package.json"
-        ]))
-
-        #expect(result.contains("already exists"), "Expected create_file to guide the model toward write_file instead of failing")
+        do {
+            _ = try await createFileTool.execute(arguments: ToolArguments([
+                "path": "package.json"
+            ]))
+            #expect(false, "Expected create_file to reject existing project-relative files")
+        } catch {
+            #expect(error.localizedDescription.localizedCaseInsensitiveContains("already exists"))
+        }
     }
 
     @Test func testCreateFileWritesProvidedContentImmediately() async throws {

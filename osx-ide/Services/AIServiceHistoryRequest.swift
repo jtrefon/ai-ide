@@ -30,7 +30,12 @@ public enum AIRequestStage: String, Codable, Sendable {
         stage: AIRequestStage?
     ) -> String? {
         guard reasoningMode.includesAgentReasoning, mode == .agent else { return nil }
-        return stage?.reasoningPromptKey ?? AIRequestStage.other.reasoningPromptKey
+        switch stage {
+        case .initial_response, .strategic_planning, .tactical_planning, .tool_loop:
+            return nil
+        default:
+            return stage?.reasoningPromptKey ?? AIRequestStage.other.reasoningPromptKey
+        }
     }
 
     static func reasoningPromptIfNeeded(

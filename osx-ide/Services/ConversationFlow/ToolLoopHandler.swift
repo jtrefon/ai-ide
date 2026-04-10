@@ -518,7 +518,8 @@ final class ToolLoopHandler {
                 historyCoordinator.append(ChatMessage(
                     role: .assistant,
                     content: statusSummary,
-                    billing: latestDraftAssistantBilling()
+                    billing: latestDraftAssistantBilling(),
+                    tool: ChatMessageToolContext(toolCalls: uniqueToolCalls)
                 ))
                 previousAssistantUpdateSignature = statusSignature
             }

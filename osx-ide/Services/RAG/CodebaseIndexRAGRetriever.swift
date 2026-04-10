@@ -170,8 +170,7 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
     }
 
     private func retrieveSegmentCandidates(userInput: String) async -> [RAGEvidenceCandidate] {
-        if let semanticProvider = index as? CodeChunkEmbeddingSearchProviding,
-           let semanticMatches = try? await semanticProvider.getRelevantCodeChunks(userInput: userInput, limit: 12),
+        if let semanticMatches = try? await index.getRelevantCodeChunks(userInput: userInput, limit: 12),
            !semanticMatches.isEmpty {
             return semanticMatches.map { match in
                 RAGEvidenceCandidate(
