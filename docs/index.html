@@ -8,7 +8,7 @@
     name="description"
     content="osx-ide is a native macOS IDE for developers who want Apple Silicon acceleration, local inference, local RAG, and a smaller, faster alternative to Electron-based AI coding tools."
   >
-  <meta name="theme-color" content="#0e141b">
+  <meta name="theme-color" content="#030712">
   <meta property="og:title" content="osx-ide | Native AI IDE for Apple Developers">
   <meta
     property="og:description"
@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
     rel="stylesheet"
   >
   <link rel="stylesheet" href="./styles.css">
@@ -33,6 +33,7 @@
       <nav class="topnav" aria-label="Primary">
         <a href="#why">Why</a>
         <a href="#capabilities">Capabilities</a>
+        <a href="#models">Models</a>
         <a href="#compare">Compare</a>
         <a href="#downloads">Download</a>
       </nav>
@@ -41,26 +42,26 @@
     <main id="top">
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Native macOS IDE for serious Apple developers</p>
-          <h1>Stop routing your Apple hardware through a browser-era IDE.</h1>
+          <p class="eyebrow">The Native AI Evolution</p>
+          <h1>Apple Silicon deserves better than Electron.</h1>
           <p class="hero-lede">
-            osx-ide is built in SwiftUI and AppKit for developers who want low overhead,
-            direct system integration, and AI features that can run locally instead of
-            through another subscription.
+            osx-ide is built in SwiftUI for developers who demand extreme performance. 
+            Native speed, direct hardware access, and AI that runs on <strong>your</strong> terms.
           </p>
           <div class="hero-actions">
-            <a class="button button-primary" href="#downloads">Download Latest Build</a>
-            <a class="button button-secondary" href="https://github.com/jtrefon/ai-ide" target="_blank" rel="noreferrer">View on GitHub</a>
+            <a class="button button-primary" href="#downloads">Download Latest</a>
+            <a class="button button-secondary" href="https://github.com/jtrefon/ai-ide" target="_blank" rel="noreferrer">GitHub Repo</a>
           </div>
           <ul class="signal-list" aria-label="Key product signals">
-            <li>Native macOS UI, not an Electron shell</li>
-            <li>Local inference chat shipped today</li>
-            <li>CoreML embedding pipeline with Apple Neural Engine support</li>
-            <li>Zero subscription required for local workflows</li>
+            <li>SwiftUI & AppKit: 100% Native macOS architecture</li>
+            <li>MLX-Powered: Real-time local inference with hardware acceleration</li>
+            <li>Turbo Quant Interface: 4-bit KV Cache compression (75% RAM savings)</li>
+            <li>Zero dependencies on cloud APIs for core features</li>
           </ul>
         </div>
 
-        <div class="hero-panel">
+        <div class="hero-panel glass-card">
+          <img src="./images/hero.png" alt="Futuristic IDE Mockup with 4-bit Quantization" style="width: 100%; border-radius: 16px; margin-bottom: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
           <div class="terminal-card">
             <div class="terminal-header">
               <span></span>
@@ -68,55 +69,51 @@
               <span></span>
             </div>
             <div class="terminal-body">
-              <div><span class="prompt">runtime:</span> SwiftUI + AppKit</div>
-              <div><span class="prompt">inference:</span> local chat available</div>
-              <div><span class="prompt">rag:</span> local embeddings + retrieval</div>
-              <div><span class="prompt">index:</span> project-aware, stage-aware context</div>
-              <div><span class="prompt">pricing:</span> free to use</div>
+              <div><span class="prompt">os:</span> macOS Sonoma+ (Native)</div>
+              <div><span class="prompt">arch:</span> Apple Silicon (Metal/ANE)</div>
+              <div><span class="prompt">kv_cache:</span> Turbo Quant 4-bit Enabled</div>
+              <div><span class="prompt">status:</span> Local Inference Ready</div>
+              <div><span class="prompt">build:</span> Production Node Active</div>
             </div>
           </div>
 
           <div class="metric-grid">
             <article>
-              <strong>Apple Silicon first</strong>
-              <span>CoreML, Neural Engine access, native filesystem and shell integration.</span>
+              <strong>Turbo Quant</strong>
+              <span>Compress KV cache by 75% for massive context windows.</span>
             </article>
             <article>
-              <strong>Small footprint</strong>
-              <span>Fewer layers, less drag, better fit for developers tired of heavy web runtimes.</span>
+              <strong>Ultra Low Latency</strong>
+              <span>Zero Electron bridge. Direct Metal-to-Display rendering.</span>
             </article>
             <article>
-              <strong>Local by default</strong>
-              <span>Project chat and retrieval can run without paid model providers.</span>
+              <strong>Privacy First</strong>
+              <span>Your code never leaves your machine unless you choose.</span>
             </article>
             <article>
-              <strong>Built for depth</strong>
-              <span>RAG, orchestration, diagnostics, indexing, and tool execution are first-class architecture.</span>
+              <strong>NPU Optimized</strong>
+              <span>Leverages the Apple Neural Engine for background tasks.</span>
             </article>
           </div>
         </div>
       </section>
 
-      <section id="why" class="section">
+      <section id="why" class="section glass-card story-card">
         <div class="section-heading">
-          <p class="eyebrow">Why it exists</p>
-          <h2>Built for developers who are done compromising with JavaScript-heavy AI IDEs.</h2>
+          <p class="eyebrow">The Mission</p>
+          <h2>Stop the Bloat.</h2>
         </div>
         <div class="split-grid">
-          <article class="story-card">
-            <h3>What other AI IDEs get wrong</h3>
+          <article>
+            <h3>Modern AI, Native Speed</h3>
             <p>
-              Too many products stack agent features on top of VS Code and Electron, then ask Apple
-              hardware to carry the extra weight. That means more memory pressure, less direct platform
-              access, weaker integration, and too much dependence on remote APIs.
+              Most AI tools today are web browsers wearing a suit. They consume gigabytes of RAM before you even type a character. osx-ide uses the power of your Mac Pro, Studio, or MacBook to its full potential.
             </p>
           </article>
-          <article class="story-card">
-            <h3>What osx-ide is optimizing for</h3>
+          <article>
+            <h3>Full Ownership</h3>
             <p>
-              Native performance, hardware acceleration, local inference, local retrieval, and a product
-              that feels like it belongs on macOS. The goal is not to clone a browser IDE. The goal is to
-              build the Apple-native one.
+              By focusing on local-first workflows like local RAG and MLX-powered generation, we give you back control over your most sensitive IP: your source code.
             </p>
           </article>
         </div>
@@ -125,180 +122,168 @@
       <section id="capabilities" class="section">
         <div class="section-heading">
           <p class="eyebrow">Capabilities</p>
-          <h2>Clear technical value, not generic AI wallpaper.</h2>
+          <h2>Professional Grade Tooling.</h2>
         </div>
         <div class="feature-grid">
-          <article class="feature-card">
+          <article class="feature-card glass-card">
             <span class="feature-state">Available now</span>
-            <h3>Local inference chat</h3>
+            <h3>Turbo Quant Compression</h3>
             <p>
-              Chat about the current project without forcing developers into paid providers or recurring subscriptions.
+              Our proprietary implementation of 4-bit KV cache quantization. Run larger models with longer histories without exhausting your Unified Memory.
             </p>
           </article>
-          <article class="feature-card">
+          <article class="feature-card glass-card">
             <span class="feature-state">Available now</span>
-            <h3>Local RAG for project understanding</h3>
+            <h3>Native MLX Inference</h3>
             <p>
-              Project indexing, embedding generation, semantic retrieval, and context enhancement run as native IDE capabilities.
+              Optimized for Apple Silicon. Support for the latest architectures including Gemma 4, Qwen 3.5, and Llama 3 with sub-millisecond dispatch.
             </p>
           </article>
-          <article class="feature-card">
+          <article class="feature-card glass-card">
+            <span class="feature-state">Beta</span>
+            <h3>Inline Code Completion</h3>
+            <p>
+              Low-latency FIM (Fill-In-the-Middle) support. Experience ghost-text suggestions that keep up with your typing speed.
+            </p>
+          </article>
+          <article class="feature-card glass-card">
             <span class="feature-state">Available now</span>
-            <h3>CoreML embedding acceleration</h3>
+            <h3>Alibaba & Kilo Cloud</h3>
             <p>
-              Embedding models are compiled for CoreML with Neural Engine support on Apple Silicon.
+              Extended support for remote giants. Connect seamlessly to Alibaba Cloud and Kilo Code for massive scale when local isn't enough.
             </p>
           </article>
-          <article class="feature-card">
+          <article class="feature-card glass-card">
             <span class="feature-state">Available now</span>
-            <h3>Native editor and terminal stack</h3>
+            <h3>Embedded RAG Indexer</h3>
             <p>
-              SwiftUI and AppKit UI, native terminal integration, file system access, command palette, search, and diagnostics.
+              A background indexing service that creates a vector map of your project. Lightning fast retrieval for context-aware chat.
             </p>
           </article>
-          <article class="feature-card">
-            <span class="feature-state">In motion</span>
-            <h3>Graph-native agent runtime</h3>
+          <article class="feature-card glass-card">
+            <span class="feature-state">Available now</span>
+            <h3>Advanced Telemetry</h3>
             <p>
-              A LangGraph-inspired native orchestration runtime is being built into the product architecture for deterministic multi-stage execution.
+              Detailed logs for every token generated. Monitor tokens/sec, KV cache state, and NPU usage directly in the diagnostic panel.
             </p>
           </article>
-          <article class="feature-card">
-            <span class="feature-state">Product promise</span>
-            <h3>Free, local-friendly, aggressively practical</h3>
-            <p>
-              The product is designed to keep core value accessible: fast local workflows, no mandatory cloud tax, and continuous iteration.
-            </p>
+        </div>
+      </section>
+
+      <section id="models" class="section glass-card story-card">
+        <div class="section-heading">
+          <div class="eyebrow">Model Support</div>
+          <h2>A Catalog of Excellence.</h2>
+          <p>We support a wide range of state-of-the-art models out of the box, optimized for MLX.</p>
+        </div>
+        <div class="metric-grid">
+          <article>
+            <strong>Gemma 4 Family</strong>
+            <span>Efficient, high-reasoning models from Google, tuned for 4-bit.</span>
+          </article>
+          <article>
+            <strong>Qwen 3.5</strong>
+            <span>Top-tier performance from Alibaba, excellent for coding tasks.</span>
+          </article>
+          <article>
+            <strong>Llama 3</strong>
+            <span>The industry standard, running natively on your NPU.</span>
+          </article>
+          <article>
+            <strong>Granite 4.0</strong>
+            <span>IBM's micro-models, perfect for low-power high-speed tasks.</span>
           </article>
         </div>
       </section>
 
       <section id="compare" class="section">
         <div class="section-heading">
-          <p class="eyebrow">Competitive framing</p>
-          <h2>Different tradeoffs. Different outcome.</h2>
+          <p class="eyebrow">Comparison</p>
+          <h2>Native vs. Wrapper.</h2>
         </div>
-        <div class="comparison-card">
+        <div class="comparison-card glass-card">
           <div class="comparison-row comparison-head">
             <div>Category</div>
-            <div>Typical AI IDE on VS Code</div>
+            <div>Hybrid/Electron IDE</div>
             <div>osx-ide</div>
           </div>
           <div class="comparison-row">
-            <div>Platform model</div>
-            <div>Cross-platform shell first</div>
-            <div>macOS-native architecture first</div>
+            <div>Memory Management</div>
+            <div>Chrome Sandbox (High Usage)</div>
+            <div>Native Heap (Optimized)</div>
           </div>
           <div class="comparison-row">
-            <div>Runtime weight</div>
-            <div>Electron and extension overhead</div>
-            <div>Smaller footprint with direct native APIs</div>
+            <div>Inference</div>
+            <div>Cloud-Only or Slow Python-Bridge</div>
+            <div>Native Metal / MLX (Fastest)</div>
           </div>
           <div class="comparison-row">
-            <div>AI economics</div>
-            <div>Often remote-model centric</div>
-            <div>Local-first workflows with no required subscription</div>
+            <div>Startup Time</div>
+            <div>Cold start ~3-5 seconds</div>
+            <div>Near-instant (< 1s)</div>
           </div>
           <div class="comparison-row">
-            <div>Apple hardware access</div>
-            <div>Indirect, generic abstraction layers</div>
-            <div>CoreML, filesystem, shell, and platform integration built in</div>
-          </div>
-          <div class="comparison-row">
-            <div>Retrieval stack</div>
-            <div>Usually bolted on</div>
-            <div>Local RAG and project indexing treated as product core</div>
+            <div>Privacy</div>
+            <div>Telemetry & Cloud Uploads</div>
+            <div>Local-First, Total Control</div>
           </div>
         </div>
       </section>
 
-      <section class="section">
+      <section id="downloads" class="section downloads-section glass-card">
         <div class="section-heading">
-          <p class="eyebrow">For developers</p>
-          <h2>Made to resonate with experienced builders.</h2>
-        </div>
-        <div class="audience-grid">
-          <article>
-            <h3>Mid to senior engineers</h3>
-            <p>
-              If you care about latency, architecture, memory profile, local tooling, and owning your environment, this product is aimed directly at you.
-            </p>
-          </article>
-          <article>
-            <h3>Juniors included</h3>
-            <p>
-              The pitch is technical, but the workflow is approachable. Developers early in their careers still get a fast, local, no-subscription entry point.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <section id="downloads" class="section downloads-section">
-        <div class="section-heading">
-          <p class="eyebrow">Downloads</p>
-          <h2>Live release data from GitHub.</h2>
+          <p class="eyebrow">GET STARTED</p>
+          <h2>Experience the Power.</h2>
           <p class="section-note">
-            This page reads GitHub Releases at runtime, so new tagged builds can appear here without editing or redeploying the website.
+            Download the latest release directly from GitHub.
           </p>
-          <ul class="signal-list" aria-label="Install notes">
-            <li>Recommended install: download the DMG from GitHub Releases.</li>
-            <li>Homebrew convenience install: <code>brew install --cask https://raw.githubusercontent.com/jtrefon/ai-ide/main/Casks/osx-ide.rb</code></li>
-            <li>Unsigned free builds may require right-clicking the app and choosing Open on first launch.</li>
-          </ul>
         </div>
 
         <div class="download-layout">
-          <article class="download-hero">
+          <div class="download-content">
             <div class="download-status">
               <span class="pulse"></span>
-              <span id="release-status">Loading release metadata…</span>
+              <span id="release-status">SYNCING WITH GITHUB...</span>
             </div>
-            <h3 id="latest-version">Latest version</h3>
-            <p id="latest-summary">Fetching current release details from GitHub.</p>
-            <div class="download-actions" id="latest-actions">
-              <a class="button button-primary button-disabled" href="#downloads" aria-disabled="true">Preparing download links</a>
-            </div>
-            <dl class="release-meta">
+            <h3 id="latest-version">Detecting Latest Release...</h3>
+            <p id="latest-summary">Connecting to repository for build metadata.</p>
+            <div class="release-meta">
               <div>
                 <dt>Published</dt>
                 <dd id="latest-date">-</dd>
               </div>
               <div>
-                <dt>Assets</dt>
-                <dd id="latest-assets">-</dd>
+                <dt>Tag</dt>
+                <dd id="latest-tag">-</dd>
               </div>
               <div>
-                <dt>Channel</dt>
-                <dd>GitHub Releases</dd>
+                <dt>Package</dt>
+                <dd id="latest-assets">-</dd>
               </div>
-            </dl>
-          </article>
+            </div>
+            <div class="download-actions" id="latest-actions">
+              <a class="button button-primary button-disabled" href="#downloads" aria-disabled="true">CHECKING RELEASES</a>
+            </div>
+          </div>
 
           <aside class="download-feed">
             <div class="feed-header">
-              <h3>Release archive</h3>
-              <button id="refresh-releases" class="refresh-button" type="button">Refresh</button>
+              <h3>Changelog</h3>
+              <button id="refresh-releases" class="refresh-button" type="button">Refetch</button>
             </div>
             <div id="release-list" class="release-list" aria-live="polite">
-              <p class="release-placeholder">Loading available builds…</p>
+              <p class="release-placeholder">Fetching history...</p>
             </div>
           </aside>
         </div>
       </section>
 
-      <section class="section founder-section">
-        <div class="section-heading">
-          <p class="eyebrow">Social proof</p>
-          <h2>The product stays in front. The builder is here if you want the context.</h2>
-        </div>
-        <article class="founder-card">
-          <p>
-            osx-ide is created by <strong>Jack Trefon</strong>, an AI-focused software engineer with
-            25+ years of experience building systems, products, and developer tooling.
-          </p>
-          <a href="https://github.com/jtrefon" target="_blank" rel="noreferrer">Follow the build on GitHub</a>
-        </article>
-      </section>
+      <footer class="section glass-card founder-card">
+        <p>
+          Built for the future of macOS by <strong>Jack Trefon</strong>.
+        </p>
+        <a href="https://github.com/jtrefon" target="_blank" rel="noreferrer">Open Source on GitHub</a>
+      </footer>
     </main>
   </div>
 

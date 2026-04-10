@@ -133,7 +133,10 @@ public enum LocalModelFileStore {
         // The upgraded mlx-swift-lm runtime supports Qwen 3.5 natively, including its
         // multimodal configuration and processor stack. Keep the compatibility path for
         // older-model shims only; Qwen 3.5 should now load from the installed directory.
-        false
+        if model.id.contains("gemma-4") {
+            return true
+        }
+        return false
     }
 
     private static func hasAllArtifacts(for model: LocalModelDefinition, in directory: URL?) -> Bool {
@@ -312,7 +315,7 @@ public enum LocalModelFileStore {
         let configURL = try artifactURL(modelId: model.id, fileName: "config.json")
         let originalData = try Data(contentsOf: configURL)
 
-        guard model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main" else {
+        guard model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main" || model.id.contains("gemma-4") else {
             return originalData
         }
 
@@ -322,14 +325,44 @@ public enum LocalModelFileStore {
 
         var mutated = false
 
-        if let modelType = configObject["model_type"] as? String,
-           modelType == "qwen3_5" {
-            configObject["model_type"] = "qwen3_vl"
-            mutated = true
-        }
+        if model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main" {
+            if let modelType = configObject["model_type"] as? String,
+               modelType == "qwen3_5" {
+                configObject["model_type"] = "qwen3_vl"
+                mutated = true
+            }
 
-        if let textConfig = configObject["text_config"] as? [String: Any] {
-            configObject["text_config"] = textConfig
+            if let textConfig = configObject["text_config"] as? [String: Any] {
+                configObject["text_config"] = textConfig
+            }
+        } else if model.id.contains("gemma-4") {
+            if let modelType = configObject["model_type"] as? String,
+               modelType == "gemma4" {
+                
+                if let textConfig = configObject["text_config"] as? [String: Any] {
+                    for (key, value) in textConfig {
+                        configObject[key] = value
+                    }
+                }
+                // MLX Swift expects Gemma 2 to specifically define these fields at the root
+                if configObject["attn_logit_softcapping"] == nil {
+                    // Try to map it from audio_config.attention_logit_cap, else default to 50.0
+                    let audioConfig = configObject["audio_config"] as? [String: Any]
+                    configObject["attn_logit_softcapping"] = audioConfig?["attention_logit_cap"] ?? 50.0
+                }
+                if configObject["query_pre_attn_scalar"] == nil {
+                    let headDim = configObject["head_dim"] as? Int ?? 256
+                    configObject["query_pre_attn_scalar"] = Double(headDim)
+                }
+                if configObject["rope_theta"] == nil {
+                    // Fall back to gemma2 default or pull it manually
+                    configObject["rope_theta"] = 10000.0
+                }
+                
+                // MLX Swift's gemma3_text model naturally strips the language_model prefix dynamically.
+                configObject["model_type"] = "gemma3_text"
+                mutated = true
+            }
         }
 
         guard mutated else { return originalData }

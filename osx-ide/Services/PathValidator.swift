@@ -58,9 +58,7 @@ struct PathValidator {
             if isWithinProjectRoot(candidateURL) {
                 url = candidateURL
             } else {
-                // Otherwise, strip the leading slash and treat it as relative to project root
-                let relativePath = String(normalizedPath.dropFirst())
-                url = projectRoot.appendingPathComponent(relativePath)
+                throw AppError.aiServiceError("Access denied: '\(path)' is outside the project directory. All file operations are sandboxed to: \(projectRoot.path)")
             }
         } else {
             url = projectRoot.appendingPathComponent(normalizedPath)

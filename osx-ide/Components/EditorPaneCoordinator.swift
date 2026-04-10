@@ -29,10 +29,13 @@ struct EditorPaneCoordinator {
         let focused = (paneID == .primary) ? fileEditor.focusedPane == .primary : fileEditor.focusedPane == .secondary
 
         return EditorPaneView(
+            paneID: paneID,
             pane: manager,
             isFocused: focused,
             onFocus: { fileEditor.focus(paneID) },
             selectionContext: appState.selectionContext,
+            inlineCompletionEngine: appState.inlineCompletionEngine,
+            inlineCompletionDebugOverlayEnabled: ui.inlineCompletionDebugOverlayEnabled,
             showLineNumbers: ui.showLineNumbers,
             wordWrap: ui.wordWrap,
             minimapVisible: ui.minimapVisible,
@@ -65,10 +68,13 @@ struct EditorPaneCoordinator {
     // MARK: - Private Components
 
     private struct EditorPaneView: View {
+        let paneID: FileEditorStateManager.PaneID
         @ObservedObject var pane: EditorPaneStateManager
         let isFocused: Bool
         let onFocus: () -> Void
         let selectionContext: CodeSelectionContext
+        let inlineCompletionEngine: InlineCompletionEngine
+        let inlineCompletionDebugOverlayEnabled: Bool
         let showLineNumbers: Bool
         let wordWrap: Bool
         let minimapVisible: Bool
@@ -128,10 +134,14 @@ struct EditorPaneCoordinator {
 
                 HStack(spacing: 0) {
                     CodeEditorView(
+                        paneID: paneID,
                         text: $pane.editorContent,
+                        filePath: pane.selectedFile,
                         language: pane.editorLanguage,
                         selectedRange: $pane.selectedRange,
                         selectionContext: selectionContext,
+                        inlineCompletionEngine: inlineCompletionEngine,
+                        inlineCompletionDebugOverlayEnabled: inlineCompletionDebugOverlayEnabled,
                         showLineNumbers: showLineNumbers,
                         wordWrap: wordWrap,
                         fontSize: fontSize,

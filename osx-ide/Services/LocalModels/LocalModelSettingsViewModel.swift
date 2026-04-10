@@ -30,10 +30,23 @@ final class LocalModelSettingsViewModel: ObservableObject {
         }
     }
 
+    @Published var turboQuantEnabled: Bool {
+        didSet {
+            persistTurboQuantEnabled()
+        }
+    }
+
+    @Published var contextLength: Double {
+        didSet {
+            persistContextLength()
+        }
+    }
+
     @Published private(set) var status = Status(kind: .idle, message: "Local models not configured.")
     @Published private(set) var isDownloading = false
     @Published private(set) var progressFraction: Double = 0
     @Published private(set) var currentFileName: String? = nil
+    @Published private(set) var progressText: String? = nil
 
     private let downloader: LocalModelDownloader
     private let settingsStore: SettingsStore
@@ -41,6 +54,7 @@ final class LocalModelSettingsViewModel: ObservableObject {
 
     private let selectedModelKey = "LocalModel.SelectedId"
     private let offlineModeEnabledKey = "AI.OfflineModeEnabled"
+    private let turboQuantEnabledKey = "LocalModel.TurboQuantEnabled"
 
     init(
         downloader: LocalModelDownloader = LocalModelDownloader(),
@@ -52,6 +66,9 @@ final class LocalModelSettingsViewModel: ObservableObject {
         self.models = LocalModelCatalog.allModels()
         self.selectedModelId = settingsStore.string(forKey: selectedModelKey) ?? ""
         self.offlineModeEnabled = settingsStore.bool(forKey: offlineModeEnabledKey, default: false)
+        self.turboQuantEnabled = settingsStore.bool(forKey: turboQuantEnabledKey, default: false)
+        let ctx = settingsStore.integer(forKey: "LocalModel.ContextLength")
+        self.contextLength = ctx > 0 ? Double(ctx) : 8192
     }
 
     func refreshCatalog() {
@@ -78,6 +95,7 @@ final class LocalModelSettingsViewModel: ObservableObject {
         isDownloading = true
         progressFraction = 0
         currentFileName = nil
+        progressText = nil
         status = Status(kind: .loading, message: "Downloading \(model.displayName)...")
 
         do {
@@ -85,6 +103,17 @@ final class LocalModelSettingsViewModel: ObservableObject {
                 Task { @MainActor in
                     self?.progressFraction = progress.fractionCompleted
                     self?.currentFileName = progress.currentFileName
+                    
+                    if let total = progress.currentFileBytesTotal, total > 0 {
+                        let downloadedMB = Double(progress.currentFileBytesDownloaded) / 1_048_576.0
+                        let totalMB = Double(total) / 1_048_576.0
+                        self?.progressText = String(format: "%.1f MB / %.1f MB", downloadedMB, totalMB)
+                    } else if progress.currentFileBytesDownloaded > 0 {
+                        let downloadedMB = Double(progress.currentFileBytesDownloaded) / 1_048_576.0
+                        self?.progressText = String(format: "%.1f MB downloaded", downloadedMB)
+                    } else {
+                        self?.progressText = nil
+                    }
                 }
             }
 
@@ -95,6 +124,7 @@ final class LocalModelSettingsViewModel: ObservableObject {
 
         isDownloading = false
         currentFileName = nil
+        progressText = nil
     }
 
     func deleteModel(_ model: LocalModelDefinition) {
@@ -122,6 +152,20 @@ final class LocalModelSettingsViewModel: ObservableObject {
             await selectionStore.setOfflineModeEnabled(offlineModeEnabled)
         }
         updateOfflineStatusMessage()
+    }
+
+    private func persistTurboQuantEnabled() {
+        let turboQuantEnabled = self.turboQuantEnabled
+        Task {
+            await selectionStore.setTurboQuantEnabled(turboQuantEnabled)
+        }
+    }
+
+    private func persistContextLength() {
+        let length = Int(self.contextLength)
+        Task {
+            await selectionStore.setContextLength(length)
+        }
     }
 
     private func updateOfflineStatusMessage(selectedModel: LocalModelDefinition? = nil) {

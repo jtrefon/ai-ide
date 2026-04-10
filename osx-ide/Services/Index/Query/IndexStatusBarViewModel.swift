@@ -9,11 +9,6 @@ final class IndexStatusBarViewModel: ObservableObject {
     @Published private(set) var currentFile: URL?
     @Published private(set) var stats: IndexStats?
 
-    @Published private(set) var isAIEnriching: Bool = false
-    @Published private(set) var aiProcessedCount: Int = 0
-    @Published private(set) var aiTotalCount: Int = 0
-    @Published private(set) var aiCurrentFile: URL?
-
     @Published private(set) var isRetrieving: Bool = false
     @Published private(set) var retrievalStatus: String = ""
 
@@ -57,17 +52,6 @@ final class IndexStatusBarViewModel: ObservableObject {
             return "RAG: \(retrievalStatus)"
         }
 
-        if isAIEnriching {
-            if aiTotalCount > 0 {
-                let fileName = aiCurrentFile?.lastPathComponent
-                if let fileName, !fileName.isEmpty {
-                    return "AI Enriching \(aiProcessedCount)/\(aiTotalCount): \(fileName)"
-                }
-                return "AI Enriching \(aiProcessedCount)/\(aiTotalCount)"
-            }
-            return "AI Enriching…"
-        }
-
         if isIndexing {
             if totalCount > 0 {
                 let fileName = currentFile?.lastPathComponent
@@ -82,11 +66,9 @@ final class IndexStatusBarViewModel: ObservableObject {
         if let stats {
             if stats.totalProjectFileCount > 0 {
                 let indexed = min(stats.indexedResourceCount, stats.totalProjectFileCount)
-                let aiDenom = max(0, stats.aiEnrichableProjectFileCount)
-                let ai = min(stats.aiEnrichedResourceCount, aiDenom)
-                return "Index \(indexed)/\(stats.totalProjectFileCount) | AI \(ai)/\(aiDenom)"
+                return "Index \(indexed)/\(stats.totalProjectFileCount) | RAG Ready"
             }
-            return "Index: \(stats.indexedResourceCount) files"
+            return "Index: \(stats.indexedResourceCount) files | RAG Ready"
         }
 
         return "Index: unavailable"
@@ -130,32 +112,6 @@ final class IndexStatusBarViewModel: ObservableObject {
             self.currentFile = nil
             self.refreshStats()
             self.refreshEmbeddingModel()
-        }
-        .store(in: &cancellables)
-
-        eventBus.subscribe(to: AIEnrichmentStartedEvent.self) { [weak self] _ in
-            guard let self else { return }
-            self.isAIEnriching = true
-            self.aiProcessedCount = 0
-            self.aiTotalCount = max(self.aiTotalCount, 0)
-            self.aiCurrentFile = nil
-        }
-        .store(in: &cancellables)
-
-        eventBus.subscribe(to: AIEnrichmentProgressEvent.self) { [weak self] event in
-            guard let self else { return }
-            self.isAIEnriching = true
-            self.aiProcessedCount = event.processedCount
-            self.aiTotalCount = event.totalCount
-            self.aiCurrentFile = event.currentFile
-        }
-        .store(in: &cancellables)
-
-        eventBus.subscribe(to: AIEnrichmentCompletedEvent.self) { [weak self] _ in
-            guard let self else { return }
-            self.isAIEnriching = false
-            self.aiCurrentFile = nil
-            self.refreshStats()
         }
         .store(in: &cancellables)
 

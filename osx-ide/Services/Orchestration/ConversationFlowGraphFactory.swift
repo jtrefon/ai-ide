@@ -12,20 +12,23 @@ enum ConversationFlowGraphFactory {
         qaReviewHandler: QAReviewHandler,
         qaReviewEnabled: Bool
     ) -> OrchestrationGraph {
-        _ = request
+        let strategicPlanningNodeId = StrategicPlanningNode.idValue
+        let tacticalPlanningNodeId = TacticalPlanningNode.idValue
         let dispatcherNodeId = DispatcherNode.idValue
         let emptyResponseRecoveryNodeId = "empty_response_recovery"
         let branchReviewNodeId = BranchReviewNode.idValue
         let finalResponseNextNodeId = qaReviewEnabled ? QAToolOutputReviewNode.idValue : nil
 
         return OrchestrationGraph(
-            entryNodeId: dispatcherNodeId,
+            entryNodeId: strategicPlanningNodeId,
             nodes: [
+                StrategicPlanningNode(nextNodeId: tacticalPlanningNodeId),
+                TacticalPlanningNode(nextNodeId: dispatcherNodeId),
                 DispatcherNode(
                     historyCoordinator: historyCoordinator,
                     handler: initialResponseHandler,
                     toolLoopNodeId: ToolLoopNode.idValue,
-                    finalResponseNodeId: FinalResponseNode.idValue
+                    finalResponseNodeId: emptyResponseRecoveryNodeId
                 ),
                 ToolLoopNode(
                     handler: toolLoopHandler,

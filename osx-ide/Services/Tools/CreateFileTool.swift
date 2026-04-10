@@ -70,7 +70,7 @@ struct CreateFileTool: AITool {
                 return "File already exists at \(relativePath). Updated content successfully."
             }
 
-            return "File already exists at \(relativePath). Use write_file to update content."
+            throw AppError.aiServiceError("File already exists at \(relativePath). Use write_file to update content.")
         }
 
         if let content {
@@ -81,13 +81,9 @@ struct CreateFileTool: AITool {
             return "Created file at \(relativePath) and wrote provided content."
         }
 
-        fileManager.createFile(atPath: url.path, contents: Data(), attributes: nil)
-        Task { @MainActor in
-            eventBus.publish(FileModifiedEvent(url: url))
-        }
         await AIToolTraceLogger.shared.log(type: "fs.create_file_reserved", data: [
             "path": relativePath
         ])
-        return "Created empty file at \(relativePath)."
+        return "Reserved file path at \(relativePath). Parent directories are ready for write_file."
     }
 }

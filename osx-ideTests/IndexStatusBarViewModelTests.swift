@@ -44,6 +44,8 @@ final class IndexStatusBarViewModelTests: XCTestCase {
             contextLength: 100
         ))
 
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+
         XCTAssertEqual(viewModel.openRouterContextUsageText, "CTX 30/100")
         XCTAssertEqual(viewModel.remoteAICostText, "")
         XCTAssertEqual(viewModel.remoteAISpendText, "Kilo Code spent $0.12")

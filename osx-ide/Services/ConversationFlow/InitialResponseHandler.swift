@@ -111,7 +111,8 @@ final class InitialResponseHandler {
                  conversationId: conversationId,
                  projectRoot: projectRoot,
                  existingAssistantContent: content,
-                 toolsAvailable: false
+                 toolsAvailable: false,
+                 historyMessages: historyCoordinator.messages
              )
              response = try await aiInteractionCoordinator
                  .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
@@ -228,7 +229,8 @@ final class InitialResponseHandler {
             conversationId: conversationId,
             projectRoot: projectRoot,
             existingAssistantContent: existingAssistantContent,
-            toolsAvailable: true
+            toolsAvailable: true,
+            historyMessages: historyCoordinator.messages
         )
         return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(

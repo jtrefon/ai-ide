@@ -156,6 +156,7 @@
 "menu.editor" = "Editor";
 "menu.editor.find" = "Find";
 "menu.editor.replace" = "Replace";
+"menu.editor.trigger_inline_completion" = "Trigger Inline Completion";
 "menu.editor.ai_inline_assist" = "AI Inline Assist";
 "menu.editor.close_tab" = "Close Tab";
 "menu.editor.close_all_tabs" = "Close All Tabs";
@@ -213,6 +214,29 @@
 "settings.editor.word_wrap.subtitle" = "Keep long lines within the view.";
 "settings.editor.minimap.title" = "Minimap";
 "settings.editor.minimap.subtitle" = "Quickly scan large files.";
+
+"settings.inline_completion.title" = "Inline Completion";
+"settings.inline_completion.subtitle" = "Low-latency ghost text suggestions for the active editor pane.";
+"settings.inline_completion.enabled.title" = "Enable inline completion";
+"settings.inline_completion.enabled.subtitle" = "Show contextual suggestions while typing in supported files.";
+"settings.inline_completion.debounce.title" = "Automatic debounce";
+"settings.inline_completion.debounce.subtitle" = "Wait this long after typing before requesting a suggestion.";
+"settings.inline_completion.aggressiveness.title" = "Ranking aggressiveness";
+"settings.inline_completion.aggressiveness.subtitle" = "Bias more strongly toward short, confident completions.";
+"settings.inline_completion.max_length.title" = "Maximum suggestion length";
+"settings.inline_completion.max_length.subtitle" = "Cap the number of characters accepted from the model.";
+"settings.inline_completion.multiline.title" = "Manual multiline suggestions";
+"settings.inline_completion.multiline.subtitle" = "Allow multiline output when suggestions are requested manually.";
+"settings.inline_completion.retrieval.title" = "Retrieval context";
+"settings.inline_completion.retrieval.subtitle" = "Use same-file and indexed context when available.";
+"settings.inline_completion.routing.title" = "Routing mode";
+"settings.inline_completion.routing.subtitle" = "Choose whether automatic inference stays local or can use remote models.";
+"settings.inline_completion.routing.local_only" = "Local Only";
+"settings.inline_completion.routing.remote_only" = "Remote Only";
+"settings.inline_completion.routing.hybrid_local" = "Hybrid Prefer Local";
+"settings.inline_completion.routing.hybrid_remote" = "Hybrid Prefer Remote";
+"settings.inline_completion.debug_overlay.title" = "Debug overlay";
+"settings.inline_completion.debug_overlay.subtitle" = "Show live suggestion metadata over the editor.";
 
 "settings.workspace.title" = "Workspace";
 "settings.workspace.subtitle" = "Layout options for your daily flow.";

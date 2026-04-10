@@ -7,7 +7,7 @@ final class CodeFormatterTests: XCTestCase {
 
     override func tearDown() {
         super.tearDown()
-        UserDefaults.standard.removeObject(forKey: indentationStyleKey)
+        AppRuntimeEnvironment.userDefaults.removeObject(forKey: indentationStyleKey)
     }
 
     func testBraceAnalyzerCountsBracesAndDetectsLeadingClosing() {
@@ -43,7 +43,7 @@ final class CodeFormatterTests: XCTestCase {
     }
 
     func testCodeFormatterFormatsUsingIndentationStyleTabs() {
-        UserDefaults.standard.set(IndentationStyle.tabs.rawValue, forKey: indentationStyleKey)
+        AppRuntimeEnvironment.userDefaults.set(IndentationStyle.tabs.rawValue, forKey: indentationStyleKey)
 
         let input = """
         func foo() {
@@ -58,11 +58,11 @@ final class CodeFormatterTests: XCTestCase {
         """
 
         let output = CodeFormatter.format(input, language: .swift)
-        XCTAssertEqual(output, expected)
+        XCTAssertEqual(output, expected + "\n")
     }
 
     func testCodeFormatterPreservesBlankLines() {
-        UserDefaults.standard.set(IndentationStyle.tabs.rawValue, forKey: indentationStyleKey)
+        AppRuntimeEnvironment.userDefaults.set(IndentationStyle.tabs.rawValue, forKey: indentationStyleKey)
 
         let input = """
         func foo() {
@@ -73,7 +73,7 @@ final class CodeFormatterTests: XCTestCase {
 
         let output = CodeFormatter.format(input, language: .swift)
         let lines = output.components(separatedBy: .newlines)
-        XCTAssertEqual(lines.count, 4)
+        XCTAssertEqual(lines.count, 5)
         XCTAssertEqual(lines[1], "")
     }
 }

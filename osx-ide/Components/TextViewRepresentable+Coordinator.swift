@@ -28,11 +28,18 @@ extension TextViewRepresentable {
         var currentHighlightTask: Task<Void, Never>?
         var pendingHighlightTask: Task<Void, Never>?
         weak var attachedTextView: NSTextView?
+        var currentFilePath: String?
+        let signalBridge: EditorSignalBridge?
         let textStorageDelegateProxy: TextStorageDelegateProxy
 
         init(_ parent: TextViewRepresentable) {
             self.parent = parent
             self.currentLanguageIdentifier = parent.language
+            self.currentFilePath = parent.filePath
+            self.signalBridge = EditorSignalBridge(
+                paneID: parent.paneID,
+                engine: parent.inlineCompletionEngine
+            )
             self.textStorageDelegateProxy = TextStorageDelegateProxy()
             super.init()
             self.textStorageDelegateProxy.coordinator = self
@@ -40,6 +47,17 @@ extension TextViewRepresentable {
 
         func attach(textView: NSTextView) {
             self.attachedTextView = textView
+            configureInlineCompletionHandlers()
+        }
+
+        deinit {
+            let inlineCompletionEngine = parent.inlineCompletionEngine
+            let paneID = parent.paneID
+            Task { @MainActor in
+                inlineCompletionEngine.unregisterSuggestionHandler(for: paneID)
+                inlineCompletionEngine.unregisterManualTriggerHandler(for: paneID)
+                InlineCompletionDebugStore.shared.update(paneID: paneID, presentation: nil)
+            }
         }
 
         // MARK: - Real-time editor behaviors
@@ -51,6 +69,14 @@ extension TextViewRepresentable {
             replacementString: String?
         ) -> Bool {
             if isProgrammaticUpdate { return true }
+
+            if let codeEditorTextView = textView as? CodeEditorTextView,
+               codeEditorTextView.hasInlineSuggestion,
+               replacementString != nil {
+                codeEditorTextView.clearInlineSuggestion()
+                invalidateInlineCompletion()
+            }
+
             guard let replacementString else { return true }
 
             // Only apply behaviors for simple insertions (typing). Let multi-char replacements go through.
@@ -84,6 +110,47 @@ extension TextViewRepresentable {
             }
 
             return true
+        }
+
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            guard let codeEditorTextView = textView as? CodeEditorTextView else {
+                return false
+            }
+
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                let shouldAllowDefault = handleContextualNewline(in: textView)
+                return !shouldAllowDefault
+            }
+
+            if commandSelector == #selector(NSResponder.insertTab(_:)), codeEditorTextView.hasInlineSuggestion {
+                let acceptedSuggestion = codeEditorTextView.inlineSuggestionText
+                let accepted = codeEditorTextView.acceptInlineSuggestion()
+                if accepted {
+                    parent.inlineCompletionEngine.markAccepted(
+                        on: parent.paneID,
+                        suggestionText: acceptedSuggestion
+                    )
+                    parent.text = textView.string
+                    parent.selectedRange = textView.selectedRange
+                    updateSelectionContext(from: textView)
+                    scheduleHighlight(
+                        for: textView.string,
+                        in: textView,
+                        language: currentLanguageIdentifier,
+                        font: textView.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+                    )
+                }
+                return accepted
+            }
+
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)), codeEditorTextView.hasInlineSuggestion {
+                codeEditorTextView.clearInlineSuggestion()
+                parent.inlineCompletionEngine.markDismissed()
+                invalidateInlineCompletion()
+                return true
+            }
+
+            return false
         }
 
         @MainActor

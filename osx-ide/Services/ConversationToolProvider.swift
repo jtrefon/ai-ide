@@ -29,75 +29,32 @@ final class ConversationToolProvider {
 
     func allTools(pathValidator: PathValidator) -> [AITool] {
         let projectRoot = projectRootProvider()
-        let aiService = aiServiceProvider()
-        let codebaseIndex = codebaseIndexProvider()
-        let settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
-        let agentMemoryEnabled = settingsStore.bool(
-            forKey: AppConstantsStorage.agentMemoryEnabledKey, default: true)
-
+        
         var tools: [AITool] = []
 
-        if let codebaseIndex {
-            tools.append(IndexFindFilesTool(index: codebaseIndex))
-            tools.append(IndexListFilesTool(index: codebaseIndex))
-            tools.append(IndexSearchTextTool(index: codebaseIndex))
-            tools.append(IndexReadFileTool(index: codebaseIndex))
-            tools.append(IndexSearchSymbolsTool(index: codebaseIndex))
-
-            if agentMemoryEnabled {
-                tools.append(IndexListMemoriesTool(index: codebaseIndex))
-                tools.append(IndexAddMemoryTool(index: codebaseIndex))
-            }
+        // Core Filesystem Tools
+        tools.append(ReadFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator))
+        tools.append(ListFilesTool(pathValidator: pathValidator))
+        tools.append(WriteFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus))
+        tools.append(ReplaceInFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus))
+        tools.append(DeleteFileTool(pathValidator: pathValidator, eventBus: eventBus))
+        
+        // RAG & Index Tools
+        if let index = codebaseIndexProvider() {
+            tools.append(IndexSearchTextTool(index: index))
+            tools.append(IndexSearchSymbolsTool(index: index))
+            tools.append(IndexFindFilesTool(index: index))
+            tools.append(IndexListMemoriesTool(index: index))
+            tools.append(IndexAddMemoryTool(index: index))
         }
 
-        tools.append(
-            ReadFileTool(
-                fileSystemService: fileSystemService,
-                pathValidator: pathValidator
-            )
-        )
-        tools.append(ListFilesTool(pathValidator: pathValidator))
-        tools.append(
-            WriteFileTool(
-                fileSystemService: fileSystemService,
-                pathValidator: pathValidator,
-                eventBus: eventBus
-            )
-        )
-        tools.append(
-            WriteFilesTool(
-                fileSystemService: fileSystemService,
-                pathValidator: pathValidator,
-                eventBus: eventBus
-            )
-        )
-        tools.append(CreateFileTool(pathValidator: pathValidator, eventBus: eventBus))
-        tools.append(DeleteFileTool(pathValidator: pathValidator, eventBus: eventBus))
-        tools.append(
-            ReplaceInFileTool(
-                fileSystemService: fileSystemService,
-                pathValidator: pathValidator,
-                eventBus: eventBus
-            )
-        )
+        // Search & Structure Tools
+        tools.append(GrepTool(pathValidator: pathValidator))
+        tools.append(FindFileTool(pathValidator: pathValidator))
+        tools.append(GetProjectStructureTool(projectRoot: projectRoot))
+
+        // Terminal & Execution
         tools.append(RunCommandTool(projectRoot: projectRoot, pathValidator: pathValidator))
-
-        tools.append(
-            ArchitectAdvisorTool(
-                aiService: aiService, index: codebaseIndex, projectRoot: projectRoot))
-        tools.append(ContemplationTool())
-        tools.append(PlannerTool())
-        tools.append(StrategicPlanTool())
-        tools.append(TacticalPlanTool())
-
-        tools.append(PatchSetListTool())
-        tools.append(PatchSetApplyTool(eventBus: eventBus, projectRoot: projectRoot))
-        tools.append(PatchSetClearTool())
-
-        tools.append(CheckpointListTool())
-        tools.append(CheckpointRestoreTool(eventBus: eventBus, projectRoot: projectRoot))
-
-        tools.append(ConversationFoldTool(projectRoot: projectRoot))
 
         return tools
     }

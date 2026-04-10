@@ -168,13 +168,17 @@ class ProjectCoordinator: ObservableObject {
                     forKey: AppConstants.Storage.codebaseIndexEnabledKey, default: true)
                 await index.setEnabled(isIndexEnabled)
 
-                if isIndexEnabled {
+                if isIndexEnabled, await Self.shouldRunInitialProjectReindex(index: index, projectRoot: root) {
                     await backgroundWorkGovernor.waitUntilReady(
                         for: .indexing,
                         reason: "initial_project_reindex"
                     )
                     // Start reindex in background
                     await index.reindexProject(aiEnrichmentEnabled: false)
+                } else {
+                    await IndexLogger.shared.log(
+                        "ProjectCoordinator: Skipping initial project reindex because persisted index data already exists"
+                    )
                 }
 
                 Swift.print(
@@ -331,6 +335,27 @@ class ProjectCoordinator: ObservableObject {
                 }
             }
         }
+    }
+
+    nonisolated static func shouldRunInitialProjectReindex(
+        index: CodebaseIndex,
+        projectRoot: URL
+    ) async -> Bool {
+        let dbURL = CodebaseIndex.indexDatabaseURL(projectRoot: projectRoot)
+        let dbExists = FileManager.default.fileExists(atPath: dbURL.path)
+        let hasPersistedIndexData = await index.hasPersistedIndexData()
+        return shouldRunInitialProjectReindex(
+            dbExists: dbExists,
+            hasPersistedIndexData: hasPersistedIndexData
+        )
+    }
+
+    nonisolated static func shouldRunInitialProjectReindex(
+        dbExists: Bool,
+        hasPersistedIndexData: Bool
+    ) -> Bool {
+        guard dbExists else { return true }
+        return !hasPersistedIndexData
     }
 
     func setIndexEnabled(_ enabled: Bool) {

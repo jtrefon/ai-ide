@@ -211,10 +211,13 @@ struct ContentView: View {
             }
         } else {
             EditorPaneView(
+                paneID: .primary,
                 pane: fileEditor.primaryPane,
                 isFocused: true,
                 onFocus: { fileEditor.focus(.primary) },
                 selectionContext: appState.selectionContext,
+                inlineCompletionEngine: appState.inlineCompletionEngine,
+                inlineCompletionDebugOverlayEnabled: uiState.inlineCompletionDebugOverlayEnabled,
                 showLineNumbers: uiState.showLineNumbers,
                 wordWrap: uiState.wordWrap,
                 minimapVisible: uiState.minimapVisible,
@@ -229,10 +232,13 @@ struct ContentView: View {
         let focused = (pane == .primary) ? fileEditor.focusedPane == .primary : fileEditor.focusedPane == .secondary
 
         return EditorPaneView(
+            paneID: pane,
             pane: manager,
             isFocused: focused,
             onFocus: { fileEditor.focus(pane) },
             selectionContext: appState.selectionContext,
+            inlineCompletionEngine: appState.inlineCompletionEngine,
+            inlineCompletionDebugOverlayEnabled: uiState.inlineCompletionDebugOverlayEnabled,
             showLineNumbers: uiState.showLineNumbers,
             wordWrap: uiState.wordWrap,
             minimapVisible: uiState.minimapVisible,

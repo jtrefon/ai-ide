@@ -9,6 +9,8 @@ actor LocalModelSelectionStore {
     private let settingsStore: SettingsStore
     private let selectedModelKey = "LocalModel.SelectedId"
     private let offlineModeEnabledKey = "AI.OfflineModeEnabled"
+    private let turboQuantEnabledKey = "LocalModel.TurboQuantEnabled"
+    private let contextLengthKey = "LocalModel.ContextLength"
 
     init(settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)) {
         self.settingsStore = settingsStore
@@ -42,5 +44,26 @@ actor LocalModelSelectionStore {
             object: nil,
             userInfo: ["enabled": enabled]
         )
+    }
+
+    func isTurboQuantEnabled() -> Bool {
+        settingsStore.bool(forKey: turboQuantEnabledKey, default: false)
+    }
+
+    func setTurboQuantEnabled(_ enabled: Bool) {
+        settingsStore.set(enabled, forKey: turboQuantEnabledKey)
+    }
+
+    func contextLength() -> Int? {
+        let val = settingsStore.integer(forKey: contextLengthKey)
+        return val > 0 ? val : nil
+    }
+
+    func setContextLength(_ length: Int?) {
+        if let length {
+            settingsStore.set(length, forKey: contextLengthKey)
+        } else {
+            settingsStore.removeObject(forKey: contextLengthKey)
+        }
     }
 }

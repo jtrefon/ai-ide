@@ -4,9 +4,118 @@ import AppKit
 final class CodeEditorTextView: NSTextView {
     let foldingManager = CodeFoldingManager()
     private lazy var foldingDelegate = FoldingLayoutManagerDelegate(manager: foldingManager)
+    private let ghostTextView = CodeEditorTextView.makeGhostTextView()
+    private var ghostPresentation: InlineSuggestionPresentation?
+
+    var hasInlineSuggestion: Bool {
+        ghostPresentation != nil
+    }
+
+    var inlineSuggestionText: String? {
+        ghostPresentation?.suggestionText
+    }
+
+    override func viewWillMove(toSuperview newSuperview: NSView?) {
+        super.viewWillMove(toSuperview: newSuperview)
+        if ghostTextView.superview == nil {
+            addSubview(ghostTextView)
+        }
+    }
 
     func configureFolding() {
         layoutManager?.delegate = foldingDelegate
+    }
+
+    override func layout() {
+        super.layout()
+        updateGhostTextFrame()
+    }
+
+    func updateGhostSuggestion(_ presentation: InlineSuggestionPresentation) {
+        ghostPresentation = presentation
+        let attributes = ghostTextAttributes()
+        ghostTextView.textStorage?.setAttributedString(
+            NSAttributedString(string: String(presentation.suggestionText.prefix(600)), attributes: attributes)
+        )
+        ghostTextView.toolTip = presentation.source.rawValue + " • " + String(Int(presentation.latencyMs)) + "ms"
+        ghostTextView.isHidden = false
+        updateGhostTextFrame()
+    }
+
+    func clearInlineSuggestion() {
+        ghostPresentation = nil
+        ghostTextView.string = ""
+        ghostTextView.toolTip = nil
+        ghostTextView.isHidden = true
+    }
+
+    @discardableResult
+    func acceptInlineSuggestion() -> Bool {
+        guard let suggestion = ghostPresentation?.suggestionText, !suggestion.isEmpty else {
+            return false
+        }
+
+        clearInlineSuggestion()
+        insertText(suggestion, replacementRange: selectedRange)
+        return true
+    }
+
+    private func updateGhostTextFrame() {
+        guard ghostPresentation != nil, !ghostTextView.isHidden else { return }
+        guard let window else { return }
+
+        let screenRect = firstRect(forCharacterRange: selectedRange, actualRange: nil)
+        let windowRect = window.convertFromScreen(screenRect)
+        let localRect = convert(windowRect, from: nil)
+        let width = max(bounds.width - localRect.origin.x - 8, 120)
+        ghostTextView.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        ghostTextView.frame = NSRect(
+            x: localRect.origin.x,
+            y: localRect.origin.y + 1,
+            width: width,
+            height: 1
+        )
+        if let layoutManager = ghostTextView.layoutManager,
+           let textContainer = ghostTextView.textContainer {
+            layoutManager.ensureLayout(for: textContainer)
+            let usedRect = layoutManager.usedRect(for: textContainer)
+            ghostTextView.frame.size.height = max(usedRect.height + 2, font?.pointSize ?? 12)
+        }
+    }
+
+    private func ghostTextAttributes() -> [NSAttributedString.Key: Any] {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        return [
+            .font: font ?? NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+            .foregroundColor: NSColor.placeholderTextColor,
+            .paragraphStyle: paragraph
+        ]
+    }
+
+    private static func makeGhostTextView() -> NSTextView {
+        let textContainer = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        textContainer.widthTracksTextView = false
+        textContainer.heightTracksTextView = false
+        textContainer.lineFragmentPadding = 0
+
+        let layoutManager = NSLayoutManager()
+        layoutManager.addTextContainer(textContainer)
+
+        let textStorage = NSTextStorage()
+        textStorage.addLayoutManager(layoutManager)
+
+        let textView = NSTextView(frame: .zero, textContainer: textContainer)
+        textView.isEditable = false
+        textView.isSelectable = false
+        textView.drawsBackground = false
+        textView.backgroundColor = NSColor.clear
+        textView.textContainerInset = NSSize(width: 0, height: 0)
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = []
+        textView.isHidden = true
+        return textView
     }
 
     @IBAction func toggleFoldAtCursor(_ sender: Any?) {

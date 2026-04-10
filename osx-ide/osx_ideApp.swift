@@ -327,6 +327,11 @@ struct OSXIDEApp: App {
 
                 Divider()
 
+                Button(localized("menu.editor.trigger_inline_completion")) {
+                    Task { try? await appState.commandRegistry.execute(.editorTriggerInlineCompletion) }
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
+
                 Button(localized("menu.editor.ai_inline_assist")) {
                     Task { try? await appState.commandRegistry.execute(.editorAIInlineAssist) }
                 }

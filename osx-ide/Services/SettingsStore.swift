@@ -21,6 +21,10 @@ final class SettingsStore: @unchecked Sendable {
         userDefaults.double(forKey: key)
     }
 
+    func integer(forKey key: String) -> Int {
+        userDefaults.integer(forKey: key)
+    }
+
     func bool(forKey key: String, default defaultValue: Bool) -> Bool {
         userDefaults.object(forKey: key) as? Bool ?? defaultValue
     }

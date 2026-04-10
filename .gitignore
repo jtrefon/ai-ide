@@ -77,3 +77,9 @@ sandbox/
 scripts/
 venv*/
 .venv*/
+.kilo
+.vscode
+.windsurf
+.windsurf/*
+.windsurf/**
+.windsurfignore

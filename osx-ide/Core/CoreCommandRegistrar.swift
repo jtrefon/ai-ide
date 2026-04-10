@@ -57,6 +57,7 @@ struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
         registerEditorStateCommands()
         registerTextFinderCommands()
         registerMultiCursorCommands()
+        registerInlineCompletionCommand()
         registerInlineAIAssistCommand()
     }
 
@@ -220,6 +221,12 @@ struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
 
         commandRegistry.register(command: .editorAddCursorBelow) { _ in
             NSApp.sendAction(#selector(CodeEditorTextView.addCursorBelow(_:)), to: nil, from: nil)
+        }
+    }
+
+    private func registerInlineCompletionCommand() {
+        commandRegistry.register(command: .editorTriggerInlineCompletion) { _ in
+            context.inlineCompletionEngine.requestManualTrigger(for: context.fileEditor.focusedPane)
         }
     }
 

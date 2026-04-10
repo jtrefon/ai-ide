@@ -8,6 +8,7 @@ const latestVersionNode = document.getElementById("latest-version");
 const latestSummaryNode = document.getElementById("latest-summary");
 const latestDateNode = document.getElementById("latest-date");
 const latestAssetsNode = document.getElementById("latest-assets");
+const latestTagNode = document.getElementById("latest-tag");
 const latestActionsNode = document.getElementById("latest-actions");
 const releaseListNode = document.getElementById("release-list");
 const refreshButton = document.getElementById("refresh-releases");
@@ -86,6 +87,7 @@ function showError(message) {
   latestVersionNode.textContent = "Download from GitHub";
   latestSummaryNode.textContent = message;
   latestDateNode.textContent = "-";
+  latestTagNode.textContent = "-";
   latestAssetsNode.textContent = "-";
   latestActionsNode.innerHTML = `<a class="button button-primary" href="${REPO_URL}/releases">Open Releases</a>`;
   releaseListNode.innerHTML = `<p class="release-empty">${message}</p>`;
@@ -121,6 +123,7 @@ async function loadReleases() {
     latestVersionNode.textContent = latest.name || latest.tag_name;
     latestSummaryNode.textContent = summarizeRelease(latest);
     latestDateNode.textContent = formatDate(latest.published_at);
+    latestTagNode.textContent = latest.tag_name;
     latestAssetsNode.textContent = `${assetCount} asset${assetCount === 1 ? "" : "s"}`;
     latestActionsNode.innerHTML = assetLinks(latest);
     releaseListNode.innerHTML = published

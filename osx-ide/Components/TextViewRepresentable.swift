@@ -3,10 +3,13 @@ import AppKit
 
 @MainActor
 struct TextViewRepresentable: NSViewRepresentable {
+    let paneID: FileEditorStateManager.PaneID
     @Binding var text: String
+    let filePath: String?
     var language: String
     @Binding var selectedRange: NSRange?
     @ObservedObject var selectionContext: CodeSelectionContext
+    let inlineCompletionEngine: InlineCompletionEngine
     var showLineNumbers: Bool
     var wordWrap: Bool
     var fontSize: Double
@@ -14,7 +17,7 @@ struct TextViewRepresentable: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
-        let textView = NSTextView()
+        let textView = CodeEditorTextView()
 
         let resolvedFont = Self.resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize)
         configureTextView(textView, resolvedFont: resolvedFont)
@@ -42,6 +45,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         // UI Tests need a stable identifier; otherwise `app.textViews.firstMatch` can
         // accidentally match the AI chat input instead of the editor.
         textView.setAccessibilityIdentifier(AccessibilityID.codeEditorTextView)
+        (textView as? CodeEditorTextView)?.configureFolding()
     }
 
     private func configureTextContainerSizing(for textView: NSTextView) {
@@ -112,7 +116,9 @@ struct TextViewRepresentable: NSViewRepresentable {
 
         let resolvedFont = Self.resolveEditorFont(fontFamily: fontFamily, fontSize: fontSize)
         let languageDidChange = context.coordinator.currentLanguageIdentifier != language
+        let fileDidChange = context.coordinator.currentFilePath != filePath
         context.coordinator.currentLanguageIdentifier = language
+        context.coordinator.currentFilePath = filePath
         let needsRehighlight = syncFont(resolvedFont, for: textView, in: scrollView)
         scheduleWordWrapUpdate(for: scrollView, textView: textView)
         syncTextAndHighlightIfNeeded(
@@ -123,6 +129,9 @@ struct TextViewRepresentable: NSViewRepresentable {
         )
         syncSelectionIfNeeded(for: textView, coordinator: context.coordinator)
         syncRulerVisibilityIfNeeded(for: scrollView, textView: textView)
+        if fileDidChange {
+            context.coordinator.handleFileSwitch(textView: textView)
+        }
     }
 
     private func syncFont(_ resolvedFont: NSFont, for textView: NSTextView, in scrollView: NSScrollView) -> Bool {

@@ -5,14 +5,32 @@ import AppKit
 
 @MainActor
 final class TextViewHighlightingHelpersTests: XCTestCase {
+    private var inlineCompletionEngine: InlineCompletionEngine {
+        InlineCompletionEngine(
+            settingsStore: InlineCompletionSettingsStore(),
+            triggerPolicy: CompletionTriggerPolicy(),
+            contextAssembler: CompletionContextAssembler(),
+            retrievalLayer: CompletionRetrievalLayer(
+                projectRootProvider: { nil },
+                codebaseIndexProvider: { nil }
+            ),
+            inferenceService: CompletionInferenceService(
+                provider: AIServiceInlineCompletionProvider(aiServiceProvider: { nil })
+            ),
+            ranker: SuggestionRanker()
+        )
+    }
 
     func testApplyHighlightAttributesCopiesForegroundColors() {
         var text = "abc"
         let parent = TextViewRepresentable(
+            paneID: .primary,
             text: Binding(get: { text }, set: { text = $0 }),
+            filePath: nil,
             language: "swift",
             selectedRange: .constant(nil),
             selectionContext: CodeSelectionContext(),
+            inlineCompletionEngine: inlineCompletionEngine,
             showLineNumbers: false,
             wordWrap: false,
             fontSize: 12,

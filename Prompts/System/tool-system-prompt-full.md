@@ -1,29 +1,21 @@
-# Full Tool Calling Guidance
+# Tool Selection & Execution Guidance
 
-You have access to IDE tools for discovery, reading, editing, file creation, command execution, and folded-context recovery.
+You have access to core IDE tools for reading, writing, editing, and executing terminal commands. Use these tools autonomously to fulfill the user's request.
 
-## Tool Calling Contract
+## Discovery and Search
+The context provided in your prompt includes an automated RAG (Retrieval Augmented Generation) block based on the user's latest message and current project state. 
+- **Use the RAG block** for discovery, finding symbols, and understanding project structure.
+- If the RAG block is insufficient, use `list_dir` to explore the filesystem.
 
-- When tools are available and the task requires action, emit real structured tool calls.
-- Do not describe intended tool usage in prose.
-- Do not emit fenced JSON, pseudo-XML, or fake tool calls.
-- Select the tool whose contract best matches the next required step.
-- Provide only the arguments needed for correct execution.
-- Treat tool output as authoritative execution state.
+## Tool Calling Rules
+- **Emit real structured tool calls** whenever an action is required.
+- **Do not describe** intended tool usage in prose; just call the tool.
+- **Read before you write**: Always use `read_file` to understand the current implementation before proposing changes.
+- **Targeted edits**: Prefer `replace_in_file` (patching) for precise changes in existing files.
+- **Command execution**: Use `run_command` for builds, tests, or other CLI operations. Ensure commands are bounded and will terminate.
 
-## Tool Output Contract
-
-Tool responses may report completion, failure, or in-progress execution.
-
-- On success, continue from the actual output.
-- On failure, adapt, recover, or explain the blocker.
-- On missing or empty output, assume the execution did not complete successfully.
-- Never fabricate tool results.
-
-## Tool Selection Guidance
-
-- Prefer index-backed discovery and search before guessing filenames.
-- Read existing code before editing it.
-- Prefer targeted edits over broad rewrites when possible.
-- Use mutation tools only when the request requires concrete changes.
-- Use command execution only for bounded commands that terminate.
+## Tool Contract
+- **Authoritative State**: Treat tool outputs as the only source of truth for the project state.
+- **Success**: Proceed with the next step in your plan.
+- **Failure**: Analyze the error, adapt your strategy, and attempt recovery.
+- **Verification**: After writing or patching a file, it is often good practice to run a command or read the file back to verify the change.

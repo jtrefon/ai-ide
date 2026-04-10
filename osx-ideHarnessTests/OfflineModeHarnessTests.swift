@@ -1170,7 +1170,8 @@ final class OfflineModeHarnessTests: XCTestCase {
             temperature: 0.35,
             topP: 0.92,
             repetitionPenalty: 1.03,
-            repetitionContextSize: 64
+            repetitionContextSize: 64,
+            turboQuantEnabled: false
         )
     }
 
@@ -1221,7 +1222,8 @@ final class OfflineModeHarnessTests: XCTestCase {
                                                 temperature: temperature,
                                                 topP: topP,
                                                 repetitionPenalty: repetitionPenalty,
-                                                repetitionContextSize: repetitionContextSize
+                                                repetitionContextSize: repetitionContextSize,
+                                                turboQuantEnabled: false
                                             )
                                         )
                                     }

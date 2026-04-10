@@ -10,13 +10,7 @@ import Foundation
 public struct CodeFormatter {
     public static func format(_ code: String, language: CodeLanguage) -> String {
         let configuration = LanguageKeywordRepository.formattingConfiguration(for: language)
-        let indentString: String
-        switch configuration.indentUnitStyle {
-        case .tabs:
-            indentString = "\t"
-        case .spaces:
-            indentString = String(repeating: " ", count: max(1, configuration.indentWidth))
-        }
+        let indentString = IndentationStyle.current().indentUnit(tabWidth: max(1, configuration.indentWidth))
 
         let strategy: CodeFormattingStrategy = DefaultCodeFormattingStrategy()
         let formatted = strategy.format(code: code, language: language, indentUnit: indentString)

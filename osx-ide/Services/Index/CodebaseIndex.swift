@@ -282,9 +282,6 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         Task {
             await memoryManager.updateEmbeddingGenerator(generator)
             await indexer.updateEmbeddingGenerator(generator)
-            await MainActor.run {
-                self.reindexProject()
-            }
         }
     }
 

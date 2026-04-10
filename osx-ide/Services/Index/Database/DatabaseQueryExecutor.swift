@@ -171,4 +171,43 @@ final class DatabaseQueryExecutor {
             return Int(sqlite3_changes(database.db))
         }
     }
+
+    func pruneResourcesNotInPaths(_ knownPaths: Set<String>) throws -> Int {
+        guard !knownPaths.isEmpty else { return 0 }
+
+        let batchSize = 500
+        var totalRemoved = 0
+
+        let allPathsSql = "SELECT id, path FROM resources;"
+        let resourcesToDelete = try database.withPreparedStatement(sql: allPathsSql) { statement -> [(String, String)] in
+            var results: [(String, String)] = []
+            while sqlite3_step(statement) == SQLITE_ROW {
+                if let idPtr = sqlite3_column_text(statement, 0),
+                   let pathPtr = sqlite3_column_text(statement, 1) {
+                    results.append((String(cString: idPtr), String(cString: pathPtr)))
+                }
+            }
+            return results
+        }
+
+        let idsToDelete = resourcesToDelete.filter { !knownPaths.contains($0.1) }.map { $0.0 }
+
+        guard !idsToDelete.isEmpty else { return 0 }
+
+        for batchStart in stride(from: 0, to: idsToDelete.count, by: batchSize) {
+            let batchEnd = min(batchStart + batchSize, idsToDelete.count)
+            let batch = Array(idsToDelete[batchStart..<batchEnd])
+            let placeholders = batch.map { _ in "?" }.joined(separator: ", ")
+            let deleteSql = "DELETE FROM resources WHERE id IN (\(placeholders));"
+
+            try database.syncOnQueue {
+                try database.transaction {
+                    try database.execute(sql: deleteSql, parameters: batch)
+                }
+                totalRemoved += Int(sqlite3_changes(database.db))
+            }
+        }
+
+        return totalRemoved
+    }
 }

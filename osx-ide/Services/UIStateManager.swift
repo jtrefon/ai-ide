@@ -47,6 +47,30 @@ class UIStateManager: ObservableObject {
     @Published var minimapVisible: Bool = false {
         didSet { trackChange("minimapVisible", from: oldValue, to: minimapVisible) }
     }
+    @Published var inlineCompletionEnabled: Bool = InlineCompletionSettings.default.isEnabled {
+        didSet { trackChange("inlineCompletionEnabled", from: oldValue, to: inlineCompletionEnabled) }
+    }
+    @Published var inlineCompletionDebounceMilliseconds: Int = InlineCompletionSettings.default.debounceMilliseconds {
+        didSet { trackChange("inlineCompletionDebounceMilliseconds", from: oldValue, to: inlineCompletionDebounceMilliseconds) }
+    }
+    @Published var inlineCompletionAggressiveness: Double = InlineCompletionSettings.default.aggressiveness {
+        didSet { trackChange("inlineCompletionAggressiveness", from: oldValue, to: inlineCompletionAggressiveness) }
+    }
+    @Published var inlineCompletionMaxSuggestionLength: Int = InlineCompletionSettings.default.maxSuggestionLength {
+        didSet { trackChange("inlineCompletionMaxSuggestionLength", from: oldValue, to: inlineCompletionMaxSuggestionLength) }
+    }
+    @Published var inlineCompletionMultilineEnabled: Bool = InlineCompletionSettings.default.multilineEnabled {
+        didSet { trackChange("inlineCompletionMultilineEnabled", from: oldValue, to: inlineCompletionMultilineEnabled) }
+    }
+    @Published var inlineCompletionRetrievalEnabled: Bool = InlineCompletionSettings.default.retrievalEnabled {
+        didSet { trackChange("inlineCompletionRetrievalEnabled", from: oldValue, to: inlineCompletionRetrievalEnabled) }
+    }
+    @Published var inlineCompletionRoutingMode: InlineCompletionRoutingMode = InlineCompletionSettings.default.routingMode {
+        didSet { trackChange("inlineCompletionRoutingMode", from: oldValue.rawValue, to: inlineCompletionRoutingMode.rawValue) }
+    }
+    @Published var inlineCompletionDebugOverlayEnabled: Bool = InlineCompletionSettings.default.debugOverlayEnabled {
+        didSet { trackChange("inlineCompletionDebugOverlayEnabled", from: oldValue, to: inlineCompletionDebugOverlayEnabled) }
+    }
     @Published var fontSize: Double = AppConstants.Editor.defaultFontSize {
         didSet { trackChange("fontSize", from: oldValue, to: fontSize) }
     }
@@ -196,6 +220,46 @@ class UIStateManager: ObservableObject {
         uiService.setMinimapVisible(visible)
     }
 
+    func setInlineCompletionEnabled(_ enabled: Bool) {
+        inlineCompletionEnabled = enabled
+        uiService.setInlineCompletionEnabled(enabled)
+    }
+
+    func setInlineCompletionDebounceMilliseconds(_ milliseconds: Int) {
+        inlineCompletionDebounceMilliseconds = max(50, min(800, milliseconds))
+        uiService.setInlineCompletionDebounceMilliseconds(inlineCompletionDebounceMilliseconds)
+    }
+
+    func setInlineCompletionAggressiveness(_ aggressiveness: Double) {
+        inlineCompletionAggressiveness = max(0.05, min(1.0, aggressiveness))
+        uiService.setInlineCompletionAggressiveness(inlineCompletionAggressiveness)
+    }
+
+    func setInlineCompletionMaxSuggestionLength(_ length: Int) {
+        inlineCompletionMaxSuggestionLength = max(16, min(512, length))
+        uiService.setInlineCompletionMaxSuggestionLength(inlineCompletionMaxSuggestionLength)
+    }
+
+    func setInlineCompletionMultilineEnabled(_ enabled: Bool) {
+        inlineCompletionMultilineEnabled = enabled
+        uiService.setInlineCompletionMultilineEnabled(enabled)
+    }
+
+    func setInlineCompletionRetrievalEnabled(_ enabled: Bool) {
+        inlineCompletionRetrievalEnabled = enabled
+        uiService.setInlineCompletionRetrievalEnabled(enabled)
+    }
+
+    func setInlineCompletionRoutingMode(_ mode: InlineCompletionRoutingMode) {
+        inlineCompletionRoutingMode = mode
+        uiService.setInlineCompletionRoutingMode(mode)
+    }
+
+    func setInlineCompletionDebugOverlayEnabled(_ enabled: Bool) {
+        inlineCompletionDebugOverlayEnabled = enabled
+        uiService.setInlineCompletionDebugOverlayEnabled(enabled)
+    }
+
     func updateFontSize(_ size: Double) {
         guard size >= AppConstants.Editor.minFontSize && size <= AppConstants.Editor.maxFontSize else { return }
         fontSize = size
@@ -294,6 +358,14 @@ class UIStateManager: ObservableObject {
         showLineNumbers = settings.showLineNumbers
         wordWrap = settings.wordWrap
         minimapVisible = settings.minimapVisible
+        inlineCompletionEnabled = settings.inlineCompletionEnabled
+        inlineCompletionDebounceMilliseconds = settings.inlineCompletionDebounceMilliseconds
+        inlineCompletionAggressiveness = settings.inlineCompletionAggressiveness
+        inlineCompletionMaxSuggestionLength = settings.inlineCompletionMaxSuggestionLength
+        inlineCompletionMultilineEnabled = settings.inlineCompletionMultilineEnabled
+        inlineCompletionRetrievalEnabled = settings.inlineCompletionRetrievalEnabled
+        inlineCompletionRoutingMode = settings.inlineCompletionRoutingMode
+        inlineCompletionDebugOverlayEnabled = settings.inlineCompletionDebugOverlayEnabled
         sidebarWidth = settings.sidebarWidth
         terminalHeight = settings.terminalHeight
         chatPanelWidth = settings.chatPanelWidth
@@ -321,6 +393,14 @@ class UIStateManager: ObservableObject {
         showLineNumbers = true
         wordWrap = false
         minimapVisible = false
+        inlineCompletionEnabled = InlineCompletionSettings.default.isEnabled
+        inlineCompletionDebounceMilliseconds = InlineCompletionSettings.default.debounceMilliseconds
+        inlineCompletionAggressiveness = InlineCompletionSettings.default.aggressiveness
+        inlineCompletionMaxSuggestionLength = InlineCompletionSettings.default.maxSuggestionLength
+        inlineCompletionMultilineEnabled = InlineCompletionSettings.default.multilineEnabled
+        inlineCompletionRetrievalEnabled = InlineCompletionSettings.default.retrievalEnabled
+        inlineCompletionRoutingMode = InlineCompletionSettings.default.routingMode
+        inlineCompletionDebugOverlayEnabled = InlineCompletionSettings.default.debugOverlayEnabled
         fontSize = AppConstants.Editor.defaultFontSize
         fontFamily = AppConstants.Editor.defaultFontFamily
         indentationStyle = .tabs

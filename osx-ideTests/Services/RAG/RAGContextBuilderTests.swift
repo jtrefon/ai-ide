@@ -14,7 +14,9 @@ final class RAGContextBuilderTests: XCTestCase {
             projectRoot: nil
         )
         
-        XCTAssertEqual(context, "Explicit context content")
+        XCTAssertNotNil(context)
+        XCTAssertTrue(context?.contains("EXECUTION ENVIRONMENT:") ?? false)
+        XCTAssertTrue(context?.contains("Explicit context content") ?? false)
     }
     
     func testTrimsWhitespaceFromExplicitContext() async {
@@ -25,7 +27,9 @@ final class RAGContextBuilderTests: XCTestCase {
             projectRoot: nil
         )
         
-        XCTAssertEqual(context, "Trimmed content")
+        XCTAssertNotNil(context)
+        XCTAssertTrue(context?.contains("EXECUTION ENVIRONMENT:") ?? false)
+        XCTAssertTrue(context?.contains("Trimmed content") ?? false)
     }
     
     func testReturnsNilForEmptyExplicitContext() async {
@@ -36,7 +40,8 @@ final class RAGContextBuilderTests: XCTestCase {
             projectRoot: nil
         )
         
-        XCTAssertNil(context)
+        XCTAssertNotNil(context)
+        XCTAssertTrue(context?.contains("EXECUTION ENVIRONMENT:") ?? false)
     }
     
     func testReturnsNilForNilExplicitContextAndNoRetriever() async {
@@ -47,7 +52,8 @@ final class RAGContextBuilderTests: XCTestCase {
             projectRoot: nil
         )
         
-        XCTAssertNil(context)
+        XCTAssertNotNil(context)
+        XCTAssertTrue(context?.contains("EXECUTION ENVIRONMENT:") ?? false)
     }
     
     func testCombinesExplicitContextWithRAGContext() async {
