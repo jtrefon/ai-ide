@@ -49,8 +49,8 @@ jobs:
           test
           -destination 'platform=macOS'
           -only-testing:osx-ideTests
-          -parallelize-tests
-          -maximum-test-concurrency 4
+          -parallel-testing-enabled YES
+          -maximum-parallel-testing-workers 4
           CODE_SIGNING_ALLOWED=NO
           TEST_AFTER_BUILD=YES
 
