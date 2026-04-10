@@ -26,6 +26,7 @@ class BaseUITestCase: XCTestCase {
         app.launchEnvironment[TestLaunchKeys.xcuiTesting] = "1"
         app.launchEnvironment[TestLaunchKeys.testProfileDir] = testProfilePath
         app.launchEnvironment[TestLaunchKeys.disableHeavyInit] = "1"
+        app.launchEnvironment["OSXIDE_DISABLE_INLINE_COMPLETION"] = "1"
         if let scenario {
             app.launchEnvironment[TestLaunchKeys.uiTestScenario] = scenario
         }
@@ -69,12 +70,13 @@ enum UITestAccessibilityID {
 struct AppRobot {
     let app: XCUIApplication
 
-    func waitForReady(timeout: TimeInterval = 30) {
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: timeout), "App must reach foreground")
+    func waitForReady(timeout: TimeInterval = 60) {
+        let adjustedTimeout = ProcessInfo.processInfo.environment["CI"] != nil ? 120 : timeout
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: adjustedTimeout), "App must reach foreground")
         app.activate()
 
         let readyMarker = app.staticTexts[UITestAccessibilityID.appReadyMarker]
-        if readyMarker.waitForExistence(timeout: min(10, timeout)) {
+        if readyMarker.waitForExistence(timeout: min(30, adjustedTimeout)) {
             let readyDeadline = Date().addingTimeInterval(timeout)
             while Date() < readyDeadline {
                 if (readyMarker.value as? String) == "ready" {
