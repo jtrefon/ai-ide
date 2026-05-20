@@ -9,8 +9,12 @@ extension OpenRouterAIService {
     internal func buildOpenRouterMessages(from messages: [ChatMessage]) -> [OpenRouterChatMessage] {
         let sanitizedMessages = Self.sanitizeToolCallOrdering(messages)
         let validToolCallIds = buildValidToolCallIds(from: sanitizedMessages)
+        // Find the most recent reasoning from any assistant message in this conversation.
+        // DeepSeek V4 requires reasoning_content echoed back in every subsequent assistant message.
+        let conversationReasoning = sanitizedMessages.last(where: { $0.role == .assistant && ($0.reasoning?.isEmpty == false) })?.reasoning
+            ?? lastReasoningContent
         return sanitizedMessages.compactMap { message in
-            mapOpenRouterChatMessage(message, validToolCallIds: validToolCallIds)
+            mapOpenRouterChatMessage(message, validToolCallIds: validToolCallIds, conversationReasoning: conversationReasoning)
         }
     }
 
@@ -25,20 +29,27 @@ extension OpenRouterAIService {
 
     internal func mapOpenRouterChatMessage(
         _ message: ChatMessage,
-        validToolCallIds: Set<String>
+        validToolCallIds: Set<String>,
+        conversationReasoning: String? = nil
     ) -> OpenRouterChatMessage? {
         switch message.role {
         case .user:
             return OpenRouterChatMessage(role: "user", content: message.content)
         case .assistant:
+            let effectiveReasoning = message.reasoning ?? conversationReasoning
             if let toolCalls = message.toolCalls {
                 return OpenRouterChatMessage(
                     role: "assistant",
                     content: message.content.isEmpty ? "" : message.content,
-                    toolCalls: toolCalls
+                    toolCalls: toolCalls,
+                    reasoningContent: effectiveReasoning
                 )
             }
-            return OpenRouterChatMessage(role: "assistant", content: message.content)
+            return OpenRouterChatMessage(
+                role: "assistant",
+                content: message.content,
+                reasoningContent: effectiveReasoning
+            )
         case .system:
             return OpenRouterChatMessage(role: "system", content: message.content)
         case .tool:

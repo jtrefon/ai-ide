@@ -25,11 +25,13 @@ internal struct OpenRouterChatResponseChunkDelta: Decodable {
     let content: String?
     let toolCalls: [OpenRouterChatResponseChunkToolCall]?
     let reasoning: String?
+    let reasoningContent: String?
 
     enum CodingKeys: String, CodingKey {
         case content
         case toolCalls = "tool_calls"
         case reasoning
+        case reasoningContent = "reasoning_content"
     }
 }
 

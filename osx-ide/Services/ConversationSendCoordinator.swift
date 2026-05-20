@@ -58,7 +58,8 @@ final class ConversationSendCoordinator {
         let foldStartTime = ContinuousClock.now
         try await foldingHandler.foldIfNeeded(
             historyCoordinator: historyCoordinator,
-            projectRoot: request.projectRoot
+            projectRoot: request.projectRoot,
+            mode: request.mode
         )
         let foldDuration = foldStartTime.duration(to: ContinuousClock.now)
         await AppLogger.shared.debug(

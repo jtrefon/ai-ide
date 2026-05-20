@@ -11,6 +11,7 @@ struct AISettingsTab: View {
     @ObservedObject var openRouterViewModel: OpenRouterSettingsViewModel
     @ObservedObject var alibabaViewModel: OpenRouterSettingsViewModel
     @ObservedObject var kiloCodeViewModel: OpenRouterSettingsViewModel
+    @ObservedObject var deepSeekViewModel: OpenRouterSettingsViewModel
     @ObservedObject var providerSelectionViewModel: AIProviderSelectionViewModel
     @ObservedObject var localModelViewModel: LocalModelSettingsViewModel
     @ObservedObject var embeddingModelViewModel: EmbeddingModelSettingsViewModel
@@ -24,6 +25,8 @@ struct AISettingsTab: View {
             return alibabaViewModel
         case .kiloCode:
             return kiloCodeViewModel
+        case .deepSeek:
+            return deepSeekViewModel
         }
     }
 
@@ -31,7 +34,8 @@ struct AISettingsTab: View {
         [
             openRouterViewModel,
             alibabaViewModel,
-            kiloCodeViewModel
+            kiloCodeViewModel,
+            deepSeekViewModel
         ]
     }
 
@@ -50,6 +54,8 @@ struct AISettingsTab: View {
         switch providerSelectionViewModel.selectedProvider {
         case .kiloCode:
             return "Choose how much reasoning Kilo Code uses: none, model-only, agent-only, or both."
+        case .deepSeek:
+            return "DeepSeek supports native reasoning. Toggle to enable thinking mode."
         case .openRouter, .alibabaCloud:
             return localized("settings.ai.reasoning_card.subtitle")
         }
@@ -59,6 +65,8 @@ struct AISettingsTab: View {
         switch providerSelectionViewModel.selectedProvider {
         case .kiloCode:
             return "None disables thinking, Model uses internal-only thinking, Agent uses app-side reasoning, and Model + Agent enables both."
+        case .deepSeek:
+            return "Enable native reasoning for DeepSeek-R1 style chain-of-thought."
         case .openRouter, .alibabaCloud:
             return localized("settings.ai.reasoning.subtitle")
         }

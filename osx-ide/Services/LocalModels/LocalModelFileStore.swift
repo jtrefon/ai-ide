@@ -359,8 +359,8 @@ public enum LocalModelFileStore {
                     configObject["rope_theta"] = 10000.0
                 }
                 
-                // MLX Swift's gemma3_text model naturally strips the language_model prefix dynamically.
-                configObject["model_type"] = "gemma3_text"
+                // Use gemma4_text model (text-only) with inlined text_config.
+                configObject["model_type"] = "gemma4_text"
                 mutated = true
             }
         }

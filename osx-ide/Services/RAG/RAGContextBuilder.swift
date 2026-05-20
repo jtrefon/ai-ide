@@ -198,9 +198,64 @@ public enum RAGContextBuilder {
         if let projectRoot {
             lines.append("Project Root: \(projectRoot.path)")
             lines.append("Working Directory Scope: Use the project root unless a tool contract requires another path.")
+
+            // Include project file tree so the model knows what files exist
+            if let fileTree = buildProjectFileTree(root: projectRoot) {
+                lines.append("\nPROJECT FILE TREE:")
+                lines.append(fileTree)
+            }
         }
 
         lines.append("CLI Guidance: Prefer macOS-compatible shell commands and paths. Do not assume Linux-only utilities or package-manager behavior.")
         return lines.joined(separator: "\n")
+    }
+
+    /// Builds a concise file tree listing for the project, skipping ignored directories.
+    private static func buildProjectFileTree(root: URL) -> String? {
+        let maxFiles = 150
+        let maxDepth = 4
+        let maxChars = 3000
+
+        let ignoredDirs: Set<String> = [
+            ".git", ".ide", "node_modules", ".build", "DerivedData",
+            "__pycache__", ".venv", "venv", "build", "dist", ".next",
+            "coverage", ".turbo", ".cache"
+        ]
+
+        var result = ""
+        var fileCount = 0
+
+        func walk(url: URL, depth: Int, prefix: String) {
+            guard depth <= maxDepth, fileCount < maxFiles, result.count < maxChars else { return }
+            guard let contents = try? FileManager.default.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else { return }
+
+            let sorted = contents.sorted { $0.lastPathComponent < $1.lastPathComponent }
+            for (index, item) in sorted.enumerated() {
+                guard fileCount < maxFiles, result.count < maxChars else { break }
+                let isLast = index == sorted.count - 1
+                let connector = isLast ? "└── " : "├── "
+                let name = item.lastPathComponent
+
+                var isDir: ObjCBool = false
+                FileManager.default.fileExists(atPath: item.path, isDirectory: &isDir)
+
+                if isDir.boolValue {
+                    guard !ignoredDirs.contains(name) else { continue }
+                    result += "\(prefix)\(connector)\(name)/\n"
+                    let childPrefix = prefix + (isLast ? "    " : "│   ")
+                    walk(url: item, depth: depth + 1, prefix: childPrefix)
+                } else {
+                    result += "\(prefix)\(connector)\(name)\n"
+                    fileCount += 1
+                }
+            }
+        }
+
+        walk(url: root, depth: 0, prefix: "")
+        return result.isEmpty ? nil : result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

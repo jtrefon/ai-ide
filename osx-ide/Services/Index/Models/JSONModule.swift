@@ -86,11 +86,15 @@ public final class JSONModule: TokenLanguageModule,
         var cursor = afterStringIndex
         while cursor < text.length {
             let scalar = text.character(at: cursor)
-            if CharacterSet.whitespacesAndNewlines.contains(UnicodeScalar(scalar)!) {
+            guard let unicodeScalar = UnicodeScalar(scalar) else {
                 cursor += 1
                 continue
             }
-            return Character(UnicodeScalar(scalar)!) == ":"
+            if CharacterSet.whitespacesAndNewlines.contains(unicodeScalar) {
+                cursor += 1
+                continue
+            }
+            return Character(unicodeScalar) == ":"
         }
 
         return false

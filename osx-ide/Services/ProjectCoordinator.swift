@@ -155,10 +155,8 @@ class ProjectCoordinator: ObservableObject {
                     index.start()
 
                     // Update conversation manager with new project context - safe on MainActor
-                    if let cm = self.conversationManager as? ConversationManager {
-                        cm.updateCodebaseIndex(index)
-                        cm.updateProjectRoot(root)
-                    }
+                    conversationManager.updateCodebaseIndex(index)
+                    conversationManager.updateProjectRoot(root)
 
                     self.startRootWatcher(projectRoot: root)
                 }
@@ -303,10 +301,8 @@ class ProjectCoordinator: ObservableObject {
                     self.isInitializing = false
                     indexCopy.start()
 
-                    if let cm = self.conversationManager as? ConversationManager {
-                        cm.updateCodebaseIndex(indexCopy)
-                        cm.updateProjectRoot(projectRoot)
-                    }
+                    conversationManager.updateCodebaseIndex(indexCopy)
+                    conversationManager.updateProjectRoot(projectRoot)
                 }
 
                 await self.startRootWatcher(projectRoot: projectRoot)

@@ -382,4 +382,51 @@ final class RealServiceToolLoopTests: XCTestCase {
     private func harnessNote(_ message: String) {
         print("[HARNESS][WARN] \(message)")
     }
+    
+    // MARK: - DeepSeek V4 Pro Harness
+    
+    func testDeepSeekV4ProToolLoopWithThinking() async throws {
+        try requireOnlineHarnessExecution()
+        print("\n=== Test: DeepSeek V4 Pro Tool Loop with Thinking ===\n")
+        
+        // Select DeepSeek provider and model via UserDefaults BEFORE creating runtime.
+        // The harness reuses the app's existing key from UserDefaults (DeepSeekAPIKey).
+        let defaults = AppRuntimeEnvironment.userDefaults
+        defaults.set("deepSeek", forKey: "AI.SelectedRemoteProvider")
+        defaults.set("deepseek-v4-pro", forKey: "DeepSeekModel")
+        defaults.set("modelAndAgent", forKey: "DeepSeekReasoningMode")
+        defaults.set("https://api.deepseek.com/v1", forKey: "DeepSeekBaseURL")
+        defaults.synchronize()
+        
+        let result = try await runScenarioUntilStable(
+            name: "deepseek_v4_pro_uppercase",
+            prepare: { root in
+                let testFile = root.appendingPathComponent("input.txt")
+                try "hello world from deepseek".write(to: testFile, atomically: true, encoding: .utf8)
+            },
+            prompt: """
+                Read input.txt and create output.txt containing exactly HELLO WORLD FROM DEEPSEEK (uppercase).
+                Use at most one read and one write operation, then finish.
+                """
+        )
+        
+        let files = listAllFiles(under: result.projectRoot)
+        print("[HARNESS][INFO] deepseek_v4_pro files=\(files)")
+        let lastAssistant = result.manager.messages.last(where: { $0.role == .assistant })?.content ?? ""
+        print("[HARNESS][INFO] deepseek_v4_pro lastAssistant=\(lastAssistant)")
+        
+        // Log telemetry for debugging
+        let summary = result.telemetry
+        print("[HARNESS][INFO] deepseek_v4_pro iterations=\(summary.totalIterations) successful=\(summary.successfulExecutions)")
+        
+        harnessTrue(files.contains("output.txt"), "Should have created output.txt")
+        if files.contains("output.txt") {
+            let content = try String(contentsOf: result.projectRoot.appendingPathComponent("output.txt"))
+            harnessEqual(
+                content.trimmingCharacters(in: .whitespacesAndNewlines),
+                "HELLO WORLD FROM DEEPSEEK",
+                "output.txt should contain uppercase content"
+            )
+        }
+    }
 }

@@ -8,34 +8,8 @@
 import Combine
 import SwiftUI
 
-private struct AIServiceBundle {
-    let openRouterService: OpenRouterAIService
-    let alibabaService: OpenRouterAIService
-    let kiloCodeService: OpenRouterAIService
-    let localModelService: LocalModelProcessAIService
-    let selectionStore: LocalModelSelectionStore
-    let providerSelectionStore: AIProviderSelectionStore
-    let router: ModelRoutingAIService
-}
-
-private func earlyDiag(_ msg: String) {
-    let ts = ISO8601DateFormatter().string(from: Date())
-    let line = "[\(ts)] \(msg)\n"
-    let fm = FileManager.default
-    let tmpLog = URL(fileURLWithPath: "/tmp/osx-ide-startup.log")
-    if let data = line.data(using: .utf8) {
-        if fm.fileExists(atPath: tmpLog.path) {
-            if let handle = try? FileHandle(forWritingTo: tmpLog) {
-                _ = try? handle.seekToEnd()
-                try? handle.write(contentsOf: data)
-                try? handle.close()
-            }
-        } else {
-            try? data.write(to: tmpLog)
-        }
-    }
-    Swift.print("[EARLY-DIAG] \(msg)")
-    fflush(stdout)
+func elapsedSince(_ start: Date) -> Int {
+    Int(Date().timeIntervalSince(start) * 1000)
 }
 
 /// Dependency injection container for managing service instances
@@ -49,12 +23,12 @@ class DependencyContainer: ObservableObject {
 
     init(launchContext: AppLaunchContext = AppRuntimeEnvironment.launchContext) {
         let _initStart = Date()
-        earlyDiag("DependencyContainer.init START")
+        StartupLogger.log("DependencyContainer.init START")
 
         settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.makeUserDefaults(for: launchContext))
 
         // Create lightweight services immediately
-        earlyDiag("Creating lightweight services...")
+        StartupLogger.log("Creating lightweight services...")
 
         let errorManager = ErrorManager()
         _errorManager = errorManager
@@ -85,28 +59,24 @@ class DependencyContainer: ObservableObject {
             }
         )
         _activityCoordinator = AgentActivityCoordinator.shared
-        earlyDiag(
-            "Lightweight services done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
-        )
+        StartupLogger.log("Lightweight services done", elapsedMs: elapsedSince(_initStart))
 
         // Create AI services (these are lightweight)
-        earlyDiag("Creating AI services...")
-        
+        StartupLogger.log("Creating AI services...")
+
         // Note: Test configuration will be set up asynchronously in initializeHeavyServices
 
-        let aiServices = Self.makeAIServices(
+        let aiServices = AIServicesFactory.makeAIServices(
             launchContext: launchContext,
             settingsStore: settingsStore,
             eventBus: _eventBus,
             activityCoordinator: _activityCoordinator
         )
         _aiService = aiServices.router
-        earlyDiag(
-            "AI services done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
-        )
+        StartupLogger.log("AI services done", elapsedMs: elapsedSince(_initStart))
 
         // Create conversation manager
-        earlyDiag("Creating conversation manager...")
+        StartupLogger.log("Creating conversation manager...")
 
         _conversationManager = ConversationManager(
             dependencies: ConversationManager.Dependencies(
@@ -125,12 +95,10 @@ class DependencyContainer: ObservableObject {
                 )
             )
         )
-        earlyDiag(
-            "Conversation manager done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
-        )
+        StartupLogger.log("Conversation manager done", elapsedMs: elapsedSince(_initStart))
 
         // Create project coordinator
-        earlyDiag("Creating project coordinator...")
+        StartupLogger.log("Creating project coordinator...")
 
         let projectCoordinator = ProjectCoordinator(
             aiService: _aiService,
@@ -139,18 +107,14 @@ class DependencyContainer: ObservableObject {
             conversationManager: _conversationManager
         )
         _projectCoordinator = projectCoordinator
-        _inlineCompletionEngine = Self.makeInlineCompletionEngine(
+        _inlineCompletionEngine = AIServicesFactory.makeInlineCompletionEngine(
             aiServices: aiServices,
             projectRootProvider: { [weak projectCoordinator] in projectCoordinator?.currentProjectRoot },
             codebaseIndexProvider: { [weak projectCoordinator] in projectCoordinator?.codebaseIndex }
         )
-        earlyDiag(
-            "Project coordinator done: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
-        )
+        StartupLogger.log("Project coordinator done", elapsedMs: elapsedSince(_initStart))
 
-        earlyDiag(
-            "DependencyContainer.init END total: \(String(format: "%.0f", Date().timeIntervalSince(_initStart) * 1000))ms"
-        )
+        StartupLogger.log("DependencyContainer.init END total", elapsedMs: elapsedSince(_initStart))
 
         // DO NOT set isInitialized here. Wait for heavy services background task to reach a stable "Medium" point.
         self.initializationStatus = "Starting heavy services..."
@@ -250,61 +214,6 @@ class DependencyContainer: ObservableObject {
             metadata: [
                 "totalDurationMs": String(format: "%.2f", heavyDuration)
             ])
-    }
-
-    private static func makeAIServices(
-        launchContext: AppLaunchContext,
-        settingsStore: SettingsStore,
-        eventBus: any EventBusProtocol,
-        activityCoordinator: any AgentActivityCoordinating
-    ) -> AIServiceBundle {
-        let openRouterService = OpenRouterAIService(
-            settingsStore: OpenRouterSettingsStore(settingsStore: settingsStore),
-            eventBus: eventBus,
-            providerName: "OpenRouter",
-            testConfigurationProvider: TestConfigurationProvider.shared
-        )
-        let alibabaService = OpenRouterAIService(
-            settingsStore: AlibabaSettingsStore(settingsStore: settingsStore),
-            eventBus: eventBus,
-            providerName: "Alibaba Cloud",
-            supportsStreamingWithTools: false,
-            testConfigurationProvider: TestConfigurationProvider.shared
-        )
-        let kiloCodeService = OpenRouterAIService(
-            settingsStore: KiloCodeSettingsStore(settingsStore: settingsStore),
-            eventBus: eventBus,
-            providerName: "Kilo Code",
-            supportsStreamingWithTools: true,
-            supportsNativeReasoning: true,
-            testConfigurationProvider: TestConfigurationProvider.shared
-        )
-        let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
-        let providerSelectionStore = AIProviderSelectionStore(settingsStore: settingsStore)
-        let localModelEventBus: (any EventBusProtocol)? = launchContext.isTesting ? nil : eventBus
-        let localModelService = LocalModelProcessAIService(
-            selectionStore: selectionStore,
-            eventBus: localModelEventBus,
-            activityCoordinator: activityCoordinator,
-            launchContext: launchContext
-        )
-        let router = ModelRoutingAIService(
-            openRouterService: openRouterService,
-            alibabaService: alibabaService,
-            kiloCodeService: kiloCodeService,
-            localService: localModelService,
-            selectionStore: selectionStore,
-            providerSelectionStore: providerSelectionStore
-        )
-        return AIServiceBundle(
-            openRouterService: openRouterService,
-            alibabaService: alibabaService,
-            kiloCodeService: kiloCodeService,
-            localModelService: localModelService,
-            selectionStore: selectionStore,
-            providerSelectionStore: providerSelectionStore,
-            router: router
-        )
     }
 
     // MARK: - Public Accessors
@@ -473,42 +382,7 @@ class DependencyContainer: ObservableObject {
         _aiService = newService
         // Update the existing conversation manager's AI service instead of creating a new one
         // to preserve loaded chat history
-        if let cm = _conversationManager as? ConversationManager {
-            cm.updateAIService(newService)
-        }
-    }
-
-    private static func makeInlineCompletionEngine(
-        aiServices: AIServiceBundle,
-        projectRootProvider: @escaping () -> URL?,
-        codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?
-    ) -> InlineCompletionEngine {
-        return InlineCompletionEngine(
-            settingsStore: InlineCompletionSettingsStore(),
-            triggerPolicy: CompletionTriggerPolicy(),
-            contextAssembler: CompletionContextAssembler(),
-            retrievalLayer: CompletionRetrievalLayer(
-                projectRootProvider: projectRootProvider,
-                codebaseIndexProvider: codebaseIndexProvider
-            ),
-            inferenceService: CompletionInferenceService(
-                provider: AIServiceInlineCompletionProvider(
-                    remoteServiceProvider: {
-                        switch await aiServices.providerSelectionStore.selectedRemoteProvider() {
-                        case .openRouter:
-                            return aiServices.openRouterService
-                        case .alibabaCloud:
-                            return aiServices.alibabaService
-                        case .kiloCode:
-                            return aiServices.kiloCodeService
-                        }
-                    },
-                    localServiceProvider: { aiServices.localModelService },
-                    localModelSelectionStore: aiServices.selectionStore
-                )
-            ),
-            ranker: SuggestionRanker()
-        )
+        _conversationManager.updateAIService(newService)
     }
 
     // MARK: - Stored Services

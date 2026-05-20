@@ -14,6 +14,7 @@ struct SendRequest {
     let cancelledToolCallIds: @Sendable () -> Set<String>
     let qaReviewEnabled: Bool
     let draftAssistantMessageId: UUID?
+    let usesLocalModel: Bool
 
     init(
         userInput: String,
@@ -26,7 +27,8 @@ struct SendRequest {
         availableTools: [AITool],
         cancelledToolCallIds: @escaping @Sendable () -> Set<String>,
         qaReviewEnabled: Bool,
-        draftAssistantMessageId: UUID?
+        draftAssistantMessageId: UUID?,
+        usesLocalModel: Bool = false
     ) {
         self.userInput = userInput
         self.mediaAttachments = mediaAttachments
@@ -39,6 +41,7 @@ struct SendRequest {
         self.cancelledToolCallIds = cancelledToolCallIds
         self.qaReviewEnabled = qaReviewEnabled
         self.draftAssistantMessageId = draftAssistantMessageId
+        self.usesLocalModel = usesLocalModel
     }
 }
 

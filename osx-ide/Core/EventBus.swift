@@ -31,20 +31,33 @@ public final class EventBus: EventBusProtocol, @unchecked Sendable {
     private var subjects: [String: Any] = [:]
     private let lock = NSLock()
 
+    // Log sampling to avoid spawning a Task per event on hot paths
+    private let logSampleRate: UInt64 = 100
+    private var publishCounter: UInt64 = 0
+    private var subscribeCounter: UInt64 = 0
+    private let statsLock = NSLock()
+
     public init() {}
 
     public func publish<E: Event>(_ event: E) {
         let key = String(describing: E.self)
 
-        // Log asynchronously (non-blocking)
-        Task {
-            await AppLogger.shared.debug(
-                category: .eventBus,
-                message: "event.publish",
-                context: AppLogger.LogCallContext(metadata: [
-                    "eventType": key
-                ])
-            )
+        // Log only every Nth publish to avoid spawning Tasks on hot paths
+        statsLock.lock()
+        publishCounter += 1
+        let shouldLog = (publishCounter % logSampleRate == 0)
+        statsLock.unlock()
+        if shouldLog {
+            Task {
+                await AppLogger.shared.debug(
+                    category: .eventBus,
+                    message: "event.publish",
+                    context: AppLogger.LogCallContext(metadata: [
+                        "eventType": key,
+                        "publishCount": String(publishCounter)
+                    ])
+                )
+            }
         }
         
         lock.lock()
@@ -58,15 +71,21 @@ public final class EventBus: EventBusProtocol, @unchecked Sendable {
     public func subscribe<E: Event>(to eventType: E.Type, handler: @escaping (E) -> Void) -> AnyCancellable {
         let key = String(describing: E.self)
 
-        // Log asynchronously (non-blocking)
-        Task {
-            await AppLogger.shared.debug(
-                category: .eventBus,
-                message: "event.subscribe",
-                context: AppLogger.LogCallContext(metadata: [
-                    "eventType": key
-                ])
-            )
+        // Log only every Nth subscribe
+        statsLock.lock()
+        subscribeCounter += 1
+        let shouldLog = (subscribeCounter % logSampleRate == 0)
+        statsLock.unlock()
+        if shouldLog {
+            Task {
+                await AppLogger.shared.debug(
+                    category: .eventBus,
+                    message: "event.subscribe",
+                    context: AppLogger.LogCallContext(metadata: [
+                        "eventType": key
+                    ])
+                )
+            }
         }
         
         lock.lock()

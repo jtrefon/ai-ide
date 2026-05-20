@@ -25,7 +25,8 @@ final class ToolLoopHandler {
         availableTools: [AITool],
         cancelledToolCallIds: @escaping () -> Set<String>,
         runId: String,
-        userInput: String
+        userInput: String,
+        usesLocalModel: Bool = false
     ) async throws -> ToolLoopResult {
         guard mode == .agent else {
             return ToolLoopResult(response: response, lastToolCalls: [], lastToolResults: [])
@@ -57,7 +58,14 @@ final class ToolLoopHandler {
         var hasObservedMutationVerificationRead = false
         var consecutivePostMutationNonMutationIterations = 0
         var consecutiveNonRecoverableMutationFailureIterations = 0
-        let maxIterations = (mode == .agent) ? ToolLoopConstants.maxAgentIterations : ToolLoopConstants.maxNonAgentIterations
+        var lastContinuationRecoveryIteration = -10  // cooldown: 3 iterations between recoveries
+        let maxIterations = if usesLocalModel {
+            ToolLoopConstants.maxMLXIterations
+        } else if mode == .agent {
+            ToolLoopConstants.maxAgentIterations
+        } else {
+            ToolLoopConstants.maxNonAgentIterations
+        }
 
         if mode == .agent,
            currentResponse.toolCalls?.isEmpty ?? true,
@@ -466,9 +474,10 @@ final class ToolLoopHandler {
             }
 
             let split = ChatPromptBuilder.splitReasoning(from: currentResponse.content ?? "")
+            let effectiveReasoning = currentResponse.reasoning ?? split.reasoning
             let normalizedProgress = normalizedProgressUpdate(
                 modelContent: split.content,
-                modelReasoning: split.reasoning,
+                modelReasoning: effectiveReasoning,
                 toolCalls: uniqueToolCalls,
                 iteration: toolIteration
             )
@@ -1276,7 +1285,9 @@ final class ToolLoopHandler {
             hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
         )
 
-        currentResponse = try await requestExecutionRecoveryIfPlanStillIncomplete(
+        if toolIteration - lastContinuationRecoveryIteration >= 3 {
+            lastContinuationRecoveryIteration = toolIteration
+            currentResponse = try await requestExecutionRecoveryIfPlanStillIncomplete(
             currentResponse: currentResponse,
             explicitContext: explicitContext,
             mode: mode,
@@ -1288,6 +1299,7 @@ final class ToolLoopHandler {
             hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
         )
 
+        }
         if let escalatedContinuationResponse = try await requestEscalatedExecutionRecoveryForRecoveredReadOnlyToolCalls(
             currentResponse: currentResponse,
             explicitContext: explicitContext,
@@ -1510,11 +1522,9 @@ final class ToolLoopHandler {
         toolCalls: [AIToolCall],
         iteration: Int
     ) -> (content: String, reasoning: String?) {
-        _ = modelContent
-        _ = modelReasoning
-        _ = toolCalls
-        _ = iteration
-        return ("", nil)
+        // Pass through the model's reasoning content so it can be preserved
+        // in ChatMessage for providers that require it (e.g. DeepSeek thinking mode).
+        return (modelContent, modelReasoning)
     }
 
     private func progressTriplet(

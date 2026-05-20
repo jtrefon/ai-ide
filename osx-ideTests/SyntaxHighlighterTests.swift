@@ -124,6 +124,38 @@ struct SyntaxHighlighterTests {
         #expect(LanguageModuleManager.shared.getHighlightModule(for: .unknown) == nil)
     }
 
+    @Test func testSyntaxHighlighterUnknownLanguageFallsBackGracefully() async throws {
+        let highlighter = SyntaxHighlighter.shared
+        let code = "echo 'fallback test'"
+
+        let result = highlighter.highlight(code, language: "unknown-language")
+
+        #expect(result.string == code, "Fallback highlighter should preserve original code text")
+        #expect(result.length == code.utf16.count, "Fallback result should have the same text length as input")
+
+        var nonDefaultHighlightFound = false
+        result.enumerateAttributes(in: NSRange(location: 0, length: result.length), options: []) { attrs, _, _ in
+            if let color = attrs[.foregroundColor] as? NSColor, color != NSColor.labelColor {
+                nonDefaultHighlightFound = true
+            }
+        }
+
+        #expect(!nonDefaultHighlightFound, "Fallback highlighter should not apply language-specific highlighting")
+    }
+
+    @Test func testSyntaxHighlighterDisabledHighlightCapabilityFallsBackGracefully() async throws {
+        let highlighter = SyntaxHighlighter.shared
+        let manager = LanguageModuleManager.shared
+        defer { manager.toggleCapability(.highlight, for: .javascript, enabled: true) }
+
+        manager.toggleCapability(.highlight, for: .javascript, enabled: false)
+
+        let code = "const x = 42;"
+        let result = highlighter.highlight(code, language: "javascript")
+
+        #expect(result.string == code, "Disabled highlight capability should preserve original source text")
+    }
+
     @Test func testHighlightingPerformance() async throws {
         let highlighter = SyntaxHighlighter.shared
 

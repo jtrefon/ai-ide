@@ -11,6 +11,7 @@ actor ModelRoutingAIService: AIService, RemoteAIAccountStatusRefreshing {
     private let openRouterService: AIService
     private let alibabaService: AIService
     private let kiloCodeService: AIService
+    private let deepSeekService: AIService
     private let localService: AIService
     private let selectionStore: LocalModelSelectionStore
     private let providerSelectionStore: AIProviderSelectionStore
@@ -19,6 +20,7 @@ actor ModelRoutingAIService: AIService, RemoteAIAccountStatusRefreshing {
         openRouterService: AIService,
         alibabaService: AIService,
         kiloCodeService: AIService,
+        deepSeekService: AIService,
         localService: AIService,
         selectionStore: LocalModelSelectionStore = LocalModelSelectionStore(),
         providerSelectionStore: AIProviderSelectionStore = AIProviderSelectionStore()
@@ -26,6 +28,7 @@ actor ModelRoutingAIService: AIService, RemoteAIAccountStatusRefreshing {
         self.openRouterService = openRouterService
         self.alibabaService = alibabaService
         self.kiloCodeService = kiloCodeService
+        self.deepSeekService = deepSeekService
         self.localService = localService
         self.selectionStore = selectionStore
         self.providerSelectionStore = providerSelectionStore
@@ -39,6 +42,8 @@ actor ModelRoutingAIService: AIService, RemoteAIAccountStatusRefreshing {
             return alibabaService
         case .kiloCode:
             return kiloCodeService
+        case .deepSeek:
+            return deepSeekService
         }
     }
 

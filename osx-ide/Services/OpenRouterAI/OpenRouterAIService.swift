@@ -78,6 +78,11 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
     private let supportsStreamingWithTools: Bool
     internal let supportsNativeReasoning: Bool
     
+    // DeepSeek V4 requires reasoning_content echoed back in every subsequent
+    // assistant message. Cache the last seen reasoning per conversation.
+    var reasoningContentByConversationId: [String: String] = [:]
+    var lastReasoningContent: String?
+    
     // Rate limiting to prevent 421 errors
     private var minRequestInterval: TimeInterval = 0.5 // 500ms between requests
     private static let providerRateLimiter = OpenRouterProviderRateLimiter()
@@ -275,7 +280,7 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                         collector.setUsage(usage)
                     }
                     if let delta = chunk.choices.first?.delta {
-                        if let reasoning = delta.reasoning {
+                        if let reasoning = delta.reasoning ?? delta.reasoningContent {
                             collector.appendReasoningChunk(reasoning)
                             Task { @MainActor in
                                 self.eventBus.publish(LocalModelStreamingReasoningChunkEvent(
@@ -299,6 +304,12 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                         }
                     }
                 }
+            }
+            
+            // Cache reasoning_content for DeepSeek V4 round-trip requirement
+            let results = collector.getResults()
+            if let reasoning = results.reasoning, !reasoning.isEmpty {
+                lastReasoningContent = reasoning
             }
         } catch {
             try await handlePotentialRateLimit(error, requestId: preparation.requestId)
@@ -471,10 +482,15 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
             )
         )
 
+        let effectiveReasoning = choice.message.reasoning ?? choice.message.reasoningContent
+        if let reasoning = effectiveReasoning, !reasoning.isEmpty {
+            lastReasoningContent = reasoning
+        }
+
         return AIServiceResponse(
             content: sanitizedContent,
             toolCalls: resolvedToolCalls,
-            reasoning: choice.message.reasoning
+            reasoning: effectiveReasoning
         )
     }
 
@@ -888,7 +904,7 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
         }
     }
 
-    private func decodeOpenRouterErrorMessage(from data: Data) -> String? {
+    func decodeOpenRouterErrorMessage(from data: Data) -> String? {
         struct ErrorEnvelope: Decodable {
             struct ErrorBody: Decodable {
                 struct Metadata: Decodable {
@@ -917,7 +933,13 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
         }
 
         let providerName = err.metadata?.providerName
-        let providerSuffix = providerName?.isEmpty == false ? " Provider: \(providerName!)." : ""
+        let providerSuffix: String
+        if let providerName, !providerName.isEmpty {
+            providerSuffix = " Provider: \(providerName)."
+        } else {
+            providerSuffix = ""
+        }
+
         if let code = err.code, let message = err.message, !message.isEmpty {
             return "OpenRouter error (\(code)): \(message).\(providerSuffix)"
         }
@@ -1006,24 +1028,29 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
         apiKey: String,
         baseURL: String
     ) async throws -> Int? {
-        guard providerName == "Kilo Code" || baseURL.contains("api.kilo.ai") else {
-            return nil
+        if providerName == "Kilo Code" || baseURL.contains("api.kilo.ai") {
+            guard let apiBaseURL = kiloAPIBaseURL(from: baseURL) else { return nil }
+            guard let balance = try await client.fetchKiloBalance(apiKey: apiKey, apiBaseURL: apiBaseURL) else { return nil }
+            return microdollars(fromDollarAmount: balance)
         }
-        guard let apiBaseURL = kiloAPIBaseURL(from: baseURL) else {
-            return nil
+        if providerName == "DeepSeek" || baseURL.contains("api.deepseek.com") {
+            guard let apiBaseURL = providerAPIBaseURL(from: baseURL) else { return nil }
+            guard let balance = try await client.fetchDeepSeekBalance(apiKey: apiKey, apiBaseURL: apiBaseURL) else { return nil }
+            return microdollars(fromDollarAmount: balance)
         }
-        guard let balance = try await client.fetchKiloBalance(apiKey: apiKey, apiBaseURL: apiBaseURL) else {
-            return nil
-        }
-        return microdollars(fromDollarAmount: balance)
+        return nil
     }
 
-    private func kiloAPIBaseURL(from baseURL: String) -> String? {
+    private func providerAPIBaseURL(from baseURL: String) -> String? {
         guard var components = URLComponents(string: baseURL) else { return nil }
         components.path = ""
         components.query = nil
         components.fragment = nil
         return components.url?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    private func kiloAPIBaseURL(from baseURL: String) -> String? {
+        providerAPIBaseURL(from: baseURL)
     }
 
     private func microdollars(fromDollarAmount amount: Decimal) -> Int {

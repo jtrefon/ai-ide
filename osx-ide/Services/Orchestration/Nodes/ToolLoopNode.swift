@@ -27,7 +27,8 @@ struct ToolLoopNode: OrchestrationNode {
             availableTools: request.availableTools,
             cancelledToolCallIds: request.cancelledToolCallIds,
             runId: request.runId,
-            userInput: request.userInput
+            userInput: request.userInput,
+            usesLocalModel: request.usesLocalModel
         )
 
         var nextState = state.transitioning(

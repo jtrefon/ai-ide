@@ -84,6 +84,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
         let openRouterService = SpyAIService()
         let alibabaService = SpyAIService()
         let kiloCodeService = SpyAIService()
+        let deepSeekService = SpyAIService()
         let localService = SpyAIService()
         await selectionStore.setOfflineModeEnabled(true)
         await providerSelectionStore.setSelectedRemoteProvider(.openRouter)
@@ -92,6 +93,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
             openRouterService: openRouterService,
             alibabaService: alibabaService,
             kiloCodeService: kiloCodeService,
+            deepSeekService: deepSeekService,
             localService: localService,
             selectionStore: selectionStore,
             providerSelectionStore: providerSelectionStore
@@ -120,6 +122,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
         let openRouterService = SpyAIService()
         let alibabaService = SpyAIService()
         let kiloCodeService = SpyAIService()
+        let deepSeekService = SpyAIService()
         let localService = SpyAIService()
         localService.streamingResponse = AIServiceResponse(content: "local-stream", toolCalls: nil)
         await selectionStore.setOfflineModeEnabled(true)
@@ -129,6 +132,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
             openRouterService: openRouterService,
             alibabaService: alibabaService,
             kiloCodeService: kiloCodeService,
+            deepSeekService: deepSeekService,
             localService: localService,
             selectionStore: selectionStore,
             providerSelectionStore: providerSelectionStore
@@ -155,6 +159,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
         let openRouterService = SpyAIService()
         let alibabaService = SpyAIService()
         let kiloCodeService = SpyAIService()
+        let deepSeekService = SpyAIService()
         let localService = SpyAIService()
         await selectionStore.setOfflineModeEnabled(false)
         await providerSelectionStore.setSelectedRemoteProvider(.openRouter)
@@ -163,6 +168,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
             openRouterService: openRouterService,
             alibabaService: alibabaService,
             kiloCodeService: kiloCodeService,
+            deepSeekService: deepSeekService,
             localService: localService,
             selectionStore: selectionStore,
             providerSelectionStore: providerSelectionStore
@@ -186,6 +192,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
         let openRouterService = SpyAIService()
         let alibabaService = SpyAIService()
         let kiloCodeService = SpyAIService()
+        let deepSeekService = SpyAIService()
         let localService = SpyAIService()
         await selectionStore.setOfflineModeEnabled(false)
         await providerSelectionStore.setSelectedRemoteProvider(.alibabaCloud)
@@ -194,6 +201,7 @@ final class ModelRoutingAIServiceTests: XCTestCase {
             openRouterService: openRouterService,
             alibabaService: alibabaService,
             kiloCodeService: kiloCodeService,
+            deepSeekService: deepSeekService,
             localService: localService,
             selectionStore: selectionStore,
             providerSelectionStore: providerSelectionStore

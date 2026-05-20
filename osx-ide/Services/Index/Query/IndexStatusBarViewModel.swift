@@ -15,6 +15,7 @@ final class IndexStatusBarViewModel: ObservableObject {
     @Published private(set) var embeddingModelIdentifier: String = "hashing_v1"
 
     @Published private(set) var openRouterContextUsageText: String = ""
+    @Published private(set) var localModelContextUsageText: String = ""
     @Published private(set) var remoteAICostText: String = ""
     @Published private(set) var remoteAISpendText: String = ""
     @Published private(set) var remoteAIBalanceText: String = ""
@@ -174,6 +175,24 @@ final class IndexStatusBarViewModel: ObservableObject {
         }
         .store(in: &cancellables)
 
+        eventBus.subscribe(to: ConversationContextEvent.self) { [weak self] event in
+            guard let self else { return }
+            // Convert chars to estimated tokens (4 chars ≈ 1 token) for consistency
+            // with the remote display which reports actual token counts.
+            let estTokens = max(1, event.totalCharCount / 4)
+            if let windowChars = event.contextWindowChars {
+                let windowTokens = max(1, windowChars / 4)
+                let used = min(estTokens, windowTokens)
+                self.localModelContextUsageText = "CTX \(Self.formatTokenCount(used))/\(Self.formatTokenCount(windowTokens))"
+            } else {
+                self.localModelContextUsageText = "CTX ~\(Self.formatTokenCount(estTokens)) · \(event.messageCount) msgs"
+            }
+            if let ratio = event.compressionRatio {
+                self.localModelContextUsageText += " · \(String(format: "%.1fx", ratio))"
+            }
+        }
+        .store(in: &cancellables)
+
         eventBus.subscribe(to: RemoteAIAccountBalanceUpdatedEvent.self) { [weak self] event in
             guard let self else { return }
             self.remoteAIBalanceText = self.formatAccountBalance(
@@ -247,6 +266,20 @@ final class IndexStatusBarViewModel: ObservableObject {
                 self.embeddingModelIdentifier = String(modelId.prefix(8))
             }
         }
+    }
+
+    private static func formatCharCount(_ count: Int) -> String {
+        if count < 1000 { return "\(count)" }
+        let k = Double(count) / 1000.0
+        if k < 1000 { return String(format: "%.1fK", k) }
+        return String(format: "%.1fM", k / 1000.0)
+    }
+
+    private static func formatTokenCount(_ count: Int) -> String {
+        if count < 1000 { return "\(count)" }
+        let k = Double(count) / 1000.0
+        if k < 10 { return String(format: "%.1fK", k) }
+        return String(format: "%.0fK", k)
     }
 
     private func formatBytes(_ bytes: Int64) -> String {

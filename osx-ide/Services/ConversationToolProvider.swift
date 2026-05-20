@@ -5,16 +5,16 @@ final class ConversationToolProvider {
     private let fileSystemService: FileSystemService
     private let eventBus: EventBusProtocol
 
-    private let aiServiceProvider: () -> AIService
+    private let aiServiceProvider: () -> AIService?
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
-    private let projectRootProvider: () -> URL
+    private let projectRootProvider: () -> URL?
 
     init(
         fileSystemService: FileSystemService,
         eventBus: EventBusProtocol,
-        aiServiceProvider: @escaping () -> AIService,
+        aiServiceProvider: @escaping () -> AIService?,
         codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
-        projectRootProvider: @escaping () -> URL
+        projectRootProvider: @escaping () -> URL?
     ) {
         self.fileSystemService = fileSystemService
         self.eventBus = eventBus
@@ -28,7 +28,7 @@ final class ConversationToolProvider {
     }
 
     func allTools(pathValidator: PathValidator) -> [AITool] {
-        let projectRoot = projectRootProvider()
+        guard let projectRoot = projectRootProvider() else { return [] }
         
         var tools: [AITool] = []
 

@@ -8,5 +8,3 @@ excluded:
   - .build
   - .build-tests
   - "**/DerivedSources"
-  - osx-ideTests
-  - osx-ideUITests

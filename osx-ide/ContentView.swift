@@ -9,6 +9,9 @@ import SwiftUI
 import AppKit
 
 struct ContentView: View {
+
+    // MARK: - Properties
+
     let appState: AppState
     @ObservedObject private var fileEditor: FileEditorStateManager
     @ObservedObject private var workspace: WorkspaceStateManager
@@ -31,6 +34,8 @@ struct ContentView: View {
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }
+
+    // MARK: - Body & Root
 
     var body: some View {
         let _ = trackViewRender("ContentView.body")
@@ -65,6 +70,8 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+
+    // MARK: - Layout: Workspace
 
     private var workspaceLayout: some View {
         let _ = trackViewRender("ContentView.workspaceLayout")
@@ -184,6 +191,8 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Layout: Editor & Terminal
+
     private var editorAndTerminal: some View {
         EditorTerminalSplitView(
             isTerminalVisible: uiState.isTerminalVisible,
@@ -246,6 +255,8 @@ struct ContentView: View {
             fontFamily: uiState.fontFamily
         )
     }
+
+    // MARK: - Layout: Bottom Panel
 
     @ViewBuilder
     private var terminalPanel: some View {
@@ -361,6 +372,8 @@ struct ContentView: View {
     }
 }
 
+// MARK: - Private: EditorTerminalSplitView
+
 private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
     let isTerminalVisible: Bool
     let terminalHeight: Double
@@ -424,6 +437,8 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
     }
 }
 
+// MARK: - Private: WindowSetupView
+
 private struct WindowSetupView: View {
     @ObservedObject var appState: AppState
 
@@ -465,6 +480,8 @@ private struct WindowSetupView: View {
         .frame(width: 0, height: 0)
     }
 }
+
+// MARK: - Private: OverlayHostView
 
 private struct OverlayHostView: View {
     @ObservedObject var appState: AppState
@@ -528,6 +545,8 @@ private struct OverlayHostView: View {
         .background(Color(NSColor.windowBackgroundColor))
     }
 }
+
+// MARK: - Previews
 
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {

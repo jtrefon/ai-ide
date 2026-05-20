@@ -52,9 +52,7 @@ final class SyntaxHighlighter {
         print("[Highlighter] highlight raw=\(language) normalized=\(langStr) len=\((code as NSString).length)")
         #endif
 
-        guard let module = resolveModule(for: langStr) else {
-            fatalError("Missing highlight module for language identifier: \(langStr)")
-        }
+        let module = resolveModule(for: langStr)
 
         #if DEBUG
         print("[Highlighter] using module id=\(module.id.rawValue) extensions=\(module.fileExtensions)")
@@ -90,11 +88,34 @@ final class SyntaxHighlighter {
         return highlight(request.code, language: request.language, font: request.font)
     }
 
-    private func resolveModule(for languageIdentifier: String) -> (any LanguageModule)? {
-        LanguageModuleManager.shared.getHighlightModule(forExtension: languageIdentifier) ??
+    private func resolveModule(for languageIdentifier: String) -> any LanguageModule {
+        return LanguageModuleManager.shared.getHighlightModule(forExtension: languageIdentifier) ??
             LanguageModuleManager.shared.getHighlightModule(
                 for: CodeLanguage(rawValue: languageIdentifier) ?? .unknown
-            )
+            ) ??
+            FallbackLanguageModule()
+    }
+
+    private struct FallbackLanguageModule: LanguageModule {
+        let id: CodeLanguage = .unknown
+        let fileExtensions: [String] = []
+        let capabilities: Set<LanguageModuleCapability> = [.highlight]
+
+        func highlight(_ code: String, font: NSFont) -> NSAttributedString {
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: NSColor.labelColor
+            ]
+            return NSAttributedString(string: code, attributes: attributes)
+        }
+
+        func parseSymbols(content: String, resourceId: String) -> [Symbol] {
+            []
+        }
+
+        func format(_ code: String) -> String {
+            code
+        }
     }
 
 }

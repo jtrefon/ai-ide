@@ -56,7 +56,13 @@ struct MessageListView: View {
     let isSending: Bool
     var fontSize: Double
     var fontFamily: String
-    @State private var expandedReasoningMessageIds: Set<UUID> = []
+    
+    // Global reasoning visibility: one toggle for all messages.
+    // Auto-opens during streaming; auto-closes 5s after streaming stops
+    // unless the user manually toggled it open.
+    @State private var globalReasoningExpanded = false
+    @State private var userManuallyToggledReasoning = false
+    @State private var reasoningAutoCloseTask: Task<Void, Never>?
 
     private let filterCoordinator = MessageFilterCoordinator()
 
@@ -83,13 +89,12 @@ struct MessageListView: View {
 
     private func reasoningHiddenBinding(for messageId: UUID) -> Binding<Bool> {
         Binding(
-            get: { !expandedReasoningMessageIds.contains(messageId) },
+            get: { !globalReasoningExpanded },
             set: { isHidden in
-                if isHidden {
-                    expandedReasoningMessageIds.remove(messageId)
-                } else {
-                    expandedReasoningMessageIds.insert(messageId)
-                }
+                userManuallyToggledReasoning = true
+                globalReasoningExpanded = !isHidden
+                // Cancel auto-close if user manually interacted
+                reasoningAutoCloseTask?.cancel()
             }
         )
     }
@@ -136,8 +141,27 @@ struct MessageListView: View {
                 .onChange(of: visibleMessageIDsSignature) { _ in
                     scrollToBottom(proxy: proxy)
                 }
-                .onChange(of: isSending) { _ in
+                .onChange(of: isSending) { _, newValue in
                     scrollToBottom(proxy: proxy)
+                    if newValue {
+                        // Auto-open reasoning during streaming
+                        if !globalReasoningExpanded {
+                            globalReasoningExpanded = true
+                        }
+                    } else {
+                        // Auto-close after 5s if user didn't manually open
+                        if !userManuallyToggledReasoning {
+                            reasoningAutoCloseTask?.cancel()
+                            reasoningAutoCloseTask = Task {
+                                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                                guard !Task.isCancelled else { return }
+                                await MainActor.run {
+                                    globalReasoningExpanded = false
+                                }
+                            }
+                        }
+                        userManuallyToggledReasoning = false
+                    }
                 }
             }
         }

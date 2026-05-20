@@ -479,14 +479,14 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             "Final-response requests should use the deterministic non-streaming path"
         )
 
-        XCTAssertFalse(
+        XCTAssertTrue(
             coordinator.shouldUseStreamingForRequest(
                 runId: UUID().uuidString,
                 stage: .tool_loop,
                 hasTools: true,
                 isRunningUnitTests: false
             ),
-            "Tool-bearing execution stages should stay on the deterministic non-streaming path"
+            "Tool-bearing execution stages should stream for responsive UX"
         )
 
         XCTAssertTrue(

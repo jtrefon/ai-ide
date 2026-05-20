@@ -344,7 +344,7 @@ final class AIInteractionCoordinator {
     ) -> Bool {
         runId != nil
             && !isRunningUnitTests
-            && !hasTools
+            
             && stage != .final_response
     }
 

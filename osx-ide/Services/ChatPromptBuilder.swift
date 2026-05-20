@@ -115,8 +115,21 @@ class ChatPromptBuilder {
             #"(?is)<arg_value>\s*.*?\s*</arg_value>"#,
             #"(?is)<minimax:tool_call>\s*.*?\s*</minimax:tool_call>"#,
             #"(?is)<invoke\s+name=\"[^\"]+\"\s*>.*?</invoke>"#,
-            #"(?is)</?parameter\s+name=\"[^\"]+\">"#,
-            #"(?is)</?param\s+name=\"[^\"]+\">"#
+            #"(?is)</?parameter\s+name=\"[^\"]+\"[^>]*>"#,
+            #"(?is)</?param\s+name=\"[^\"]+\"[^>]*>"#,
+            // Pipe-delimited tool call format: tool_name|{json}
+            #"[a-z_]+\|[\[{][^}\]]*[\]}]"#,
+            // Bare JSON tool call objects
+            #"^\s*\{\s*"tool_calls"\s*:"#,
+            #"^\s*\{\s*"name"\s*:\s*"[^"]+"\s*,"#,
+            // Gemma channel tags: <|channel>thought, <|channel>action, etc.
+            #"<\|channel\|>\w+(?:\s*</\|channel\|>)?"#,
+            // Gemma tool call format: call:name{...}
+            #"call:\w+\{[^}]*\}"#,
+            // DeepSeek/XML function call wrappers
+            #"(?is)<\|tool_calls\|>.*?</\|tool_calls\|>"#,
+            // Gemma function call XML tags
+            #"(?is)<start_function_call>\s*.*?\s*<end_function_call>"#,
         ]
 
         for pattern in patterns {

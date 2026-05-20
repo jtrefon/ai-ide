@@ -177,7 +177,7 @@ actor LocalModelProcessAIService: AIService {
         }
 
         func generate(modelId: String, modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat? = nil, runId: String?, inferenceConfiguration: LocalModelInferenceConfiguration, conversationId: String? = nil) async throws -> AIServiceResponse {
-            print("[LOCAL-MLX] generate modelId=\(modelId) modelDirectory=\(modelDirectory.path) toolCallFormat=\(String(describing: toolCallFormat)) contextLength=\(inferenceConfiguration.contextLength) maxKVSize=\(inferenceConfiguration.maxKVSize) maxOutputTokens=\(inferenceConfiguration.maxOutputTokens) prefillStepSize=\(inferenceConfiguration.prefillStepSize) temperature=\(inferenceConfiguration.temperature) topP=\(inferenceConfiguration.topP) repetitionPenalty=\(String(describing: inferenceConfiguration.repetitionPenalty)) repetitionContextSize=\(inferenceConfiguration.repetitionContextSize)")
+            print("[LOCAL-MLX] generate modelId=\(modelId) modelDirectory=\(modelDirectory.path) toolCallFormat=\(String(describing: toolCallFormat)) contextLength=\(inferenceConfiguration.contextLength) maxKVSize=\(inferenceConfiguration.maxKVSize) maxOutputTokens=\(inferenceConfiguration.maxOutputTokens) prefillStepSize=\(inferenceConfiguration.prefillStepSize) temperature=\(inferenceConfiguration.temperature) topP=\(inferenceConfiguration.topP) repetitionPenalty=\(String(describing: inferenceConfiguration.repetitionPenalty)) repetitionContextSize=\(inferenceConfiguration.repetitionContextSize) turboQuant=\(inferenceConfiguration.turboQuantEnabled)")
             let preparedUserInput = userInput
             let rssLimitMB = Self.resolvedRSSLimitMB()
             let generationStart = ContinuousClock.now
@@ -625,19 +625,60 @@ actor LocalModelProcessAIService: AIService {
         }
 
         private func loadModelContainer(
-            configuration: ModelConfiguration,
+            configuration _: ModelConfiguration,
             modelDirectory: URL
         ) async throws -> ModelContainer {
             let useVLMFactory = try shouldUseVLMFactory(modelDirectory: modelDirectory)
             print("[LOCAL-MLX] loadModelContainer directory=\(modelDirectory.path) useVLMFactory=\(useVLMFactory)")
+            struct LocalTokenizerLoader: MLXLMCommon.TokenizerLoader {
+                let directory: URL
+                func load(from _: URL) async throws -> any MLXLMCommon.Tokenizer {
+                    let upstream = try await AutoTokenizer.from(modelFolder: directory)
+                    struct Bridge: MLXLMCommon.Tokenizer {
+                        let upstream: any Tokenizers.Tokenizer
+                        func encode(text: String, addSpecialTokens: Bool) -> [Int] {
+                            upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
+                        }
+                        func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
+                            upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
+                        }
+                        func convertTokenToId(_ token: String) -> Int? {
+                            upstream.convertTokenToId(token)
+                        }
+                        func convertIdToToken(_ id: Int) -> String? {
+                            upstream.convertIdToToken(id)
+                        }
+                        var bosToken: String? { upstream.bosToken }
+                        var eosToken: String? { upstream.eosToken }
+                        var unknownToken: String? { upstream.unknownToken }
+                        func applyChatTemplate(
+                            messages: [[String: any Sendable]],
+                            tools: [[String: any Sendable]]?,
+                            additionalContext: [String: any Sendable]?
+                        ) throws -> [Int] {
+                            do {
+                                return try upstream.applyChatTemplate(
+                                    messages: messages, tools: tools,
+                                    additionalContext: additionalContext)
+                            } catch Tokenizers.TokenizerError.missingChatTemplate {
+                                throw MLXLMCommon.TokenizerError.missingChatTemplate
+                            }
+                        }
+                    }
+                    return Bridge(upstream: upstream)
+                }
+            }
+            let tokenizerLoader = LocalTokenizerLoader(directory: modelDirectory)
             if useVLMFactory {
                 do {
-                    return try await VLMModelFactory.shared.loadContainer(configuration: configuration)
+                    return try await VLMModelFactory.shared.loadContainer(
+                        from: modelDirectory, using: tokenizerLoader)
                 } catch {
                     print("[LOCAL-MLX] VLM loader failed for \(modelDirectory.lastPathComponent). Falling back to text-only container. error=\(error)")
                 }
             }
-            return try await MLXLMCommon.loadModelContainer(configuration: configuration)
+            return try await MLXLMCommon.loadModelContainer(
+                from: modelDirectory, using: tokenizerLoader)
         }
 
         private func shouldUseVLMFactory(modelDirectory: URL) throws -> Bool {
@@ -757,6 +798,9 @@ actor LocalModelProcessAIService: AIService {
         let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
         let storedContextLength = await selectionStore.contextLength()
         let turboQuantEnabled = await selectionStore.isTurboQuantEnabled()
+        // Gemma4 has incompatible attention head dimensions for QuantizedKVCache.
+        // Disable TurboQuant until upstream mlx-swift-lm fixes block size alignment.
+        let effectiveTurboQuant = model.id.contains("gemma-4") ? false : turboQuantEnabled
         let testBudget = LocalModelTestBudget.applyIfNeeded(
             to: request,
             contextLength: storedContextLength ?? LocalModelFileStore.contextLength(for: model),
@@ -773,7 +817,7 @@ actor LocalModelProcessAIService: AIService {
             defaultTopP: defaultSampling.topP,
             defaultRepetitionPenalty: defaultSampling.repetitionPenalty,
             defaultRepetitionContextSize: defaultSampling.repetitionContextSize,
-            defaultTurboQuantEnabled: turboQuantEnabled
+            defaultTurboQuantEnabled: effectiveTurboQuant
         )
         let isTesting = launchContext.isTesting
         let settings = settingsStore.load(includeApiKey: false)

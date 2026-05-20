@@ -403,6 +403,9 @@ final class FinalResponseHandler {
     ) {
         let splitFinal = ChatPromptBuilder.splitReasoning(
             from: response.content ?? "No response received.")
+        // DeepSeek/OpenRouter native reasoning arrives via response.reasoning,
+        // not embedded in the text content. Preserve it for the next request.
+        let effectiveReasoning = response.reasoning ?? splitFinal.reasoning
         let sanitizedDisplay = ChatPromptBuilder.contentForDisplay(from: response.content ?? "No response received.")
         let trimmedContent = sanitizedDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayContent =
@@ -462,7 +465,7 @@ final class FinalResponseHandler {
                 historyCoordinator.finalizeDraftMessage(
                     id: draftId,
                     content: displayContent,
-                    reasoning: splitFinal.reasoning
+                    reasoning: effectiveReasoning
                 )
             } else {
                 historyCoordinator.removeDraftMessage(id: draftId)
@@ -470,7 +473,7 @@ final class FinalResponseHandler {
                     ChatMessage(
                         role: MessageRole.assistant,
                         content: displayContent,
-                        context: ChatMessageContentContext(reasoning: splitFinal.reasoning),
+                        context: ChatMessageContentContext(reasoning: effectiveReasoning),
                         billing: draftMessage?.billing
                     )
                 )
@@ -480,7 +483,7 @@ final class FinalResponseHandler {
                 ChatMessage(
                     role: MessageRole.assistant,
                     content: displayContent,
-                    context: ChatMessageContentContext(reasoning: splitFinal.reasoning),
+                    context: ChatMessageContentContext(reasoning: effectiveReasoning),
                     billing: historyCoordinator.messages.reversed().first {
                         $0.role == .assistant && $0.isDraft
                     }?.billing
@@ -488,9 +491,9 @@ final class FinalResponseHandler {
             )
         }
 
-        let hasReasoning = (splitFinal.reasoning?.isEmpty == false)
+        let hasReasoning = (effectiveReasoning?.isEmpty == false)
         let contentLength = displayContent.count
-        let reasoningText = splitFinal.reasoning
+        let reasoningText = effectiveReasoning
 
         Task.detached(priority: .utility) {
             await AppLogger.shared.info(

@@ -18,6 +18,10 @@ struct SettingsView: View {
         store: KiloCodeSettingsStore(),
         providerDisplayName: "Kilo Code"
     )
+    @StateObject private var deepSeekViewModel = OpenRouterSettingsViewModel(
+        store: DeepSeekSettingsStore(),
+        providerDisplayName: "DeepSeek"
+    )
     @StateObject private var providerSelectionViewModel = AIProviderSelectionViewModel()
     @StateObject private var localModelViewModel = LocalModelSettingsViewModel()
     @StateObject private var embeddingModelViewModel = EmbeddingModelSettingsViewModel()
@@ -45,6 +49,7 @@ struct SettingsView: View {
                         openRouterViewModel: openRouterViewModel,
                         alibabaViewModel: alibabaViewModel,
                         kiloCodeViewModel: kiloCodeViewModel,
+                        deepSeekViewModel: deepSeekViewModel,
                         providerSelectionViewModel: providerSelectionViewModel,
                         localModelViewModel: localModelViewModel,
                         embeddingModelViewModel: embeddingModelViewModel

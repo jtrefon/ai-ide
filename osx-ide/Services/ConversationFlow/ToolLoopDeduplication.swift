@@ -27,12 +27,30 @@ struct ToolLoopDeduplication {
         return uniqueCalls
     }
     
-    /// Creates a signature for a tool call to identify duplicates
+    /// Creates a signature for a tool call to identify duplicates.
+    /// Excludes metadata arguments (_tool_call_id, _conversation_id) so that
+    /// repeated attempts on the same path are detected as duplicates.
     private static func toolCallSignature(_ toolCall: AIToolCall) -> String {
-        let argsSignature = toolCall.arguments.sorted { $0.key < $1.key }
+        let metadataKeys: Set<String> = ["_tool_call_id", "_conversation_id", "_run_id"]
+        let argsSignature = toolCall.arguments
+            .filter { !metadataKeys.contains($0.key) }
+            .sorted { $0.key < $1.key }
             .map { "\($0.key)=\($0.value)" }
             .joined(separator: "&")
         return "\(toolCall.name):\(argsSignature)"
+    }
+
+    /// Creates a path-based signature for detecting repeated failed file access attempts.
+    /// This is separate from the full tool signature to catch the model trying
+    /// different tools on the same non-existent path.
+    static func toolPathSignature(_ toolCall: AIToolCall) -> String? {
+        let pathKeys = ["path", "filePath", "targetPath", "file_path", "target"]
+        for key in pathKeys {
+            if let path = toolCall.arguments[key] as? String {
+                return "\(toolCall.name):\(path)"
+            }
+        }
+        return nil
     }
     
     /// Creates a signature for a batch of tool calls to detect repeated batches

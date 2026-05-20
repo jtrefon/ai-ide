@@ -9,8 +9,13 @@ import Foundation
 import Combine
 import SwiftUI
 
+// MARK: - ConversationManager
+
 @MainActor
 final class ConversationManager: ObservableObject, ConversationManagerProtocol {
+
+    // MARK: - Nested Types
+
     struct Dependencies {
         let services: ServiceDependencies
         let environment: EnvironmentDependencies
@@ -46,6 +51,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         let liveStatusPreview: String
     }
 
+    // MARK: - Published State
+
     @Published var currentInput: String = ""
     @Published var currentMediaAttachments: [ChatMessageMediaAttachment] = []
     @Published var isSending: Bool = false
@@ -57,6 +64,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published private(set) var isLiveModelOutputPreviewVisible: Bool = true
     @Published private(set) var conversationTabs: [ConversationTabItem] = []
     @Published private(set) var providerIssue: ConversationProviderIssueState?
+
+    // MARK: - Dependencies
 
     private let historyManager: ChatHistoryManager
     private let historyCoordinator: ChatHistoryCoordinator
@@ -80,9 +89,9 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private lazy var toolProvider = ConversationToolProvider(
         fileSystemService: fileSystemService,
         eventBus: eventBus,
-        aiServiceProvider: { [unowned self] in self.aiService },
-        codebaseIndexProvider: { [unowned self] in self.codebaseIndex },
-        projectRootProvider: { [unowned self] in self.projectRoot }
+        aiServiceProvider: { [weak self] in self?.aiService },
+        codebaseIndexProvider: { [weak self] in self?.codebaseIndex },
+        projectRootProvider: { [weak self] in self?.projectRoot }
     )
     private var cancellables = Set<AnyCancellable>()
 
@@ -101,6 +110,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var currentSessionId: String
     private var conversationSessionOrder: [String]
     private var conversationSessionSnapshots: [String: ConversationSessionSnapshot]
+
+    // MARK: - Computed Properties
 
     var messages: [ChatMessage] {
         historyCoordinator.messages
@@ -121,6 +132,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var availableTools: [AITool] {
         toolProvider.availableTools(mode: currentMode, pathValidator: pathValidator)
     }
+
+    // MARK: - Initialization
 
     init(dependencies: Dependencies) {
         self.aiService = dependencies.services.aiService
@@ -188,6 +201,13 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         refreshConversationTabs()
     }
 
+    deinit {
+        activeSendTask?.cancel()
+        streamingRenderTask?.cancel()
+    }
+
+    // MARK: - Session Management
+
     private func refreshConversationTabs() {
         conversationTabs = conversationSessionOrder.enumerated().map { index, id in
             ConversationTabItem(id: id, title: "Chat \(index + 1)")
@@ -221,6 +241,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         setLiveModelStatusPreview(snapshot.liveStatusPreview)
         cancelledToolCallIds.removeAll()
     }
+
+    // MARK: - Event Bus Subscriptions
 
     private func setupStreamingSubscriptions() {
         eventBus
@@ -269,6 +291,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             .store(in: &cancellables)
     }
 
+    // MARK: - Provider Helpers
+
     private func providerIssueTypeLabel(for statusKind: ProviderIssueStatusEvent.StatusKind) -> String {
         switch statusKind {
         case .resolved:
@@ -285,6 +309,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             return "Provider issue"
         }
     }
+
+    // MARK: - Streaming Rendering
 
     private func handleLocalModelStreamingChunk(_ event: LocalModelStreamingChunkEvent) {
         guard let runId = activeStreamingRunId, runId == event.runId else { return }
@@ -311,15 +337,17 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             guard let self else { return }
             defer { self.streamingRenderTask = nil }
             while self.activeStreamingRunId != nil {
+                guard !Task.isCancelled else { break }
+
                 if self.pendingStreamingBuffer.isEmpty {
-                    try? await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds)
+                    do { try await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds) } catch { break }
                     continue
                 }
 
                 let delta = self.dequeueStreamingDelta()
                 let reasoningDelta = self.dequeueReasoningDelta()
                 guard !delta.isEmpty || !reasoningDelta.isEmpty else {
-                    try? await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds)
+                    do { try await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds) } catch { break }
                     continue
                 }
                 guard self.historyCoordinator.getDraftMessage(id: draftId) != nil else { break }
@@ -342,7 +370,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     )
                 )
 
-                try? await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds)
+                do { try await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds) } catch { break }
             }
         }
     }
@@ -438,6 +466,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         )
     }
 
+    // MARK: - Observation
+
     private func setupObservation() {
         historyManager.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
@@ -493,6 +523,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             await OrchestrationRunStore.shared.setProjectRoot(root)
         }
     }
+
+    // MARK: - Dependency Updates
 
     func updateAIService(_ newService: AIService) {
         self.aiService = newService
@@ -550,6 +582,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         )
     }
 
+    // MARK: - Send Pipeline
+
     func sendMessage() {
         sendMessage(context: nil)
     }
@@ -559,6 +593,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         let userContext = buildUserMessageContext(context: context)
         logUserMessage(userContext)
         historyCoordinator.append(userContext.message)
+        publishContextEvent()
         resetInputState()
         startSendTask(userContext: userContext, explicitContext: context)
     }
@@ -605,6 +640,26 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         providerIssue = nil
     }
 
+    private func publishContextEvent() {
+        let msgs = historyCoordinator.messages
+        let totalChars = msgs.reduce(0) { $0 + $1.content.count }
+        // Only enforce context window for local models (slider in settings).
+        // Remote APIs manage their own context limits; we just report usage.
+        let isOffline = settingsStore.bool(forKey: "AI.OfflineModeEnabled", default: false)
+        let contextTokens = settingsStore.integer(forKey: "LocalModel.ContextLength")
+        let contextWindowChars: Int? = (isOffline && contextTokens > 0) ? contextTokens * 4 : nil
+        let turboQuantEnabled = settingsStore.bool(forKey: "LocalModel.TurboQuantEnabled", default: false)
+        let compressionRatio: Double? = (isOffline && turboQuantEnabled) ? 8.0 : nil
+        eventBus.publish(ConversationContextEvent(
+            totalCharCount: totalChars,
+            messageCount: msgs.count,
+            contextWindowChars: contextWindowChars,
+            compressionRatio: compressionRatio
+        ))
+    }
+
+    // MARK: - Preview Helpers
+
     private func appendToLiveModelPreview(_ chunk: String) {
         guard !chunk.isEmpty else { return }
         liveModelOutputPreview.append(chunk)
@@ -643,6 +698,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             liveModelOutputStatusPreview = text
         }
     }
+
+    // MARK: - State Reset
 
     private func resetStreamingDraftState() {
         activeStreamingRunId = nil
@@ -708,7 +765,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                         availableTools: tools,
                         cancelledToolCallIds: { [cancelledIds = self.cancelledToolCallIds] in cancelledIds },
                         qaReviewEnabled: self.currentMode == .agent && self.settingsStore.bool(forKey: AppConstantsStorage.agentQAReviewEnabledKey, default: false),
-                        draftAssistantMessageId: self.draftAssistantMessageId
+                        draftAssistantMessageId: self.draftAssistantMessageId,
+                        usesLocalModel: self.settingsStore.bool(forKey: "AI.OfflineModeEnabled", default: false)
                     )
                 )
 
@@ -767,6 +825,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             || normalized.contains("cancelled")
             || normalized.contains("canceled")
     }
+
+    // MARK: - Conversation Lifecycle
 
     func clearConversation() {
         cancelActiveSendTask()
@@ -854,6 +914,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         // Find the specific tool execution message and mark it as failed/cancelled
         historyCoordinator.updateMessageStatus(toolCallId: id, status: .failed, content: "Cancelled by user")
     }
+
+    // MARK: - Quick Actions
 
     func explainCode(_ code: String) {
         isSending = true

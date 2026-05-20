@@ -226,6 +226,56 @@ actor OpenRouterAPIClient {
         return try JSONDecoder().decode(BalanceResponse.self, from: data).balance
     }
 
+    func fetchDeepSeekBalance(
+        apiKey: String,
+        apiBaseURL: String
+    ) async throws -> Decimal? {
+        guard let base = URL(string: apiBaseURL) else {
+            throw OpenRouterServiceError.invalidURL
+        }
+        let url = base.appendingPathComponent("user/balance")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await urlSession.data(for: request)
+        let status = try httpStatus(from: response)
+        guard status == 200 else {
+            let body = String(data: data, encoding: .utf8)
+            throw OpenRouterServiceError.serverError(status, body: body)
+        }
+
+        struct DeepSeekBalanceResponse: Decodable {
+            struct BalanceInfo: Decodable {
+                let currency: String?
+                let totalBalance: String?
+                let grantedBalance: String?
+                let toppedUpBalance: String?
+                
+                enum CodingKeys: String, CodingKey {
+                    case currency
+                    case totalBalance = "total_balance"
+                    case grantedBalance = "granted_balance"
+                    case toppedUpBalance = "topped_up_balance"
+                }
+            }
+            let isAvailable: Bool?
+            let balanceInfos: [BalanceInfo]?
+            
+            enum CodingKeys: String, CodingKey {
+                case isAvailable = "is_available"
+                case balanceInfos = "balance_infos"
+            }
+        }
+
+        let decoded = try JSONDecoder().decode(DeepSeekBalanceResponse.self, from: data)
+        // Return total balance in USD from first balance info
+        if let balanceStr = decoded.balanceInfos?.first?.totalBalance {
+            return Decimal(string: balanceStr)
+        }
+        return nil
+    }
+
     private func makeRequest(_ request: Request) throws -> URLRequest {
         guard let base = URL(string: request.context.baseURL) else { throw OpenRouterServiceError.invalidURL }
         let url = base.appendingPathComponent(request.path)

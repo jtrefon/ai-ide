@@ -153,6 +153,7 @@ struct IndexStatusBarView: View {
 
             HStack(spacing: 6) {
                 statusLabel(viewModel.openRouterContextUsageText)
+                statusLabel(viewModel.localModelContextUsageText)
                 statusLabel(viewModel.remoteAICostText)
                 statusLabel(viewModel.remoteAISpendText, layoutPriority: 1)
                 statusLabel(viewModel.remoteAIBalanceText, layoutPriority: 1)

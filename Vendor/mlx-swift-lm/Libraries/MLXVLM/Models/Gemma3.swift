@@ -2,7 +2,6 @@ import CoreImage
 import MLX
 import MLXLMCommon
 import MLXNN
-import Tokenizers
 
 // Based on https://github.com/Blaizzy/mlx-vlm/tree/main/mlx_vlm/models/gemma3
 
@@ -866,12 +865,12 @@ private func maskedScatter(
 
     // Scatter the scaled image features into the special image token positions
     let imagePositions = MLXArray(imagePositionIndices)
-    guard scaledImageFeaturesFlattened.shape[0] == imagePositions.shape[0] else {
+    guard scaledImageFeaturesFlattened.dim(0) == imagePositions.dim(0) else {
         fatalError(
             """
             Critical error in maskedScatter: Size mismatch between image features and positions.
-            Image features: \(scaledImageFeaturesFlattened.shape[0])
-            Image positions: \(imagePositions.shape[0])
+            Image features: \(scaledImageFeaturesFlattened.dim(0))
+            Image positions: \(imagePositions.dim(0))
             """)
     }
     finalEmbeddingFlattened[imagePositions] = scaledImageFeaturesFlattened
@@ -1067,7 +1066,9 @@ public struct Gemma3Processor: UserInputProcessor {
         // Use structured content message generator for Gemma3's chat template
         let messages = Qwen2VLMessageGenerator().generate(from: input)
 
-        var promptTokens = try tokenizer.applyChatTemplate(messages: messages)
+        var promptTokens = try tokenizer.applyChatTemplate(
+            messages: messages, tools: input.tools,
+            additionalContext: input.additionalContext)
 
         // Process images if any
         var processedImage: LMInput.ProcessedImage?

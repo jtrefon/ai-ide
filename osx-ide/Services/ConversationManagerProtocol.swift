@@ -55,4 +55,6 @@ public protocol ConversationManagerProtocol: AnyObject, StatePublisherProtocol {
     func closeConversation(id: String)
     func stopGeneration()
     func updateProjectRoot(_ root: URL)
+    func updateCodebaseIndex(_ index: CodebaseIndexProtocol?)
+    func updateAIService(_ service: AIService)
 }
