@@ -1,13 +1,13 @@
 import Foundation
 
 /// The ONLY search/find tool available to local models.
-/// Runs all search methods internally and returns a concise summary.
-/// No other search/list/discovery tools are needed.
+/// All search methods use the codebase index (vector, symbol, FTS, path LIKE).
+/// No filesystem grep — too slow for large projects and would time out.
 struct LocalFindTool: AITool {
     let name = "find"
     let description = "Find files, classes, functions, variables, or text in the project. " +
-        "Runs vector search, symbol lookup, full-text search, grep, and filename matching " +
-        "internally. Returns ALL matches grouped by file with type and location. " +
+        "Uses the codebase index for vector search, symbol lookup, full-text search, " +
+        "and path matching. Returns ALL matches grouped by file with type and location. " +
         "This is the ONLY search tool — use it for ANY code discovery task."
 
     var parameters: [String: Any] {
@@ -31,23 +31,24 @@ struct LocalFindTool: AITool {
         guard let phrase = raw["phrase"] as? String else {
             return "Missing 'phrase' argument."
         }
-        let lowerPhrase = phrase.lowercased()
+
+        guard let index else {
+            return "The codebase index is still building. Please wait a moment and try again."
+        }
 
         var entries: [SearchEntry] = []
         let maxResults = 100
 
-        // 1. Vector semantic search
-        if let index {
-            if let chunks = try? await index.getRelevantCodeChunks(userInput: phrase, limit: 20) {
-                for chunk in chunks {
-                    let ctx = String(chunk.snippet.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120))
-                    entries.append(SearchEntry(file: chunk.filePath, line: chunk.lineStart, matchType: "semantic", context: ctx))
-                }
+        // 1. Vector semantic search (conceptually relevant code)
+        if let chunks = try? await index.getRelevantCodeChunks(userInput: phrase, limit: 20) {
+            for chunk in chunks {
+                let ctx = String(chunk.snippet.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120))
+                entries.append(SearchEntry(file: chunk.filePath, line: chunk.lineStart, matchType: "semantic", context: ctx))
             }
         }
 
-        // 2. Symbol search
-        if let index {
+        // 2. Symbol search (classes, functions, variables)
+        if entries.count < maxResults {
             if let symbols = try? await index.searchSymbolsWithPaths(nameLike: phrase, limit: 30) {
                 for sym in symbols {
                     let kind = classify(sym.symbol.kind)
@@ -57,8 +58,8 @@ struct LocalFindTool: AITool {
             }
         }
 
-        // 3. Full-text search via index
-        if entries.count < maxResults, let index {
+        // 3. Full-text search via index FTS5 (fast, sub-millisecond)
+        if entries.count < maxResults {
             if let textMatches = try? await index.searchIndexedText(pattern: phrase, limit: 30) {
                 for match in textMatches {
                     let parts = match.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
@@ -74,65 +75,20 @@ struct LocalFindTool: AITool {
             }
         }
 
-        // 4. Grep filesystem
+        // 4. Filename match via index (path LIKE query)
         if entries.count < maxResults {
-            let grepResults = try await grepFilesystem(query: lowerPhrase, maxResults: maxResults - entries.count)
-            entries.append(contentsOf: grepResults)
-        }
-
-        // 5. Filename match
-        if entries.count < maxResults {
-            let fileResults = findFilesByName(query: lowerPhrase, maxResults: maxResults - entries.count)
-            entries.append(contentsOf: fileResults)
+            let fileMatches = try? await index.listIndexedFiles(matching: phrase, limit: 20, offset: 0)
+            for filePath in fileMatches ?? [] {
+                let name = (filePath as NSString).lastPathComponent
+                entries.append(SearchEntry(file: filePath, line: 0, matchType: "filename", context: name))
+            }
         }
 
         guard !entries.isEmpty else {
-            return "No matches found for '\(phrase)'."
+            return "No matches found for '\(phrase)' in the indexed project files."
         }
 
         return format(entries: entries, phrase: phrase)
-    }
-
-    // MARK: - Search methods
-
-    private func grepFilesystem(query: String, maxResults: Int) async throws -> [SearchEntry] {
-        var results: [SearchEntry] = []
-        guard let enumerator = FileManager.default.enumerator(
-            at: projectRoot,
-            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return results }
-        while let fileURL = enumerator.nextObject() as? URL {
-            if results.count >= maxResults { break }
-            let isDir = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if isDir { if ToolFileExclusion.isExcluded(url: fileURL) { enumerator.skipDescendants() }; continue }
-            guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
-            guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
-            for (i, line) in content.components(separatedBy: .newlines).enumerated() {
-                if results.count >= maxResults { break }
-                if line.lowercased().contains(query) {
-                    results.append(SearchEntry(file: relPath(fileURL), line: i + 1, matchType: "reference", context: line.trimmingCharacters(in: .whitespaces)))
-                }
-            }
-        }
-        return results
-    }
-
-    private func findFilesByName(query: String, maxResults: Int) -> [SearchEntry] {
-        var results: [SearchEntry] = []
-        guard let enumerator = FileManager.default.enumerator(
-            at: projectRoot, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return results }
-        while let fileURL = enumerator.nextObject() as? URL {
-            if results.count >= maxResults { break }
-            let isDir = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if isDir { if ToolFileExclusion.isExcluded(url: fileURL) { enumerator.skipDescendants() }; continue }
-            if fileURL.lastPathComponent.lowercased().contains(query) {
-                results.append(SearchEntry(file: relPath(fileURL), line: 0, matchType: "filename", context: fileURL.lastPathComponent))
-            }
-        }
-        return results
     }
 
     // MARK: - Formatting
@@ -150,13 +106,6 @@ struct LocalFindTool: AITool {
             output += "\n"
         }
         return output
-    }
-
-    private func relPath(_ url: URL) -> String {
-        let root = projectRoot.standardizedFileURL.path
-        let full = url.standardizedFileURL.path
-        if full.hasPrefix(root + "/") { return String(full.dropFirst(root.count + 1)) }
-        return full
     }
 
     private func classify(_ kind: SymbolKind) -> String {
