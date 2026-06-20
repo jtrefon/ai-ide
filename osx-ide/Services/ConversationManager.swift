@@ -83,6 +83,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var projectRoot: URL
     private let conversationLogger: ConversationLogger
     private let settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
+    private lazy var aiRouter = AIRouter(settingsStore: settingsStore)
     private let activityCoordinator: AgentActivityCoordinating?
     /// Token for the current API sending activity
     private var apiSendingActivityToken: AgentActivityToken?
@@ -645,7 +646,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         let totalChars = msgs.reduce(0) { $0 + $1.content.count }
         // Only enforce context window for local models (slider in settings).
         // Remote APIs manage their own context limits; we just report usage.
-        let isOffline = settingsStore.bool(forKey: "AI.OfflineModeEnabled", default: false)
+        let isOffline = aiRouter.usesLocalModel
         let contextTokens = settingsStore.integer(forKey: "LocalModel.ContextLength")
         let contextWindowChars: Int? = (isOffline && contextTokens > 0) ? contextTokens * 4 : nil
         let turboQuantEnabled = settingsStore.bool(forKey: "LocalModel.TurboQuantEnabled", default: false)
@@ -766,7 +767,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                         cancelledToolCallIds: { [cancelledIds = self.cancelledToolCallIds] in cancelledIds },
                         qaReviewEnabled: self.currentMode == .agent && self.settingsStore.bool(forKey: AppConstantsStorage.agentQAReviewEnabledKey, default: false),
                         draftAssistantMessageId: self.draftAssistantMessageId,
-                        usesLocalModel: self.settingsStore.bool(forKey: "AI.OfflineModeEnabled", default: false)
+                        usesLocalModel: self.aiRouter.usesLocalModel
                     )
                 )
 

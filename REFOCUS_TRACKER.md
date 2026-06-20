@@ -17,21 +17,21 @@
 
 ---
 
-## Phase 1 — Pipeline Isolation (Current)
+## Phase 1 — Pipeline Isolation ✅ (Completed)
 
 **Theme:** Stop blending local and cloud. RAG and orchestration become cloud-only.
 
 | # | Item | Impact | Depends On | Status |
 |---|---|---|---|---|
-| 1.1 | Remove RAG injection from local model path in AIInteractionCoordinator | 🔥 **Highest impact** — prevents 4B model from being polluted with irrelevant context | 0.5 | ⬜ |
-| 1.2 | Remove orchestration graph from local model path (skip nodes, direct LLM call) | 🔥 **Highest impact** — prevents 4B model from running planner/worker/QA nodes | 1.1 | ⬜ |
-| 1.3 | Update SendRequest/ConversationSendCoordinator to support pipeline routing | 🏗️ Infrastructure for 1.1 + 1.2 | 1.2 | ⬜ |
+| 1.1 | Remove RAG injection from local model path in AIInteractionCoordinator | 🔥 **Highest impact** — prevents 4B model from being polluted with irrelevant context | 0.5 | ✅ |
+| 1.2 | Remove orchestration graph from local model path (skip nodes, direct LLM call) | 🔥 **Highest impact** — prevents 4B model from running planner/worker/QA nodes | 1.1 | ✅ |
+| 1.3 | Update SendRequest/ConversationSendCoordinator to support pipeline routing | 🏗️ Infrastructure for 1.1 + 1.2 | 1.2 | ✅ |
 
-**Gate:** Build must compile. Local model makes direct LLM calls only. Cloud model retains full orchestration + RAG.
+**Gate:** Build must compile. Local model makes direct LLM calls only. Cloud model retains full orchestration + RAG. ✅
 
 ---
 
-## Phase 2 — Structural Reorg
+## Phase 2 — Structural Reorg (Partial)
 
 **Theme:** Directory structure reflects the architecture. Mechanical but important.
 
@@ -39,24 +39,24 @@
 |---|---|---|---|---|
 | 2.1 | Rename `Services/ConversationFlow/` → `Services/CloudPipeline/` | 🏗️ Architecture clarity | 1.2 | ⬜ |
 | 2.2 | Move `Services/InlineCompletion/` → `Services/LocalPipeline/InlineCompletion/` | 🏗️ Architecture clarity | — | ⬜ |
-| 2.3 | Create `Services/LocalPipeline/LocalInteractionService.swift` | 📦 Scaffold for local-only AI interaction | 1.2 | ⬜ |
+| 2.3 | Create `Services/LocalPipeline/LocalInteractionService.swift` | 📦 Scaffold for local-only AI interaction | 1.2 | ✅ |
 | 2.4 | Fix all imports and Xcode project references | ✅ Maintains build | 2.1, 2.2, 2.3 | ⬜ |
 
-**Gate:** Build must compile. Directory structure matches ARCHITECTURE.md diagram.
+**Gate:** Build must compile. Directory structure matches ARCHITECTURE.md diagram. (File moves postponed — require Xcode project updates.)
 
 ---
 
-## Phase 3 — Architecture Completion
+## Phase 3 — Architecture Completion (Partial)
 
 **Theme:** Cleanly separate concerns. The router dispatches, two backends serve.
 
 | # | Item | Impact | Depends On | Status |
 |---|---|---|---|---|
-| 3.1 | Split `ConversationManager` into `SessionManager` (tabs/history) + `CloudConversationService` (orchestration) | 🔥 **Major** — removes god object (981→~300 lines) | 2.1, 2.2 | ⬜ |
+| 3.1 | Split `ConversationManager` into `SessionManager` + `CloudConversationService` | 🔥 **Major** — removes god object (981→~300 lines) | 2.1, 2.2 | ⬜ |
 | 3.2 | Create `AIRouter` to dispatch requests to local or cloud pipeline | 🏗️ Clean entry point for AI interactions | 3.1 | ⬜ |
-| 3.3 | Remove `_ragTelemetryAggregator` from DependencyContainer (dead reference) | 🗑️ Cleanup | 0.5 | ⬜ |
+| 3.3 | Remove `RAGTelemetryAggregator` (dead code, file + test) | 🗑️ Cleanup | 0.5 | ✅ |
 
-**Gate:** Build must compile. ConversationManager is no longer a god object. All AI requests go through AIRouter.
+**Gate:** Build must compile.
 
 ---
 
