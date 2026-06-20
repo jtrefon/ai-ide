@@ -143,6 +143,7 @@ final class ConversationSendCoordinator {
         let maxIterations = 5
         var callFrequencies: [CallSignature: Int] = [:]
         let maxSameCall = 3
+        var promptedForExecution = false
 
         for iteration in 0..<maxIterations {
             let messages = historyCoordinator.messages
@@ -161,19 +162,31 @@ final class ConversationSendCoordinator {
                 )
             )
             let response = try result.get()
+            let rawContent = response.content ?? ""
 
             // Prefer structured tool calls from the MLX framework (cleaner parsing)
             let toolCalls: [AIToolCall]
             if let structured = response.toolCalls, !structured.isEmpty {
                 toolCalls = structured
             } else {
-                let rawContent = response.content ?? ""
                 let parsed = ChatPromptBuilder.parseModelResponse(rawContent)
                 toolCalls = parsed.toolCalls
             }
 
-            // No tool calls → return the response (final pass or text-only response)
+            // No tool calls
             guard !toolCalls.isEmpty else {
+                // If the response looks like a plan with no execution, prompt the model once to act
+                if !promptedForExecution, looksLikePlanWithoutAction(rawContent) {
+                    promptedForExecution = true
+                    let planMsg = ChatMessage(
+                        role: .system,
+                        content: "You outlined a plan above but did not execute any steps. " +
+                            "Immediately execute the first step by calling the appropriate tool. " +
+                            "Do not repeat the plan — just execute."
+                    )
+                    historyCoordinator.append(planMsg)
+                    continue
+                }
                 return response
             }
 
@@ -225,6 +238,18 @@ final class ConversationSendCoordinator {
             )
         )
         return try result.get()
+    }
+
+    private func looksLikePlanWithoutAction(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        // Has planning language and numbered steps but no evidence of execution
+        let hasPlanMarker = lower.contains("plan:") || lower.contains("**plan**") || lower.contains("# plan")
+        let hasSteps = lower.contains("1.") || lower.contains("step 1") || lower.contains("step one")
+        // But no tool call indicators (model said it would do something but didn't)
+        let hasToolCall = lower.contains("read_file") || lower.contains("search_project") ||
+                          lower.contains("find_file") || lower.contains("grep") ||
+                          lower.contains("list_dir") || lower.contains("get_project_structure")
+        return hasPlanMarker && hasSteps && !hasToolCall
     }
 
     private struct CallSignature: Hashable {
