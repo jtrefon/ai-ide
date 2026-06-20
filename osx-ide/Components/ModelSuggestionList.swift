@@ -34,7 +34,7 @@ struct ModelSuggestionList: View {
                             .padding(.vertical, 8)
                         }
                         .buttonStyle(.plain)
-                        .background(Color.white.opacity(0.02))
+                        .background(Color(NSColor.controlBackgroundColor).opacity(0.3))
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                 }

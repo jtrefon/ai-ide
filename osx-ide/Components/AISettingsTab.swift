@@ -306,7 +306,7 @@ private struct SystemPromptSection: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 0.6)
+                            .stroke(Color(NSColor.separatorColor).opacity(0.2), lineWidth: 0.6)
                     )
 
                 HStack(spacing: 12) {

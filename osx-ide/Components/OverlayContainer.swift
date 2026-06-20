@@ -18,8 +18,9 @@ struct OverlayContainer<Content: View>: View {
     var body: some View {
         if isPresented {
             ZStack {
-                Color.black.opacity(AppConstants.Overlay.backdropOpacity)
+                Color.black.opacity(0.15)
                     .ignoresSafeArea()
+                    .background(.ultraThinMaterial)
                     .onTapGesture(perform: onDismiss)
 
                 content

@@ -301,7 +301,7 @@ struct GeneralSettingsTab: View {
                             ui.resetToDefaults()
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(Color.white.opacity(0.2))
+                        .tint(Color(NSColor.separatorColor).opacity(0.3))
                     }
                 }
             }

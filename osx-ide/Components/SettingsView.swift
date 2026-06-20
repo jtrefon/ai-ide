@@ -83,30 +83,8 @@ struct SettingsView: View {
 
 private struct SettingsBackgroundView: View {
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.12, green: 0.15, blue: 0.2),
-                    Color(red: 0.08, green: 0.1, blue: 0.14),
-                    Color(red: 0.06, green: 0.08, blue: 0.12)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+        Color(NSColor.windowBackgroundColor)
             .ignoresSafeArea()
-
-            RoundedRectangle(cornerRadius: 32, style: .continuous)
-                .fill(Color.white.opacity(0.05))
-                .blur(radius: 40)
-                .offset(x: 180, y: -220)
-                .allowsHitTesting(false)
-
-            RoundedRectangle(cornerRadius: 32, style: .continuous)
-                .fill(Color.blue.opacity(0.08))
-                .blur(radius: 60)
-                .offset(x: -200, y: 240)
-                .allowsHitTesting(false)
-        }
     }
 }
 

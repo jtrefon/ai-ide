@@ -31,7 +31,7 @@ struct LanguageModulesTab: View {
                     .textFieldStyle(.plain)
             }
             .padding(10)
-            .background(Color.black.opacity(0.2))
+            .background(Color(NSColor.controlBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 24)
             .padding(.top, 16)

@@ -62,7 +62,7 @@ struct ChatInputView: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.white)
                         .frame(width: 26, height: 26)
-                        .background(canSend ? Color.accentColor : Color.gray.opacity(0.55))
+                        .background(canSend ? Color.accentColor : Color(NSColor.separatorColor).opacity(0.5))
                         .clipShape(Circle())
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -78,7 +78,7 @@ struct ChatInputView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .stroke(
-                        isInputFocused ? Color.accentColor : Color.gray.opacity(0.3),
+                        isInputFocused ? Color.accentColor : Color(NSColor.separatorColor).opacity(0.6),
                         lineWidth: isInputFocused ? 2 : 1
                     )
             )

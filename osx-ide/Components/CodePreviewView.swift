@@ -45,7 +45,7 @@ struct CodePreviewView: View {
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 2)
-                        .background(Color.gray.opacity(0.2))
+                        .background(Color(NSColor.controlBackgroundColor))
                         .cornerRadius(4)
                 }
 
@@ -58,7 +58,7 @@ struct CodePreviewView: View {
                     }
                     .font(.caption)
                 }
-                .buttonStyle(BorderlessButtonStyle())
+                .buttonStyle(.plain)
                 .foregroundColor(.blue)
             }
 
@@ -66,7 +66,7 @@ struct CodePreviewView: View {
                 .font(resolveFont(size: fontSize, family: fontFamily))
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.gray.opacity(0.1))
+                .background(Color(NSColor.textBackgroundColor))
                 .cornerRadius(4)
         }
         .padding(.top, 4)

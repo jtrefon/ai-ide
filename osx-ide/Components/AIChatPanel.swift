@@ -87,7 +87,7 @@ struct AIChatPanel: View {
             .overlay(
                 Rectangle()
                     .frame(height: 1)
-                    .foregroundColor(Color.gray.opacity(0.18)),
+                    .foregroundColor(Color(NSColor.separatorColor)),
                 alignment: .bottom
             )
 
@@ -213,7 +213,7 @@ struct AIChatPanel: View {
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(Color.gray.opacity(0.15))
+                    .background(Color(NSColor.controlBackgroundColor))
                     .cornerRadius(5)
                 }
                 .menuStyle(.borderlessButton)
@@ -222,7 +222,7 @@ struct AIChatPanel: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Color.gray.opacity(0.1))
+            .background(Color(NSColor.controlBackgroundColor))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)

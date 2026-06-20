@@ -97,7 +97,7 @@ private struct EmbeddingModelRow: View {
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.blue.opacity(0.8))
+                                .background(Color(NSColor.controlAccentColor).opacity(0.8))
                                 .clipShape(Capsule())
                         }
                     }

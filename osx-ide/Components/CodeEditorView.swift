@@ -115,7 +115,7 @@ struct CodeEditorView: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.secondary.opacity(0.15), lineWidth: 0.8)
+                    .stroke(Color(NSColor.separatorColor).opacity(0.3), lineWidth: 0.8)
             )
             .padding(12)
             .allowsHitTesting(false)

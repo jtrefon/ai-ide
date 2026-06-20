@@ -88,7 +88,7 @@ struct ToolExecutionMessageView: View {
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                .stroke(Color(NSColor.separatorColor).opacity(0.5), lineWidth: 1)
         )
     }
 

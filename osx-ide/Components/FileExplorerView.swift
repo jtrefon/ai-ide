@@ -52,7 +52,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 .cornerRadius(6)
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                        .stroke(Color(NSColor.separatorColor).opacity(0.3), lineWidth: 1)
                 )
 
                 Button(action: {
@@ -61,7 +61,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: max(10, context.ui.fontSize - 2)))
                 }
-                .buttonStyle(BorderlessButtonStyle())
+                .buttonStyle(.plain)
                 .help(localized("file_explorer.refresh_help"))
             }
             .padding(8)

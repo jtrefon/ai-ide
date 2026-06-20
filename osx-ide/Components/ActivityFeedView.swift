@@ -67,7 +67,7 @@ struct ActivityFeedView: View {
             .overlay(
                 Rectangle()
                     .frame(height: 1)
-                    .foregroundColor(Color.gray.opacity(0.18)),
+                    .foregroundColor(Color(NSColor.separatorColor)),
                 alignment: .bottom
             )
         }
