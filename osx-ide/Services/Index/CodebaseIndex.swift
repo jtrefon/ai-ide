@@ -68,9 +68,6 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     let projectRoot: URL
     let excludePatterns: [String]
     var isEnabled: Bool
-    var aiEnrichmentAfterIndexCancellable: AnyCancellable?
-    var aiEnrichmentTask: Task<Void, Never>?
-
     /// Initialization state for async creation
     public let initializationState = CodebaseIndexInitializationState()
 

@@ -124,27 +124,5 @@ final class DatabaseManagerTests: XCTestCase {
         XCTAssertEqual(results.first?.qualityScore, 9.2)
     }
 
-    func testUpdateQualityScore() throws {
-        let path = "src/main.swift"
 
-        let id = UUID().uuidString
-        try insertResource(id: id, path: path, qualityScore: 7.5, aiEnriched: false)
-
-        try dbManager.updateQualityScore(resourceId: id, score: 8.8)
-
-        // Simple verification - just check that update doesn't throw
-        XCTAssertTrue(true)
-    }
-
-    func testMarkAIEnriched() throws {
-        let path = "src/main.swift"
-
-        let id = UUID().uuidString
-        try insertResource(id: id, path: path, qualityScore: 7.5, aiEnriched: false)
-
-        try dbManager.markAIEnriched(resourceId: id, score: 9.1, summary: "Test summary")
-
-        // Simple verification - just check that marking doesn't throw
-        XCTAssertTrue(true)
-    }
 }

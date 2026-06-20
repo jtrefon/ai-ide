@@ -85,9 +85,6 @@ private final class FakeCodebaseIndex: CodebaseIndexProtocol {
     func stop() {}
     func setEnabled(_ enabled: Bool) {}
     func reindexProject() {}
-    func reindexProject(aiEnrichmentEnabled: Bool) {}
-    func runAIEnrichment() {}
-    func upgradeEmbeddingGenerator(_ generator: any MemoryEmbeddingGenerating) {}
 
     func listIndexedFiles(matching query: String?, limit: Int, offset: Int) async throws -> [String] { [] }
     func findIndexedFiles(query: String, limit: Int) async throws -> [IndexedFileMatch] { [] }

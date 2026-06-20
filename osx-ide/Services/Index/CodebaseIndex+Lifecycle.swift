@@ -20,10 +20,6 @@ extension CodebaseIndex {
 
     public func stop() {
         isEnabled = false
-        aiEnrichmentAfterIndexCancellable?.cancel()
-        aiEnrichmentAfterIndexCancellable = nil
-        aiEnrichmentTask?.cancel()
-        aiEnrichmentTask = nil
         Task { await coordinator.stop() }
         Task { await database.shutdown() }
     }
@@ -34,26 +30,10 @@ extension CodebaseIndex {
     }
 
     public func reindexProject() {
-        reindexProject(aiEnrichmentEnabled: false)
-    }
-
-    public func reindexProject(aiEnrichmentEnabled: Bool) {
         guard isEnabled else { return }
         Task {
             await pruneOutOfScopeResourcesIfNeeded()
             await coordinator.reindexProject(rootURL: projectRoot)
-        }
-
-        if aiEnrichmentEnabled {
-            aiEnrichmentAfterIndexCancellable?.cancel()
-            aiEnrichmentAfterIndexCancellable = eventBus.subscribe(
-                to: ProjectReindexCompletedEvent.self
-            ) { [weak self] _ in
-                guard let self else { return }
-                self.aiEnrichmentAfterIndexCancellable?.cancel()
-                self.aiEnrichmentAfterIndexCancellable = nil
-                self.runAIEnrichment()
-            }
         }
     }
 

@@ -16,7 +16,7 @@ final class ConversationPolicy: ConversationPolicyProtocol {
         "index_read_file",
         "index_search_symbols",
         "read_file",
-        "list_files",
+        "list_dir",
         "conversation_fold"
     ]
     private let toolLoopExecutionToolNames: Set<String> = [
@@ -26,7 +26,7 @@ final class ConversationPolicy: ConversationPolicyProtocol {
         "index_read_file",
         "index_search_symbols",
         "read_file",
-        "list_files",
+        "list_dir",
         "write_file",
         "write_files",
         "create_file",

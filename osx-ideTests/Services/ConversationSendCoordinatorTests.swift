@@ -154,9 +154,6 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         func stop() {}
         func setEnabled(_ enabled: Bool) { _ = enabled }
         func reindexProject() {}
-        func reindexProject(aiEnrichmentEnabled: Bool) { _ = aiEnrichmentEnabled }
-        func runAIEnrichment() {}
-        func upgradeEmbeddingGenerator(_ generator: any MemoryEmbeddingGenerating) { }
 
         func listIndexedFiles(matching query: String?, limit: Int, offset: Int) async throws -> [String] {
             _ = query

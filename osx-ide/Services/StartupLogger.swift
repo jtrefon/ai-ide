@@ -14,21 +14,19 @@ enum StartupLogger {
     private static let queue = DispatchQueue(label: "osx-ide.startup-logger")
 
     #if DEBUG
-    nonisolated(unsafe) private static var logURL: URL = {
-        let dir = FileManager.default.temporaryDirectory
-        return dir.appendingPathComponent("osx-ide-startup-\(ProcessInfo.processInfo.processIdentifier).log")
-    }()
+    private final class LoggerState: @unchecked Sendable {
+        private let lock = NSLock()
+        private let logURL: URL
+        private var isFirstWrite = true
 
-    nonisolated(unsafe) private static var isFirstWrite = true
-    #endif
+        init() {
+            let dir = FileManager.default.temporaryDirectory
+            self.logURL = dir.appendingPathComponent("osx-ide-startup-\(ProcessInfo.processInfo.processIdentifier).log")
+        }
 
-    /// Log a startup diagnostic message with an optional elapsed time.
-    static func log(_ message: String, elapsedMs: Int? = nil) {
-        #if DEBUG
-        queue.async {
-            let ts = ISO8601DateFormatter().string(from: Date())
-            let elapsed = elapsedMs.map { " (\($0)ms)" } ?? ""
-            let line = "[\(ts)] \(message)\(elapsed)\n"
+        func writeLog(_ line: String) {
+            lock.lock()
+            defer { lock.unlock() }
 
             if isFirstWrite {
                 isFirstWrite = false
@@ -40,6 +38,21 @@ enum StartupLogger {
                     try? handle.close()
                 }
             }
+        }
+    }
+
+    private static let state = LoggerState()
+    #endif
+
+    /// Log a startup diagnostic message with an optional elapsed time.
+    static func log(_ message: String, elapsedMs: Int? = nil) {
+        #if DEBUG
+        queue.async {
+            let ts = ISO8601DateFormatter().string(from: Date())
+            let elapsed = elapsedMs.map { " (\($0)ms)" } ?? ""
+            let line = "[\(ts)] \(message)\(elapsed)\n"
+
+            state.writeLog(line)
 
             Swift.print("[STARTUP] \(message)\(elapsed)")
             fflush(stdout)

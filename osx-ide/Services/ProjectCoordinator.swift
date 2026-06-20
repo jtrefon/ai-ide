@@ -172,7 +172,7 @@ class ProjectCoordinator: ObservableObject {
                         reason: "initial_project_reindex"
                     )
                     // Start reindex in background
-                    await index.reindexProject(aiEnrichmentEnabled: false)
+                    await index.reindexProject()
                 } else {
                     await IndexLogger.shared.log(
                         "ProjectCoordinator: Skipping initial project reindex because persisted index data already exists"
@@ -197,11 +197,11 @@ class ProjectCoordinator: ObservableObject {
         }
     }
 
-    func reindexProject(aiEnrichment: Bool) {
-        codebaseIndex?.reindexProject(aiEnrichmentEnabled: aiEnrichment)
+    func reindexProject() {
+        codebaseIndex?.reindexProject()
     }
 
-    func rebuildIndex(overwriteDB: Bool, aiEnrichment: Bool) {
+    func rebuildIndex(overwriteDB: Bool) {
         guard let root = currentProjectRoot else {
             Task {
                 await IndexLogger.shared.log(
@@ -223,7 +223,7 @@ class ProjectCoordinator: ObservableObject {
             cleanupIndexDatabase(projectRoot: root)
         }
 
-        initializeAndStartIndex(projectRoot: root, aiEnrichment: aiEnrichment)
+        initializeAndStartIndex(projectRoot: root)
     }
 
     private func cleanupIndexDatabase(projectRoot: URL) {
@@ -252,7 +252,7 @@ class ProjectCoordinator: ObservableObject {
         }
     }
 
-    private func initializeAndStartIndex(projectRoot: URL, aiEnrichment: Bool) {
+    private func initializeAndStartIndex(projectRoot: URL) {
         // Capture Sendable values for the detached task
         let eventBus = self.eventBus
         let aiService = self.aiService
@@ -316,7 +316,7 @@ class ProjectCoordinator: ObservableObject {
                         for: .indexing,
                         reason: "rebuild_project_reindex"
                     )
-                    await index.reindexProject(aiEnrichmentEnabled: aiEnrichment)
+                    await index.reindexProject()
                 } else {
                     await IndexLogger.shared.log(
                         "ProjectCoordinator: Reindex requested but Codebase Index is disabled")
@@ -358,7 +358,7 @@ class ProjectCoordinator: ObservableObject {
         settingsStore.set(enabled, forKey: AppConstants.Storage.codebaseIndexEnabledKey)
         codebaseIndex?.setEnabled(enabled)
         if enabled {
-            reindexProject(aiEnrichment: false)
+            reindexProject()
         }
     }
 
@@ -368,14 +368,12 @@ class ProjectCoordinator: ObservableObject {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard let self = self else { return }
 
-            let aiEnrichmentEnabled = await self.settingsStore.bool(
-                forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, default: false)
             if let index = await self.codebaseIndex {
                 await self.backgroundWorkGovernor.waitUntilReady(
                     for: .indexing,
                     reason: "scheduled_auto_reindex"
                 )
-                await index.reindexProject(aiEnrichmentEnabled: aiEnrichmentEnabled)
+                await index.reindexProject()
             }
         }
     }

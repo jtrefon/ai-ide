@@ -44,6 +44,10 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         func set(conversationId: String, plan: String) {
             plans[conversationId] = plan
         }
+
+        func reset() {
+            plans.removeAll()
+        }
     }
 
     private struct StubBranchExecutionContinuationDecider: BranchExecutionContinuationDeciding {

@@ -1,6 +1,10 @@
 import Foundation
 
 public enum EmbeddingModelCatalog {
+    private static func safeURL(_ string: String) -> URL {
+        URL(string: string) ?? URL(string: "https://huggingface.co")!
+    }
+
     /// Models that are bundled with the app (in Resources/EmbeddingModels/)
     public static let bundledModels: [EmbeddingModelDefinition] = [
         // BGE Small - Fast, good quality (63 MB)
@@ -10,9 +14,7 @@ public enum EmbeddingModelCatalog {
             dimensions: 512,
             huggingFaceRepo: "BAAI/bge-small-en-v1.5",
             fileName: "bge-small-en-v1.5.mlmodelc",
-            downloadURL: URL(
-                string: "https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main/onnx/model.onnx"
-            )!,
+            downloadURL: safeURL("https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main/onnx/model.onnx"),
             sizeBytes: 63 * 1024 * 1024,  // ~63 MB (CoreML)
             modelFormat: .coreml,
             conversionInstructions: nil  // Already bundled
@@ -24,9 +26,7 @@ public enum EmbeddingModelCatalog {
             dimensions: 768,
             huggingFaceRepo: "BAAI/bge-base-en-v1.5",
             fileName: "bge-base-en-v1.5.mlmodelc",
-            downloadURL: URL(
-                string: "https://huggingface.co/BAAI/bge-base-en-v1.5/resolve/main/onnx/model.onnx"
-            )!,
+            downloadURL: safeURL("https://huggingface.co/BAAI/bge-base-en-v1.5/resolve/main/onnx/model.onnx"),
             sizeBytes: 207 * 1024 * 1024,  // ~207 MB (CoreML)
             modelFormat: .coreml,
             conversionInstructions: nil  // Already bundled
@@ -38,9 +38,7 @@ public enum EmbeddingModelCatalog {
             dimensions: 1024,
             huggingFaceRepo: "BAAI/bge-large-en-v1.5",
             fileName: "bge-large-en-v1.5.mlmodelc",
-            downloadURL: URL(
-                string: "https://huggingface.co/BAAI/bge-large-en-v1.5/resolve/main/onnx/model.onnx"
-            )!,
+            downloadURL: safeURL("https://huggingface.co/BAAI/bge-large-en-v1.5/resolve/main/onnx/model.onnx"),
             sizeBytes: 637 * 1024 * 1024,  // ~637 MB (CoreML)
             modelFormat: .coreml,
             conversionInstructions: nil  // Already bundled
@@ -52,9 +50,7 @@ public enum EmbeddingModelCatalog {
             dimensions: 768,
             huggingFaceRepo: "nomic-ai/nomic-embed-text-v1.5",
             fileName: "nomic-embed-text-v1.5.mlmodelc",
-            downloadURL: URL(
-                string: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model.onnx"
-            )!,
+            downloadURL: safeURL("https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model.onnx"),
             sizeBytes: 261 * 1024 * 1024,  // ~261 MB (CoreML)
             modelFormat: .coreml,
             conversionInstructions: nil  // Already bundled

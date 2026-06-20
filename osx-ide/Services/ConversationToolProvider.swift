@@ -44,6 +44,8 @@ final class ConversationToolProvider {
             tools.append(IndexSearchTextTool(index: index))
             tools.append(IndexSearchSymbolsTool(index: index))
             tools.append(IndexFindFilesTool(index: index))
+            tools.append(IndexListFilesTool(index: index))
+            tools.append(IndexReadFileTool(index: index))
             tools.append(IndexListMemoriesTool(index: index))
             tools.append(IndexAddMemoryTool(index: index))
         }

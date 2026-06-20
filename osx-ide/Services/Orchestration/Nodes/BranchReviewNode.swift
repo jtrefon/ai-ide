@@ -32,6 +32,7 @@ struct BranchReviewNode: OrchestrationNode {
             
             var shouldRetry = signals.hasToolCalls
                 || signals.missingClaimedArtifacts
+                || signals.hasIncompletePlan
             
             if !shouldRetry && (
                 indicatesUnfinished || 

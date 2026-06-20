@@ -12,25 +12,31 @@ import Combine
 /// Manages registration and activation of language modules.
 @MainActor
 public final class LanguageModuleManager: ObservableObject {
-    public static let shared = LanguageModuleManager()
+    @available(*, deprecated, message: "Use dependency injection via DependencyContainer instead")
+    public static let shared = LanguageModuleManager(
+        modules: [
+            SwiftModule(),
+            JavaScriptModule(),
+            TypeScriptModule(),
+            TSXModule(),
+            PythonModule(),
+            HTMLModule(),
+            CSSModule(),
+            JSONModule()
+        ],
+        settingsStore: SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
+    )
 
     @Published private(set) var enabledModules: [CodeLanguage: LanguageModule] = [:]
     private var allModules: [CodeLanguage: LanguageModule] = [:]
     private var disabledCapabilitiesByLanguage: [CodeLanguage: Set<LanguageModuleCapability>] = [:]
     private let settingsStore: SettingsStore
 
-    private init() {
-        settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
-        // Register default modules
-        register(SwiftModule())
-        register(JavaScriptModule())
-        register(TypeScriptModule())
-        register(TSXModule())
-        register(PythonModule())
-        register(HTMLModule())
-        register(CSSModule())
-        register(JSONModule())
-
+    init(modules: [LanguageModule], settingsStore: SettingsStore) {
+        self.settingsStore = settingsStore
+        for module in modules {
+            allModules[module.id] = module
+        }
         setupInitialEnabledState()
     }
 

@@ -65,7 +65,6 @@ class AppState: ObservableObject, IDEContext {
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
     private let configureCodebaseIndex: (URL) -> Void
     private let setCodebaseIndexEnabledImpl: (Bool) -> Void
-    private let setAIEnrichmentIndexingEnabledImpl: (Bool) -> Void
     private let reindexProjectNowImpl: () -> Void
     let refreshRemoteAIAccountBalance: @Sendable (_ runId: String?) async -> Void
     private var eventCancellables = Set<AnyCancellable>()
@@ -161,7 +160,6 @@ class AppState: ObservableObject, IDEContext {
         codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
         configureCodebaseIndex: @escaping (URL) -> Void,
         setCodebaseIndexEnabled: @escaping (Bool) -> Void,
-        setAIEnrichmentIndexingEnabled: @escaping (Bool) -> Void,
         reindexProjectNow: @escaping () -> Void,
         refreshRemoteAIAccountBalance: @escaping @Sendable (_ runId: String?) async -> Void
     ) {
@@ -183,7 +181,6 @@ class AppState: ObservableObject, IDEContext {
         self.codebaseIndexProvider = codebaseIndexProvider
         self.configureCodebaseIndex = configureCodebaseIndex
         self.setCodebaseIndexEnabledImpl = setCodebaseIndexEnabled
-        self.setAIEnrichmentIndexingEnabledImpl = setAIEnrichmentIndexingEnabled
         self.reindexProjectNowImpl = reindexProjectNow
         self.refreshRemoteAIAccountBalance = refreshRemoteAIAccountBalance
 
@@ -256,10 +253,6 @@ class AppState: ObservableObject, IDEContext {
 
     func setCodebaseIndexEnabled(_ enabled: Bool) {
         setCodebaseIndexEnabledImpl(enabled)
-    }
-
-    func setAIEnrichmentIndexingEnabled(_ enabled: Bool) {
-        setAIEnrichmentIndexingEnabledImpl(enabled)
     }
 
     func reindexProjectNow() {

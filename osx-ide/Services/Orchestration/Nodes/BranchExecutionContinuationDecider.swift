@@ -19,7 +19,7 @@ struct BranchExecutionContinuationDecider: BranchExecutionContinuationDeciding {
         branchExecution: OrchestrationState.BranchExecution
     ) async -> Bool {
         guard !branchExecution.hasAdditionalBranches else { return false }
-        guard let response = state.response else { return false }
+        guard state.response != nil else { return false }
 
         let signals = if let executionSignals = state.executionSignals {
             executionSignals
@@ -36,19 +36,7 @@ struct BranchExecutionContinuationDecider: BranchExecutionContinuationDeciding {
         }
 
         if signals.hasIncompletePlan {
-            if signals.hasToolCalls {
-                return true
-            }
-
-            if signals.hasToolResults {
-                return signals.deliveryState != .done
-                    || signals.missingClaimedArtifacts
-                    || signals.shouldForceExecutionFollowup
-                    || signals.indicatesUnfinishedExecution
-                    || signals.isSyntheticProgressArtifact
-            }
-
-            return signals.deliveryState == .needsWork || signals.indicatesUnfinishedExecution
+            return true
         }
 
         if signals.isIntermediateExecutionHandoff {

@@ -11,6 +11,7 @@ final class UnifiedLintingFramework {
     private let eventBus: EventBusProtocol
     private let diagnosticsStore: DiagnosticsStore
     private let workspaceRootProvider: () -> URL?
+    private let languageModuleManager: LanguageModuleManager
     private var lintCacheByAbsolutePath: [String: LintCacheEntry] = [:]
     private var subscriptions = Set<AnyCancellable>()
     private var isProjectScanRunning = false
@@ -18,10 +19,12 @@ final class UnifiedLintingFramework {
     init(
         eventBus: EventBusProtocol,
         diagnosticsStore: DiagnosticsStore,
+        languageModuleManager: LanguageModuleManager,
         workspaceRootProvider: @escaping () -> URL?
     ) {
         self.eventBus = eventBus
         self.diagnosticsStore = diagnosticsStore
+        self.languageModuleManager = languageModuleManager
         self.workspaceRootProvider = workspaceRootProvider
         subscribeToEvents()
     }
@@ -82,9 +85,9 @@ final class UnifiedLintingFramework {
 
     private func isLintableFile(_ fileURL: URL) -> Bool {
         let ext = fileURL.pathExtension.lowercased()
-        guard let module = LanguageModuleManager.shared.getModule(forExtension: ext) else { return false }
-        guard LanguageModuleManager.shared.isEnabled(module.id) else { return false }
-        guard LanguageModuleManager.shared.isCapabilityEnabled(.lint, for: module.id) else { return false }
+        guard let module = languageModuleManager.getModule(forExtension: ext) else { return false }
+        guard languageModuleManager.isEnabled(module.id) else { return false }
+        guard languageModuleManager.isCapabilityEnabled(.lint, for: module.id) else { return false }
         return true
     }
 
@@ -126,7 +129,7 @@ final class UnifiedLintingFramework {
 
     private func language(for fileURL: URL) -> CodeLanguage? {
         let ext = fileURL.pathExtension.lowercased()
-        return LanguageModuleManager.shared.getModule(forExtension: ext)?.id
+        return languageModuleManager.getModule(forExtension: ext)?.id
     }
 
     private func relativePath(for fileURL: URL) -> String? {

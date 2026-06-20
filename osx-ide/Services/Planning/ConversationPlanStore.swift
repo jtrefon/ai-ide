@@ -3,6 +3,7 @@ import Foundation
 protocol ConversationPlanStoring: Actor {
     func get(conversationId: String) -> String?
     func set(conversationId: String, plan: String)
+    func reset()
 }
 
 actor ConversationPlanStore {
@@ -68,6 +69,12 @@ actor ConversationPlanStore {
             .appendingPathComponent(".ide", isDirectory: true)
             .appendingPathComponent("plans", isDirectory: true)
             .appendingPathComponent("\(conversationId).md")
+    }
+
+    func reset() {
+        cache.removeAll()
+        accessOrder.removeAll()
+        projectRoot = nil
     }
 }
 

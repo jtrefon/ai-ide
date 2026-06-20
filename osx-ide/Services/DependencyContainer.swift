@@ -50,10 +50,26 @@ class DependencyContainer: ObservableObject {
             eventBus: _eventBus
         )
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
-        _ragTelemetryAggregator = RAGTelemetryAggregator(eventBus: _eventBus)
+
+        let languageModuleManager = LanguageModuleManager(
+            modules: [
+                SwiftModule(),
+                JavaScriptModule(),
+                TypeScriptModule(),
+                TSXModule(),
+                PythonModule(),
+                HTMLModule(),
+                CSSModule(),
+                JSONModule()
+            ],
+            settingsStore: settingsStore
+        )
+        _languageModuleManager = languageModuleManager
+
         _unifiedLintingFramework = UnifiedLintingFramework(
             eventBus: _eventBus,
             diagnosticsStore: _diagnosticsStore,
+            languageModuleManager: languageModuleManager,
             workspaceRootProvider: { [weak _workspaceService] in
                 _workspaceService?.currentDirectory
             }
@@ -237,6 +253,10 @@ class DependencyContainer: ObservableObject {
         return _eventBus
     }
 
+    var languageModuleManager: LanguageModuleManager {
+        return _languageModuleManager
+    }
+
     var commandRegistry: CommandRegistry {
         return _commandRegistry
     }
@@ -251,10 +271,6 @@ class DependencyContainer: ObservableObject {
 
     var inlineCompletionEngine: InlineCompletionEngine {
         return _inlineCompletionEngine
-    }
-
-    var ragTelemetryAggregator: RAGTelemetryAggregator {
-        return _ragTelemetryAggregator
     }
 
     /// File editor service instance
@@ -306,31 +322,7 @@ class DependencyContainer: ObservableObject {
     }
 
     func reindexProjectNow() {
-        _projectCoordinator.rebuildIndex(
-            overwriteDB: true, aiEnrichment: isAIEnrichmentIndexingEnabled)
-    }
-
-    var isAIEnrichmentIndexingEnabled: Bool {
-        return settingsStore.bool(
-            forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, default: false)
-    }
-
-    func setAIEnrichmentIndexingEnabled(_ enabled: Bool) {
-        if enabled {
-            let settings = OpenRouterSettingsStore().load(includeApiKey: false)
-            let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
-            if model.isEmpty {
-                settingsStore.set(
-                    false, forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey)
-                _errorManager.handle(.aiServiceError("OpenRouter model is not set."))
-                return
-            }
-        }
-
-        settingsStore.set(enabled, forKey: AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey)
-        if enabled, isCodebaseIndexEnabled {
-            _projectCoordinator.codebaseIndex?.runAIEnrichment()
-        }
+        _projectCoordinator.rebuildIndex(overwriteDB: true)
     }
 
     func configureCodebaseIndex(projectRoot: URL) {
@@ -364,9 +356,6 @@ class DependencyContainer: ObservableObject {
             setCodebaseIndexEnabled: { [weak self] enabled in
                 self?.setCodebaseIndexEnabled(enabled)
             },
-            setAIEnrichmentIndexingEnabled: { [weak self] enabled in
-                self?.setAIEnrichmentIndexingEnabled(enabled)
-            },
             reindexProjectNow: { [weak self] in
                 self?.reindexProjectNow()
             },
@@ -392,7 +381,6 @@ class DependencyContainer: ObservableObject {
     private let _commandRegistry: CommandRegistry
     private let _uiRegistry: UIRegistry
     private let _diagnosticsStore: DiagnosticsStore
-    private let _ragTelemetryAggregator: RAGTelemetryAggregator
     private let _uiService: any UIServiceProtocol
     private let _workspaceService: any WorkspaceServiceProtocol
     private let _fileEditorService: any FileEditorServiceProtocol
@@ -400,6 +388,7 @@ class DependencyContainer: ObservableObject {
     private let _fileDialogService: any FileDialogServiceProtocol
     private let _windowProvider: WindowProvider
     private let _unifiedLintingFramework: UnifiedLintingFramework
+    private let _languageModuleManager: LanguageModuleManager
     private var _aiService: any AIService
     private var _conversationManager: any ConversationManagerProtocol
     private var _projectCoordinator: ProjectCoordinator

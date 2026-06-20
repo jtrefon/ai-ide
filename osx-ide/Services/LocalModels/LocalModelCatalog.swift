@@ -15,13 +15,25 @@ enum LocalModelCatalog {
         allModels().first(where: { $0.id == id })
     }
 
+    private static func makeURL(base: String, fileName: String) -> URL {
+        let fullString = base + fileName
+        if let url = URL(string: fullString) {
+            return url
+        }
+        if let escapedString = fullString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: escapedString) {
+            return url
+        }
+        return URL(string: "https://huggingface.co")!
+    }
+
     private static func qwen3_4B_Instruct_2507() -> LocalModelDefinition {
         // MLX-optimized 4-bit quantized version from mlx-community
         // Uses ~2GB memory instead of ~8GB for full precision
         let base = "https://huggingface.co/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/50d4277/"
 
         func artifact(_ fileName: String) -> LocalModelArtifact {
-            LocalModelArtifact(fileName: fileName, url: URL(string: base + fileName)!)
+            LocalModelArtifact(fileName: fileName, url: makeURL(base: base, fileName: fileName))
         }
 
         return LocalModelDefinition(
@@ -49,7 +61,7 @@ enum LocalModelCatalog {
         let base = "https://huggingface.co/mlx-community/granite-4.0-h-micro-4bit/resolve/0a29e17/"
 
         func artifact(_ fileName: String) -> LocalModelArtifact {
-            LocalModelArtifact(fileName: fileName, url: URL(string: base + fileName)!)
+            LocalModelArtifact(fileName: fileName, url: makeURL(base: base, fileName: fileName))
         }
 
         return LocalModelDefinition(
@@ -76,7 +88,7 @@ enum LocalModelCatalog {
         let base = "https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit/resolve/main/"
 
         func artifact(_ fileName: String) -> LocalModelArtifact {
-            LocalModelArtifact(fileName: fileName, url: URL(string: base + fileName)!)
+            LocalModelArtifact(fileName: fileName, url: makeURL(base: base, fileName: fileName))
         }
 
         return LocalModelDefinition(
@@ -103,7 +115,7 @@ enum LocalModelCatalog {
         let base = "https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit/resolve/62b0e4e/"
 
         func artifact(_ fileName: String) -> LocalModelArtifact {
-            LocalModelArtifact(fileName: fileName, url: URL(string: base + fileName)!)
+            LocalModelArtifact(fileName: fileName, url: makeURL(base: base, fileName: fileName))
         }
 
         return LocalModelDefinition(

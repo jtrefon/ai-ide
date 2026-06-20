@@ -30,9 +30,14 @@ import AppKit
 /// - Custom languages via LanguageModuleManager
 @MainActor
 final class SyntaxHighlighter {
-    /// Shared singleton instance for syntax highlighting
-    static let shared = SyntaxHighlighter()
-    private init() {}
+    @available(*, deprecated, message: "Use dependency injection via DependencyContainer instead")
+    static let shared = SyntaxHighlighter(languageModuleManager: .shared)
+
+    private let languageModuleManager: LanguageModuleManager
+
+    init(languageModuleManager: LanguageModuleManager) {
+        self.languageModuleManager = languageModuleManager
+    }
 
     /// Highlights the given code with syntax highlighting for the specified language.
     ///
@@ -89,8 +94,8 @@ final class SyntaxHighlighter {
     }
 
     private func resolveModule(for languageIdentifier: String) -> any LanguageModule {
-        return LanguageModuleManager.shared.getHighlightModule(forExtension: languageIdentifier) ??
-            LanguageModuleManager.shared.getHighlightModule(
+        return languageModuleManager.getHighlightModule(forExtension: languageIdentifier) ??
+            languageModuleManager.getHighlightModule(
                 for: CodeLanguage(rawValue: languageIdentifier) ?? .unknown
             ) ??
             FallbackLanguageModule()

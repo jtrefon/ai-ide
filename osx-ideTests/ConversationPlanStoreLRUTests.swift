@@ -4,6 +4,16 @@ import XCTest
 
 final class ConversationPlanStoreLRUTests: XCTestCase {
 
+    override func setUp() async throws {
+        try await super.setUp()
+        await ConversationPlanStore.shared.reset()
+    }
+
+    override func tearDown() async throws {
+        await ConversationPlanStore.shared.reset()
+        try await super.tearDown()
+    }
+
     func testEvictsOldestWhenExceedingMaxCachedPlans() async {
         let store = ConversationPlanStore.shared
         let tempDir = FileManager.default.temporaryDirectory

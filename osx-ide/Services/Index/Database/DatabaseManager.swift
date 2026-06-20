@@ -28,27 +28,11 @@ public class DatabaseManager {
     private lazy var codeChunkManager = DatabaseCodeChunkManager(database: self)
     private lazy var symbolManager = DatabaseSymbolManager(database: self)
     private lazy var queryExecutor = DatabaseQueryExecutor(database: self)
-    private lazy var aiEnrichmentManager = DatabaseAIEnrichmentManager(database: self)
-
     public init(path: String) throws {
         self.dbPath = path
         queue.setSpecific(key: queueKey, value: queueID)
         try open()
         try createTables()
-    }
-
-    public func getAIEnrichedResourceCountScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Int {
-        try aiEnrichmentManager.getAIEnrichedResourceCountScoped(
-            projectRoot: projectRoot,
-            allowedExtensions: allowedExtensions
-        )
-    }
-
-    public func getAverageAIQualityScoreScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Double {
-        try aiEnrichmentManager.getAverageAIQualityScoreScoped(
-            projectRoot: projectRoot,
-            allowedExtensions: allowedExtensions
-        )
     }
 
     deinit {
@@ -181,10 +165,6 @@ public class DatabaseManager {
         try queryExecutor.getResourceContentHash(resourceId: resourceId)
     }
 
-    public func isResourceAIEnriched(resourceId: String) throws -> Bool {
-        try queryExecutor.isResourceAIEnriched(resourceId: resourceId)
-    }
-
     public func searchSymbols(nameLike query: String, limit: Int = 50) throws -> [Symbol] {
         try symbolManager.searchSymbols(nameLike: query, limit: limit)
     }
@@ -205,32 +185,8 @@ public class DatabaseManager {
         return try scalarInt(sql: sql, parameters: parameters)
     }
 
-    public func updateQualityScore(resourceId: String, score: Double) throws {
-        try aiEnrichmentManager.updateQualityScore(resourceId: resourceId, score: score)
-    }
-
-    public func updateQualityDetails(resourceId: String, details: String?) throws {
-        try aiEnrichmentManager.updateQualityDetails(resourceId: resourceId, details: details)
-    }
-
-    public func getQualityScore(resourceId: String) throws -> Double? {
-        try aiEnrichmentManager.getQualityScore(resourceId: resourceId)
-    }
-
-    public func markAIEnriched(resourceId: String, score: Double, summary: String?) throws {
-        try aiEnrichmentManager.markAIEnriched(resourceId: resourceId, score: score, summary: summary)
-    }
-
     public func getSymbolKindCounts() throws -> [String: Int] {
         try symbolManager.getSymbolKindCounts()
-    }
-
-    public func getAverageQualityScore() throws -> Double {
-        try aiEnrichmentManager.getAverageQualityScore()
-    }
-
-    public func getAIEnrichedSummaries(projectRoot: URL, limit: Int = 20) throws -> [(path: String, summary: String)] {
-        try aiEnrichmentManager.getAIEnrichedSummaries(projectRoot: projectRoot, limit: limit)
     }
 
     public func searchFTS(query: String, limit: Int) throws -> [(path: String, snippet: String)] {

@@ -335,6 +335,7 @@ final class FinalResponseHandler {
             "read_file",
             "index_read_file",
             "list_files",
+            "list_dir",
             "index_list_files",
             "search_files",
             "index_search_text",

@@ -98,45 +98,5 @@ final class DatabaseComponentTests: XCTestCase {
         XCTAssertEqual(matches.first?.qualityScore, 0.75)
     }
 
-    func testDatabaseAIEnrichmentManagerMarkAndReadValues() throws {
-        let databaseManager = try makeTempDatabaseManager()
 
-        let insertResourceSQL =
-            "INSERT INTO resources (id, path, language, last_modified, content_hash, " +
-            "quality_score, quality_details, ai_enriched, summary) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"
-
-        try databaseManager.execute(
-            sql: insertResourceSQL,
-            parameters: [
-                "r1",
-                "/tmp/project/src/a.swift",
-                "swift",
-                1.0,
-                "hash",
-                0.0,
-                NSNull(),
-                0,
-                NSNull()
-            ]
-        )
-
-        let enrichmentManager = DatabaseAIEnrichmentManager(database: databaseManager)
-        try enrichmentManager.markAIEnriched(resourceId: "r1", score: 0.9, summary: "Great file")
-
-        XCTAssertEqual(try enrichmentManager.getQualityScore(resourceId: "r1"), 0.9)
-        XCTAssertEqual(try databaseManager.isResourceAIEnriched(resourceId: "r1"), true)
-
-        let summaries = try enrichmentManager.getAIEnrichedSummaries(
-            projectRoot: URL(fileURLWithPath: "/tmp/project"),
-            limit: 10
-        )
-        XCTAssertEqual(summaries.count, 1)
-        XCTAssertEqual(summaries.first?.path, "/tmp/project/src/a.swift")
-        XCTAssertEqual(summaries.first?.summary, "Great file")
-
-        // Ensure score=0 does not clobber existing score.
-        try enrichmentManager.markAIEnriched(resourceId: "r1", score: 0.0, summary: "")
-        XCTAssertEqual(try enrichmentManager.getQualityScore(resourceId: "r1"), 0.9)
-    }
 }

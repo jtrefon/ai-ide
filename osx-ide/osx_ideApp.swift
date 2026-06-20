@@ -39,9 +39,6 @@ struct OSXIDEApp: App {
     @StateObject private var errorManager: ErrorManager
     @AppStorage(AppConstants.Storage.codebaseIndexEnabledKey, store: AppRuntimeEnvironment.userDefaults)
     private var codebaseIndexEnabled: Bool = true
-    @AppStorage(AppConstants.Storage.codebaseIndexAIEnrichmentEnabledKey, store: AppRuntimeEnvironment.userDefaults)
-    private var codebaseIndexAIEnrichmentEnabled: Bool = false
-
     init() {
         let _initStart = Date()
         earlyDiag("OSXIDEApp.init START")
@@ -80,99 +77,8 @@ struct OSXIDEApp: App {
             appSt.ui.bottomPanelSelectedName = AppConstants.UI.internalTerminalPanelName
         }
 
-        if launchContext.isUITesting,
-           let scenario = ProcessInfo.processInfo.environment[TestLaunchKeys.uiTestScenario] {
-            switch scenario {
-            case "json_highlighting":
-                let json = """
-                {
-                  "key": "value",
-                  "number": 123,
-                  "bool": true,
-                  "nullVal": null,
-                  "arr": [1, false],
-                  "obj": {"nested": false}
-                }
-                """
-                appSt.fileEditor.primaryPane.editorContent = json
-                appSt.fileEditor.primaryPane.editorLanguage = "json"
-            case "typescript_highlighting":
-                let typescript = """
-                interface User {
-                  id: number
-                  name: string
-                }
-
-                const getUser = async (id: number): Promise<User> => {
-                  // load user
-                  const response = await fetch(`/users/${id}`)
-                  return response.json() as Promise<User>
-                }
-                """
-                appSt.fileEditor.primaryPane.editorContent = typescript
-                appSt.fileEditor.primaryPane.editorLanguage = "typescript"
-            case "typescript_realworld_highlighting":
-                let typescript = """
-                import React, { useState } from 'react'
-
-                interface PasswordRecoveryProps {
-                  onBackToLogin: () => void
-                  onPasswordRecovery?: (email: string) => void
-                }
-
-                const PasswordRecovery: React.FC<PasswordRecoveryProps> = ({
-                  onBackToLogin,
-                  onPasswordRecovery
-                }) => {
-                  const [email, setEmail] = useState('')
-                  const [emailError, setEmailError] = useState('')
-                  const [isSubmitting, setIsSubmitting] = useState(false)
-
-                  // Simulate API call
-                  const validateForm = () => {
-                    if (!email) {
-                      setEmailError('Email is required')
-                      return false
-                    }
-                    return true
-                  }
-                }
-                """
-                appSt.fileEditor.primaryPane.editorContent = typescript
-                appSt.fileEditor.primaryPane.editorLanguage = "typescript"
-            case "tsx_realworld_highlighting":
-                let tsx = """
-                import React from 'react'
-
-                interface PasswordRecoveryProps {
-                  onBackToLogin: () => void
-                  onPasswordRecovery: (email: string) => void
-                }
-
-                export const PasswordRecovery: React.FC<PasswordRecoveryProps> = ({
-                  onBackToLogin,
-                  onPasswordRecovery
-                }) => {
-                  const handlePasswordRecovery = (email: string) => {
-                    // In a real app, this would call the password recovery API
-                    console.log('Password recovery requested for:', email)
-                  }
-
-                  return (
-                    <div className="app-shell">
-                      <PasswordRecoveryForm
-                        onBackToLogin={onBackToLogin}
-                        onPasswordRecovery={handlePasswordRecovery}
-                      />
-                    </div>
-                  )
-                }
-                """
-                appSt.fileEditor.primaryPane.editorContent = tsx
-                appSt.fileEditor.primaryPane.editorLanguage = "tsx"
-            default:
-                break
-            }
+        if launchContext.isUITesting {
+            UITestScenarioBootstrapper.bootstrapIfNeeded(appState: appSt, launchContext: launchContext)
         }
 
         self._errorManager = StateObject(wrappedValue: errorMgr)
@@ -282,24 +188,6 @@ struct OSXIDEApp: App {
                 Toggle(localized("menu.tools.codebase_index_enabled"), isOn: $codebaseIndexEnabled)
                     .onChange(of: codebaseIndexEnabled) { _, newValue in
                         appState.setCodebaseIndexEnabled(newValue)
-                    }
-
-                Toggle(localized("menu.tools.ai_enrichment_indexing"), isOn: $codebaseIndexAIEnrichmentEnabled)
-                    .onChange(of: codebaseIndexAIEnrichmentEnabled) { _, newValue in
-                        if newValue {
-                            let settings = OpenRouterSettingsStore().load(includeApiKey: false)
-                            let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if model.isEmpty {
-                                errorManager.handle(
-                                    .aiServiceError(
-                                        localized("menu.tools.ai_enrichment_indexing.missing_model")
-                                    )
-                                )
-                                codebaseIndexAIEnrichmentEnabled = false
-                                return
-                            }
-                        }
-                        appState.setAIEnrichmentIndexingEnabled(newValue)
                     }
 
                 Divider()
@@ -607,10 +495,11 @@ private struct LoadingOverlayView: View {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    nonisolated(unsafe) static weak var sharedAppState: AppState?
-    nonisolated(unsafe) static weak var sharedErrorManager: ErrorManager?
-    nonisolated(unsafe) static var uiTestFallbackWindow: NSWindow?
+    static weak var sharedAppState: AppState?
+    static weak var sharedErrorManager: ErrorManager?
+    static var uiTestFallbackWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let launchMode = AppRuntimeEnvironment.launchContext.mode

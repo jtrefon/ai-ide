@@ -24,7 +24,6 @@ enum AppConstantsStorage {
     static let inlineCompletionRoutingModeKey = "Editor.InlineCompletion.RoutingMode"
     static let inlineCompletionDebugOverlayKey = "Editor.InlineCompletion.DebugOverlay"
     static let codebaseIndexEnabledKey = "CodebaseIndexEnabled"
-    static let codebaseIndexAIEnrichmentEnabledKey = "CodebaseIndexAIEnrichmentEnabled"
     static let enabledLanguageModulesKey = "EnabledLanguageModules"
     static let disabledLanguageModuleCapabilitiesKey = "DisabledLanguageModuleCapabilities"
 }

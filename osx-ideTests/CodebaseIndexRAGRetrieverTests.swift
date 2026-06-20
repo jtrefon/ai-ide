@@ -224,8 +224,6 @@ private final class FakeRAGCodebaseIndex: CodebaseIndexProtocol {
     func stop() {}
     func setEnabled(_ enabled: Bool) {}
     func reindexProject() {}
-    func reindexProject(aiEnrichmentEnabled: Bool) {}
-    func runAIEnrichment() {}
 
     func listIndexedFiles(matching query: String?, limit: Int, offset: Int) async throws -> [String] { [] }
     func findIndexedFiles(query: String, limit: Int) async throws -> [IndexedFileMatch] { [] }

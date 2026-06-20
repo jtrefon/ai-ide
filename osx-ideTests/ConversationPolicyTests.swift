@@ -18,7 +18,7 @@ final class ConversationPolicyTests: XCTestCase {
             makeTool(name: "index_read_file"),
             makeTool(name: "index_search_symbols"),
             makeTool(name: "read_file"),
-            makeTool(name: "list_files"),
+            makeTool(name: "list_dir"),
             makeTool(name: "conversation_fold"),
             makeTool(name: "write_file"),
             makeTool(name: "replace_in_file"),
@@ -33,7 +33,7 @@ final class ConversationPolicyTests: XCTestCase {
         "index_read_file",
         "index_search_symbols",
         "read_file",
-        "list_files",
+        "list_dir",
         "conversation_fold"
     ]
     private let expectedToolLoopExecution: Set<String> = [
@@ -43,7 +43,7 @@ final class ConversationPolicyTests: XCTestCase {
         "index_read_file",
         "index_search_symbols",
         "read_file",
-        "list_files",
+        "list_dir",
         "write_file",
         "replace_in_file",
         "run_command"
