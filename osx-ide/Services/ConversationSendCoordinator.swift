@@ -164,14 +164,19 @@ final class ConversationSendCoordinator {
             let response = try result.get()
             let rawContent = response.content ?? ""
 
+            // Parse response for reasoning + content + tool calls
+            let parsed = ChatPromptBuilder.parseModelResponse(rawContent)
+
             // Prefer structured tool calls from the MLX framework (cleaner parsing)
             let toolCalls: [AIToolCall]
             if let structured = response.toolCalls, !structured.isEmpty {
                 toolCalls = structured
             } else {
-                let parsed = ChatPromptBuilder.parseModelResponse(rawContent)
                 toolCalls = parsed.toolCalls
             }
+
+            // Clear streaming buffer so consolidation pass starts fresh
+            await clearStreamingBuffer?()
 
             // No tool calls
             guard !toolCalls.isEmpty else {
@@ -203,10 +208,19 @@ final class ConversationSendCoordinator {
                 return response
             }
 
-            // Clear streaming buffer so consolidation pass starts fresh
-            await clearStreamingBuffer?()
+            // Store assistant message with reasoning + tool calls BEFORE executing.
+            // This preserves reasoning in the conversation for the UI to display
+            // (the cloud tool loop does the same pattern).
+            let displayContent = ChatPromptBuilder.contentForDisplay(from: rawContent)
+            let assistantMsg = ChatMessage(
+                role: .assistant,
+                content: displayContent.isEmpty ? "Working..." : displayContent,
+                context: ChatMessageContentContext(reasoning: parsed.reasoning),
+                tool: ChatMessageToolContext(toolCalls: toolCalls)
+            )
+            historyCoordinator.append(assistantMsg)
 
-            // Execute tool calls
+            // Execute tool calls and append results
             let toolResults = await toolExecutionCoordinator.executeToolCalls(
                 toolCalls,
                 availableTools: localTools,
@@ -215,8 +229,6 @@ final class ConversationSendCoordinator {
                     self.historyCoordinator.upsertToolExecutionMessage(progressMsg)
                 }
             )
-
-            // Append tool results to history
             for msg in toolResults {
                 historyCoordinator.append(msg)
             }

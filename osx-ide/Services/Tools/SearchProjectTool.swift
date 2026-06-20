@@ -5,10 +5,12 @@ import Foundation
 /// into a single call. Returns ALL occurrences of a query with type, location, and context.
 struct SearchProjectTool: AITool {
     let name = "search_project"
-    let description = "Search the entire project for a class, function, variable, import, or text pattern. " +
-        "Returns ALL occurrences grouped by file with match type (class, function, variable, reference, import, filename), " +
-        "line numbers, and surrounding context. " +
-        "This is the PRIMARY search tool — use it for ANY code search task instead of find_file or grep."
+    let description = "THE PRIMARY search tool for ANY code search task. " +
+        "Finds classes, functions, variables, files, and text patterns. " +
+        "Uses semantic search (vector similarity), symbol lookup, full-text index, " +
+        "and filesystem grep — automatically picks the best method. " +
+        "Returns results grouped by file with match type and line numbers. " +
+        "ALWAYS use this first for code search instead of find_file or grep."
 
     var parameters: [String: Any] {
         [
@@ -40,7 +42,21 @@ struct SearchProjectTool: AITool {
 
         var entries: [SearchEntry] = []
 
-        // 1. Symbol search via index (authoritative for code structure)
+        // 1. Vector semantic search via index (best for conceptual relevance)
+        if let index {
+            if let chunks = try? await index.getRelevantCodeChunks(userInput: query, limit: maxResults / 2) {
+                for chunk in chunks {
+                    entries.append(SearchEntry(
+                        file: chunk.filePath,
+                        line: chunk.lineStart,
+                        matchType: "semantic",
+                        context: chunk.snippet.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120).description
+                    ))
+                }
+            }
+        }
+
+        // 2. Symbol search via index (authoritative for code structure)
         if let index {
             if let symbols = try? await index.searchSymbolsWithPaths(nameLike: query, limit: maxResults) {
                 for symbolResult in symbols {

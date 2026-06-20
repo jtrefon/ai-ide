@@ -3,7 +3,8 @@ import Foundation
 struct FindFileTool: AITool {
     let name = "find_file"
     let description =         "Find files by name only (case insensitive). " +
-        "For general code search, use search_project instead. " +
+        "SECONDARY tool — only for locating files when you already know the exact name. " +
+        "For ALL other search tasks (classes, functions, variables, text patterns), use search_project instead. " +
         "Skips vendor/dependency directories automatically."
     var parameters: [String: Any] {
         [
