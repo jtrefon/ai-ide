@@ -2,6 +2,11 @@ import SwiftUI
 
 @MainActor
 final class InlineAIPopoverManager: ObservableObject {
+    static let disabled = InlineAIPopoverManager(
+        aiService: nil,
+        projectRootProvider: { nil }
+    )
+
     @Published var isVisible: Bool = false
     @Published var question: String = ""
     @Published var answer: String = ""
@@ -11,11 +16,11 @@ final class InlineAIPopoverManager: ObservableObject {
     var anchorRect: CGRect = .zero
     var paneID: FileEditorStateManager.PaneID = .primary
 
-    private let aiService: AIService
+    private let aiService: AIService?
     private let projectRootProvider: () -> URL?
 
     init(
-        aiService: AIService,
+        aiService: AIService?,
         projectRootProvider: @escaping () -> URL?
     ) {
         self.aiService = aiService
@@ -64,6 +69,11 @@ final class InlineAIPopoverManager: ObservableObject {
                 conversationId: nil
             )
 
+            guard let aiService = aiService else {
+                error = "AI service not available"
+                isProcessing = false
+                return
+            }
             do {
                 let response = try await aiService.sendMessageStreaming(request, runId: request.runId ?? "")
                 answer = response.content ?? ""

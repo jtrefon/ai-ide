@@ -25,6 +25,7 @@ struct CodeEditorView: View {
     var fontFamily: String = AppConstantsEditor.defaultFontFamily
     @ObservedObject private var highlightDiagnostics = EditorHighlightDiagnosticsStore.shared
     @ObservedObject private var inlineCompletionDebugStore = InlineCompletionDebugStore.shared
+    @ObservedObject var inlineQAPopoverManager: InlineAIPopoverManager = .disabled
 
     var body: some View {
         GeometryReader { geometry in
@@ -51,6 +52,22 @@ struct CodeEditorView: View {
                 inlineCompletionDebugOverlay,
                 alignment: .topTrailing
             )
+            .overlay(
+                inlineQAPopoverOverlay,
+                alignment: .topLeading
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var inlineQAPopoverOverlay: some View {
+        if inlineQAPopoverManager.isVisible && inlineQAPopoverManager.paneID == paneID {
+            InlineAIPopoverView(manager: inlineQAPopoverManager)
+                .offset(
+                    x: inlineQAPopoverManager.anchorRect.origin.x,
+                    y: inlineQAPopoverManager.anchorRect.origin.y
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
         }
     }
 

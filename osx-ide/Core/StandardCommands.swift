@@ -36,6 +36,7 @@ extension CommandID {
 
     public static let editorTriggerInlineCompletion: CommandID = "editor.triggerInlineCompletion"
     public static let editorAIInlineAssist: CommandID = "editor.aiInlineAssist"
+    public static let editorAIInlineQuestion: CommandID = "editor.aiInlineQuestion"
 
     public static let viewToggleMinimap: CommandID = "view.toggleMinimap"
 
