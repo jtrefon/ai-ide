@@ -203,13 +203,9 @@ class ChatPromptBuilder {
     }
 
     private static func normalizeDisplayWhitespace(_ text: String) -> String {
-        var output = text
-            .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // If words were glued by model glitches around punctuation-less boundaries, ensure at least single spaces.
-        output = output.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
-        return output
+        // Only strip leading/trailing whitespace — preserve all internal
+        // spacing and newlines as the model intended.
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func stripTextualToolCallMarkup(from text: String) -> String {
