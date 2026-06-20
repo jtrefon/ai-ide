@@ -428,7 +428,15 @@ actor LocalModelProcessAIService: AIService {
         }
 
         nonisolated private static func makeAIToolCall(from toolCall: ToolCall) -> AIToolCall {
-            let arguments = toolCall.function.arguments.mapValues { $0.anyValue }
+            let rawArgs = toolCall.function.arguments.mapValues { $0.anyValue }
+            // Gemma 4 uses <|"|> (token id 52) as a string delimiter. The MLX
+            // framework may not strip it from decoded string values, so we strip
+            // it here so tools receive clean arguments.
+            let arguments: [String: Any] = rawArgs.mapValues { value in
+                guard var str = value as? String else { return value }
+                str = str.replacingOccurrences(of: "<|\"|>", with: "")
+                return str
+            }
             return AIToolCall(
                 id: UUID().uuidString,
                 name: toolCall.function.name,
