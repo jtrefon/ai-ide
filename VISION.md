@@ -67,9 +67,17 @@ The professional macOS developer who wants AI that's always available, always fa
 └─────────────────────────────────────────────────────┘
 ```
 
+## State as of Refocus (June 2026)
+
+**Completed:** Phases 0–3 (foundation cuts, pipeline isolation, structural reorg, architecture completion). Phase 5 items 5.1 (Inline AI popover), 5.2 (cloud pipeline bug fixes: `usesLocalModel` parameter drop in ConditionalToolLoopNode, non-fatal QA review), 5.3 (HNSW ANN index for semantic search).
+
+**Remaining:** Phase 4 benchmarks (require real model on user machine), Phase 5.4–5.5 (28 singleton migration, ~50 force unwrap removals).
+
+**Build:** All 15+ commits compile with zero Swift errors. Pre-existing SPM dependency issues (`EventSource` → swift-nio) break the test target only.
+
 ## What Success Looks Like
 
-**v1.0** — Inline completion faster and more context-aware than any cloud editor. Inline AI popover for instant file-level Q&A. Semantic search that finds what you need in milliseconds. All offline, all private. Cloud pipeline matches Cursor's agentic capability.
+**v1.0** — Inline completion faster and more context-aware than any cloud editor. Inline AI popover for instant file-level Q&A (built in 5.1). ANN semantic search in milliseconds (built in 5.3). All offline, all private. Cloud pipeline matches Cursor's agentic capability (tool loop, QA review fixed in 5.2).
 
 **v1.5** — Experience engine learns from your patterns. Deeper Mac integration. Cloud pipeline exceeds Cursor in orchestration quality and reliability.
 

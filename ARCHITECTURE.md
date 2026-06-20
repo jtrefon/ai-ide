@@ -263,6 +263,20 @@ User types: "Add error handling to all API routes"
   Total: ~5-60s (depending on complexity)
 ```
 
+## Semantic Search (HNSW Index)
+
+The codebase index uses an in-memory HNSW (Hierarchical Navigable Small World) graph for approximate nearest-neighbor search over embedding vectors. This replaces the O(n) brute-force SQLite scan that loaded all vectors into memory on every query.
+
+**Implementation:** `Services/Index/Search/HNSWIndex.swift`
+
+**Key parameters:** M=16, efConstruction=200, efSearch=50, mL=1/ln(M). Estimates: 10-50x speedup over brute-force at ~95-99% recall.
+
+**Per-modelId indices:** Separate HNSW graphs for each embedding model (e.g., hashing, CoreML, BERT). Lazily rebuilt from SQLite on first search after model change or data mutation. Incremental insert/remove on save/delete. Post-filter by memory tier (3x over-fetch, then filter).
+
+**Managers using HNSW:**
+- `DatabaseMemoryManager` — memory embeddings
+- `DatabaseCodeChunkManager` — code chunk embeddings (composite key: `resourceId:chunkIndex`)
+
 ## Pipeline Isolation Rules
 
 1. **No shared state** between pipelines beyond what's in shared services. Local and cloud conversations have separate histories, separate contexts, separate caches.
@@ -353,29 +367,68 @@ osx-ide/
 └── Utilities/
 ```
 
-## Migration Path from Current Architecture
+## Migration Log (What Was Actually Done)
 
-The current codebase has all services intertwined in `Services/` with no local/cloud separation. Migration to the target architecture happens in phases:
+The refocus branch (`refocus-v1`) executed a 5-phase migration over 15+ commits, 94 files changed, 1,737 added, 7,966 deleted. Below is the record of what was done so recovery from any pivot is possible.
 
-**Phase 1 — Cut (delete misaligned code):**
-- Delete `Services/Index/Memory/` (overengineered)
-- Delete `Services/Index/Scoring/` (unclear value)
-- Delete `Services/Index/AIEnrichment.swift` (expensive, unclear ROI)
-- Remove RAG injection from `AIInteractionCoordinator` (make cloud-only)
+### Phase 0 — Foundation (Cuts)
+| What | Details |
+|------|---------|
+| Deleted Scoring/ | `Services/Index/Scoring/` — SwiftHeuristicScorer, QualityScoringEngine |
+| Deleted AIEnrichment + events + DB manager | `Services/Index/AIEnrichment.swift`, `AIEnrichmentEvent.swift`, `AIEnrichmentDatabaseManager.swift` |
+| Deleted RAGStatusGauge | `Components/RAGStatusGauge.swift` |
+| Removed from CodebaseIndexProtocol | `aiEnrichedResourceCount`, `averageAIQualityScore`, `performAIEnrichment` |
+| Removed from DatabaseManager | `isResourceAIEnriched`, `getAIEnrichedResourceCountScoped`, `getAverageAIQualityScoreScoped` (return 0) |
+| Removed from ProjectCoordinator | AI enrichment scheduling references |
+| Removed from DependencyContainer | AI enrichment registrations |
+| Removed from AppState | enrichmentState, aiEnrichmentService |
+| Fixed 6 test mocks | Updated mock implementations to match protocol changes |
 
-**Phase 2 — Isolate (separate pipelines):**
-- Extract `LocalInteractionService` from current `ConversationManager`
-- Rename current `Services/ConversationFlow/` → `Services/CloudPipeline/`
-- Move `InlineCompletion/` under `LocalPipeline/`
-- Create `AIRouter` for pipeline routing
+### Phase 1 — Pipeline Isolation
+| What | Details |
+|------|---------|
+| RAG removed from local path | `AIInteractionCoordinator.SendMessageWithRetryRequest` skips RAG when `usesLocalModel == true` |
+| Orchestration removed from local path | `ConversationSendCoordinator.executeConversationFlow()` skips graph for local, direct LLM call |
+| Unreachable path | Both land in `ToolLoopHandler` path — harmless for cloud, unreachable for local |
 
-**Phase 3 — Simplify local path:**
-- Remove orchestration from local path
-- Remove tool loop from local path
-- Simplify `ConversationManager` to a router + two service backends
+### Phase 2 — Structural Reorg
+| What | Details |
+|------|---------|
+| `ConversationFlow/` → `CloudPipeline/` | Directory rename with Xcode 16 `fileSystemSynchronizedGroups` |
+| `InlineCompletion/` → `LocalPipeline/InlineCompletion/` | Moved under local pipeline |
+| `LocalInteractionService` | Created at `Services/LocalPipeline/LocalInteractionService.swift` |
+| `LocalModelAdapter` + `Qwen36Adapter` | Created at `Services/LocalPipeline/` |
+| `CompletionBenchmarkService` | Created at `Services/LocalPipeline/CompletionBenchmarkService.swift` |
 
-**Phase 4 — Polish:**
-- Finalize directory structure
-- Fix inline completion latency with 4B model
-- Fix cloud orchestration bugs
-- Add inline popover
+### Phase 3 — Architecture Completion
+| What | Details |
+|------|---------|
+| `SessionManager` | Extracted from `ConversationManager` (981→880 lines) |
+| `AIRouter` | `Services/AIRouter.swift` — central dispatch for local/cloud routing |
+| `RAGTelemetryAggregator` | Deleted |
+| `CompletionContextAssembler` | `.fast` limits as default (prefix 4K→500, output 120→40 chars) |
+
+### Phase 4 — Model Optimization (Partial)
+| What | Details |
+|------|---------|
+| `LocalModelAdapter` protocol | 6 methods: tokenize, decode, formatPrompt, contextLength, toolCallFormat, additionalContext + reasoning/turbo flags |
+| `Qwen36Adapter` | Conforms to LocalModelAdapter. Targets mlx-community/Qwen3-4B-Instruct-2507-4bit (no official Qwen3.6 4B exists yet) |
+| `CompletionBenchmarkService` | p50/p90/p99 latency measurement |
+| 4.3–4.4 benchmarks | ⬜ BLOCKED — require real model execution on user machine |
+
+### Phase 5 — Polish (3/5 Complete)
+| What | Details |
+|------|---------|
+| **5.1 Inline AI Popover** | `InlineAIPopoverView` + `InlineAIPopoverManager` with `.disabled` singleton, glass material overlay on `CodeEditorView`, question input + streaming answer |
+| **5.2 Cloud pipeline bugs** | `ConditionalToolLoopNode.handle()` passes `usesLocalModel` (was defaulting to `false`). Recursive `ToolLoopHandler.handleToolLoopIfNeeded()` passes `usesLocalModel` (same bug). QA review failures caught and logged instead of fatal |
+| **5.3 HNSW Semantic Search** | `HNSWIndex.swift` — pure-Swift HNSW with binary heap, M=16, efConstruction=200, efSearch=50. Integrated into `DatabaseMemoryManager` and `DatabaseCodeChunkManager` with lazy rebuild |
+| 5.4 Singletons (28) | ⬜ Remaining |
+| 5.5 Force unwraps (~50+) | ⬜ Remaining |
+
+### Critical Known Issues
+1. **`IndexStats` still has `aiEnrichedResourceCount`/`averageAIQualityScore`** — always 0 since AIEnrichment deleted. Cosmetic only.
+2. **28 singletons remain** — Phase 5.4 target
+3. **~50+ force unwraps** — Phase 5.5 target
+4. **Blocked benchmarks** — Phase 4.3–4.4 need real model
+5. **SPM test target broken** — Pre-existing `EventSource` dependency on swift-nio/CNIOExtrasZlib
+6. **Qwen3.6 4B doesn't exist** — Adapter targets Qwen3-4B-2507. Swap when upstream publishes MLX 4bit
