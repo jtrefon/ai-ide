@@ -74,9 +74,9 @@ struct ChatInputView: View {
             }
             .frame(minHeight: max(minimumComposerHeight, textViewHeight), maxHeight: maximumComposerHeight)
             .background(Color(NSColor.textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
                         isInputFocused ? Color.accentColor : Color(NSColor.separatorColor).opacity(0.6),
                         lineWidth: isInputFocused ? 2 : 1

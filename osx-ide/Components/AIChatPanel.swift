@@ -24,65 +24,49 @@ struct AIChatPanel: View {
 
         VStack(alignment: .leading, spacing: 0) {
             // Tabs header
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 2) {
                         ForEach(displayedTabs) { tab in
-                            HStack(spacing: 6) {
-                                Button {
-                                    conversationManager.switchConversation(to: tab.id)
-                                } label: {
+                            Button {
+                                conversationManager.switchConversation(to: tab.id)
+                            } label: {
+                                HStack(spacing: 4) {
                                     Text(tab.title)
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(tab.id == conversationManager.currentConversationId ? .white : .primary)
+                                        .font(.system(size: 12))
                                         .lineLimit(1)
-                                }
-                                .buttonStyle(.plain)
-
-                                if displayedTabs.count > 1 {
-                                    Button {
-                                        conversationManager.closeConversation(id: tab.id)
-                                    } label: {
+                                    if displayedTabs.count > 1 {
                                         Image(systemName: "xmark")
-                                            .font(.system(size: 9, weight: .semibold))
-                                            .foregroundColor(tab.id == conversationManager.currentConversationId ? .white.opacity(0.85) : .secondary)
+                                            .font(.system(size: 8, weight: .medium))
+                                            .foregroundColor(.secondary)
                                     }
-                                    .buttonStyle(.plain)
-                                    .accessibilityIdentifier("ConversationTabCloseButton_\(tab.id)")
                                 }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(tab.id == conversationManager.currentConversationId ? Color.accentColor.opacity(0.15) : Color.clear)
+                                .cornerRadius(4)
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(
-                                RoundedRectangle(cornerRadius: 7)
-                                    .fill(tab.id == conversationManager.currentConversationId ? Color.accentColor : Color(NSColor.controlBackgroundColor))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 7)
-                                    .stroke(Color(NSColor.separatorColor).opacity(0.35), lineWidth: 1)
-                            )
-                            .accessibilityElement(children: .contain)
+                            .buttonStyle(.plain)
                             .accessibilityIdentifier("ConversationTab_\(tab.id)")
                         }
                     }
-                    .padding(.leading, 8)
-                    .padding(.vertical, 4)
+                    .padding(.leading, 4)
+                    .padding(.vertical, 2)
                 }
 
                 Button(action: {
                     conversationManager.startNewConversation()
                 }) {
                     Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 22, height: 22)
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 18, height: 18)
                 }
                 .buttonStyle(.plain)
                 .help(localized("ai_chat.new_conversation_help"))
-                .accessibilityLabel(localized("ai_chat.new_conversation_help"))
                 .accessibilityIdentifier(AccessibilityID.aiChatNewConversationButton)
-                .padding(.trailing, 8)
+                .padding(.trailing, 6)
             }
-            .frame(height: 34)
+            .frame(height: 26)
             .background(Color(NSColor.windowBackgroundColor))
             .overlay(
                 Rectangle()
