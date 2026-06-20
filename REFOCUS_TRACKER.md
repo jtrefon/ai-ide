@@ -60,18 +60,18 @@
 
 ---
 
-## Phase 4 — Model Optimization
+## Phase 4 — Model Optimization (Partial)
 
 **Theme:** Lock in on Qwen3.6 4B 4bit. Thin adapter, deep optimization.
 
 | # | Item | Impact | Depends On | Status |
 |---|---|---|---|---|
-| 4.1 | Create thin `LocalModelAdapter` protocol (50 lines: tokenize, formatPrompt, contextLength) | 🏗️ Enables model swap without abstraction layer bloat | 2.3 | ⬜ |
-| 4.2 | Implement `Qwen36Adapter` conforming to `LocalModelAdapter` | 🎯 **High** — optimizes for target model | 4.1 | ⬜ |
+| 4.1 | Create thin `LocalModelAdapter` protocol (6 methods: tokenize, decode, formatPrompt, contextLength, toolCallFormat, additionalContext, reasoning/turbo support flags) | 🏗️ Enables model swap without abstraction layer bloat | 2.3 | ✅ |
+| 4.2 | Implement `Qwen36Adapter` conforming to `LocalModelAdapter` | 🎯 **High** — optimizes for target model | 4.1 | ✅ |
 | 4.3 | Run coding-specific benchmarks (completion latency, Q&A quality, semantic search) vs current | 📊 Evidence for model lock-in decision | 4.2 | ⬜ |
 | 4.4 | Tune inline completion for <100ms p50 with Qwen3.6 | 🎯 **High** — core competitive advantage | 4.3 | ⬜ |
 
-**Gate:** Build must compile. Inline completion achieves <100ms p50 with Qwen3.6 4B 4bit.
+**Note:** Qwen3.6 does not have a 4B variant — only 27B (dense) and 35B-A3B (MoE). The adapter targets the closest available model (Qwen3-4B-2507). When mlx-community publishes Qwen3.6 MLX 4bit, swap the adapter implementation. Benchmarks (4.3-4.4) require real model execution and user testing.
 
 ---
 
