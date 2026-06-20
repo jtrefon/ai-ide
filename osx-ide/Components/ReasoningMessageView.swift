@@ -45,7 +45,7 @@ struct ReasoningMessageView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(Color.gray.opacity(0.06))
-        .cornerRadius(14)
+        .cornerRadius(12)
     }
 
     // MARK: - Private Components

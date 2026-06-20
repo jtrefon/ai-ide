@@ -63,7 +63,7 @@ struct MessageContentCoordinator {
                 .padding(.vertical, 8)
                 .background(bubbleBackground(for: message))
                 .foregroundColor(bubbleForegroundColor(for: message))
-                .cornerRadius(18, corners: bubbleCorners(for: message))
+                .cornerRadius(12, corners: bubbleCorners(for: message))
                 .textSelection(.enabled)
                 .contextMenu {
                     copyMessageButton
@@ -76,7 +76,7 @@ struct MessageContentCoordinator {
                     .padding(.vertical, 8)
                     .background(bubbleBackground(for: message))
                     .foregroundColor(bubbleForegroundColor(for: message))
-                    .cornerRadius(18, corners: bubbleCorners(for: message))
+                    .cornerRadius(12, corners: bubbleCorners(for: message))
                     .textSelection(.enabled)
                     .contextMenu {
                         copyMessageButton

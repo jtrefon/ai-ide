@@ -246,7 +246,7 @@ class ChatPromptBuilder {
         for pattern in patterns {
             output = output.replacingOccurrences(
                 of: pattern,
-                with: "",
+                with: " ",
                 options: .regularExpression
             )
         }
