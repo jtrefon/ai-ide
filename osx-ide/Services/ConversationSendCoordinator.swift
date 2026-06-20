@@ -161,18 +161,25 @@ final class ConversationSendCoordinator {
                 )
             )
             let response = try result.get()
-            let rawContent = response.content ?? ""
 
-            let parsed = ChatPromptBuilder.parseModelResponse(rawContent)
+            // Prefer structured tool calls from the MLX framework (cleaner parsing)
+            let toolCalls: [AIToolCall]
+            if let structured = response.toolCalls, !structured.isEmpty {
+                toolCalls = structured
+            } else {
+                let rawContent = response.content ?? ""
+                let parsed = ChatPromptBuilder.parseModelResponse(rawContent)
+                toolCalls = parsed.toolCalls
+            }
 
             // No tool calls → return the response (final pass or text-only response)
-            guard !parsed.toolCalls.isEmpty else {
+            guard !toolCalls.isEmpty else {
                 return response
             }
 
             // Count call frequencies and break if same call seen 3+ times
             var shouldBreak = false
-            for call in parsed.toolCalls {
+            for call in toolCalls {
                 let sig = CallSignature(name: call.name, arguments: call.arguments)
                 callFrequencies[sig, default: 0] += 1
                 if callFrequencies[sig]! >= maxSameCall {
@@ -188,7 +195,7 @@ final class ConversationSendCoordinator {
 
             // Execute tool calls
             let toolResults = await toolExecutionCoordinator.executeToolCalls(
-                parsed.toolCalls,
+                toolCalls,
                 availableTools: localTools,
                 conversationId: request.conversationId,
                 onProgressMessage: { progressMsg in

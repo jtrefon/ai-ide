@@ -2,8 +2,8 @@ import Foundation
 
 struct FindFileTool: AITool {
     let name = "find_file"
-    let description = "Find files matching a simple name pattern recursively (case insensitive). " +
-        "Use this to locate files when you don't know the exact path. " +
+    let description =         "Find files by name only (case insensitive). " +
+        "For general code search, use search_project instead. " +
         "Skips vendor/dependency directories automatically."
     var parameters: [String: Any] {
         [

@@ -5,6 +5,7 @@ enum LocalModelToolProvider {
         "read_file",
         "list_dir",
         "get_project_structure",
+        "search_project",
         "find_file",
         "grep",
         "index_search_text",
