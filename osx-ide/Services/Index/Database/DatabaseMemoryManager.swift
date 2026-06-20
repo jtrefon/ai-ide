@@ -3,9 +3,15 @@ import SQLite3
 
 final class DatabaseMemoryManager {
     private unowned let database: DatabaseManager
+    private var hnswIndices: [String: HNSWIndex] = [:]
+    private var modelIdsNeedingRebuild: Set<String> = []
 
     init(database: DatabaseManager) {
         self.database = database
+    }
+
+    func markIndexDirty(modelId: String) {
+        modelIdsNeedingRebuild.insert(modelId)
     }
 
     func saveMemory(_ memory: MemoryEntry) throws {
@@ -69,6 +75,10 @@ final class DatabaseMemoryManager {
     func deleteMemory(id: String) throws {
         let sql = "DELETE FROM memories WHERE id = ?;"
         try database.execute(sql: sql, parameters: [id])
+
+        for (_, index) in hnswIndices {
+            index.remove(id: id)
+        }
     }
 
     func saveMemoryEmbedding(memoryId: String, modelId: String, vector: [Float]) throws {
@@ -94,6 +104,14 @@ final class DatabaseMemoryManager {
             data,
             Date().timeIntervalSince1970
         ])
+
+        hnswIndices[modelId]?.insert(id: memoryId, vector: vector)
+    }
+
+    func deleteAllMemoryEmbeddings(modelId: String) throws {
+        try database.execute(sql: "DELETE FROM memory_embeddings WHERE model_id = ?;", parameters: [modelId])
+        hnswIndices.removeValue(forKey: modelId)
+        modelIdsNeedingRebuild.remove(modelId)
     }
 
     func searchSimilarMemories(
@@ -103,64 +121,98 @@ final class DatabaseMemoryManager {
         tier: MemoryTier?
     ) throws -> [MemorySimilarityResult] {
         guard !queryVector.isEmpty else { return [] }
-        let normalizedQuery = normalize(queryVector)
-        guard !normalizedQuery.isEmpty else { return [] }
 
-        var sql = """
-        SELECT m.id, m.tier, m.content, m.category, m.timestamp, m.protection_level, e.vector_blob
+        if modelIdsNeedingRebuild.contains(modelId) || hnswIndices[modelId] == nil {
+            rebuildHNSWIndex(modelId: modelId)
+        }
+
+        let searchLimit = tier != nil ? limit * 3 : limit
+        let hnswResults = hnswIndices[modelId]?.search(query: queryVector, limit: searchLimit) ?? []
+
+        guard !hnswResults.isEmpty else { return [] }
+
+        return try fetchMemoryResults(ids: hnswResults, tier: tier, limit: limit)
+    }
+
+    private func rebuildHNSWIndex(modelId: String) {
+        let index = HNSWIndex()
+        defer { modelIdsNeedingRebuild.remove(modelId) }
+
+        let sql = """
+        SELECT m.id, e.vector_blob
         FROM memory_embeddings e
         INNER JOIN memories m ON m.id = e.memory_id
-        WHERE e.model_id = ?
+        WHERE e.model_id = ?;
         """
 
-        var parameters: [Any] = [modelId]
-        if let tier {
-            sql += " AND m.tier = ?"
-            parameters.append(tier.rawValue)
-        }
-        sql += ";"
-
-        let matches = try database.withPreparedStatement(sql: sql, parameters: parameters) { statement in
-            var results: [MemorySimilarityResult] = []
+        guard let matches = try? database.withPreparedStatement(sql: sql, parameters: [modelId]) { statement in
+            var rows: [(String, [Float])] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 let memoryId = String(cString: sqlite3_column_text(statement, 0))
+                guard let blobPointer = sqlite3_column_blob(statement, 1) else { continue }
+                let blobLength = Int(sqlite3_column_bytes(statement, 1))
+                let embeddingData = Data(bytes: blobPointer, count: blobLength)
+                guard let vector = decodeVector(from: embeddingData), !vector.isEmpty else { continue }
+                rows.append((memoryId, vector))
+            }
+            return rows
+        } else { return }
+
+        for (id, vector) in matches {
+            index.insert(id: id, vector: vector)
+        }
+
+        hnswIndices[modelId] = index
+    }
+
+    private func fetchMemoryResults(
+        ids: [(id: String, similarity: Float)],
+        tier: MemoryTier?,
+        limit: Int
+    ) throws -> [MemorySimilarityResult] {
+        guard !ids.isEmpty else { return [] }
+
+        let idList = ids.map { $0.id }
+        let placeholders = idList.map { _ in "?" }.joined(separator: ",")
+        let sql = """
+        SELECT m.id, m.tier, m.content, m.category, m.timestamp, m.protection_level
+        FROM memories m
+        WHERE m.id IN (\(placeholders));
+        """
+
+        let rows = try database.withPreparedStatement(sql: sql, parameters: idList) { statement in
+            var memories: [MemoryEntry] = []
+            while sqlite3_step(statement) == SQLITE_ROW {
+                let id = String(cString: sqlite3_column_text(statement, 0))
                 let tierRaw = String(cString: sqlite3_column_text(statement, 1))
                 let content = String(cString: sqlite3_column_text(statement, 2))
                 let category = String(cString: sqlite3_column_text(statement, 3))
                 let timestamp = Date(timeIntervalSince1970: sqlite3_column_double(statement, 4))
                 let protectionLevel = Int(sqlite3_column_int(statement, 5))
-
-                guard let blobPointer = sqlite3_column_blob(statement, 6) else { continue }
-                let blobLength = Int(sqlite3_column_bytes(statement, 6))
-                let embeddingData = Data(bytes: blobPointer, count: blobLength)
-                guard let memoryVector = decodeVector(from: embeddingData) else { continue }
-                let normalizedMemoryVector = normalize(memoryVector)
-                guard !normalizedMemoryVector.isEmpty else { continue }
-
-                let similarity = cosineSimilarity(lhs: normalizedQuery, rhs: normalizedMemoryVector)
-                guard let parsedTier = MemoryTier(rawValue: tierRaw) else { continue }
-
-                let entry = MemoryEntry(
-                    id: memoryId,
-                    tier: parsedTier,
-                    content: content,
-                    category: category,
-                    timestamp: timestamp,
-                    protectionLevel: protectionLevel
-                )
-
-                results.append(MemorySimilarityResult(entry: entry, similarityScore: similarity))
+                if let parsedTier = MemoryTier(rawValue: tierRaw) {
+                    memories.append(MemoryEntry(
+                        id: id, tier: parsedTier,
+                        content: content, category: category,
+                        timestamp: timestamp, protectionLevel: protectionLevel
+                    ))
+                }
             }
-            return results
+            return memories
         }
 
-        return matches
-            .sorted { lhs, rhs in
-                if lhs.similarityScore == rhs.similarityScore {
-                    return lhs.entry.timestamp > rhs.entry.timestamp
-                }
-                return lhs.similarityScore > rhs.similarityScore
-            }
+        let memoryMap = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
+        let similarityMap = Dictionary(uniqueKeysWithValues: ids.map { ($0.id, Double($0.similarity)) })
+
+        var results: [MemorySimilarityResult] = []
+        for (hnswId, _) in ids {
+            guard let entry = memoryMap[hnswId] else { continue }
+            if let tier, entry.tier != tier { continue }
+            let similarity = similarityMap[hnswId] ?? 0
+            results.append(MemorySimilarityResult(entry: entry, similarityScore: similarity))
+        }
+
+        return results
+            .sorted { $0.similarityScore > $1.similarityScore }
             .prefix(max(1, limit))
             .map { $0 }
     }

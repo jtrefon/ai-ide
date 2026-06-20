@@ -82,8 +82,8 @@
 | # | Item | Impact | Depends On | Status |
 |---|---|---|---|---|
 | 5.1 | Inline AI popover (cursor-anchored Q&A) | 🎯 **High** — biggest missing feature | 3.2 | ✅ |
-| 5.2 | Fix cloud pipeline orchestration bugs (plan supervision, tool loop edge cases) | 🎯 **High** — competing with Cursor | 3.1 | ⬜ |
-| 5.3 | Improve semantic search with approximate ANN (HNSW) | 🎯 **Medium** — faster search | 2.1 | ⬜ |
+| 5.2 | Fix cloud pipeline orchestration bugs (plan supervision, tool loop edge cases) | 🎯 **High** — competing with Cursor | 3.1 | ✅ |
+| 5.3 | Improve semantic search with approximate ANN (HNSW) | 🎯 **Medium** — faster search | 2.1 | ✅ |
 | 5.4 | Remove remaining 28 singletons (migrate to DI container) | 🏗️ Code quality | 3.2 | ⬜ |
 | 5.5 | Remove force unwraps (~50+ across codebase) | 🏗️ Crash safety | — | ⬜ |
 
