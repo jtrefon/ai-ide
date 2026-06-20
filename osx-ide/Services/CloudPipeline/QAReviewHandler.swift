@@ -50,17 +50,27 @@ final class QAReviewHandler {
                 "- Suggested next actions (bullets)"
         )
 
-        let qaResponse = try await aiInteractionCoordinator
-            .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: [qaSystem, qaUser],
-                explicitContext: explicitContext,
-                tools: readOnlyTools(from: availableTools),
-                mode: mode,
-                projectRoot: projectRoot,
-                runId: runId,
-                stage: AIRequestStage.qa_tool_output_review
-            ))
-            .get()
+        let qaResponse: AIServiceResponse
+        do {
+            qaResponse = try await aiInteractionCoordinator
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                    messages: [qaSystem, qaUser],
+                    explicitContext: explicitContext,
+                    tools: readOnlyTools(from: availableTools),
+                    mode: mode,
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.qa_tool_output_review
+                ))
+                .get()
+        } catch {
+            AppLogger.shared.warning(
+                category: .conversation,
+                message: "qa.tool_output_review_failed",
+                context: AppLogger.LogCallContext(metadata: ["error": error.localizedDescription])
+            )
+            return response
+        }
 
         let qaReport = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
@@ -131,17 +141,27 @@ final class QAReviewHandler {
                 "- Suggested next actions (bullets)"
         )
 
-        let qaResponse = try await aiInteractionCoordinator
-            .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: [qaSystem, qaUser],
-                explicitContext: explicitContext,
-                tools: readOnlyTools(from: availableTools),
-                mode: mode,
-                projectRoot: projectRoot,
-                runId: runId,
-                stage: AIRequestStage.qa_quality_review
-            ))
-            .get()
+        let qaResponse: AIServiceResponse
+        do {
+            qaResponse = try await aiInteractionCoordinator
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                    messages: [qaSystem, qaUser],
+                    explicitContext: explicitContext,
+                    tools: readOnlyTools(from: availableTools),
+                    mode: mode,
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.qa_quality_review
+                ))
+                .get()
+        } catch {
+            AppLogger.shared.warning(
+                category: .conversation,
+                message: "qa.quality_review_failed",
+                context: AppLogger.LogCallContext(metadata: ["error": error.localizedDescription])
+            )
+            return response
+        }
 
         let qaReport = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !qaReport.isEmpty {

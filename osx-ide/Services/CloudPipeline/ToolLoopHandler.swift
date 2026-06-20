@@ -1323,7 +1323,8 @@ final class ToolLoopHandler {
                 availableTools: availableTools,
                 cancelledToolCallIds: cancelledToolCallIds,
                 runId: runId,
-                userInput: userInput
+                userInput: userInput,
+                usesLocalModel: usesLocalModel
             )
 
             return ToolLoopResult(
