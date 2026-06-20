@@ -3,7 +3,7 @@ import Foundation
 enum LocalModelToolProvider {
     private static let safeToolNames: Set<String> = [
         "read_file",
-        "list_files",
+        "list_dir",
         "get_project_structure",
         "find_file",
         "grep",

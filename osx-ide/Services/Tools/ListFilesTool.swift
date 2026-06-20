@@ -3,7 +3,8 @@ import Foundation
 /// List files in a directory
 struct ListFilesTool: AITool {
     let name = "list_dir"
-    let description = "List files and directories under a project path. Supports optional filtering and limit."
+    let description = "List files and directories under a project path. Supports optional filtering and limit. " +
+        "Vendor/dependency directories are marked with '(excluded)' — their contents are hidden to keep output manageable."
     var parameters: [String: Any] {
         FileToolParameterSchemaBuilder.objectSchema(
             properties: [
@@ -64,7 +65,11 @@ struct ListFilesTool: AITool {
             .prefix(limit)
             .map { fileURL -> String in
                 let isDirectory = (try? fileURL.resourceValues(forKeys: [URLResourceKey.isDirectoryKey]).isDirectory) ?? false
-                return isDirectory ? "\(fileURL.lastPathComponent)/" : fileURL.lastPathComponent
+                let name = isDirectory ? "\(fileURL.lastPathComponent)/" : fileURL.lastPathComponent
+                if isDirectory, ToolFileExclusion.isExcluded(url: fileURL) {
+                    return "\(name) (excluded)"
+                }
+                return name
             }
 
         return sortedEntries.joined(separator: "\n")

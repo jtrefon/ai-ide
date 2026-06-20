@@ -2,9 +2,11 @@ import Foundation
 
 struct GetProjectStructureTool: AITool {
     let name = "get_project_structure"
-    let description = "Get the complete file and folder structure of the current project. " +
-        "Returns a hierarchical tree view of all files and directories. " +
-        "Use this to understand the project layout and cognitively identify files even with partial or misspelled names."
+    let description = "Get the file and folder structure of the current project. " +
+        "Returns a hierarchical tree view. Vendor/dependency directories " +
+        "(node_modules, vendor, .build, Pods, etc.) are collapsed to a single " +
+        "line to keep output manageable. Use max_depth for a high-level overview " +
+        "(2-3) or omit for the full structure."
     var parameters: [String: Any] {
         [
             "type": "object",
@@ -20,6 +22,10 @@ struct GetProjectStructureTool: AITool {
     }
 
     let projectRoot: URL
+
+    private var exclusion: ToolFileExclusion {
+        ToolFileExclusion(projectRoot: projectRoot)
+    }
 
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
@@ -46,9 +52,14 @@ struct GetProjectStructureTool: AITool {
         for (index, item) in contents.enumerated() {
             let isLast = index == contents.count - 1
             let rendering = renderTreeNode(prefix: prefix, isLast: isLast, item: item)
-            output += rendering.line
-            if rendering.isDirectory {
-                output += buildTree(at: item, prefix: rendering.childPrefix, depth: depth + 1, maxDepth: maxDepth)
+
+            if exclusion.shouldExclude(item), rendering.isDirectory {
+                output += prefix + (isLast ? "└── " : "├── ") + item.lastPathComponent + "/ (excluded)\n"
+            } else {
+                output += rendering.line
+                if rendering.isDirectory {
+                    output += buildTree(at: item, prefix: rendering.childPrefix, depth: depth + 1, maxDepth: maxDepth)
+                }
             }
         }
 
@@ -61,7 +72,7 @@ struct GetProjectStructureTool: AITool {
     }
 
     private func listDirectoryContents(at url: URL) -> [URL]? {
-        return try? FileManager.default.contentsOfDirectory(
+        try? FileManager.default.contentsOfDirectory(
             at: url,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]

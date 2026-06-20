@@ -4,7 +4,8 @@ struct FindFileRegexTool: AITool {
     let name = "find_file_regex"
     let description = "FALLBACK TOOL: Use only when list_all_files returns too many files (>1000) " +
         "and you cannot cognitively search. Searches for files matching a regex pattern. " +
-        "Much less intelligent than cognitive search - use as last resort."
+        "Much less intelligent than cognitive search - use as last resort. " +
+        "Skips vendor/dependency directories automatically."
     var parameters: [String: Any] {
         [
             "type": "object",
@@ -35,7 +36,7 @@ struct FindFileRegexTool: AITool {
 
         guard let enumerator = FileManager.default.enumerator(
             at: projectRoot,
-            includingPropertiesForKeys: [.isDirectoryKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else {
             return "No files found."
@@ -44,7 +45,15 @@ struct FindFileRegexTool: AITool {
         var matches: [String] = []
 
         for case let fileURL as URL in enumerator {
-            if !isFile(fileURL: fileURL) {
+            let isDirectory = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDirectory {
+                if ToolFileExclusion.isExcluded(url: fileURL) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+
+            guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else {
                 continue
             }
 
@@ -62,14 +71,5 @@ struct FindFileRegexTool: AITool {
         }
 
         return "Found \(matches.count) file(s):\n" + matches.joined(separator: "\n")
-    }
-
-    private func isFile(fileURL: URL) -> Bool {
-        do {
-            let resourceValues = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
-            return resourceValues.isRegularFile ?? false
-        } catch {
-            return false
-        }
     }
 }

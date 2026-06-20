@@ -57,16 +57,7 @@ struct IndexFileEnumerator {
     private static func isIndexableFile(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
         if ext.isEmpty { return false }
-        let allowed: Set<String> = [
-            "swift",
-            "js", "jsx",
-            "ts", "tsx",
-            "py",
-            "html", "css",
-            "json", "yaml", "yml",
-            "md", "markdown"
-        ]
-        return allowed.contains(ext)
+        return AppConstantsIndexing.allowedExtensions.contains(ext)
     }
 
     private static func relativePath(from root: URL, to url: URL) -> String {

@@ -3,7 +3,8 @@ import Foundation
 struct FindFileTool: AITool {
     let name = "find_file"
     let description = "Find files matching a simple name pattern recursively (case insensitive). " +
-        "Use this to locate files when you don't know the exact path."
+        "Use this to locate files when you don't know the exact path. " +
+        "Skips vendor/dependency directories automatically."
     var parameters: [String: Any] {
         [
             "type": "object",
@@ -37,7 +38,7 @@ struct FindFileTool: AITool {
         let url = try pathValidator.validateAndResolve(path)
         let enumerator = FileManager.default.enumerator(
             at: url,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
             options: [.skipsHiddenFiles]
         )
 
@@ -45,6 +46,14 @@ struct FindFileTool: AITool {
         let lowerPattern = pattern.lowercased()
 
         while let fileURL = enumerator?.nextObject() as? URL {
+            let isDirectory = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDirectory {
+                if ToolFileExclusion.isExcluded(url: fileURL) {
+                    enumerator?.skipDescendants()
+                }
+                continue
+            }
+
             let fileName = fileURL.lastPathComponent.lowercased()
             if fileName.contains(lowerPattern) {
                 let relativePath = fileURL.path.replacingOccurrences(of: url.path + "/", with: "")

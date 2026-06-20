@@ -2,7 +2,8 @@ import Foundation
 
 struct GrepTool: AITool {
     let name = "grep"
-    let description = "Search for a text pattern within files in a directory (recursive)."
+    let description = "Search for a text pattern within files in a directory (recursive). " +
+        "Skips vendor/dependency directories automatically."
     var parameters: [String: Any] {
         [
             "type": "object",
@@ -38,17 +39,26 @@ struct GrepTool: AITool {
     }
 
     private func searchInDirectory(url: URL, pattern: String) async throws -> [String] {
-        let fileManager = FileManager.default
         var results: [String] = []
 
-        let enumerator = fileManager.enumerator(
+        guard let enumerator = FileManager.default.enumerator(
             at: url,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
             options: [.skipsHiddenFiles]
-        )
+        ) else {
+            return results
+        }
 
-        while let fileURL = enumerator?.nextObject() as? URL {
-            if await !isRegularFile(fileURL: fileURL) {
+        while let fileURL = enumerator.nextObject() as? URL {
+            let isDirectory = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDirectory {
+                if ToolFileExclusion.isExcluded(url: fileURL) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+
+            guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else {
                 continue
             }
 
@@ -62,15 +72,6 @@ struct GrepTool: AITool {
         }
 
         return results
-    }
-
-    private func isRegularFile(fileURL: URL) async -> Bool {
-        do {
-            let resourceValues = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
-            return resourceValues.isRegularFile ?? false
-        } catch {
-            return false
-        }
     }
 
     private func searchInFile(fileURL: URL, pattern: String) async -> [String] {
