@@ -2,16 +2,27 @@ import Foundation
 
 @MainActor
 struct CompletionContextAssembler {
-    private let prefixCharacterLimit = 4_000
-    private let suffixCharacterLimit = 1_200
-    private let symbolLimit = 8
+    struct Limits: Sendable {
+        let prefixCharacters: Int
+        let suffixCharacters: Int
+        let symbolCount: Int
+
+        static let standard = Limits(prefixCharacters: 4_000, suffixCharacters: 1_200, symbolCount: 8)
+        static let fast = Limits(prefixCharacters: 500, suffixCharacters: 300, symbolCount: 4)
+    }
+
+    private let limits: Limits
+
+    init(limits: Limits = .fast) {
+        self.limits = limits
+    }
 
     func buildContext(from snapshot: InlineCompletionEditorSnapshot) -> CompletionContextPayload {
         let nsBuffer = snapshot.buffer as NSString
         let safeCursor = max(0, min(snapshot.cursorPosition, nsBuffer.length))
 
-        let prefixStart = max(0, safeCursor - prefixCharacterLimit)
-        let suffixEnd = min(nsBuffer.length, safeCursor + suffixCharacterLimit)
+        let prefixStart = max(0, safeCursor - limits.prefixCharacters)
+        let suffixEnd = min(nsBuffer.length, safeCursor + limits.suffixCharacters)
 
         let prefix = nsBuffer.substring(with: NSRange(location: prefixStart, length: safeCursor - prefixStart))
         let suffix = nsBuffer.substring(with: NSRange(location: safeCursor, length: suffixEnd - safeCursor))
@@ -55,7 +66,7 @@ struct CompletionContextAssembler {
             if seen.insert(lowered).inserted {
                 ordered.append(symbol)
             }
-            if ordered.count >= symbolLimit {
+            if ordered.count >= limits.symbolCount {
                 break
             }
         }

@@ -31,18 +31,18 @@
 
 ---
 
-## Phase 2 — Structural Reorg (Partial — File moves deferred)
+## Phase 2 — Structural Reorg ✅ (Completed)
 
 **Theme:** Directory structure reflects the architecture. Mechanical but important.
 
 | # | Item | Impact | Depends On | Status |
 |---|---|---|---|---|
-| 2.1 | Rename `Services/ConversationFlow/` → `Services/CloudPipeline/` | 🏗️ Architecture clarity | 1.2 | ⬜ |
-| 2.2 | Move `Services/InlineCompletion/` → `Services/LocalPipeline/InlineCompletion/` | 🏗️ Architecture clarity | — | ⬜ |
+| 2.1 | Rename `Services/ConversationFlow/` → `Services/CloudPipeline/` | 🏗️ Architecture clarity | 1.2 | ✅ |
+| 2.2 | Move `Services/InlineCompletion/` → `Services/LocalPipeline/InlineCompletion/` | 🏗️ Architecture clarity | — | ✅ |
 | 2.3 | Create `Services/LocalPipeline/LocalInteractionService.swift` | 📦 Scaffold for local-only AI interaction | 1.2 | ✅ |
-| 2.4 | Fix all imports and Xcode project references | ✅ Maintains build | 2.1, 2.2 | ⬜ |
+| 2.4 | Fix all imports and Xcode project references | ✅ Maintains build | 2.1, 2.2, 2.3 | ✅ |
 
-**Note:** File moves (2.1, 2.2) require Xcode project file updates — lower priority than architecture work. Deferred until Phase 5.
+**Note:** Xcode 16 `fileSystemSynchronizedGroups` picks up directory changes automatically — no pbxproj edits required.
 
 ---
 

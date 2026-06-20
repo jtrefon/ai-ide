@@ -73,7 +73,7 @@ struct InlineCompletionSettings: Equatable, Sendable {
         }(),
         debounceMilliseconds: 160,
         aggressiveness: 0.35,
-        maxSuggestionLength: 120,
+        maxSuggestionLength: 40,
         multilineEnabled: false,
         retrievalEnabled: false,
         routingMode: .hybridPreferLocal,
