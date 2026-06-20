@@ -185,6 +185,26 @@ public class DatabaseManager {
         return try scalarInt(sql: sql, parameters: parameters)
     }
 
+    public func isResourceAIEnriched(resourceId: String) throws -> Bool {
+        try queryExecutor.isResourceAIEnriched(resourceId: resourceId)
+    }
+
+    public func getAIEnrichedSummaries(projectRoot: URL, limit: Int = 20) throws -> [(path: String, summary: String)] {
+        return []
+    }
+
+    public func getAIEnrichedResourceCountScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Int {
+        return 0
+    }
+
+    public func getAverageAIQualityScoreScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Double {
+        return 0.0
+    }
+
+    public func getAverageQualityScore() throws -> Double {
+        return 0.0
+    }
+
     public func getSymbolKindCounts() throws -> [String: Int] {
         try symbolManager.getSymbolKindCounts()
     }

@@ -180,26 +180,26 @@ public actor DatabaseStore {
         try database.searchSimilarCodeChunks(modelId: modelId, queryVector: queryVector, limit: limit)
     }
 
-    // MARK: - AI Enrichment Operations
+    // MARK: - AI Enrichment Operations (stubs — always return defaults)
 
     public func isResourceAIEnriched(resourceId: String) throws -> Bool {
         try database.isResourceAIEnriched(resourceId: resourceId)
     }
 
-    public func updateQualityScore(resourceId: String, score: Double) throws {
-        try database.updateQualityScore(resourceId: resourceId, score: score)
-    }
-
-    public func updateQualityDetails(resourceId: String, details: String?) throws {
-        try database.updateQualityDetails(resourceId: resourceId, details: details)
-    }
-
-    public func markAIEnriched(resourceId: String, score: Double, summary: String?) throws {
-        try database.markAIEnriched(resourceId: resourceId, score: score, summary: summary)
-    }
-
     public func getAIEnrichedSummaries(projectRoot: URL, limit: Int) throws -> [(path: String, summary: String)] {
         try database.getAIEnrichedSummaries(projectRoot: projectRoot, limit: limit)
+    }
+
+    public func getAIEnrichedResourceCountScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Int {
+        try database.getAIEnrichedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowedExtensions)
+    }
+
+    public func getAverageAIQualityScoreScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Double {
+        try database.getAverageAIQualityScoreScoped(projectRoot: projectRoot, allowedExtensions: allowedExtensions)
+    }
+
+    public func getAverageQualityScore() throws -> Double {
+        try database.getAverageQualityScore()
     }
 
     // MARK: - Stats Operations
