@@ -131,7 +131,7 @@ enum LocalModelCatalog {
                 artifact("tokenizer.json"),
                 artifact("tokenizer_config.json")
             ],
-            defaultContextLength: 8192,
+            defaultContextLength: 131072,
             toolCallFormat: .gemma
         )
     }

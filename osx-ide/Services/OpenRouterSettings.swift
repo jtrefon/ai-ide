@@ -36,6 +36,39 @@ enum ReasoningMode: String, CaseIterable, Equatable {
     }
 }
 
+enum ReasoningIntensity: String, CaseIterable, Equatable {
+    case min
+    case med
+    case max
+
+    static var `default`: ReasoningIntensity { .max }
+
+    static var current: ReasoningIntensity {
+        ReasoningIntensity(
+            rawValue: UserDefaults.standard.string(forKey: "AI.ReasoningIntensity") ?? ""
+        ) ?? .default
+    }
+
+    var systemPromptDirective: String {
+        switch self {
+        case .min:
+            return "Reasoning intensity: LOW. Keep reasoning extremely brief \u{2014} at most one short sentence."
+        case .med:
+            return "Reasoning intensity: MEDIUM. Keep reasoning compact and focused."
+        case .max:
+            return "Reasoning intensity: HIGH. Reason thoroughly, consider alternatives, and think step by step before responding."
+        }
+    }
+
+    var apiEffortValue: String {
+        switch self {
+        case .min: return "low"
+        case .med: return "medium"
+        case .max: return "high"
+        }
+    }
+}
+
 struct OpenRouterSettings: Equatable {
     var apiKey: String
     var model: String

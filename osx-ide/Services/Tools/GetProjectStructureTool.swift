@@ -23,9 +23,12 @@ struct GetProjectStructureTool: AITool {
 
     func execute(arguments: ToolArguments) async throws -> String {
         let arguments = arguments.raw
-        guard let maxDepth = arguments["max_depth"] as? Int else {
-            throw AppError.aiServiceError("Missing 'max_depth' argument for get_project_structure")
-        }
+        let maxDepth: Int? = {
+            guard let value = arguments["max_depth"] else { return nil }
+            if let int = value as? Int { return int }
+            if let string = value as? String { return Int(string) }
+            return nil
+        }()
         return buildTreeSync(maxDepth: maxDepth)
     }
 

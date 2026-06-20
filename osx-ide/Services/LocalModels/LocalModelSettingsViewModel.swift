@@ -68,7 +68,9 @@ final class LocalModelSettingsViewModel: ObservableObject {
         self.offlineModeEnabled = settingsStore.bool(forKey: offlineModeEnabledKey, default: false)
         self.turboQuantEnabled = settingsStore.bool(forKey: turboQuantEnabledKey, default: false)
         let ctx = settingsStore.integer(forKey: "LocalModel.ContextLength")
-        self.contextLength = ctx > 0 ? Double(ctx) : 8192
+        let selectedModel = LocalModelCatalog.model(id: settingsStore.string(forKey: selectedModelKey) ?? "")
+        let defaultCtx = selectedModel?.defaultContextLength ?? 8192
+        self.contextLength = ctx > 0 ? Double(ctx) : Double(defaultCtx)
     }
 
     func refreshCatalog() {

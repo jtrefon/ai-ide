@@ -175,6 +175,11 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
         self.conversationLogger = ConversationLogger()
 
+        // Wire up streaming reset after all properties are initialized
+        self.sendCoordinator.clearStreamingBuffer = { [weak self] in
+            self?.clearStreamingText()
+        }
+
         initializeLogging(root: root)
         setupObservation()
         setupPowerManagementObservation()
@@ -679,6 +684,16 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         pendingReasoningBuffer = ""
         streamingRenderTask?.cancel()
         streamingRenderTask = nil
+    }
+
+    /// Resets the streaming text buffer without clearing run state.
+    /// Used when the local model tool loop needs to start fresh output.
+    @MainActor
+    func clearStreamingText() {
+        draftAssistantText = ""
+        draftReasoningText = ""
+        pendingStreamingBuffer = ""
+        pendingReasoningBuffer = ""
     }
 
     private func resetConversationInteractionState() {

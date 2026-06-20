@@ -344,21 +344,6 @@ public enum LocalModelFileStore {
                         configObject[key] = value
                     }
                 }
-                // MLX Swift expects Gemma 2 to specifically define these fields at the root
-                if configObject["attn_logit_softcapping"] == nil {
-                    // Try to map it from audio_config.attention_logit_cap, else default to 50.0
-                    let audioConfig = configObject["audio_config"] as? [String: Any]
-                    configObject["attn_logit_softcapping"] = audioConfig?["attention_logit_cap"] ?? 50.0
-                }
-                if configObject["query_pre_attn_scalar"] == nil {
-                    let headDim = configObject["head_dim"] as? Int ?? 256
-                    configObject["query_pre_attn_scalar"] = Double(headDim)
-                }
-                if configObject["rope_theta"] == nil {
-                    // Fall back to gemma2 default or pull it manually
-                    configObject["rope_theta"] = 10000.0
-                }
-                
                 // Use gemma4_text model (text-only) with inlined text_config.
                 configObject["model_type"] = "gemma4_text"
                 mutated = true

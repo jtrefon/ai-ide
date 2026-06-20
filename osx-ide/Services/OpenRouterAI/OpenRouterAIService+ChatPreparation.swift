@@ -81,15 +81,16 @@ extension OpenRouterAIService {
     internal func nativeReasoningConfiguration(
         for reasoningMode: ReasoningMode
     ) -> NativeReasoningConfiguration? {
+        let effort = ReasoningIntensity.current.apiEffortValue
         switch reasoningMode {
         case .none:
             return .init(enabled: false, effort: "none", exclude: true)
         case .model:
-            return .init(enabled: true, effort: nil, exclude: true)
+            return .init(enabled: true, effort: effort, exclude: true)
         case .agent:
             return .init(enabled: false, effort: "none", exclude: true)
         case .modelAndAgent:
-            return .init(enabled: true, effort: nil, exclude: true)
+            return .init(enabled: true, effort: effort, exclude: true)
         }
     }
 

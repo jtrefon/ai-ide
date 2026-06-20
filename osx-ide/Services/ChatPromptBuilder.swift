@@ -14,6 +14,98 @@ class ChatPromptBuilder {
         case needsWork
     }
 
+    /// Structured representation of a model response split into reasoning, content, and tool calls.
+    struct ParsedModelResponse: Sendable {
+        let reasoning: String?
+        let content: String?
+        let toolCalls: [AIToolCall]
+
+        static func empty() -> ParsedModelResponse {
+            ParsedModelResponse(reasoning: nil, content: nil, toolCalls: [])
+        }
+    }
+
+    /// Parses raw model output into structured components.
+    /// Handles Gemma 4 format: [<|channel>thought\n...<channel|>][content][<|tool_call>call:name{json}<tool_call|>][<turn|>]
+    static func parseModelResponse(_ text: String) -> ParsedModelResponse {
+        guard !text.isEmpty else { return .empty() }
+
+        // 1. Extract reasoning from <|channel>thought\n...<channel|>
+        let afterReasoning: String
+        let reasoning: String?
+        if let open = text.range(of: "<|channel>thought", options: [.caseInsensitive]),
+           let close = text[open.upperBound...].range(of: "<channel|>")
+        {
+            let reasoningText = String(text[open.upperBound..<close.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            reasoning = reasoningText.isEmpty ? nil : reasoningText
+            afterReasoning = String(text[close.upperBound...])
+        } else {
+            reasoning = nil
+            afterReasoning = text
+        }
+
+        // 2. Extract tool calls from remaining text
+        var content = afterReasoning
+        var toolCalls: [AIToolCall] = []
+        let toolCallPattern = #"(?is)<\|tool_call>(.*?)<tool_call\|>"#
+        if let toolRegex = try? NSRegularExpression(pattern: toolCallPattern) {
+            let range = NSRange(content.startIndex..<content.endIndex, in: content)
+            let matches = toolRegex.matches(in: content, range: range)
+            if !matches.isEmpty {
+                for match in matches where match.numberOfRanges >= 2 {
+                    if let callRange = Range(match.range(at: 1), in: content) {
+                        let callBody = String(content[callRange])
+                        if let parsed = Self.parseGemmaToolCall(from: callBody) {
+                            toolCalls.append(parsed)
+                        }
+                    }
+                }
+                // Remove tool call blocks from content
+                content = toolRegex.stringByReplacingMatches(in: content, range: range, withTemplate: "")
+            }
+        }
+
+        // 3. Remove turn markers and remaining tags from content
+        content = stripTextualToolCallMarkup(from: content)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return ParsedModelResponse(
+            reasoning: reasoning,
+            content: content.isEmpty ? nil : content,
+            toolCalls: toolCalls
+        )
+    }
+
+    private static func parseGemmaToolCall(from body: String) -> AIToolCall? {
+        // Format: call:name{json_args}
+        let pattern = #"call:(\w+)\{((?:[^{}]|\{[^{}]*\})*)\}"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: body, range: NSRange(body.startIndex..<body.endIndex, in: body)),
+              match.numberOfRanges >= 3,
+              let nameRange = Range(match.range(at: 1), in: body),
+              let argsRange = Range(match.range(at: 2), in: body) else {
+            return nil
+        }
+        let name = String(body[nameRange])
+        let argsText = String(body[argsRange])
+        var args: [String: String] = [:]
+        let pairPattern = #"(\w+):(.*?)(?:,(?=\w+:)|$)"#
+        if let pairRegex = try? NSRegularExpression(pattern: pairPattern, options: [.dotMatchesLineSeparators]) {
+            let pairRange = NSRange(argsText.startIndex..<argsText.endIndex, in: argsText)
+            let pairMatches = pairRegex.matches(in: argsText, range: pairRange)
+            for pair in pairMatches where pair.numberOfRanges >= 3 {
+                if let keyRange = Range(pair.range(at: 1), in: argsText),
+                   let valRange = Range(pair.range(at: 2), in: argsText) {
+                    let key = String(argsText[keyRange]).trimmingCharacters(in: .whitespaces)
+                    let val = String(argsText[valRange]).trimmingCharacters(in: .whitespaces)
+                    args[key] = val
+                }
+            }
+        }
+        return AIToolCall(id: UUID().uuidString, name: name, arguments: args)
+    }
+
 
     /// Splits reasoning from the raw AI response text.
     /// - Parameter text: The raw response text.
@@ -122,14 +214,33 @@ class ChatPromptBuilder {
             // Bare JSON tool call objects
             #"^\s*\{\s*"tool_calls"\s*:"#,
             #"^\s*\{\s*"name"\s*:\s*"[^"]+"\s*,"#,
-            // Gemma channel tags: <|channel>thought, <|channel>action, etc.
+            // Gemma 4 channel tags: <|channel> (pipe-left) and <channel|> (pipe-right)
+            #"<\|channel>"#,
+            #"<channel\|>"#,
+            // Gemma 4 tool call block (closed): <|tool_call>...<tool_call|>
+            #"(?is)<\|tool_call>.*?<tool_call\|>"#,
+            // Gemma 4 tool call block (unclosed): <|tool_call> followed by 1-5 lines
+            #"<\|tool_call>(?:[^\n]*\n?){1,5}"#,
+            // Gemma 4 tool markers: <|tool>, <tool|>, <|tool_response>, <tool_response|>
+            #"<\|tool>"#,
+            #"<tool\|>"#,
+            #"<\|tool_response>"#,
+            #"<tool_response\|>"#,
+            // Legacy Gemma channel format (pipe on both sides)
             #"<\|channel\|>\w+(?:\s*</\|channel\|>)?"#,
-            // Gemma tool call format: call:name{...}
+            // Legacy Gemma tool call format: call:name{...}
             #"call:\w+\{[^}]*\}"#,
             // DeepSeek/XML function call wrappers
             #"(?is)<\|tool_calls\|>.*?</\|tool_calls\|>"#,
             // Gemma function call XML tags
             #"(?is)<start_function_call>\s*.*?\s*<end_function_call>"#,
+            // Turn markers: <|turn> and <turn|> (EOS)
+            #"<\|turn>"#,
+            #"<turn\|>"#,
+            // String quote delimiter used in tool declarations
+            #"<\|"\|>"#,
+            // Thinking mode token
+            #"<\|think\|>"#,
         ]
 
         for pattern in patterns {
@@ -161,6 +272,32 @@ class ChatPromptBuilder {
     }
 
     private static func splitTaggedReasoning(from text: String) -> (reasoning: String?, content: String)? {
+        // Gemma 4 channel-based reasoning: <|channel>thought\n...<channel|>
+        // (id 100 soc_token opens, id 101 eoc_token closes)
+        // The word "thought" + newline after the opening tag are literal.
+        // Everything after <channel|> is content (no separate response tag).
+        for prefix in ["<|channel>thought\n", "<|channel>thought"] {
+            guard let open = text.range(of: prefix, options: [.caseInsensitive]) else { continue }
+            let afterOpen = text[open.upperBound...]
+            guard let close = afterOpen.range(of: "<channel|>") else { continue }
+            let reasoning = String(afterOpen[..<close.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let remaining = String(text[close.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return (reasoning.isEmpty ? nil : reasoning, remaining)
+        }
+
+        // Legacy: <|channel|>thought...<|channel|>response (both sides pipe, old format)
+        if let gemmaThought = text.range(of: "<|channel|>thought", options: [.caseInsensitive]),
+           let gemmaResponse = text.range(of: "<|channel|>response", options: [.caseInsensitive]),
+           gemmaThought.upperBound < gemmaResponse.lowerBound {
+            let reasoning = String(text[gemmaThought.upperBound..<gemmaResponse.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let content = String(text[gemmaResponse.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return (reasoning.isEmpty ? nil : reasoning, content)
+        }
+
         let tags = [
             ("<thinking>", "</thinking>"),
             ("<think>", "</think>"),

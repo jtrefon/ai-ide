@@ -118,7 +118,10 @@ struct MessageContentCoordinator {
 
     private var assistantDisplayContent: String {
         let cleaned = ChatPromptBuilder.contentForDisplay(from: message.content)
-        return cleaned.isEmpty ? message.content : cleaned
+        if cleaned.isEmpty {
+            return ""
+        }
+        return cleaned
     }
 
     private var isReasoningOutcomeMessage: Bool {

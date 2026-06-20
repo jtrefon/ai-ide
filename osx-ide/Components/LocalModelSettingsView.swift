@@ -13,7 +13,7 @@ struct LocalModelSettingsView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Context Length: \(Int(viewModel.contextLength)) tokens")
-                Slider(value: $viewModel.contextLength, in: 2048...32768, step: 1024) {
+                Slider(value: $viewModel.contextLength, in: 2048...131072, step: 1024) {
                     Text("Context Length")
                 }
             }

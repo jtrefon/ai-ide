@@ -230,18 +230,6 @@ actor LocalModelProcessAIService: AIService {
                             switch generation {
                             case .chunk(let text):
                                 output.append(text)
-                                if collectedToolCalls.isEmpty,
-                                   let earlyFallbackToolCalls = Self.extractFallbackToolCalls(
-                                    from: output,
-                                    toolsWereProvided: !(tools?.isEmpty ?? true),
-                                    structuredToolCallsWereDetected: false,
-                                    toolCallFormat: toolCallFormat
-                                   ),
-                                   !earlyFallbackToolCalls.isEmpty {
-                                    collectedToolCalls = earlyFallbackToolCalls
-                                    await publishStatus("Recovered fallback tool call from streamed output")
-                                    break
-                                }
                                 if let runId, !text.isEmpty {
                                     await MainActor.run {
                                         eventBus.publish(LocalModelStreamingChunkEvent(runId: runId, chunk: text))
@@ -257,12 +245,6 @@ actor LocalModelProcessAIService: AIService {
                             }
                         }
                         let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let fallbackToolCalls = Self.extractFallbackToolCalls(
-                            from: trimmedOutput,
-                            toolsWereProvided: !(tools?.isEmpty ?? true),
-                            structuredToolCallsWereDetected: !collectedToolCalls.isEmpty,
-                            toolCallFormat: toolCallFormat
-                        )
                         Self.logGenerationPerformance(
                             modelId: modelId,
                             inferenceConfiguration: inferenceConfiguration,
@@ -275,11 +257,10 @@ actor LocalModelProcessAIService: AIService {
                             rssAfterLoadMB: rssAfterLoadMB,
                             rssAfterGenerationMB: Self.currentProcessRSSMB()
                         )
-                        let resolvedToolCalls = collectedToolCalls.isEmpty ? fallbackToolCalls : collectedToolCalls
-                        let shouldSuppressToolCallPayloadFromContent = !(resolvedToolCalls?.isEmpty ?? true)
+                        let toolCalls: [AIToolCall]? = collectedToolCalls.isEmpty ? nil : collectedToolCalls
                         return AIServiceResponse(
-                            content: trimmedOutput.isEmpty || shouldSuppressToolCallPayloadFromContent ? nil : trimmedOutput,
-                            toolCalls: resolvedToolCalls
+                            content: trimmedOutput.isEmpty ? nil : trimmedOutput,
+                            toolCalls: toolCalls
                         )
                     }
                 }
@@ -453,6 +434,49 @@ actor LocalModelProcessAIService: AIService {
                 name: toolCall.function.name,
                 arguments: arguments
             )
+        }
+
+        nonisolated static func extractGemmaToolCalls(from content: String) -> [AIToolCall]? {
+            // Actual Gemma 4 format: call:name{json_args} inside <|tool_call>...<tool_call|>
+            // Regex from tokenizer_config.json: call\:(?P<name>\w+)(?P<arguments>\{.*\})
+            let pattern = #"call:(\w+)\{((?:[^{}]|\{[^{}]*\})*)\}"#
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                return nil
+            }
+            let range = NSRange(content.startIndex..<content.endIndex, in: content)
+            let matches = regex.matches(in: content, options: [], range: range)
+            guard !matches.isEmpty else { return nil }
+
+            let calls: [AIToolCall] = matches.compactMap { match in
+                guard match.numberOfRanges >= 3,
+                      let nameRange = Range(match.range(at: 1), in: content),
+                      let argsRange = Range(match.range(at: 2), in: content) else {
+                    return nil
+                }
+                let name = String(content[nameRange])
+                let argsText = String(content[argsRange])
+                // Parse JSON-like bare key:value pairs (not standard JSON)
+                var args: [String: String] = [:]
+                let pairPattern = #"(\w+):(.*?)(?:,(?=\w+:)|$)"#
+                if let pairRegex = try? NSRegularExpression(pattern: pairPattern, options: [.dotMatchesLineSeparators]) {
+                    let pairRange = NSRange(argsText.startIndex..<argsText.endIndex, in: argsText)
+                    let pairMatches = pairRegex.matches(in: argsText, options: [], range: pairRange)
+                    for pair in pairMatches {
+                        guard pair.numberOfRanges >= 3,
+                              let keyRange = Range(pair.range(at: 1), in: argsText),
+                              let valRange = Range(pair.range(at: 2), in: argsText) else { continue }
+                        let key = String(argsText[keyRange]).trimmingCharacters(in: .whitespaces)
+                        let val = String(argsText[valRange]).trimmingCharacters(in: .whitespaces)
+                        args[key] = val
+                    }
+                }
+                return AIToolCall(
+                    id: UUID().uuidString,
+                    name: name,
+                    arguments: args
+                )
+            }
+            return calls.isEmpty ? nil : calls
         }
 
         nonisolated static func extractFallbackToolCalls(
@@ -798,9 +822,7 @@ actor LocalModelProcessAIService: AIService {
         let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
         let storedContextLength = await selectionStore.contextLength()
         let turboQuantEnabled = await selectionStore.isTurboQuantEnabled()
-        // Gemma4 has incompatible attention head dimensions for QuantizedKVCache.
-        // Disable TurboQuant until upstream mlx-swift-lm fixes block size alignment.
-        let effectiveTurboQuant = model.id.contains("gemma-4") ? false : turboQuantEnabled
+        let effectiveTurboQuant = turboQuantEnabled
         let testBudget = LocalModelTestBudget.applyIfNeeded(
             to: request,
             contextLength: storedContextLength ?? LocalModelFileStore.contextLength(for: model),
@@ -879,7 +901,12 @@ actor LocalModelProcessAIService: AIService {
             settings: settings,
             stage: request.stage
         )
-        let userInput = UserInput(chat: chatMessages, tools: toolSpecs, additionalContext: additionalContext)
+        let rawMessages = buildRawMessages(
+            messages: budgetedMessages,
+            explicitContext: request.context,
+            systemContent: systemContent
+        )
+        let userInput = UserInput(messages: rawMessages, tools: toolSpecs, additionalContext: additionalContext)
         
         // Wrap MLX inference with power management to prevent sleep during long generations
         let response: AIServiceResponse
@@ -1047,9 +1074,24 @@ actor LocalModelProcessAIService: AIService {
                 continue
             }
 
+            if message.role == .tool {
+                let toolName = message.toolName ?? "unknown_tool"
+                let toolContent = replayToolMessageContent(from: message)
+                rawMessages.append([
+                    "role": "tool",
+                    "tool_responses": [
+                        [
+                            "name": toolName,
+                            "response": toolContent,
+                        ] as [String: any Sendable],
+                    ] as [any Sendable],
+                ] as [String: any Sendable])
+                continue
+            }
+
             var rawMessage: Message = [
                 "role": message.role.rawValue,
-                "content": rawContent(for: message),
+                "content": message.content,
             ]
 
             if message.role == .assistant,
@@ -1169,7 +1211,11 @@ actor LocalModelProcessAIService: AIService {
                 includeModelReasoning: settings.reasoningMode.includesModelReasoning && stage != .tool_loop
             )
         )
-        return systemPrompt + "\n\n" + localModelResponseGuidance(mode: mode, stage: stage)
+        var prompt = systemPrompt
+        if settings.reasoningMode.includesModelReasoning && stage != .tool_loop {
+            prompt += "\n\n" + ReasoningIntensity.current.systemPromptDirective
+        }
+        return prompt + "\n\n" + localModelResponseGuidance(mode: mode, stage: stage)
     }
 
     private func additionalContext(

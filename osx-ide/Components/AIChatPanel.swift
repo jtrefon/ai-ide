@@ -8,6 +8,9 @@ struct AIChatPanel: View {
     let conversationManager: any ConversationManagerProtocol
     @ObservedObject var ui: UIStateManager
     @State private var renderRefreshToken: UInt = 0
+    @State private var isOfflineMode: Bool = false
+    @State private var modelDisplayName: String = "Cloud"
+    @State private var reasoningIntensity: ReasoningIntensity = .default
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
@@ -143,6 +146,79 @@ struct AIChatPanel: View {
                     .lineLimit(1)
 
                 Spacer()
+
+                Menu {
+                    Section("Cloud") {
+                        ForEach(RemoteAIProvider.allCases, id: \.self) { provider in
+                            Button {
+                                Task {
+                                    let store = AIProviderSelectionStore()
+                                    await store.setSelectedRemoteProvider(provider)
+                                    UserDefaults.standard.set(false, forKey: "AI.OfflineModeEnabled")
+                                    NotificationCenter.default.post(name: .localModelOfflineModeDidChange, object: nil)
+                                }
+                            } label: {
+                                HStack {
+                                    Text(provider.displayName)
+                                    if !isOfflineMode && modelDisplayName == provider.displayName {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Section("Local") {
+                        Button {
+                            Task {
+                                let store = LocalModelSelectionStore()
+                                await store.setSelectedModelId(gemmaE4bModel.id)
+                                await store.setOfflineModeEnabled(true)
+                            }
+                        } label: {
+                            HStack {
+                                Text(gemmaE4bModel.displayName)
+                                if isOfflineMode {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    Section("Reasoning") {
+                        ForEach(ReasoningIntensity.allCases, id: \.self) { intensity in
+                            Button {
+                                UserDefaults.standard.set(intensity.rawValue, forKey: "AI.ReasoningIntensity")
+                                reasoningIntensity = intensity
+                            } label: {
+                                HStack {
+                                    Text(intensityLabel(intensity))
+                                    if reasoningIntensity == intensity {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: isOfflineMode ? "network.slash" : "cloud.fill")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("\(modelDisplayName) [\(intensityShortLabel(reasoningIntensity))]")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.gray.opacity(0.15))
+                    .cornerRadius(5)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -152,9 +228,51 @@ struct AIChatPanel: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.aiChatPanel)
         .background(Color(NSColor.controlBackgroundColor))
+        .onAppear {
+            refreshModelState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .localModelOfflineModeDidChange)) { _ in
+            refreshModelState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .localModelSelectionDidChange)) { _ in
+            refreshModelState()
+        }
         .onReceive(conversationManager.statePublisher) { _ in
             renderRefreshToken &+= 1
         }
+    }
+
+    private func refreshModelState() {
+        let defaults = UserDefaults.standard
+        isOfflineMode = defaults.bool(forKey: "AI.OfflineModeEnabled")
+        reasoningIntensity = ReasoningIntensity.current
+        if isOfflineMode {
+            let modelId = defaults.string(forKey: "LocalModel.SelectedId") ?? ""
+            modelDisplayName = LocalModelCatalog.model(id: modelId)?.displayName ?? modelId
+        } else {
+            let raw = defaults.string(forKey: "AI.SelectedRemoteProvider") ?? ""
+            modelDisplayName = RemoteAIProvider(rawValue: raw)?.displayName ?? "Cloud"
+        }
+    }
+
+    private func intensityLabel(_ intensity: ReasoningIntensity) -> String {
+        switch intensity {
+        case .min: return "Min"
+        case .med: return "Med"
+        case .max: return "Max"
+        }
+    }
+
+    private func intensityShortLabel(_ intensity: ReasoningIntensity) -> String {
+        switch intensity {
+        case .min: return "Min"
+        case .med: return "Med"
+        case .max: return "Max"
+        }
+    }
+
+    private var gemmaE4bModel: LocalModelDefinition {
+        LocalModelCatalog.model(id: "mlx-community/gemma-4-e4b-it-4bit@62b0e4e")!
     }
 
     var currentSelection: String? {
