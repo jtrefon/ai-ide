@@ -2,503 +2,380 @@
 
 ## Overview
 
-The osx-ide is a modern macOS IDE built with SwiftUI and AppKit, designed to provide a powerful yet intuitive development environment. The architecture follows SOLID principles and emphasizes modularity, testability, and maintainability.
+osx-ide is a native macOS IDE with dual AI pipelines — a local pipeline powered by a 4B MLX model for instant, private daily coding, and a cloud pipeline powered by OpenRouter for agentic, multi-file work at scale. The two pipelines share an editor and infrastructure but are architecturally independent.
 
 ## Core Architecture
 
-### Layered Architecture
-
-The application follows a layered architecture pattern:
+### Dual-Pipeline Design
 
 ```
-┌─────────────────────────────────────────┐
-│              UI Layer                    │
-│  SwiftUI Views + AppKit Components      │
-├─────────────────────────────────────────┤
-│            Service Layer                 │
-│  Business Logic + State Management      │
-├─────────────────────────────────────────┤
-│            Core Layer                   │
-│  Utilities + Protocols + Models        │
-├─────────────────────────────────────────┤
-│           Data Layer                    │
-│  File System + Database + Persistence   │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                        UI LAYER                                  │
+│  SwiftUI Views · AppKit Components · NSTextView · Terminal      │
+│  File Tree · Command Palette · Panels · Settings                 │
+├──────────────────────────────────────────────────────────────────┤
+│                        CORE LAYER                                │
+│  EventBus · CommandRegistry · DependencyContainer · Models       │
+├──────────────────────────────────────────────────────────────────┤
+│                     SHARED SERVICES                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐ │
+│  │ CodebaseIndex│  │ Tool Impls   │  │ FileSystem · Terminal  │ │
+│  │ SQLite, FTS5, │  │ (AITool      │  │ Session · Settings    │ │
+│  │ symbols,      │  │  protocol)   │  │ EventBus              │ │
+│  │ embeddings    │  │              │  │                        │ │
+│  └──────────────┘  └──────────────┘  └────────────────────────┘ │
+├──────────────────────┬───────────────────────────────────────────┤
+│   LOCAL AI PIPELINE  │           CLOUD AI PIPELINE               │
+│                      │                                           │
+│ ┌──────────────────┐ │ ┌──────────────────────────────────────┐ │
+│ │ LocalInteraction │ │ │ ConversationOrchestrator             │ │
+│ │ Service          │ │ │ ┌──────────┐                         │ │
+│ │ ─ Direct LLM     │ │ │ │ Planner  │                         │ │
+│ │   call to 4B MLX │ │ │ └────┬─────┘                         │ │
+│ │ ─ No orchestrate │ │ │      v                               │ │
+│ │ ─ No tool loop   │ │ │ ┌──────────┐  ┌──────────────┐     │ │
+│ │ ─ No RAG injection│ │ │ │ Worker   │→│ Tool Executor│     │ │
+│ │ ─ Simpler context │ │ │ │(ToolLoop)│  │ (AITool impls)│     │ │
+│ └──────────────────┘ │ │ └────┬─────┘  └──────────────┘     │ │
+│                      │ │      v                               │ │
+│ ┌──────────────────┐ │ │ ┌──────────┐                         │ │
+│ │ InlineCompletion │ │ │ │ QAReview │                         │ │
+│ │ Engine            │ │ │ └────┬─────┘                         │ │
+│ │ ─ 4B MLX <100ms  │ │ │      v                               │ │
+│ │ ─ Ghost text      │ │ │ ┌──────────┐                         │ │
+│ │ ─ Cache + rank    │ │ │ │ Final    │                         │ │
+│ └──────────────────┘ │ │ └──────────┘                         │ │
+│                      │ └──────────────────────────────────────┘ │
+│ ┌──────────────────┐ │ ┌──────────────────────────────────────┐ │
+│ │ InlinePopover    │ │ │ RAGEngine                             │ │
+│ │ ─ Cursor-anchored│ │ │ ─ Retrieval + ranking                │ │
+│ │ ─ File-scoped QA │ │ │ ─ Context injection (cloud only)     │ │
+│ │ ─ Quick explain   │ │ │ ─ Evidence fusion                   │ │
+│ └──────────────────┘ │ └──────────────────────────────────────┘ │
+└──────────────────────┴───────────────────────────────────────────┘
 ```
 
-### Key Components
+### Key Architectural Decision: Two Separate AI Pipelines
 
-#### 1. UI Layer (`Components/`)
+Local and cloud pipelines share ZERO AI execution code. The only shared components are:
 
-- **CodeEditorView**: Main code editor with syntax highlighting
-- **ModernFileTreeCoordinator**: File tree navigation and management
-- **MessageListView**: Chat interface for AI interactions
-- **CommandPaletteOverlayView**: Quick command execution
+| Shared Component | Used By | How |
+|---|---|---|
+| CodebaseIndex | Both | Read-only queries for context and search |
+| Tool implementations (AITool protocol) | Cloud only | Executed by ToolLoopHandler |
+| FileSystemService | Both | File I/O for context and tool results |
+| TerminalService | Both | Terminal operations |
+| EventBus | Both | Events for telemetry and UI updates |
+| CommandRegistry | Both | Commands triggered by AI or user |
+| DependencyContainer | Both | DI for shared services |
 
-#### 2. Service Layer (`Services/`)
+## Component Architecture
 
-- **WorkspaceService**: Project and file management
-- **ConversationManager**: AI chat and conversation handling
-- **AIToolExecutor**: Tool execution and sandboxing
-- **IndexCoordinator**: Code indexing and symbol resolution
-- **PowerManagementService**: Prevents system sleep during agent activity
+### 1. CodebaseIndex (`Services/Index/`)
 
-#### 3. Core Layer (`Core/`)
+The shared knowledge foundation. An SQLite database with FTS5 full-text search, symbol extraction, and embedding-based semantic search.
 
-- **CommandRegistry**: Command registration and execution
-- **EventBus**: Event-driven communication
-- **DependencyContainer**: Dependency injection
+**Key capabilities:**
+- File indexing with content hashing (skip unchanged files)
+- FTS5 full-text search with ranking
+- Symbol extraction (Swift, TypeScript, JavaScript, Python, regex fallback)
+- Semantic search via embedding vectors (O(n) currently, target: ANN)
+- File watching with intelligent debouncing
 
-#### 4. Data Layer
+**Consumers:**
+- Local pipeline: semantic search, symbol resolution for inline features
+- Cloud pipeline: RAG retrieval, tool-backed search (index_find_files, index_search_text, etc.)
+- UI: workspace search, symbol search
 
-- **DatabaseManager**: SQLite database operations
-- **FileSystemService**: File system abstraction
-- **IndexDatabase**: Symbol and code indexing storage
+**Database schema:**
+- `resources` — one row per indexed file (path, language, hash, summary)
+- `resources_fts` — FTS5 virtual table for full-text search
+- `symbols` — extracted symbols with location and kind
+- `code_chunks` — overlapping chunks with embedding vectors
 
-## Design Patterns
+### 2. Local AI Pipeline (`Services/LocalPipeline/`)
 
-### 1. Dependency Injection
+A minimal, fast path for the 4B MLX model.
 
-The application uses dependency injection through the `DependencyContainer`:
+**Components:**
 
-```swift
-class DependencyContainer {
-    static let shared = DependencyContainer()
-    
-    func registerServices() {
-        register(WorkspaceService.self) { WorkspaceService() }
-        register(ConversationManager.self) { ConversationManager() }
-        // ... other services
-    }
-}
+```
+LocalInteractionService
+  ─ receives: user input + optional explicit context (current file, selection)
+  ─ optionally queries CodebaseIndex for relevant context
+  ─ calls: LocalModelProcessAIService (4B MLX)
+  ─ returns: text response
+
+InlineCompletionEngine
+  ─ triggered by: text change events (debounced)
+  ─ builds: completion context (prefix, suffix, scope)
+  ─ optionally: retrieves context from CodebaseIndex
+  ─ calls: 4B MLX model for inline completion
+  ─ renders: ghost text in NSTextView
+  ─ accepts: Tab, dismisses: Esc
+
+InlinePopoverService
+  ─ triggered by: Cmd+I / selection context menu
+  ─ reads: current selection, file contents
+  ─ shows: floating popover anchored to cursor
+  ─ supports: explain, refactor, quick transform, find similar
+  ─ calls: 4B MLX model
 ```
 
-### 2. Observer Pattern
+**What the local pipeline does NOT have:**
+- No orchestration graph (no Planner, Worker, QA nodes)
+- No tool loop (no iterative tool execution)
+- No RAG context injection (context is explicitly requested, not prepended)
+- No planning or strategy synthesis
+- No conversation folding or memory management
 
-Event-driven communication using the `EventBus`:
+### 3. Cloud AI Pipeline (`Services/CloudPipeline/`)
 
-```swift
-protocol EventBusProtocol {
-    func publish<T: Event>(_ event: T)
-    func subscribe<T: Event>(to type: T.Type, handler: @escaping (T) -> Void)
-}
+A full-featured, graph-based orchestration pipeline for agentic coding with cloud models via OpenRouter.
+
+**Components:**
+
+```
+ConversationOrchestrator
+  ─ entry point for cloud AI interactions
+  ─ builds the execution graph:
+      StrategicPlanning → TacticalPlanning → Dispatcher
+        → ToolLoop (iterative) → BranchReview
+          → (optional) QAToolOutputReview → QAQualityReview
+        → FinalResponse
+
+RAGEngine
+  ─ only used in cloud pipeline
+  ─ retrieves codebase context via CodebaseIndex
+  ─ classifies intent (bugfix, feature, refactor, etc.)
+  ─ fuses evidence with ranking (semantic + structural + recency)
+  ─ injects as "RAG CONTEXT:" block in cloud requests
+
+ToolLoopHandler
+  ─ iterative execution loop with stall detection
+  ─ deduplication, mutation tracking, recovery strategies
+  ─ max iterations: 50 (configurable)
+  ─ only runs for cloud model requests
+
+Tool implementations
+  ─ conform to AITool protocol
+  ─ shared implementations, NOT shared execution loop
+  ─ cloud pipeline executes them via ToolLoopHandler
 ```
 
-### 3. Coordinator Pattern
+**What the cloud pipeline does NOT do:**
+- No inline completion (that's local-only)
+- No inline popover Q&A (that's local-only)
+- No direct file-level quick transforms (those are local-only)
 
-UI coordination using coordinators:
+### 4. AI Router (`Services/AIRouter.swift`)
 
-```swift
-class ModernFileTreeCoordinator {
-    private let configuration: Configuration
-    private weak var outlineView: NSOutlineView?
-    
-    func attach(outlineView: NSOutlineView) {
-        // Setup and coordination logic
-    }
-}
+The component that decides which pipeline handles a given request.
+
+**Routing logic:**
+
+| User Action | Route | Why |
+|---|---|---|
+| Typing (completion) | Local | Latency-critical, context-limited |
+| Cmd+I on selection (explain) | Local | Single file, instant desired |
+| Cmd+Shift+I (inline chat) | Local | Cursor-anchored, file-scoped |
+| Chat panel message (local mode) | Local | User chose local |
+| Chat panel message (cloud mode) | Cloud | User chose cloud |
+| Agentic task ("refactor X across project") | Cloud | Needs tools, multi-file |
+| Semantic search (Cmd+Shift+F) | CodebaseIndex directly | No AI needed |
+| Diagnostics explanation | Local | Single file, instant |
+
+**Explicit user control:**
+- Chat panel has a local/cloud toggle per conversation
+- Agentic mode toggle enables cloud pipeline for chat
+- Completion and inline features are always local
+- Future: smart auto-routing based on query complexity
+
+### 5. ConversationManager (`Services/ConversationManager.swift`)
+
+**Planned refactoring target.** Currently a god object managing both pipelines. Will be split into:
+
+```
+ConversationManager (simplified router)
+  ├── LocalInteractionService (new, simple)
+  ├── CloudConversationService (extracted from current manager)
+  └── SessionManager (tabs, history, state)
 ```
 
-### 4. Strategy Pattern
+### 6. Tool System (`Services/Tools/`)
 
-Tool execution using strategy pattern:
+Individual tool implementations conforming to `AITool` protocol. These are the actual operations (read file, write file, search, execute command, etc.).
 
-```swift
-protocol AITool {
-    var name: String { get }
-    var description: String { get }
-    var parameters: [String: Any] { get }
-    func execute(arguments: ToolArguments) async throws -> String
-}
-```
-
-## Key Architectural Decisions
-
-### 1. SwiftUI + AppKit Hybrid
-
-- **SwiftUI** for modern, declarative UI
-- **AppKit** for complex components (NSTextView, NSOutlineView)
-- **Bridging** through NSViewRepresentable
-
-### 2. Actor-Based Concurrency
-
-- **@MainActor** for UI components
-- **Actor** for shared mutable state
-- **Async/Await** for asynchronous operations
-
-#### Concurrency Patterns
-
-**1. MainActor Isolation**
-
-```swift
-@MainActor
-class ConversationManager {
-    // All properties and methods are automatically isolated to main actor
-    @Published var messages: [ChatMessage] = []
-    
-    func sendMessage() {
-        // Safe to update UI state directly
-    }
-}
-```
-
-**2. Actor for Thread-Safe State**
-
-```swift
-actor DatabaseManager {
-    private var cache: [String: Data] = [:]
-    
-    func get(_ key: String) -> Data? {
-        cache[key]
-    }
-    
-    func set(_ key: String, value: Data) {
-        cache[key] = value
-    }
-}
-```
-
-**3. Task-Based Async Work**
-
-```swift
-// For non-MainActor async work
-Task {
-    let result = try await someAsyncOperation()
-    await MainActor.run {
-        // Update UI on main actor
-        self.updateUI(result)
-    }
-}
-
-// For MainActor work
-Task { @MainActor in
-    self.updateUI()
-}
-```
-
-**4. Debouncing with Task**
-
-```swift
-private func debounceSearch() {
-    searchTask?.cancel()
-    searchTask = Task { @MainActor in
-        try? await Task.sleep(nanoseconds: 250_000_000)
-        if !Task.isCancelled {
-            performSearch()
-        }
-    }
-}
-```
-
-### 3. Modular Tool System
-
-- **Protocol-based** tool definitions
-- **Sandboxed** execution environment
-- **Extensible** architecture for new tools
-
-### 4. Event-Driven Communication
-
-- **Loose coupling** between components
-- **Reactive** state management
-- **Testable** event handling
-
-### 5. Error Handling
-
-- **Typed errors** using Swift's `Error` protocol
-- **Context-rich error messages** with operation context
-- **Graceful degradation** for non-critical failures
-
-### 6. Local Model Tool-Calling Formats
-
-- **Model-native formats only** for local tool calling
-- **Qwen 3.5 uses native JSON tool calling**
-- **Do not normalize Qwen 3.5 to XML**
-- **XML parsing remains only for models that are actually trained or templated for XML**
-
-For Qwen 3.5 specifically, the local runtime must treat tool calls as JSON objects rendered inside the tagged envelope expected by the JSON parser:
-
-```text
-<tool_call>
-{"name":"function_name","arguments":{"key":"value"}}
-</tool_call>
-```
-
-This decision exists to prevent regressions where an XML-oriented compatibility template or fallback parser is accidentally applied to a model whose native tool-calling behavior is JSON-based. If Qwen 3.5 tooling regresses, verify:
-
-- the catalog entry still uses `ToolCallFormat.json`
-- runtime compatibility template rewriting does not inject XML tool instructions
-- fallback parsing for Qwen 3.5 does not prioritize XML recovery
-- tests for Qwen 3.5 assert JSON-native behavior rather than XML behavior
-
-### 7. Power Management
-
-The IDE prevents macOS sleep/screen saver during agent activity to ensure long-running operations complete successfully.
-
-**Implementation:**
-
-- **PowerManagementService**: Uses IOKit power assertions (`IOPMAssertionCreateWithName`) to prevent system sleep
-- **Automatic lifecycle**: Assertions are created when agent becomes active (`isSending = true`) and released when idle
-- **Power-conscious**: Uses `kIOPMAssertPreventUserIdleSystemSleep` which prevents system sleep but allows display to dim
-
-```swift
-@MainActor
-final class PowerManagementService: PowerManagementServiceProtocol {
-    func beginPreventingSleep() -> Bool {
-        // Creates IOKit power assertion
-        IOPMAssertionCreateWithName(
-            kIOPMAssertPreventUserIdleSystemSleep,
-            IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            assertionName,
-            &assertionID
-        )
-    }
-    
-    func stopPreventingSleep() {
-        // Releases assertion, normal sleep behavior resumes
-        IOPMAssertionRelease(assertionID)
-    }
-}
-```
-
-**Integration with ConversationManager:**
-
-The service observes `isSending` state changes and automatically manages power assertions:
-
-```swift
-$isSending
-    .removeDuplicates()
-    .sink { [weak self] isSending in
-        if isSending {
-            powerManagementService.beginPreventingSleep()
-        } else {
-            powerManagementService.stopPreventingSleep()
-        }
-    }
-```
-
-**Safety guarantees:**
-
-- macOS automatically cleans up orphaned assertions if app crashes
-- Service is idempotent - multiple calls to begin/stop are safe
-- Protocol-based design allows mocking in unit tests
-
-#### Crash & Exception Capture (Centralized)
-
-The IDE treats **any caught/thrown error** as a signal for quality improvement. We capture errors **centrally** with:
-
-- **Operation context** (a stable string describing what we were doing)
-- **Callsite** (`file`, `function`, `line`)
-- **Optional metadata** (key/value strings)
-
-This is implemented by:
-
-- `ErrorManager` (the centralized entry point for UI + error normalization)
-- `CrashReporter` (the centralized persistence engine)
-
-**Log location (project-scoped):**
-
-- `.ide/logs/crash.ndjson`
-
-**Log format:** newline-delimited JSON (NDJSON), one event per line.
-
-**Event schema (CrashReportEvent):**
-
-```json
-{
-  "ts": "2026-01-12T09:12:31Z",
-  "session": "<uuid>",
-  "operation": "WorkspaceService.rename",
-  "errorType": "Foundation.NSError",
-  "errorDescription": "File not found",
-  "file": "Services/WorkspaceService.swift",
-  "function": "rename(from:to:)",
-  "line": 123,
-  "metadata": {
-    "path": "src/Foo.swift"
-  }
-}
-```
-
-**How errors flow:**
-
-- Code catches an error and calls `errorManager.handle(error, context: "SomeOperation")`
-- `ErrorManager` converts to `AppError` for UI display
-- `ErrorManager` always invokes `CrashReporter.shared.capture(...)`
-- `CrashReporter` writes the event to `.ide/logs/crash.ndjson` (and to App Support logs when no project root is set)
-
-#### Error Handling Patterns
-
-**1. Custom Error Types**
-
-```swift
-enum AppError: Error {
-    case fileNotFound(path: String)
-    case invalidOperation(String)
-    case aiServiceError(String)
-    
-    var localizedDescription: String {
-        switch self {
-        case .fileNotFound(let path):
-            return "File not found: \(path)"
-        case .invalidOperation(let msg):
-            return "Invalid operation: \(msg)"
-        case .aiServiceError(let msg):
-            return "AI service error: \(msg)"
-        }
-    }
-}
-```
-
-**2. Context-Rich Error Conversion**
-
-```swift
-extension WorkspaceService {
-    private func mapToAppError(_ error: Error, operation: String) -> AppError {
-        if let appError = error as? AppError {
-            return appError
-        }
-        return .unknown("\(operation): \(error.localizedDescription)")
-    }
-    
-    func deleteFile(at url: URL) throws {
-        do {
-            try fileSystemService.deleteFile(at: url)
-        } catch {
-            throw mapToAppError(error, operation: "deleteFile")
-        }
-    }
-}
-```
-
-**3. Result-Based Error Handling**
-
-```swift
-func loadFile(at url: URL) -> Result<String, AppError> {
-    do {
-        let content = try fileSystemService.readFile(at: url)
-        return .success(content)
-    } catch {
-        return .failure(.fileNotFound(path: url.path))
-    }
-}
-```
+**Key design:**
+- Tools are shared between pipelines as implementation code
+- Only the cloud pipeline executes tools iteratively via ToolLoopHandler
+- The local pipeline never invokes tools (too unreliable for 4B model)
+- Tools have no knowledge of which pipeline invoked them
 
 ## Data Flow
 
+### Local Pipeline: Inline Q&A
+
 ```
-User Input → UI Component → Service → Core/Database → Response
-    ↑                                                    ↓
-UI Update ← Event Bus ← Service Response ← Core/Database
+User selects code → Cmd+I
+  → InlinePopoverService.show(for: selection)
+    → reads current file from FileEditorService
+    → builds prompt: "Explain this code: ..."
+    → calls LocalModelProcessAIService.generate(prompt)
+    → 4B MLX model responds
+  → shows response in cursor-anchored popover
+  → user dismisses with Esc
+  Total: ~100-300ms
 ```
 
-## State Management
+### Local Pipeline: Code Completion
 
-### 1. SwiftUI State
+```
+User types character
+  → NSTextView.textDidChange
+    → EditorSignalBridge.scheduleAutomaticRequest()
+      → InlineCompletionEngine.requestCompletion()
+        → CompletionContextAssembler.buildContext() (prefix, suffix, scope)
+        → CompletionInferenceService.infer() → 4B MLX model
+        → SuggestionRanker.evaluate()
+        → publish suggestion
+      → CodeEditorTextView.showGhostText(suggestion)
+  → User presses Tab → accept
+  Total: ~50-150ms
+```
 
-- **@State** for local component state
-- **@StateObject** for shared state objects
-- **@EnvironmentObject** for global state
+### Cloud Pipeline: Agentic Request
 
-### 2. Service State
+```
+User types: "Add error handling to all API routes"
+  → ConversationManager routes to CloudConversationService
+    → ConversationOrchestrator.run()
+      → StrategicPlanningNode (creates a plan)
+      → TacticalPlanningNode (merges user input into plan)
+      → DispatcherNode (sends initial LLM response)
+        → model responds with tool calls
+      → ToolLoopNode:
+        [loop] → execute tool calls → send follow-up → repeat
+        → stall detection, mutation tracking, recovery
+      → BranchReviewNode (check if branch complete)
+      → FinalResponseNode (format summary)
+    → response shown in chat panel
+  Total: ~5-60s (depending on complexity)
+```
 
-- **@MainActor** for UI-related services
-- **Actor** for thread-safe state management
-- **Combine** publishers for reactive updates
+## Pipeline Isolation Rules
 
-### 3. Persistence
+1. **No shared state** between pipelines beyond what's in shared services. Local and cloud conversations have separate histories, separate contexts, separate caches.
 
-- **SQLite** for structured data
-- **File System** for project files
-- **UserDefaults** for preferences
+2. **No shared execution code.** Local code path is simple: prompt → model → response. Cloud code path is complex: plan → execute → loop → review → final. They share zero lines of AI execution logic.
 
-## Testing Architecture
+3. **RAG is cloud-only.** The local model gets explicit context (current file, selection) — not a RAG-injected context block. If the local model needs codebase context, it's queried explicitly from the index.
 
-### 1. Unit Tests
+4. **Tools are cloud-only.** The local model never invokes tools. It would be unreliable and slow. Tools are for cloud models with sufficient reasoning capability.
 
-- ** XCTest** framework
-- **Dependency Injection** for mocking
-- **Test Doubles** for external dependencies
+5. **Inline completion is local-only.** Never route a completion request to the cloud. The latency would defeat the purpose.
 
-### 2. UI Tests
+## Service Layer Responsibilities
 
-- **XCUITest** framework
-- **Accessibility** identifiers
-- **Page Object** pattern
+### Shared (non-AI) Services
 
-### 3. Integration Tests
+| Service | Responsibility |
+|---|---|
+| `EventBus` | Typed event publish/subscribe |
+| `CommandRegistry` | Command registration and execution |
+| `DependencyContainer` | DI container (migrate singletons here) |
+| `FileSystemService` | File I/O operations |
+| `WorkspaceService` | Project management, path resolution |
+| `FileEditorService` | Open file state management |
+| `TerminalService` | Terminal emulation |
+| `SessionService` | Layout persistence |
+| `ErrorManager` | Error logging and reporting |
+| `PowerManagementService` | Prevent sleep during AI activity |
+| `SettingsStore` | User preferences (UserDefaults + Keychain) |
 
-- **End-to-end** workflows
-- **Database** testing
-- **File System** testing
+### Local Pipeline Services
 
-## Performance Considerations
+| Service | Responsibility |
+|---|---|
+| `LocalInteractionService` | Direct 4B model interaction for Q&A |
+| `InlineCompletionEngine` | Ghost text code completion |
+| `InlinePopoverService` | Cursor-anchored assistant |
+| `LocalModelProcessAIService` | MLX model loading and inference |
 
-### 1. Incremental Highlighting
+### Cloud Pipeline Services
 
-- **Change detection** for syntax highlighting
-- **Caching** of previous results
-- **Async** processing
+| Service | Responsibility |
+|---|---|
+| `ConversationOrchestrator` | Graph-based orchestration |
+| `RAGEngine` | Codebase context retrieval and injection |
+| `ToolLoopHandler` | Iterative tool execution loop |
+| `QAReviewHandler` | Quality assurance review |
+| `OpenRouterAIService` | Cloud model API client |
+| `PlanningService` | Strategic/tactical plan synthesis |
 
-### 2. Lazy Loading
+## Directory Structure (Target)
 
-- **On-demand** file indexing
-- **Virtualized** lists
-- **Background** processing
+```
+osx-ide/
+├── Core/                     # Shared infrastructure
+│   ├── EventBus/
+│   ├── CommandRegistry/
+│   ├── DependencyContainer/
+│   ├── StandardCommands.swift
+│   └── Models/
+├── Components/               # UI components
+│   ├── Editor/
+│   ├── FileTree/
+│   ├── Chat/
+│   ├── Terminal/
+│   ├── Settings/
+│   └── Shared/
+├── Services/
+│   ├── Index/                # CodebaseIndex (shared)
+│   ├── Tools/                # AITool implementations (shared)
+│   ├── LocalPipeline/        # Local 4B AI pipeline
+│   │   ├── LocalInteractionService.swift
+│   │   ├── InlinePopoverService.swift
+│   │   └── (trims existing InlineCompletion/)
+│   ├── CloudPipeline/        # Cloud AI pipeline
+│   │   ├── ConversationOrchestrator/
+│   │   ├── RAGEngine/
+│   │   ├── ToolLoopHandler.swift
+│   │   └── QAReviewHandler.swift
+│   ├── LocalModels/          # MLX model management
+│   ├── OpenRouterAI/         # OpenRouter API client
+│   ├── Session/
+│   ├── Errors/
+│   ├── Logging/
+│   └── Events/
+├── Highlighting/
+├── Markdown/
+└── Utilities/
+```
 
-### 3. Memory Management
+## Migration Path from Current Architecture
 
-- **Weak references** to avoid retain cycles
-- **Value types** for data models
-- **Actor isolation** for shared state
+The current codebase has all services intertwined in `Services/` with no local/cloud separation. Migration to the target architecture happens in phases:
 
-## Security
+**Phase 1 — Cut (delete misaligned code):**
+- Delete `Services/Index/Memory/` (overengineered)
+- Delete `Services/Index/Scoring/` (unclear value)
+- Delete `Services/Index/AIEnrichment.swift` (expensive, unclear ROI)
+- Remove RAG injection from `AIInteractionCoordinator` (make cloud-only)
 
-### 1. Tool Sandboxing
+**Phase 2 — Isolate (separate pipelines):**
+- Extract `LocalInteractionService` from current `ConversationManager`
+- Rename current `Services/ConversationFlow/` → `Services/CloudPipeline/`
+- Move `InlineCompletion/` under `LocalPipeline/`
+- Create `AIRouter` for pipeline routing
 
-- **Restricted** file system access
-- **Validation** of tool inputs
-- **Error handling** for malicious inputs
+**Phase 3 — Simplify local path:**
+- Remove orchestration from local path
+- Remove tool loop from local path
+- Simplify `ConversationManager` to a router + two service backends
 
-### 2. Data Protection
-
-- **Keychain** for sensitive data
-- **App Sandbox** entitlements
-- **Input validation** throughout
-
-## Extensibility
-
-### 1. Plugin Architecture
-
-- **Protocol-based** plugin system
-- **Dynamic** loading of tools
-- **Configuration** driven behavior
-
-### 2. Language Support
-
-- **Modular** syntax highlighting
-- **Extensible** language modules
-- **Fallback** highlighting system
-
-## Future Considerations
-
-### 1. Multi-Platform Support
-
-- **Abstract** platform-specific code
-- **Shared** business logic
-- **Platform** adapters
-
-### 2. Cloud Integration
-
-- **Sync** capabilities
-- **Collaborative** features
-- **Remote** development
-
-### 3. Advanced AI Features
-
-- **Context-aware** assistance
-- **Code generation**
-- **Refactoring** suggestions
-
-## Conclusion
-
-The architecture of osx-ide emphasizes modularity, testability, and maintainability while providing a powerful development experience. The combination of modern Swift patterns with proven architectural principles ensures the application can evolve and scale over time.
+**Phase 4 — Polish:**
+- Finalize directory structure
+- Fix inline completion latency with 4B model
+- Fix cloud orchestration bugs
+- Add inline popover
