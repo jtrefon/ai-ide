@@ -12,6 +12,7 @@ final class AIInteractionCoordinator {
         let runId: String?
         let stage: AIRequestStage?
         let conversationId: String?
+        let usesLocalModel: Bool
 
         init(
             messages: [ChatMessage],
@@ -22,7 +23,8 @@ final class AIInteractionCoordinator {
             projectRoot: URL,
             runId: String? = nil,
             stage: AIRequestStage? = nil,
-            conversationId: String? = nil
+            conversationId: String? = nil,
+            usesLocalModel: Bool = false
         ) {
             self.messages = messages
             self.mediaAttachments = mediaAttachments
@@ -33,6 +35,7 @@ final class AIInteractionCoordinator {
             self.runId = runId
             self.stage = stage
             self.conversationId = conversationId
+            self.usesLocalModel = usesLocalModel
         }
     }
 
@@ -80,22 +83,27 @@ final class AIInteractionCoordinator {
         )
         var lastError: AppError?
         let settings = settingsStore.load(includeApiKey: false)
-        let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
-        let retriever: (any RAGRetriever)?
-        if let codebaseIndex, shouldUseRAGRetrieval(for: request.stage, settings: settings) {
-            retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
+        let augmentedContext: String?
+        if request.usesLocalModel {
+            augmentedContext = request.explicitContext
         } else {
-            retriever = nil
+            let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
+            let retriever: (any RAGRetriever)?
+            if let codebaseIndex, shouldUseRAGRetrieval(for: request.stage, settings: settings) {
+                retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
+            } else {
+                retriever = nil
+            }
+            augmentedContext = await RAGContextBuilder.buildContext(
+                userInput: userInput,
+                explicitContext: request.explicitContext,
+                retriever: retriever,
+                projectRoot: request.projectRoot,
+                stage: request.stage,
+                conversationId: request.conversationId,
+                eventBus: eventBus
+            )
         }
-        let augmentedContext = await RAGContextBuilder.buildContext(
-            userInput: userInput,
-            explicitContext: request.explicitContext,
-            retriever: retriever,
-            projectRoot: request.projectRoot,
-            stage: request.stage,
-            conversationId: request.conversationId,
-            eventBus: eventBus
-        )
 
         for attempt in 1...maxAttempts {
             if Task.isCancelled {

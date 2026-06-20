@@ -99,6 +99,25 @@ final class ConversationSendCoordinator {
     }
 
     private func executeConversationFlow(_ request: SendRequest) async throws -> AIServiceResponse {
+        if request.usesLocalModel {
+            let messages = historyCoordinator.messages
+            let result = await aiInteractionCoordinator.sendMessageWithRetry(
+                AIInteractionCoordinator.SendMessageWithRetryRequest(
+                    messages: messages,
+                    mediaAttachments: request.mediaAttachments,
+                    explicitContext: request.explicitContext,
+                    tools: [],
+                    mode: request.mode,
+                    projectRoot: request.projectRoot,
+                    runId: request.runId,
+                    stage: nil,
+                    conversationId: request.conversationId,
+                    usesLocalModel: true
+                )
+            )
+            return try result.get()
+        }
+
         await OrchestrationRunStore.shared.setProjectRoot(request.projectRoot)
 
         let graph = ConversationFlowGraphFactory.makeGraph(
