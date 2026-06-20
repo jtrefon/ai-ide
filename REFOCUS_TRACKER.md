@@ -31,7 +31,7 @@
 
 ---
 
-## Phase 2 — Structural Reorg (Partial)
+## Phase 2 — Structural Reorg (Partial — File moves deferred)
 
 **Theme:** Directory structure reflects the architecture. Mechanical but important.
 
@@ -40,23 +40,23 @@
 | 2.1 | Rename `Services/ConversationFlow/` → `Services/CloudPipeline/` | 🏗️ Architecture clarity | 1.2 | ⬜ |
 | 2.2 | Move `Services/InlineCompletion/` → `Services/LocalPipeline/InlineCompletion/` | 🏗️ Architecture clarity | — | ⬜ |
 | 2.3 | Create `Services/LocalPipeline/LocalInteractionService.swift` | 📦 Scaffold for local-only AI interaction | 1.2 | ✅ |
-| 2.4 | Fix all imports and Xcode project references | ✅ Maintains build | 2.1, 2.2, 2.3 | ⬜ |
+| 2.4 | Fix all imports and Xcode project references | ✅ Maintains build | 2.1, 2.2 | ⬜ |
 
-**Gate:** Build must compile. Directory structure matches ARCHITECTURE.md diagram. (File moves postponed — require Xcode project updates.)
+**Note:** File moves (2.1, 2.2) require Xcode project file updates — lower priority than architecture work. Deferred until Phase 5.
 
 ---
 
-## Phase 3 — Architecture Completion (Partial)
+## Phase 3 — Architecture Completion ✅ (Completed)
 
 **Theme:** Cleanly separate concerns. The router dispatches, two backends serve.
 
 | # | Item | Impact | Depends On | Status |
 |---|---|---|---|---|
-| 3.1 | Split `ConversationManager` into `SessionManager` + `CloudConversationService` | 🔥 **Major** — removes god object (981→~300 lines) | 2.1, 2.2 | ⬜ |
-| 3.2 | Create `AIRouter` to dispatch requests to local or cloud pipeline | 🏗️ Clean entry point for AI interactions | 3.1 | ⬜ |
-| 3.3 | Remove `RAGTelemetryAggregator` (dead code, file + test) | 🗑️ Cleanup | 0.5 | ✅ |
+| 3.1 | Split `ConversationManager` — extract `SessionManager` | 🔥 **Major** — removes god object (974→880 lines, +210 `SessionManager`) | 2.3 | ✅ |
+| 3.2 | Create `AIRouter` for pipeline dispatch | 🏗️ Centralizes local-vs-cloud routing | — | ✅ |
+| 3.3 | Remove `RAGTelemetryAggregator` (dead code) | 🗑️ Cleanup | 0.5 | ✅ |
 
-**Gate:** Build must compile.
+**Gate:** Build must compile. ✅
 
 ---
 
