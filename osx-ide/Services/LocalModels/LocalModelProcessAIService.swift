@@ -454,19 +454,39 @@ actor LocalModelProcessAIService: AIService {
                     return nil
                 }
                 let name = String(content[nameRange])
-                let argsText = String(content[argsRange])
-                // Parse JSON-like bare key:value pairs (not standard JSON)
+                var argsText = String(content[argsRange])
+
+                // Gemma 4 uses <|"|> (token id 52) as a string delimiter instead of
+                // regular quote characters. Replace with " so the text becomes valid JSON.
+                argsText = argsText.replacingOccurrences(of: "<|\"|>", with: "\"")
+
+                // Try proper JSON parsing first (most reliable)
+                let jsonText = "{\(argsText)}"
+                if let jsonData = jsonText.data(using: .utf8),
+                   let jsonObj = try? JSONSerialization.jsonObject(with: jsonData),
+                   let argsDict = jsonObj as? [String: Any] {
+                    return AIToolCall(
+                        id: UUID().uuidString,
+                        name: name,
+                        arguments: argsDict
+                    )
+                }
+
+                // Fallback: parse bare key:value pairs (handles unquoted keys or other edge cases)
                 var args: [String: String] = [:]
-                let pairPattern = #"(\w+):(.*?)(?:,(?=\w+:)|$)"#
+                let stripped = argsText
+                    .replacingOccurrences(of: "\"", with: "")
+                    .replacingOccurrences(of: "<|\"|>", with: "")
+                let pairPattern = #"(\w+):(.*?)(?:,\s*\w+|$)"#
                 if let pairRegex = try? NSRegularExpression(pattern: pairPattern, options: [.dotMatchesLineSeparators]) {
-                    let pairRange = NSRange(argsText.startIndex..<argsText.endIndex, in: argsText)
-                    let pairMatches = pairRegex.matches(in: argsText, options: [], range: pairRange)
+                    let pairRange = NSRange(stripped.startIndex..<stripped.endIndex, in: stripped)
+                    let pairMatches = pairRegex.matches(in: stripped, options: [], range: pairRange)
                     for pair in pairMatches {
                         guard pair.numberOfRanges >= 3,
-                              let keyRange = Range(pair.range(at: 1), in: argsText),
-                              let valRange = Range(pair.range(at: 2), in: argsText) else { continue }
-                        let key = String(argsText[keyRange]).trimmingCharacters(in: .whitespaces)
-                        let val = String(argsText[valRange]).trimmingCharacters(in: .whitespaces)
+                              let keyRange = Range(pair.range(at: 1), in: stripped),
+                              let valRange = Range(pair.range(at: 2), in: stripped) else { continue }
+                        let key = String(stripped[keyRange])
+                        let val = String(stripped[valRange]).trimmingCharacters(in: .whitespaces)
                         args[key] = val
                     }
                 }
