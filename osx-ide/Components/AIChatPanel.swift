@@ -109,13 +109,13 @@ struct AIChatPanel: View {
                     sendMessage()
                 }
             )
-
-            // Mode selector
-            HStack(spacing: 8) {
-                Image(systemName: conversationManager.currentMode.icon)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(AccessibilityID.aiChatPanel)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
                 Picker(localized("ai_chat.mode"), selection: modeBinding) {
                     ForEach(AIMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
@@ -123,13 +123,6 @@ struct AIChatPanel: View {
                 }
                 .pickerStyle(.menu)
                 .frame(width: 100)
-
-                Text(conversationManager.currentMode.description)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Spacer()
 
                 Menu {
                     Section("Cloud") {
@@ -189,29 +182,15 @@ struct AIChatPanel: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: isOfflineMode ? "network.slash" : "cloud.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
                         Text("\(modelDisplayName) [\(intensityShortLabel(reasoningIntensity))]")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .cornerRadius(5)
+                    .font(.caption2)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Color(nsColor: .controlBackgroundColor))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AccessibilityID.aiChatPanel)
-        .background(Color(nsColor: .controlBackgroundColor))
         .onAppear {
             refreshModelState()
         }

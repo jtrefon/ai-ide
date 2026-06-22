@@ -26,46 +26,22 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
             // Header with Search Input
             HStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: max(10, context.ui.fontSize - 2)))
-                        .foregroundStyle(.secondary)
-
-                    TextField(localized("file_explorer.search.placeholder"), text: $searchQuery)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: CGFloat(context.ui.fontSize)))
-
-                    if !searchQuery.isEmpty {
-                        Button(action: { searchQuery = "" }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: max(10, context.ui.fontSize - 2)))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(6)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .cornerRadius(6)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(.separator.opacity(0.3), lineWidth: 1)
-                )
+                TextField(localized("file_explorer.search.placeholder"), text: $searchQuery)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body)
 
                 Button(action: {
                     refreshToken += 1
                 }) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: max(10, context.ui.fontSize - 2)))
                 }
                 .buttonStyle(.plain)
                 .help(localized("file_explorer.refresh_help"))
             }
-            .padding(8)
-            .frame(height: 48)  // Slightly taller for search bar
+            .padding(6)
+            .frame(height: 36)
             .background(.windowBackground)
             // Modern macOS v26 file tree with subtle styling
             ModernFileTreeView(

@@ -24,17 +24,10 @@ struct LanguageModulesTab: View {
     var body: some View {
         VStack(spacing: 0) {
             // Search Bar
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField(NSLocalizedString("language_modules.search.placeholder", comment: ""), text: $searchText)
-                    .textFieldStyle(.plain)
-            }
-            .padding(10)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .padding(.horizontal, 24)
-            .padding(.top, 16)
+            TextField(NSLocalizedString("language_modules.search.placeholder", comment: ""), text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
 
             ScrollView {
                 VStack(spacing: 20) {
