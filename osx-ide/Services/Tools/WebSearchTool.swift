@@ -54,8 +54,13 @@ struct WebSearchTool: AITool {
             targetURL = url
         }
 
-        // WKWebView must run on the main actor
-        let text = try await fetchText(url: targetURL)
+        // WKWebView must run on the main actor. Retry once if page is empty.
+        var text = try await fetchText(url: targetURL)
+        if text == "(empty page)" {
+            // Page may need extra time for async content — retry with longer timeout
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            text = try await fetchText(url: targetURL)
+        }
 
         guard !text.isEmpty else {
             return "No content retrieved from \(targetURL.absoluteString)."
