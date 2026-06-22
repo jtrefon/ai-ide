@@ -168,7 +168,7 @@ Expected: no Swift compilation errors from our changes. Non-zero exit may be fro
 
 | Phase | Scope | Key Changes | Status |
 |-------|-------|-------------|--------|
-| 6.0 | ShapeStyles & Typography | `.foregroundColor()`→`.foregroundStyle()`, `.font(.system(size:))`→semantic fonts, `Color(NSColor.*)`→SwiftUI ShapeStyles | 🔴 Not started |
+| 6.0 | ShapeStyles & Typography | `.foregroundColor()`→`.foregroundStyle()`, `.font(.system(size:))`→semantic fonts, `Color(NSColor.*)`→SwiftUI ShapeStyles | ✅ Complete |
 | 6.1 | Layout & Navigation | `NavigationSplitView` layout, `NSOutlineView`→`List(children:)`, remove `WindowAccessor`/`LayoutView`/`PanelCoordinator` | 🔴 Not started |
 | 6.2 | Toolbar & Search | `.toolbar {}` for all tab bars, `.searchable()` for all search fields (6 instances) | 🔴 Not started |
 | 6.3 | Settings | `Form` + `Section` + `.formStyle(.grouped)` for all settings tabs, remove `SettingsCard`/`SettingsRow` | 🔴 Not started |
