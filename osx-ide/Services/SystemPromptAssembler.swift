@@ -70,6 +70,10 @@ struct SystemPromptAssembler {
             sections.append(reasoningPrompt)
         }
 
+        // Inject OS context so the agent can use platform-native tools
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+        sections.append("You are running on macOS \(osVersion). You can use standard macOS CLI tools (swift, python, node, grep, sed, awk, curl, etc.) via the run_command tool.")
+
         return sections
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }

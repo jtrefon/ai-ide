@@ -231,12 +231,13 @@ final class ConversationSendCoordinator {
             )
             for msg in toolResults {
                 historyCoordinator.append(msg)
-                // If a tool failed with "Tool not found", inject a direct instruction
-                // so the model doesn't retry the same unavailable tool.
+                // If a tool failed with "Tool not found", redirect the agent to
+                // available tools instead of a dead-end error.
                 if msg.content.contains("Tool not found") {
+                    let available = localTools.map(\.name).sorted().joined(separator: ", ")
                     let correctionMsg = ChatMessage(
                         role: .system,
-                        content: "That tool is not available. Do NOT retry it. Use one of the tools listed in the error message above."
+                        content: "Tool unavailable. Available tools: \(available). Use one of these instead."
                     )
                     historyCoordinator.append(correctionMsg)
                 }
