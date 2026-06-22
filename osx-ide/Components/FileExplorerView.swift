@@ -32,7 +32,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: max(10, context.ui.fontSize - 2)))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
 
                     TextField(localized("file_explorer.search.placeholder"), text: $searchQuery)
                         .textFieldStyle(.plain)
@@ -42,17 +42,17 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                         Button(action: { searchQuery = "" }) {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: max(10, context.ui.fontSize - 2)))
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
                     }
                 }
                 .padding(6)
-                .background(Color(NSColor.controlBackgroundColor))
+                .background(Color(nsColor: .controlBackgroundColor))
                 .cornerRadius(6)
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color(NSColor.separatorColor).opacity(0.3), lineWidth: 1)
+                        .stroke(.separator.opacity(0.3), lineWidth: 1)
                 )
 
                 Button(action: {
@@ -66,7 +66,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
             }
             .padding(8)
             .frame(height: 48)  // Slightly taller for search bar
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(.windowBackground)
             // Modern macOS v26 file tree with subtle styling
             ModernFileTreeView(
                 rootURL: context.workspace.currentDirectory
@@ -133,7 +133,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 fontSize: context.ui.fontSize,
                 fontFamily: context.ui.fontFamily
             )
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(.windowBackground)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .layoutPriority(1)
             // SwiftUI context menu disabled to allow NSOutlineView native menu

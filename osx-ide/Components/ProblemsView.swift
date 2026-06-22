@@ -22,7 +22,7 @@ struct ProblemsView<Context: IDEContext>: View {
                                 .lineLimit(2)
                             Text(locationText(diagnostic))
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                         Spacer(minLength: 0)

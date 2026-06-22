@@ -84,11 +84,11 @@ struct ToolExecutionMessageView: View {
                 toolExecutionContent
             }
         }
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(NSColor.separatorColor).opacity(0.5), lineWidth: 1)
+                .stroke(.separator.opacity(0.5), lineWidth: 1)
         )
     }
 
@@ -101,12 +101,12 @@ struct ToolExecutionMessageView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(displayToolName)
                     .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .medium))
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.primary)
 
                 if let file = displayTargetFile {
                     Text(file)
                         .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -114,7 +114,7 @@ struct ToolExecutionMessageView: View {
                 if isReadFileTool, let readFileRangeLabel {
                     Text(readFileRangeLabel)
                         .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
 
                 if displayStatus == .executing {
@@ -126,7 +126,7 @@ struct ToolExecutionMessageView: View {
                         ).last.map(String.init) ?? trimmed
                         Text(lastLine)
                             .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
@@ -141,8 +141,8 @@ struct ToolExecutionMessageView: View {
                 HStack(spacing: 6) {
                     if let seconds = timeoutCenter.countdownSeconds {
                         Text("\(seconds)s")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.secondary)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
 
@@ -150,8 +150,8 @@ struct ToolExecutionMessageView: View {
                         timeoutCenter.cancelActiveToolNow()
                     } label: {
                         Image(systemName: "xmark.octagon")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.borderless)
                     .help("Kill tool")
@@ -160,8 +160,8 @@ struct ToolExecutionMessageView: View {
                         timeoutCenter.togglePause()
                     } label: {
                         Image(systemName: timeoutCenter.isPaused ? "play.fill" : "pause.fill")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.borderless)
                     .help(timeoutCenter.isPaused ? "Resume timeout" : "Pause timeout")
@@ -177,8 +177,8 @@ struct ToolExecutionMessageView: View {
                     }
                 }) {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.secondary)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.borderless)
             }
@@ -199,11 +199,11 @@ struct ToolExecutionMessageView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Preview")
                         .font(.system(size: CGFloat(max(9, fontSize - 4)), weight: .semibold))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     ScrollView {
                         Text(previewContent)
                             .font(.system(size: CGFloat(max(10, fontSize - 2)), design: .monospaced))
-                            .foregroundColor(.primary)
+                            .foregroundStyle(.primary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
                     }
@@ -232,7 +232,7 @@ struct ToolExecutionMessageView: View {
         ScrollView {
             Text(content)
                 .font(.system(size: CGFloat(max(10, fontSize - 2)), design: .monospaced))
-                .foregroundColor(.primary)
+                .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
         }
@@ -252,7 +252,7 @@ struct ToolExecutionMessageView: View {
                 if let target = displayTargetFile {
                     Text(target)
                         .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -275,7 +275,7 @@ struct ToolExecutionMessageView: View {
                 if let target = displayTargetFile {
                     Text(target)
                         .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -284,7 +284,7 @@ struct ToolExecutionMessageView: View {
             if let readFileRangeLabel {
                 Text(readFileRangeLabel)
                     .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
 
             genericPayloadPreview(content)
@@ -303,7 +303,7 @@ struct ToolExecutionMessageView: View {
                 if let status = displayStatus {
                     Text(status.rawValue.capitalized)
                         .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -335,16 +335,16 @@ struct ToolExecutionMessageView: View {
                     .frame(width: 16, height: 16)
             case .some(.completed):
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-                    .font(.system(size: 14))
+                    .foregroundStyle(.green)
+                    .font(.body)
             case .some(.failed):
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.red)
-                    .font(.system(size: 14))
+                    .foregroundStyle(.red)
+                    .font(.body)
             case .none:
                 Image(systemName: "wrench.and.screwdriver")
-                    .foregroundColor(.secondary)
-                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .font(.body)
             }
         }
         .frame(width: 16, height: 16)

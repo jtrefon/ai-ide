@@ -92,7 +92,7 @@ struct MessageContentCoordinator {
             return Color.accentColor
         }
 
-        return Color(NSColor.controlBackgroundColor)
+        return Color(nsColor: .controlBackgroundColor)
     }
 
     private func bubbleForegroundColor(for message: ChatMessage) -> Color {

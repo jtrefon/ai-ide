@@ -33,12 +33,12 @@ struct AIChatPanel: View {
                             } label: {
                                 HStack(spacing: 4) {
                                     Text(tab.title)
-                                        .font(.system(size: 12))
+                                        .font(.body)
                                         .lineLimit(1)
                                     if displayedTabs.count > 1 {
                                         Image(systemName: "xmark")
-                                            .font(.system(size: 8, weight: .medium))
-                                            .foregroundColor(.secondary)
+                                            .font(.caption2.weight(.medium))
+                                            .foregroundStyle(.secondary)
                                     }
                                 }
                                 .padding(.horizontal, 8)
@@ -58,7 +58,7 @@ struct AIChatPanel: View {
                     conversationManager.startNewConversation()
                 }) {
                     Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .frame(width: 18, height: 18)
                 }
                 .buttonStyle(.plain)
@@ -67,11 +67,11 @@ struct AIChatPanel: View {
                 .padding(.trailing, 6)
             }
             .frame(height: 26)
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(.windowBackground)
             .overlay(
                 Rectangle()
                     .frame(height: 1)
-                    .foregroundColor(Color(NSColor.separatorColor)),
+                    .foregroundStyle(.separator),
                 alignment: .bottom
             )
 
@@ -92,7 +92,7 @@ struct AIChatPanel: View {
             // Error display
             if let error = conversationManager.error {
                 Text(error)
-                    .foregroundColor(.red)
+                    .foregroundStyle(.red)
                     .font(.caption)
                     .padding(.horizontal)
                     .padding(.vertical, 4)
@@ -114,7 +114,7 @@ struct AIChatPanel: View {
             HStack(spacing: 8) {
                 Image(systemName: conversationManager.currentMode.icon)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
 
                 Picker(localized("ai_chat.mode"), selection: modeBinding) {
                     ForEach(AIMode.allCases) { mode in
@@ -126,7 +126,7 @@ struct AIChatPanel: View {
 
                 Text(conversationManager.currentMode.description)
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
 
                 Spacer()
@@ -190,14 +190,14 @@ struct AIChatPanel: View {
                     HStack(spacing: 4) {
                         Image(systemName: isOfflineMode ? "network.slash" : "cloud.fill")
                             .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         Text("\(modelDisplayName) [\(intensityShortLabel(reasoningIntensity))]")
                             .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(Color(NSColor.controlBackgroundColor))
+                    .background(Color(nsColor: .controlBackgroundColor))
                     .cornerRadius(5)
                 }
                 .menuStyle(.borderlessButton)
@@ -206,12 +206,12 @@ struct AIChatPanel: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(Color(nsColor: .controlBackgroundColor))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.aiChatPanel)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(Color(nsColor: .controlBackgroundColor))
         .onAppear {
             refreshModelState()
         }
@@ -287,21 +287,21 @@ struct AIChatPanel: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: issue.cooldownUntil == nil ? "exclamationmark.triangle.fill" : "clock.badge.exclamationmark")
-                        .foregroundColor(.orange)
+                        .foregroundStyle(.orange)
                     Text(providerIssueHeadline(issue))
                         .font(.caption.weight(.semibold))
-                        .foregroundColor(.primary)
+                        .foregroundStyle(.primary)
                     Spacer(minLength: 0)
                     if let countdownText {
                         Text(countdownText)
                             .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
                 Text(issue.message)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 12)

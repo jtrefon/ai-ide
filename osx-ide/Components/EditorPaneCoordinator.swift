@@ -111,14 +111,14 @@ struct EditorPaneCoordinator {
                                             pane.closeTab(id: tab.id)
                                         }) {
                                             Image(systemName: "xmark")
-                                                .font(.system(size: 10, weight: .semibold))
-                                                .foregroundColor(.secondary)
+                                                .font(.caption2.weight(.semibold))
+                                                .foregroundStyle(.secondary)
                                         }
                                         .buttonStyle(.plain)
                                     }
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 6)
-                                    .background(isActive ? Color(NSColor.controlBackgroundColor) : Color.clear)
+                                    .background(isActive ? Color(nsColor: .controlBackgroundColor) : Color.clear)
                                     .cornerRadius(6)
                                 }
                                 .buttonStyle(.plain)
@@ -130,7 +130,7 @@ struct EditorPaneCoordinator {
                     .padding(.vertical, 4)
                 }
                 .frame(height: 34)
-                .background(Color(NSColor.windowBackgroundColor))
+                .background(.windowBackground)
 
                 HStack(spacing: 0) {
                     CodeEditorView(

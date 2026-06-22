@@ -42,7 +42,7 @@ struct NewProjectDialog: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color(NSColor.controlBackgroundColor))
+                        .background(Color(nsColor: .controlBackgroundColor))
                         .cornerRadius(4)
 
                     Button(NSLocalizedString("new_project.browse", comment: "")) {
@@ -72,7 +72,7 @@ struct NewProjectDialog: View {
             if !projectName.isEmpty && !isValidProjectName(projectName) {
                 Text(NSLocalizedString("new_project.invalid_project_name", comment: ""))
                     .font(.caption)
-                    .foregroundColor(.red)
+                    .foregroundStyle(.red)
             }
 
             HStack {

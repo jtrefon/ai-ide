@@ -29,7 +29,7 @@ struct PanelCoordinator {
         if bottomViews.count == 1, let pluginView = bottomViews.first {
             pluginView.makeView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(NSColor.windowBackgroundColor))
+                .background(.windowBackground)
                 .frame(minHeight: 100)
         } else if bottomViews.count > 1 {
             let selectedName = ui.bottomPanelSelectedName
@@ -37,7 +37,7 @@ struct PanelCoordinator {
 
             selectedView.makeView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(NSColor.windowBackgroundColor))
+                .background(.windowBackground)
                 .frame(minHeight: 100)
         } else {
             EmptyView()
@@ -52,15 +52,15 @@ struct PanelCoordinator {
         if let sidebarView = sidebarViews.first {
             sidebarView.makeView()
                 .frame(minWidth: 200, maxWidth: 300)
-                .background(Color(NSColor.windowBackgroundColor))
+                .background(.windowBackground)
         } else {
             // Empty sidebar
             VStack {
                 Text("Sidebar")
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
             .frame(minWidth: 200, maxWidth: 300)
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(.windowBackground)
         }
     }
 
@@ -72,7 +72,7 @@ struct PanelCoordinator {
         if ui.isAIChatVisible, let pluginView = rightViews.first {
             pluginView.makeView()
                 .frame(minWidth: 240, idealWidth: 340, maxWidth: 480)
-                .background(Color(NSColor.windowBackgroundColor))
+                .background(.windowBackground)
         } else {
             EmptyView()
         }

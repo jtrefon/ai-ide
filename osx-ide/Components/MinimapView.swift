@@ -9,7 +9,7 @@ struct MinimapView: View {
     var body: some View {
         MinimapRepresentable(text: $text, selectedRange: $selectedRange, fontFamily: fontFamily)
             .frame(minWidth: 90, idealWidth: 110, maxWidth: 140)
-            .background(Color(NSColor.textBackgroundColor))
+            .background(Color(nsColor: .textBackgroundColor))
     }
 }
 

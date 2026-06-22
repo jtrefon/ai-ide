@@ -47,8 +47,8 @@ struct GoToSymbolOverlayView: View {
                     }) {
                         HStack(spacing: AppConstants.Overlay.listItemSpacing) {
                             Text(item.kind.rawValue)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundColor(.secondary)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
                                 .frame(width: AppConstants.Overlay.listItemKindWidth, alignment: .leading)
 
                             Text(item.name)
@@ -58,7 +58,7 @@ struct GoToSymbolOverlayView: View {
 
                             Text("\(item.relativePath):\(item.line)")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                     }

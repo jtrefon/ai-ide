@@ -38,7 +38,7 @@ struct SettingsCard<Content: View>: View {
         .nativeGlassBackground(.panel, cornerRadius: AppConstants.Settings.cardCornerRadius)
         .overlay(
             RoundedRectangle(cornerRadius: AppConstants.Settings.cardCornerRadius, style: .continuous)
-                .stroke(Color(NSColor.separatorColor).opacity(0.2), lineWidth: 0.8)
+                .stroke(.separator.opacity(0.2), lineWidth: 0.8)
         )
     }
 }

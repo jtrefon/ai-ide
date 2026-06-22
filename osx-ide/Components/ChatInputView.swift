@@ -36,7 +36,7 @@ struct ChatInputView: View {
                     if text.isEmpty {
                         Text(localized("chat_input.placeholder"))
                             .font(resolveFont(size: fontSize, family: fontFamily))
-                            .foregroundColor(Color(NSColor.placeholderTextColor))
+                            .foregroundStyle(.secondary)
                             .padding(.leading, 14)
                             .padding(.top, 12)
                             .padding(.trailing, 44)
@@ -59,8 +59,8 @@ struct ChatInputView: View {
 
                 Button(action: sendIfPossible) {
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
+                        .font(.body.weight(.bold))
+                        .foregroundStyle(.white)
                         .frame(width: 26, height: 26)
                         .background(canSend ? Color.accentColor : Color(NSColor.separatorColor).opacity(0.5))
                         .clipShape(Circle())
@@ -73,7 +73,7 @@ struct ChatInputView: View {
                 .padding(.bottom, 9)
             }
             .frame(minHeight: max(minimumComposerHeight, textViewHeight), maxHeight: maximumComposerHeight)
-            .background(Color(NSColor.textBackgroundColor))
+            .background(Color(nsColor: .textBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)

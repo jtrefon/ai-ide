@@ -34,18 +34,18 @@ struct CodePreviewView: View {
             HStack {
                 Text(title)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
 
                 if let language = language {
                     Text("•")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     Text(language)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 2)
-                        .background(Color(NSColor.controlBackgroundColor))
+                        .background(Color(nsColor: .controlBackgroundColor))
                         .cornerRadius(4)
                 }
 
@@ -59,14 +59,14 @@ struct CodePreviewView: View {
                     .font(.caption)
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(.blue)
+                .foregroundStyle(.blue)
             }
 
             Text(code)
                 .font(resolveFont(size: fontSize, family: fontFamily))
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(NSColor.textBackgroundColor))
+                .background(Color(nsColor: .textBackgroundColor))
                 .cornerRadius(4)
         }
         .padding(.top, 4)

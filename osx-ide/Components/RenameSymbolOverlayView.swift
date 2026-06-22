@@ -42,7 +42,7 @@ struct RenameSymbolOverlayView: View {
             HStack {
                 Text(String(format: localized("rename_symbol.replacements_format"), previewReplacements))
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
 
                 Spacer()
 

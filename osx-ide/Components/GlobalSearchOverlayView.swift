@@ -43,8 +43,8 @@ struct GlobalSearchOverlayView: View {
                             }) {
                                 HStack {
                                     Text("\(match.line)")
-                                        .font(.system(.body, design: .monospaced))
-                                        .foregroundColor(.secondary)
+                                        .font(.body.monospaced())
+                                        .foregroundStyle(.secondary)
                                         .frame(width: 60, alignment: .trailing)
 
                                     Text(match.snippet)

@@ -25,7 +25,7 @@ struct AgentSettingsTab: View {
                             .accessibilityIdentifier("Settings.Agent.CliTimeoutSeconds")
 
                             Text("\(Int(ui.cliTimeoutSeconds)) s")
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .font(.body.weight(.semibold).monospaced())
                                 .foregroundStyle(.secondary)
                         }
                     }

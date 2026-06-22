@@ -17,7 +17,7 @@ struct PlanOutlineView: View {
             if sections.isEmpty {
                 Text(rawPlan)
                     .font(.system(size: CGFloat(max(10, fontSize - 1))))
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ForEach(sections) { section in
@@ -29,14 +29,14 @@ struct PlanOutlineView: View {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(step.title)
                                             .font(.system(size: CGFloat(max(10, fontSize - 1)), weight: .medium))
-                                            .foregroundColor(.primary)
+                                            .foregroundStyle(.primary)
 
                                         if !step.substeps.isEmpty {
                                             VStack(alignment: .leading, spacing: 2) {
                                                 ForEach(Array(step.substeps.enumerated()), id: \.offset) { _, substep in
                                                     Text("• \(substep)")
                                                         .font(.system(size: CGFloat(max(9, fontSize - 2))))
-                                                        .foregroundColor(.secondary)
+                                                        .foregroundStyle(.secondary)
                                                         .frame(maxWidth: .infinity, alignment: .leading)
                                                 }
                                             }
@@ -51,7 +51,7 @@ struct PlanOutlineView: View {
                         label: {
                             Text(section.title)
                                 .font(.system(size: CGFloat(max(11, fontSize - 1)), weight: .semibold))
-                                .foregroundColor(.primary)
+                                .foregroundStyle(.primary)
                         }
                     )
                 }

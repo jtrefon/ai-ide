@@ -32,7 +32,7 @@ struct LogsPanelView: View {
                         ForEach(tailer.lines) { line in
                             Text(line.text)
                                 .font(.system(size: max(10, ui.fontSize - 2), design: .monospaced))
-                                .foregroundColor(.primary)
+                                .foregroundStyle(.primary)
                                 .textSelection(.enabled)
                                 .lineLimit(20)  // Prevent insanely tall items
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -41,7 +41,7 @@ struct LogsPanelView: View {
                     }
                     .padding(8)
                 }
-                .background(Color(NSColor.textBackgroundColor))
+                .background(Color(nsColor: .textBackgroundColor))
                 .onChange(of: tailer.lines.count) { _, count in
                     guard follow, count > 0 else { return }
 
@@ -58,7 +58,7 @@ struct LogsPanelView: View {
                 }
             }
         }
-        .background(Color(NSColor.textBackgroundColor))
+        .background(Color(nsColor: .textBackgroundColor))
         .onAppear {
             tailer.start()
 

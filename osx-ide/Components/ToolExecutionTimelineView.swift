@@ -60,7 +60,7 @@ struct ToolExecutionTimelineView: View {
                         .font(.headline)
                     Text(localized("tool_timeline.empty.subtitle"))
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding()
@@ -72,12 +72,12 @@ struct ToolExecutionTimelineView: View {
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(entry.toolName)
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(.body.weight(.medium))
 
                                 if let target = entry.target, !target.isEmpty {
                                     Text(target)
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.secondary)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
                                 }
@@ -91,15 +91,15 @@ struct ToolExecutionTimelineView: View {
                                 Image(systemName: expandedToolCallIds.contains(entry.id) ?
                                         "chevron.up" : "chevron.down")
                                     .font(.caption2)
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
                         }
 
                         if expandedToolCallIds.contains(entry.id) {
                             Text(entry.content)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.secondary)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
                         }
                     }
@@ -127,15 +127,15 @@ struct ToolExecutionTimelineView: View {
                 .frame(width: 12, height: 12)
         case .completed:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.green)
+                .foregroundStyle(.green)
                 .font(.caption)
         case .failed:
             Image(systemName: "xmark.circle.fill")
-                .foregroundColor(.red)
+                .foregroundStyle(.red)
                 .font(.caption)
         case .none:
             Image(systemName: "gear")
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .font(.caption)
         }
     }

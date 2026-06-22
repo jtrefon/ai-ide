@@ -91,7 +91,7 @@ extension View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color(NSColor.separatorColor).opacity(0.15), lineWidth: 0.5)
+                    .stroke(.separator.opacity(0.15), lineWidth: 0.5)
             )
     }
 }

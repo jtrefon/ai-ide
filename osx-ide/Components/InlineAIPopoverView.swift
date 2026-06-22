@@ -78,7 +78,7 @@ final class InlineAIPopoverManager: ObservableObject {
                 let response = try await aiService.sendMessageStreaming(request, runId: request.runId ?? "")
                 answer = response.content ?? ""
             } catch {
-                error = error.localizedDescription
+                self.error = error.localizedDescription
             }
             isProcessing = false
         }
@@ -93,10 +93,10 @@ struct InlineAIPopoverView: View {
             if manager.answer.isEmpty && !manager.isProcessing {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkle")
-                        .foregroundColor(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                     Text("Ask about this code")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
 
                 TextField("Question...", text: $manager.question)
@@ -105,7 +105,7 @@ struct InlineAIPopoverView: View {
                     .padding(6)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(NSColor.controlBackgroundColor))
+                            .fill(Color(nsColor: .controlBackgroundColor))
                     )
                     .onSubmit {
                         manager.submitQuestion(context: nil)
@@ -128,7 +128,7 @@ struct InlineAIPopoverView: View {
                         .scaleEffect(0.7)
                     Text("Thinking...")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -145,7 +145,7 @@ struct InlineAIPopoverView: View {
             if let error = manager.error {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.red)
+                    .foregroundStyle(.red)
             }
         }
         .padding(12)
@@ -158,7 +158,7 @@ struct InlineAIPopoverView: View {
         .overlay(alignment: .topTrailing) {
             Button(action: { manager.dismiss() }) {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .font(.caption)
             }
             .buttonStyle(.plain)

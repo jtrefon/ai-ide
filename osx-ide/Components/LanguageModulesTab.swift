@@ -26,12 +26,12 @@ struct LanguageModulesTab: View {
             // Search Bar
             HStack {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 TextField(NSLocalizedString("language_modules.search.placeholder", comment: ""), text: $searchText)
                     .textFieldStyle(.plain)
             }
             .padding(10)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(Color(nsColor: .controlBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 24)
             .padding(.top, 16)
@@ -48,7 +48,7 @@ struct LanguageModulesTab: View {
                                     format: NSLocalizedString("language_modules.empty", comment: ""),
                                     searchText
                                 ))
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .center)
                                 .padding(.vertical, 20)
                             } else {
@@ -71,7 +71,7 @@ struct LanguageModulesTab: View {
                                                         module.fileExtensions.joined(separator: ", ")
                                                     )
                                                 )
-                                                .font(.system(size: 10, design: .monospaced))
+                                                .font(.caption2.monospaced())
                                                 .foregroundColor(.blue.opacity(0.8))
                                             }
                                         }
@@ -109,10 +109,10 @@ struct LanguageModulesTab: View {
                         HStack(spacing: 12) {
                             Image(systemName: "info.circle.fill")
                                 .font(.title2)
-                                .foregroundColor(.blue)
+                                .foregroundStyle(.blue)
                             Text(NSLocalizedString("language_modules.performance.detail", comment: ""))
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }

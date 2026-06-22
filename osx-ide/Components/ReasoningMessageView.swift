@@ -30,8 +30,8 @@ struct ReasoningMessageView: View {
                 )
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color(NSColor.controlBackgroundColor))
-                .foregroundColor(.primary)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .foregroundStyle(.primary)
                 .cornerRadius(16)
                 .textSelection(.enabled)
             }
@@ -44,7 +44,7 @@ struct ReasoningMessageView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
     }
 
@@ -58,15 +58,15 @@ struct ReasoningMessageView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "brain")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.accentColor)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
                 Text(localized("reasoning.title"))
                     .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .medium))
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.primary)
                 Spacer()
                 Image(systemName: isReasoningHidden ? "chevron.down" : "chevron.up")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
             }
         }
         .buttonStyle(.plain)
@@ -80,13 +80,13 @@ struct ReasoningMessageView: View {
             if showFullReasoning || text.count <= 300 {
                 Text(text)
                     .font(.system(size: CGFloat(max(10, fontSize - 2))))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 Text(String(text.prefix(300)) + "…")
                     .font(.system(size: CGFloat(max(10, fontSize - 2))))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button(showFullReasoning ? "Show less" : "Show more") {
@@ -96,7 +96,7 @@ struct ReasoningMessageView: View {
                 }
                 .font(.system(size: CGFloat(max(9, fontSize - 3))))
                 .buttonStyle(.plain)
-                .foregroundColor(.accentColor)
+                .foregroundStyle(Color.accentColor)
             }
         }
     }

@@ -80,7 +80,7 @@ struct GeneralSettingsTab: View {
 
                             Text("\(Int(ui.fontSize)) " +
                                     NSLocalizedString("settings.editor.font_size.unit", comment: ""))
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .font(.body.weight(.semibold).monospaced())
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -162,7 +162,7 @@ struct GeneralSettingsTab: View {
                             step: 25
                         ) {
                             Text("\(ui.inlineCompletionDebounceMilliseconds) ms")
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .font(.body.weight(.semibold).monospaced())
                                 .foregroundStyle(.secondary)
                         }
                         .frame(width: 180)
@@ -185,7 +185,7 @@ struct GeneralSettingsTab: View {
                             .accessibilityIdentifier("Settings.InlineCompletion.Aggressiveness")
 
                             Text("\(Int(ui.inlineCompletionAggressiveness * 100))%")
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .font(.body.weight(.semibold).monospaced())
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -202,7 +202,7 @@ struct GeneralSettingsTab: View {
                             step: 8
                         ) {
                             Text("\(ui.inlineCompletionMaxSuggestionLength)")
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .font(.body.weight(.semibold).monospaced())
                                 .foregroundStyle(.secondary)
                         }
                         .frame(width: 160)
@@ -301,7 +301,7 @@ struct GeneralSettingsTab: View {
                             ui.resetToDefaults()
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(Color(NSColor.separatorColor).opacity(0.3))
+                        .tint(Color(nsColor: .separatorColor).opacity(0.3))
                     }
                 }
             }

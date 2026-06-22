@@ -51,15 +51,15 @@ struct EditorPaneView: View {
                                             },
                                             label: {
                                                 Image(systemName: "xmark")
-                                                    .font(.system(size: 10, weight: .semibold))
-                                                    .foregroundColor(.secondary)
+                                                    .font(.caption2.weight(.semibold))
+                                                    .foregroundStyle(.secondary)
                                             }
                                         )
                                         .buttonStyle(.plain)
                                     }
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 6)
-                                    .background(isActive ? Color(NSColor.controlBackgroundColor) : Color.clear)
+                                    .background(isActive ? Color(nsColor: .controlBackgroundColor) : Color.clear)
                                     .cornerRadius(6)
                                 }
                             )
@@ -72,7 +72,7 @@ struct EditorPaneView: View {
                 .padding(.vertical, 4)
             }
             .frame(height: 34)
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(.windowBackground)
 
             HStack(spacing: 0) {
                 CodeEditorView(
@@ -109,7 +109,7 @@ struct EditorPaneView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(NSColor.textBackgroundColor))
+            .background(Color(nsColor: .textBackgroundColor))
         }
     }
 }

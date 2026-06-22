@@ -83,7 +83,7 @@ struct SettingsView: View {
 
 private struct SettingsBackgroundView: View {
     var body: some View {
-        Color(NSColor.windowBackgroundColor)
+        Color(nsColor: .windowBackgroundColor)
             .ignoresSafeArea()
     }
 }

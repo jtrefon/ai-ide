@@ -38,11 +38,11 @@ struct NavigationLocationsOverlayView: View {
                     }) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("\(loc.relativePath):\(loc.line)")
-                                .font(.system(.body, design: .monospaced))
+                                .font(.body.monospaced())
                             if !loc.snippet.isEmpty {
                                 Text(loc.snippet)
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                                     .lineLimit(2)
                             }
                         }

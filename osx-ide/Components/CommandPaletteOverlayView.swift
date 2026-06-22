@@ -65,7 +65,7 @@ struct CommandPaletteOverlayView: View {
                                 .lineLimit(1)
                             Text(item.subtitle)
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                     }

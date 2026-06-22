@@ -15,17 +15,17 @@ struct ActivityFeedView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "waveform.path.ecg")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     Text("Activity")
                         .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .semibold))
-                        .foregroundColor(.primary)
+                        .foregroundStyle(.primary)
                     Spacer()
                     Button(isExpanded ? "Hide" : "Show") {
                         isExpanded.toggle()
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 }
 
                 if isExpanded {
@@ -45,7 +45,7 @@ struct ActivityFeedView: View {
                                     if let detail = item.detail, !detail.isEmpty {
                                         Text(detail)
                                             .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                                            .foregroundColor(.secondary)
+                                            .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                             .truncationMode(.middle)
                                     }
@@ -55,7 +55,7 @@ struct ActivityFeedView: View {
 
                                 Text(relativeTimeString(for: item.timestamp))
                                     .font(.system(size: CGFloat(max(8, fontSize - 5))))
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -63,11 +63,11 @@ struct ActivityFeedView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(.windowBackground)
             .overlay(
                 Rectangle()
                     .frame(height: 1)
-                    .foregroundColor(Color(NSColor.separatorColor)),
+                    .foregroundStyle(.separator),
                 alignment: .bottom
             )
         }

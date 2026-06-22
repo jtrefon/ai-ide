@@ -44,7 +44,7 @@ struct LayoutView: View {
 
             if isTerminalVisible {
                 Rectangle()
-                    .fill(Color(NSColor.separatorColor))
+                    .fill(.separator)
                     .frame(height: dividerHeight)
                     .contentShape(Rectangle())
                     .overlay(

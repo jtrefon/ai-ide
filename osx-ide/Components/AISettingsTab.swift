@@ -298,7 +298,7 @@ private struct SystemPromptSection: View {
                     .foregroundStyle(.secondary)
 
                 TextEditor(text: $systemPrompt)
-                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .font(.body.weight(.regular).monospaced())
                     .frame(minHeight: 140)
                     .scrollContentBackground(.hidden)
                     .padding(8)
@@ -306,7 +306,7 @@ private struct SystemPromptSection: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(Color(NSColor.separatorColor).opacity(0.2), lineWidth: 0.6)
+                            .stroke(.separator.opacity(0.2), lineWidth: 0.6)
                     )
 
                 HStack(spacing: 12) {

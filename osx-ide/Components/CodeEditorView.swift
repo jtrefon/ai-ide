@@ -76,8 +76,8 @@ struct CodeEditorView: View {
         if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
             let diagnosticsText = highlightDiagnostics.diagnostics.isEmpty ? "pending" : highlightDiagnostics.diagnostics
             Text(diagnosticsText)
-                .font(.system(size: 8))
-                .foregroundColor(.primary)
+                .font(.caption2)
+                .foregroundStyle(.primary)
                 .opacity(0.01)
                 .allowsHitTesting(false)
                 .accessibilityElement(children: .ignore)
@@ -95,7 +95,7 @@ struct CodeEditorView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Inline Completion")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(.caption.weight(.semibold).monospaced())
 
                 if let state {
                     Text("\(state.source.rawValue) • \(Int(state.latencyMs))ms • \(Int(state.confidenceScore * 100))%")
@@ -108,14 +108,14 @@ struct CodeEditorView: View {
                         .lineLimit(1)
                 }
             }
-            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .font(.caption2.weight(.medium).monospaced())
             .foregroundStyle(.secondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color(NSColor.separatorColor).opacity(0.3), lineWidth: 0.8)
+                    .stroke(.separator.opacity(0.3), lineWidth: 0.8)
             )
             .padding(12)
             .allowsHitTesting(false)

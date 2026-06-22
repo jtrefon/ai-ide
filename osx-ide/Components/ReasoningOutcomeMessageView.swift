@@ -21,7 +21,7 @@ struct ReasoningOutcomeMessageView: View {
                 HStack(spacing: 6) {
                     Text("Delivery")
                         .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .semibold))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
 
                     Text(outcome.deliveryState == .done ? "Done" : "Needs Work")
                         .font(.system(size: CGFloat(max(9, fontSize - 3)), weight: .semibold))
@@ -34,7 +34,7 @@ struct ReasoningOutcomeMessageView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(Color(nsColor: .controlBackgroundColor))
             .cornerRadius(14)
         }
     }
@@ -42,11 +42,11 @@ struct ReasoningOutcomeMessageView: View {
     private var header: some View {
         HStack(spacing: 6) {
             Image(systemName: "checklist")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
             Text("Reasoning Outcome")
                 .font(.system(size: CGFloat(max(10, fontSize - 1)), weight: .semibold))
-                .foregroundColor(.primary)
+                .foregroundStyle(.primary)
         }
     }
 
@@ -57,10 +57,10 @@ struct ReasoningOutcomeMessageView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: CGFloat(max(9, fontSize - 4)), weight: .semibold))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 Text(trimmed)
                     .font(.system(size: CGFloat(max(10, fontSize - 2))))
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.primary)
                     .textSelection(.enabled)
             }
         }

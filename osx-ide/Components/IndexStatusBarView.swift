@@ -95,7 +95,7 @@ struct IndexStatusBarView: View {
         if !text.isEmpty {
             Text(text)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .layoutPriority(layoutPriority)
         }
@@ -120,7 +120,7 @@ struct IndexStatusBarView: View {
                 } label: {
                     Text(activeLanguageLabel)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 .buttonStyle(.plain)
@@ -164,7 +164,7 @@ struct IndexStatusBarView: View {
                 } label: {
                     Image(systemName: "info.circle")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .popover(isPresented: $isShowingMetricsInfo, arrowEdge: .bottom) {
@@ -187,11 +187,11 @@ struct IndexStatusBarView: View {
         .frame(height: 24)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.statusBar)
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(.windowBackground)
         .overlay(
             Rectangle()
                 .frame(height: 1)
-                .foregroundColor(Color(NSColor.separatorColor)),
+                .foregroundStyle(.separator),
             alignment: .top
         )
     }

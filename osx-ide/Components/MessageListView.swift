@@ -29,7 +29,7 @@ private struct TypingDotsBubbleView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(Color(NSColor.quaternaryLabelColor).opacity(0.2))
+            .background(Color(nsColor: .quaternaryLabelColor).opacity(0.2))
             .clipShape(Capsule())
             .frame(height: 34)
             .opacity(isActive ? 1 : 0)
@@ -232,7 +232,7 @@ struct MessageView: View {
     private var roleLabel: some View {
         Text(roleLabelText)
             .font(.caption2)
-            .foregroundColor(.secondary)
+            .foregroundStyle(.secondary)
             .monospacedDigit()
     }
 
