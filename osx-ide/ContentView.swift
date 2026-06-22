@@ -12,7 +12,7 @@ struct ContentView: View {
 
     // MARK: - Properties
 
-    let appState: AppState
+    @ObservedObject var appState: AppState
     @ObservedObject private var fileEditor: FileEditorStateManager
     @ObservedObject private var workspace: WorkspaceStateManager
     @ObservedObject private var uiState: UIStateManager
@@ -46,13 +46,36 @@ struct ContentView: View {
         let _ = trackViewRender("ContentView.rootView")
         return ZStack {
             mainLayout
-            OverlayHostView(appState: appState)
         }
         .background(Color(NSColor.windowBackgroundColor))
         .environment(\.font, .system(size: CGFloat(uiState.fontSize)))
         .preferredColorScheme(appState.selectedTheme.colorScheme)
         .accessibilityIdentifier(AccessibilityID.appRootView)
         .accessibilityValue("theme=\(appState.selectedTheme.rawValue)")
+        .sheet(isPresented: $appState.isGlobalSearchPresented) {
+            GlobalSearchOverlayView(appState: appState, isPresented: $appState.isGlobalSearchPresented)
+        }
+        .sheet(isPresented: $appState.isQuickOpenPresented) {
+            QuickOpenOverlayView(appState: appState, isPresented: $appState.isQuickOpenPresented)
+        }
+        .popover(isPresented: $appState.isCommandPalettePresented) {
+            CommandPaletteOverlayView(
+                commandRegistry: appState.commandRegistry,
+                isPresented: $appState.isCommandPalettePresented
+            )
+        }
+        .sheet(isPresented: $appState.isGoToSymbolPresented) {
+            GoToSymbolOverlayView(appState: appState, isPresented: $appState.isGoToSymbolPresented)
+        }
+        .sheet(isPresented: $appState.isNavigationLocationsPresented) {
+            NavigationLocationsOverlayView(
+                appState: appState,
+                isPresented: $appState.isNavigationLocationsPresented
+            )
+        }
+        .sheet(isPresented: $appState.isRenameSymbolPresented) {
+            RenameSymbolOverlayView(appState: appState, isPresented: $appState.isRenameSymbolPresented)
+        }
     }
 
     private var mainLayout: some View {
@@ -442,42 +465,52 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
 private struct WindowSetupView: View {
     @ObservedObject var appState: AppState
 
-    private func configureWindow(_ window: NSWindow) {
-        appState.windowProvider.setWindow(window)
-        appState.attachWindow(window)
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = false
-        window.isOpaque = true
-        window.backgroundColor = NSColor.windowBackgroundColor
-        window.hasShadow = true
-        window.styleMask.insert(.resizable)
-        window.styleMask.insert(.unifiedTitleAndToolbar)
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .background(WindowResolver { window in
+                appState.windowProvider.setWindow(window)
+                appState.attachWindow(window)
+                window.titleVisibility = .hidden
+                window.isOpaque = true
+                window.backgroundColor = NSColor.windowBackgroundColor
+                window.hasShadow = true
+                window.styleMask.insert(.resizable)
+                window.styleMask.insert(.unifiedTitleAndToolbar)
 
-        guard let screen = window.screen ?? NSScreen.main else { return }
-        let visibleFrame = screen.visibleFrame
-        let minSize = UILayoutNormalizer.normalizedMinWindowSize(screenVisibleFrame: visibleFrame)
-        window.minSize = minSize
+                guard let screen = window.screen ?? NSScreen.main else { return }
+                let visibleFrame = screen.visibleFrame
+                window.minSize = UILayoutNormalizer.normalizedMinWindowSize(screenVisibleFrame: visibleFrame)
 
-        var targetFrame = window.frame
-        if targetFrame.width <= 1 || targetFrame.height <= 1 {
-            targetFrame = UILayoutNormalizer.normalizedDefaultWindowFrame(screenVisibleFrame: visibleFrame)
+                var targetFrame = window.frame
+                if targetFrame.width <= 1 || targetFrame.height <= 1 {
+                    targetFrame = UILayoutNormalizer.normalizedDefaultWindowFrame(screenVisibleFrame: visibleFrame)
+                }
+                let normalized = UILayoutNormalizer.normalizeWindowFrame(targetFrame, screenVisibleFrame: visibleFrame)
+                if normalized != window.frame {
+                    window.setFrame(normalized, display: true)
+                }
+            })
+    }
+}
+
+private struct WindowResolver: NSViewRepresentable {
+    let onResolve: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            onResolve(window)
         }
-
-        let normalized = UILayoutNormalizer.normalizeWindowFrame(
-            targetFrame,
-            screenVisibleFrame: visibleFrame
-        )
-        if normalized != window.frame {
-            window.setFrame(normalized, display: true)
-        }
+        return view
     }
 
-    var body: some View {
-        WindowAccessor { window in
-            configureWindow(window)
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard let window = nsView.window else { return }
+            onResolve(window)
         }
-        .frame(width: 0, height: 0)
     }
 }
 
