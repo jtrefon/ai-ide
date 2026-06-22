@@ -198,11 +198,10 @@ public final class WebSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
             }
 
             function getContent() {
-                // DuckDuckGo: search results
+                // DuckDuckGo: search results (filter out skeleton/whitespace-only elements)
                 var results = document.querySelectorAll('.result, .result__body, .result__snippet, [data-testid="result"]');
-                if (results.length > 0) {
-                    return Array.from(results).map(function(r) { return r.innerText; }).filter(Boolean).join('\\n---\\n');
-                }
+                var texts = Array.from(results).map(function(r) { return r.innerText.trim(); }).filter(function(t) { return t.length > 0; });
+                if (texts.length > 0) return texts.join('\\n\\n---\\n\\n');
                 // Generic: article or main content
                 var article = document.querySelector('article');
                 if (article && article.innerText.trim().length > 200) return article.innerText;
