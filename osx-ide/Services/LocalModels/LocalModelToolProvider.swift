@@ -10,6 +10,7 @@ enum LocalModelToolProvider {
         "list_dir",
         "get_project_structure",
         "run_command",
+        "web_search",
     ]
 
     static func safeTools(from allTools: [AITool]) -> [AITool] {

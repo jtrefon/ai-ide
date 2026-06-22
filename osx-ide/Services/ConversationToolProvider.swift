@@ -53,6 +53,7 @@ final class ConversationToolProvider {
         // Search & Structure Tools
         tools.append(SearchProjectTool(index: codebaseIndexProvider(), projectRoot: projectRoot))
         tools.append(LocalFindTool(index: codebaseIndexProvider(), projectRoot: projectRoot))
+        tools.append(WebSearchTool())
         tools.append(GrepTool(pathValidator: pathValidator))
         tools.append(FindFileTool(pathValidator: pathValidator))
         tools.append(GetProjectStructureTool(projectRoot: projectRoot))
