@@ -4,38 +4,28 @@ struct LocalModelSettingsView: View {
     @ObservedObject var viewModel: LocalModelSettingsViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Toggle("Offline Mode (disable OpenRouter)", isOn: $viewModel.offlineModeEnabled)
-                .toggleStyle(.switch)
+        Form {
+            Section {
+                Toggle("Offline Mode (disable OpenRouter)", isOn: $viewModel.offlineModeEnabled)
+                Toggle("Turbo Quant (4-bit KV Cache)", isOn: $viewModel.turboQuantEnabled)
+            } header: {
+                Text("Local Models")
+            }
 
-            Toggle("Turbo Quant (4-bit KV Cache)", isOn: $viewModel.turboQuantEnabled)
-                .toggleStyle(.switch)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Context Length: \(Int(viewModel.contextLength)) tokens")
+            Section {
                 Slider(value: $viewModel.contextLength, in: 2048...131072, step: 1024) {
-                    Text("Context Length")
+                    Text("Context Length: \(Int(viewModel.contextLength)) tokens")
                 }
             }
-            .padding(.top, 4)
 
-            Text("Available local models: \(viewModel.models.count)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Picker("", selection: $viewModel.selectedModelId) {
-                Text("None")
-                    .tag("")
-
-                ForEach(viewModel.models) { model in
-                    Text(model.displayName)
-                        .tag(model.id)
+            Section {
+                Picker("Model", selection: $viewModel.selectedModelId) {
+                    Text("None").tag("")
+                    ForEach(viewModel.models) { model in
+                        Text(model.displayName).tag(model.id)
+                    }
                 }
-            }
-            .labelsHidden()
-            .frame(width: 420)
 
-            VStack(alignment: .leading, spacing: 10) {
                 ForEach(viewModel.models) { model in
                     LocalModelRow(
                         model: model,
@@ -53,16 +43,17 @@ struct LocalModelSettingsView: View {
                         }
                     )
                 }
-            }
 
-            LocalModelStatusLine(
-                status: viewModel.status,
-                progressFraction: viewModel.progressFraction,
-                currentFileName: viewModel.currentFileName,
-                progressText: viewModel.progressText,
-                isDownloading: viewModel.isDownloading
-            )
+                LocalModelStatusLine(
+                    status: viewModel.status,
+                    progressFraction: viewModel.progressFraction,
+                    currentFileName: viewModel.currentFileName,
+                    progressText: viewModel.progressText,
+                    isDownloading: viewModel.isDownloading
+                )
+            }
         }
+        .formStyle(.grouped)
         .onAppear {
             viewModel.refreshCatalog()
         }
