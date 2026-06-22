@@ -101,7 +101,7 @@ struct MessageListView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let maxBubbleWidth = min(680, max(260, geometry.size.width * 0.72))
+            let maxBubbleWidth = min(880, max(260, geometry.size.width * 0.92))
 
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
