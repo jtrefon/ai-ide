@@ -52,6 +52,27 @@ struct ToolExecutionMessageView: View {
         return preview
     }
 
+    private var displayCommand: String? {
+        guard displayToolName == "run_command", let payload = envelope?.payload else { return nil }
+        guard let data = payload.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return json["command"] as? String
+    }
+
+    private var displayExitCode: Int32? {
+        guard displayToolName == "run_command", let payload = envelope?.payload else { return nil }
+        guard let data = payload.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return json["exit_code"] as? Int32
+    }
+
+    private var displayOutputTail: String? {
+        guard displayToolName == "run_command", let payload = envelope?.payload else { return nil }
+        guard let data = payload.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return json["output_tail"] as? String
+    }
+
     private var isCommandTool: Bool {
         displayToolName == "run_command"
     }
@@ -99,13 +120,21 @@ struct ToolExecutionMessageView: View {
             statusIcon
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayToolName)
-                    .font(.system(size: CGFloat(max(10, fontSize - 2)), weight: .medium))
-                    .foregroundStyle(.primary)
+                if displayToolName == "run_command", let cmd = displayCommand {
+                    Text(cmd)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                } else {
+                    Text(displayToolName)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+                }
 
                 if let file = displayTargetFile {
                     Text(file)
-                        .font(.system(size: CGFloat(max(9, fontSize - 4))))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -113,7 +142,7 @@ struct ToolExecutionMessageView: View {
 
                 if isReadFileTool, let readFileRangeLabel {
                     Text(readFileRangeLabel)
-                        .font(.system(size: CGFloat(max(9, fontSize - 4))))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
@@ -125,11 +154,17 @@ struct ToolExecutionMessageView: View {
                             omittingEmptySubsequences: false
                         ).last.map(String.init) ?? trimmed
                         Text(lastLine)
-                            .font(.system(size: CGFloat(max(9, fontSize - 4))))
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
+                }
+
+                if displayToolName == "run_command", let code = displayExitCode, displayStatus == .completed {
+                    Text(code == 0 ? "Exit 0" : "Exit \(code)")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(code == 0 ? .green : .red)
                 }
             }
 
@@ -292,22 +327,28 @@ struct ToolExecutionMessageView: View {
     }
 
     private func commandPreview(_ content: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text("CLI")
-                    .font(.system(size: CGFloat(max(9, fontSize - 4)), weight: .semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Color.orange.opacity(0.12))
-                    .cornerRadius(6)
-                if let status = displayStatus {
-                    Text(status.rawValue.capitalized)
-                        .font(.system(size: CGFloat(max(9, fontSize - 4))))
-                        .foregroundStyle(.secondary)
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            if let cmd = displayCommand {
+                Text("$ \(cmd)")
+                    .font(.body.monospaced())
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
             }
 
-            genericPayloadPreview(content)
+            if let tail = displayOutputTail, !tail.isEmpty {
+                ScrollView([.horizontal, .vertical]) {
+                    Text(tail)
+                        .font(.body.monospaced())
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 200)
+                .background(Color(nsColor: .textBackgroundColor))
+                .cornerRadius(6)
+            } else {
+                genericPayloadPreview(content)
+            }
         }
     }
 
