@@ -1,10 +1,3 @@
-//
-//  LanguageModulesTab.swift
-//  osx-ide
-//
-//  Created by Cascade on 02/01/2026.
-//
-
 import SwiftUI
 
 struct LanguageModulesTab: View {
@@ -22,95 +15,60 @@ struct LanguageModulesTab: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Search Bar
-            TextField(NSLocalizedString("language_modules.search.placeholder", comment: ""), text: $searchText)
-                .textFieldStyle(.roundedBorder)
-                .padding(.horizontal, 24)
-                .padding(.top, 16)
-
-            ScrollView {
-                VStack(spacing: 20) {
-                    SettingsCard(
-                        title: NSLocalizedString("language_modules.card.title", comment: ""),
-                        subtitle: NSLocalizedString("language_modules.card.subtitle", comment: "")
-                    ) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            if filteredLanguages.isEmpty {
-                                Text(String(
-                                    format: NSLocalizedString("language_modules.empty", comment: ""),
-                                    searchText
-                                ))
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding(.vertical, 20)
-                            } else {
-                                ForEach(filteredLanguages, id: \.self) { language in
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(language.rawValue.capitalized)
-                                                .font(.headline)
-                                            Text(NSLocalizedString("language_modules.feature_summary", comment: ""))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-
-                                            if let module = moduleManager.getModule(for: language) {
-                                                Text(
-                                                    String(
-                                                        format: NSLocalizedString(
-                                                            "language_modules.extensions",
-                                                            comment: ""
-                                                        ),
-                                                        module.fileExtensions.joined(separator: ", ")
-                                                    )
-                                                )
-                                                .font(.caption2.monospaced())
-                                                .foregroundColor(.blue.opacity(0.8))
-                                            }
-                                        }
-
-                                        Spacer()
-
-                                        Toggle(
-                                            "",
-                                            isOn: Binding(
-                                                get: { moduleManager.isEnabled(language) },
-                                                set: { enabled in
-                                                    moduleManager.toggleModule(
-                                                        language,
-                                                        enabled: enabled
-                                                    )
-                                                }
-                                            )
-                                        )
-                                        .toggleStyle(.switch)
-                                    }
-
-                                    if language != filteredLanguages.last {
-                                        Divider()
-                                            .opacity(0.1)
-                                    }
+        Form {
+            Section {
+                if filteredLanguages.isEmpty {
+                    Text(String(
+                        format: NSLocalizedString("language_modules.empty", comment: ""),
+                        searchText
+                    ))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                } else {
+                    ForEach(filteredLanguages, id: \.self) { language in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(language.rawValue.capitalized)
+                                    .font(.headline)
+                                Text(NSLocalizedString("language_modules.feature_summary", comment: ""))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if let module = moduleManager.getModule(for: language) {
+                                    Text(module.fileExtensions.joined(separator: ", "))
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(.blue)
                                 }
                             }
-                        }
-                    }
-
-                    SettingsCard(
-                        title: NSLocalizedString("language_modules.performance.title", comment: ""),
-                        subtitle: NSLocalizedString("language_modules.performance.subtitle", comment: "")
-                    ) {
-                        HStack(spacing: 12) {
-                            Image(systemName: "info.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.blue)
-                            Text(NSLocalizedString("language_modules.performance.detail", comment: ""))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Toggle("", isOn: Binding(
+                                get: { moduleManager.isEnabled(language) },
+                                set: { moduleManager.toggleModule(language, enabled: $0) }
+                            ))
+                            .toggleStyle(.switch)
                         }
                     }
                 }
-                .padding(24)
+            } header: {
+                Text(NSLocalizedString("language_modules.card.title", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("language_modules.card.subtitle", comment: ""))
+            }
+
+            Section {
+                HStack(spacing: 12) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                    Text(NSLocalizedString("language_modules.performance.detail", comment: ""))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text(NSLocalizedString("language_modules.performance.title", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("language_modules.performance.subtitle", comment: ""))
             }
         }
+        .formStyle(.grouped)
     }
 }

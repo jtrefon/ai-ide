@@ -1,20 +1,14 @@
-//
-//  FileExplorerView.swift
-//  osx-ide
-//
-//  Created by AI Assistant on 25/08/2025.
-//
-
 import SwiftUI
 
 struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
     @ObservedObject var context: Context
     @State private var searchQuery: String = ""
     @State private var refreshToken: Int = 0
+    @State private var isSearchVisible = false
+    @FocusState private var isSearchFocused: Bool
 
     private var showHiddenFiles: Bool { context.showHiddenFilesInFileTree }
 
-    // State for new file/folder creation
     @State private var isShowingNewFileSheet = false
     @State private var isShowingNewFolderSheet = false
     @State private var newFileName: String = ""
@@ -26,24 +20,28 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header with Search Input
-            HStack(spacing: 8) {
-                TextField(localized("file_explorer.search.placeholder"), text: $searchQuery)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.body)
-
-                Button(action: {
-                    refreshToken += 1
-                }) {
-                    Image(systemName: "arrow.clockwise")
+            // Search bar — hidden by default, shown on Cmd+F
+            if isSearchVisible {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField(localized("file_explorer.search.placeholder"), text: $searchQuery)
+                        .textFieldStyle(.plain)
+                        .focused($isSearchFocused)
+                    if !searchQuery.isEmpty {
+                        Button { searchQuery = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
-                .help(localized("file_explorer.refresh_help"))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(.regularMaterial)
             }
-            .padding(6)
-            .frame(height: 36)
-            .background(.windowBackground)
-            // Modern macOS v26 file tree with subtle styling
+
+            // File tree
             ModernFileTreeView(
                 rootURL: context.workspace.currentDirectory
                     ?? FileManager.default.temporaryDirectory,
@@ -112,39 +110,19 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
             .background(.windowBackground)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .layoutPriority(1)
-            // SwiftUI context menu disabled to allow NSOutlineView native menu
-            // .contextMenu {
-            //     Button(localized("file_tree.context.new_file")) {
-            //         newFileName = ""
-            //         isShowingNewFileSheet = true
-            //     }
-            //     Button(localized("file_tree.context.new_folder")) {
-            //         newFolderName = ""
-            //         isShowingNewFolderSheet = true
-            //     }
-            // }
             .sheet(isPresented: $isShowingNewFileSheet) {
                 VStack(spacing: 20) {
                     Text(localized("file_tree.create_file.title"))
                         .font(.headline)
-                    TextField(
-                        localized("file_tree.create_file.name_placeholder"), text: $newFileName
-                    )
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding()
-                    .onSubmit {
-                        createNewFile()
-                    }
+                    TextField(localized("file_tree.create_file.name_placeholder"), text: $newFileName)
+                        .textFieldStyle(.roundedBorder)
+                        .padding()
+                        .onSubmit { createNewFile() }
                     HStack {
-                        Button(localized("common.cancel")) {
-                            isShowingNewFileSheet = false
-                        }
+                        Button(localized("common.cancel")) { isShowingNewFileSheet = false }
                         Spacer()
-                        Button(localized("common.create")) {
-                            createNewFile()
-                        }
-                        .disabled(
-                            newFileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button(localized("common.create")) { createNewFile() }
+                            .disabled(newFileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .padding(.horizontal)
                 }
@@ -153,26 +131,16 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
             }
             .sheet(isPresented: $isShowingNewFolderSheet) {
                 VStack(spacing: 20) {
-                    Text(localized("file_tree.create_folder.title"))
-                        .font(.headline)
-                    TextField(
-                        localized("file_tree.create_folder.name_placeholder"), text: $newFolderName
-                    )
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding()
-                    .onSubmit {
-                        createNewFolder()
-                    }
+                    Text(localized("file_tree.create_folder.title")).font(.headline)
+                    TextField(localized("file_tree.create_folder.name_placeholder"), text: $newFolderName)
+                        .textFieldStyle(.roundedBorder)
+                        .padding()
+                        .onSubmit { createNewFolder() }
                     HStack {
-                        Button(localized("common.cancel")) {
-                            isShowingNewFolderSheet = false
-                        }
+                        Button(localized("common.cancel")) { isShowingNewFolderSheet = false }
                         Spacer()
-                        Button(localized("common.create")) {
-                            createNewFolder()
-                        }
-                        .disabled(
-                            newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button(localized("common.create")) { createNewFolder() }
+                            .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .padding(.horizontal)
                 }
@@ -181,19 +149,34 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
             }
         }
         .frame(minWidth: 200)
-        .onAppear {
-            syncSelectionFromAppState()
-        }
+        .background(.windowBackground)
+        .onAppear { syncSelectionFromAppState() }
         .onReceive(context.workspace.$currentDirectory) { _ in
             refreshToken += 1
             syncSelectionFromAppState()
         }
-        .onChange(of: context.fileTreeRefreshToken) {
+        .onChange(of: context.fileTreeRefreshToken) { _, _ in
             refreshToken = context.fileTreeRefreshToken
         }
-        .onChange(of: context.fileEditor.selectedFile) {
+        .onChange(of: context.fileEditor.selectedFile) { _, _ in
             syncSelectionFromAppState()
         }
+        .onChange(of: isSearchVisible) { _, visible in
+            if visible {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    isSearchFocused = true
+                }
+            } else {
+                searchQuery = ""
+            }
+        }
+        // Cmd+F: toggle search bar
+        .background(
+            Button("") { isSearchVisible.toggle() }
+                .keyboardShortcut("f", modifiers: .command)
+                .frame(width: 0, height: 0)
+                .opacity(0)
+        )
     }
 
     private func syncSelectionFromAppState() {
@@ -201,15 +184,13 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
             context.fileTreeSelectedRelativePath = nil
             return
         }
-        let selectedURL = URL(fileURLWithPath: selectedFilePath)
-        context.fileTreeSelectedRelativePath = context.relativePath(for: selectedURL)
+        context.fileTreeSelectedRelativePath = context.relativePath(for: URL(fileURLWithPath: selectedFilePath))
     }
 
     private func createNewFile() {
         defer { isShowingNewFileSheet = false }
         let trimmedName = newFileName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-
         context.workspace.createFile(named: trimmedName)
         refreshToken += 1
     }
@@ -218,15 +199,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
         defer { isShowingNewFolderSheet = false }
         let trimmedName = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-
         context.workspace.createFolder(named: trimmedName)
         refreshToken += 1
-    }
-}
-
-struct FileExplorerView_Previews: PreviewProvider {
-    static var previews: some View {
-        FileExplorerView(context: DependencyContainer().makeAppState())
-            .frame(width: 250, height: 400)
     }
 }

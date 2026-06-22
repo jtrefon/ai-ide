@@ -4,48 +4,33 @@ struct EmbeddingModelSettingsView: View {
     @ObservedObject var viewModel: EmbeddingModelSettingsViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Embedding Models (for Semantic Search)")
-                .font(.headline)
-
-            Text("These models are used for semantic search in the codebase index. Smaller models are faster, larger models are more accurate. Bundled models are included with the app.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Picker("", selection: $viewModel.selectedModelId) {
-                Text("None (fallback to hashing)")
-                    .tag("")
-
-                ForEach(viewModel.models) { model in
-                    Text(model.name)
-                        .tag(model.id)
+        Form {
+            Section {
+                Picker("Model", selection: $viewModel.selectedModelId) {
+                    Text("None (fallback to hashing)").tag("")
+                    ForEach(viewModel.models) { model in
+                        Text(model.name).tag(model.id)
+                    }
                 }
+            } header: {
+                Text("Embedding Models")
+            } footer: {
+                Text("These models are used for semantic search in the codebase index. Smaller models are faster, larger models are more accurate. Bundled models are included with the app.")
             }
-            .labelsHidden()
-            .frame(width: 420)
 
-            VStack(alignment: .leading, spacing: 10) {
-                // Bundled models section
-                if !EmbeddingModelCatalog.bundledModels.isEmpty {
-                    Text("Bundled Models (included with app)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
-                    
+            if !EmbeddingModelCatalog.bundledModels.isEmpty {
+                Section {
                     ForEach(EmbeddingModelCatalog.bundledModels) { model in
                         EmbeddingModelRow(
-                            model: model,
-                            isBundled: true,
-                            isInstalled: true,
+                            model: model, isBundled: true, isInstalled: true,
                             isSelected: viewModel.selectedModelId == model.id,
                             isDownloading: viewModel.isDownloading,
-                            onSelect: {
-                                viewModel.selectModel(model)
-                            },
-                            onDownload: nil,  // No download for bundled models
-                            onDelete: nil     // No delete for bundled models
+                            onSelect: { viewModel.selectModel(model) },
+                            onDownload: nil, onDelete: nil
                         )
                     }
+                } header: {
+                    Text("Bundled Models (included with app)")
                 }
             }
 
@@ -56,9 +41,7 @@ struct EmbeddingModelSettingsView: View {
                 isDownloading: viewModel.isDownloading
             )
         }
-        .onAppear {
-            viewModel.refreshCatalog()
-        }
+        .formStyle(.grouped)
         .alert("Model Change Requires Reindex", isPresented: $viewModel.showReindexConfirmation) {
             Button("Cancel", role: .cancel) {
                 viewModel.cancelModelChange()
