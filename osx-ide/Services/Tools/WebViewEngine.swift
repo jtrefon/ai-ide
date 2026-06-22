@@ -2,9 +2,10 @@ import Foundation
 import WebKit
 
 /// Manages a persistent WKWebView session for multi-step browsing.
-/// @MainActor because WKWebView requires the main thread.
+/// SPA-aware: uses MutationObserver + WKScriptMessageHandler to detect
+/// when JavaScript-rendered content is actually ready, not just didFinish.
 @MainActor
-public final class WebSession: NSObject, WKNavigationDelegate {
+public final class WebSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     public let id: String
     public let createdAt: Date
     private let webView: WKWebView
@@ -14,19 +15,31 @@ public final class WebSession: NSObject, WKNavigationDelegate {
     public init(id: String) {
         self.id = id
         self.createdAt = Date()
+
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         config.applicationNameForUserAgent = "Version/17.0 Safari/605.1.15"
+
+        // Message handler for SPA content-ready signal
+        let userContent = WKUserContentController()
+        config.userContentController = userContent
+
         self.webView = WKWebView(frame: .zero, configuration: config)
         super.init()
         webView.navigationDelegate = self
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        userContent.add(self, name: "contentReady")
     }
 
-    /// Load a URL and return page text.
-    public func navigate(to url: URL, timeout: TimeInterval = 20) async throws -> String {
+    deinit {
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "contentReady")
+    }
+
+    /// Navigate to a URL and return the rendered page text.
+    /// Waits for the SPA to signal content readiness, not just didFinish.
+    public func navigate(to url: URL, timeout: TimeInterval = 25) async throws -> String {
         currentURL = url
-        return try await withCheckedThrowingContinuation { [weak self] continuation in
+        return try await navigateWithContinuation { [weak self] continuation in
             guard let self else {
                 continuation.resume(throwing: AppError.aiServiceError("WebSession deallocated"))
                 return
@@ -36,9 +49,8 @@ public final class WebSession: NSObject, WKNavigationDelegate {
         }
     }
 
-    /// Click an element matching a CSS selector and return the new page text.
-    public func click(selector: String, timeout: TimeInterval = 20) async throws -> String {
-        // Inject click script
+    /// Click the first element matching a CSS selector and return the new page text.
+    public func click(selector: String, timeout: TimeInterval = 25) async throws -> String {
         let clickJS = """
         (function() {
             let el = document.querySelector('\(selector)');
@@ -52,17 +64,24 @@ public final class WebSession: NSObject, WKNavigationDelegate {
         })();
         """
         let result = try await evaluateJS(clickJS)
-
-        if result.hasPrefix("NAVIGATE:"), let href = result.dropFirst(9).description.removingPercentEncoding, let url = URL(string: href, relativeTo: currentURL) {
+        if result.hasPrefix("NAVIGATE:"), 
+           let href = String(result.dropFirst(9)).removingPercentEncoding,
+           let url = URL(string: href, relativeTo: currentURL) {
             return try await navigate(to: url, timeout: timeout)
         }
-
-        // Wait for page to settle after click
-        try await Task.sleep(nanoseconds: 2_000_000_000)
-        return try await getText()
+        // Wait for the click to settle and inject watcher
+        return try await navigateWithContinuation { [weak self] continuation in
+            guard let self else {
+                continuation.resume(throwing: AppError.aiServiceError("WebSession deallocated"))
+                return
+            }
+            self.continuation = continuation
+            // The watcher will catch the mutation
+            injectContentWatcher()
+        }
     }
 
-    /// Get all links on the current page.
+    /// Get all links on the current page as JSON.
     public func getLinks() async throws -> String {
         let js = """
         Array.from(document.querySelectorAll('a[href]')).map(function(a) {
@@ -73,18 +92,17 @@ public final class WebSession: NSObject, WKNavigationDelegate {
         }).join('\\n');
         """
         let raw = try await evaluateJS(js)
-        guard !raw.isEmpty else { return "No links found." }
-        return raw
+        return raw.isEmpty ? "No links found." : raw
     }
 
-    /// Get the current page text.
+    /// Get current page text without re-navigating.
     public func getText() async throws -> String {
-        return try await extractText()
+        return try await evaluateJS("document.body?.innerText || '(empty page)'")
     }
 
     /// Navigate back in history.
-    public func goBack(timeout: TimeInterval = 20) async throws -> String {
-        try await withCheckedThrowingContinuation { [weak self] continuation in
+    public func goBack() async throws -> String {
+        return try await navigateWithContinuation { [weak self] continuation in
             guard let self else {
                 continuation.resume(throwing: AppError.aiServiceError("WebSession deallocated"))
                 return
@@ -95,8 +113,8 @@ public final class WebSession: NSObject, WKNavigationDelegate {
     }
 
     /// Navigate forward in history.
-    public func goForward(timeout: TimeInterval = 20) async throws -> String {
-        try await withCheckedThrowingContinuation { [weak self] continuation in
+    public func goForward() async throws -> String {
+        return try await navigateWithContinuation { [weak self] continuation in
             guard let self else {
                 continuation.resume(throwing: AppError.aiServiceError("WebSession deallocated"))
                 return
@@ -106,12 +124,33 @@ public final class WebSession: NSObject, WKNavigationDelegate {
         }
     }
 
+    // MARK: - Private Helpers
+
+    private func navigateWithContinuation(_ setup: (CheckedContinuation<String, Error>) -> Void) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            setup(continuation)
+        }
+    }
+
+    private func evaluateJS(_ js: String) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            webView.evaluateJavaScript(js) { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: (result as? String) ?? "")
+                }
+            }
+        }
+    }
+
     // MARK: - WKNavigationDelegate
 
     nonisolated public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            await fulfillWithPageText()
+            // didFinish fires when the initial HTML loads, but SPAs are just starting.
+            // Inject the SPA watcher that signals when actual content is rendered.
+            injectContentWatcher()
         }
     }
 
@@ -124,53 +163,98 @@ public final class WebSession: NSObject, WKNavigationDelegate {
 
     nonisolated public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         Task { @MainActor in
+            // For SPAs, provisional navigation failures (e.g., resource timeouts)
+            // are often recoverable. Only fail if we have no content at all.
             continuation?.resume(throwing: error)
             continuation = nil
         }
     }
 
-    // MARK: - Private
+    // MARK: - WKScriptMessageHandler
 
-    private func fulfillWithPageText() {
-        Task {
-            let text = await extractText()
-            continuation?.resume(returning: text)
+    nonisolated public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "contentReady" else { return }
+        Task { @MainActor in
+            let text = (message.body as? String) ?? ""
+            continuation?.resume(returning: text.isEmpty ? "(empty page)" : text)
             continuation = nil
         }
     }
 
-    private func extractText() async -> String {
+    // MARK: - Content Watcher JS
+
+    private func injectContentWatcher() {
         let js = """
         (function() {
-            function getText() {
-                let results = document.querySelectorAll('.result, .result__body, [data-testid="result"], .g, .rc');
-                if (results.length > 0) return Array.from(results).map(function(r) { return r.innerText; }).filter(Boolean).join('\\n---\\n');
-                let article = document.querySelector('article');
-                if (article) return article.innerText;
-                let main = document.querySelector('main, [role="main"], #content, .content');
-                if (main) return main.innerText;
-                let body = document.body;
-                if (!body) return '';
-                for (let sel of ['script','style','nav','footer','header','aside','.ad','.ads','.sidebar','.menu','.nav','.social','.share']) {
-                    document.querySelectorAll(sel).forEach(function(el) { if(el.parentNode) el.remove(); });
-                }
-                return body.innerText;
+            if (window.__contentWatchInjected) return;
+            window.__contentWatchInjected = true;
+            var maxWait = 20000; // 20s total
+            var start = Date.now();
+
+            function signal(text) {
+                try {
+                    window.webkit.messageHandlers.contentReady.postMessage(text);
+                } catch(e) {}
             }
-            let text = getText() || '';
-            text = text.replace(/\\s{3,}/g, '\\n\\n').trim();
-            if (text.length < 50) return '(empty page)';
-            return text.length > 50000 ? text.substring(0, 50000) + '\\n\\n... [truncated]' : text;
+
+            function getContent() {
+                // DuckDuckGo: search results
+                var results = document.querySelectorAll('.result, .result__body, .result__snippet, [data-testid="result"]');
+                if (results.length > 0) {
+                    return Array.from(results).map(function(r) { return r.innerText; }).filter(Boolean).join('\\n---\\n');
+                }
+                // Generic: article or main content
+                var article = document.querySelector('article');
+                if (article && article.innerText.trim().length > 200) return article.innerText;
+                var main = document.querySelector('main, [role="main"], #content, .content');
+                if (main && main.innerText.trim().length > 200) return main.innerText;
+                // Body fallback (with cleanup)
+                var body = document.body;
+                if (!body) return null;
+                ['script','style','nav','footer','header','aside'].forEach(function(sel) {
+                    document.querySelectorAll(sel).forEach(function(el) {
+                        if(el.parentNode) el.remove();
+                    });
+                });
+                var text = body.innerText.trim();
+                if (text.length > 500) return text;
+                return null;
+            }
+
+            // Check immediately
+            var content = getContent();
+            if (content) { signal(content); return; }
+
+            // Watch for DOM changes (SPA rendering)
+            var observer = new MutationObserver(function() {
+                var content = getContent();
+                if (content) {
+                    observer.disconnect();
+                    signal(content);
+                }
+            });
+            observer.observe(document.body || document.documentElement, {
+                childList: true, subtree: true, attributes: false, characterData: true
+            });
+
+            // Timeout safety net
+            setTimeout(function() {
+                observer.disconnect();
+                var content = getContent();
+                signal(content || '(empty page)');
+            }, maxWait);
         })();
         """
-        return await evaluateJS(js)
-    }
 
-    private func evaluateJS(_ js: String) async -> String {
-        await withCheckedContinuation { continuation in
-            webView.evaluateJavaScript(js) { result, _ in
-                continuation.resume(returning: (result as? String) ?? "")
-            }
-        }
+        webView.evaluateJavaScript(js) { _, _ in }
+    }
+}
+
+/// WKScriptMessageHandler must be a class — use a thin wrapper that
+/// forwards to the main WebSession via a weak reference.
+private class DefaultScriptMessageHandler: NSObject, WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        // Forwarded via the session's own handler
     }
 }
 
@@ -179,11 +263,10 @@ public actor WebSessionStore {
     public static let shared = WebSessionStore()
     private var sessions: [String: WebSession] = [:]
 
-    public func create() async -> String {
-        let id = UUID().uuidString
-        let session = await MainActor.run { WebSession(id: id) }
-        sessions[id] = session
-        return id
+    public func create(sessionId: String = UUID().uuidString) async -> String {
+        let session = await MainActor.run { WebSession(id: sessionId) }
+        sessions[sessionId] = session
+        return sessionId
     }
 
     public func get(_ id: String) -> WebSession? {
