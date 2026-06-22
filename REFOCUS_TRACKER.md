@@ -169,10 +169,10 @@ Expected: no Swift compilation errors from our changes. Non-zero exit may be fro
 | Phase | Scope | Key Changes | Status |
 |-------|-------|-------------|--------|
 | 6.0 | ShapeStyles & Typography | `.foregroundColor()`→`.foregroundStyle()`, `.font(.system(size:))`→semantic fonts, `Color(NSColor.*)`→SwiftUI ShapeStyles | ✅ Complete |
-| 6.1 | Layout & Navigation | `NavigationSplitView` layout, `NSOutlineView`→`List(children:)`, remove `WindowAccessor`/`LayoutView`/`PanelCoordinator` | 🔴 Not started |
+| 6.1 | Layout & Navigation | `NavigationSplitView` layout, `NSOutlineView`→`List(children:)`, remove `WindowAccessor`/`LayoutView`/`PanelCoordinator` | 🔶 Partial — WindowAccessor removed, window setup inlined |
 | 6.2 | Toolbar & Search | `.toolbar {}` for all tab bars, `.searchable()` for all search fields (6 instances) | 🔴 Not started |
 | 6.3 | Settings | `Form` + `Section` + `.formStyle(.grouped)` for all settings tabs, remove `SettingsCard`/`SettingsRow` | 🔴 Not started |
-| 6.4 | Lists & Overlays | `ScrollView+LazyVStack`→native `List`, `OverlayContainer`→`.sheet()`/`.popover()`, remove overlay scaffolding | 🔴 Not started |
+| 6.4 | Lists & Overlays | `ScrollView+LazyVStack`→native `List`, `OverlayContainer`→`.sheet()`/`.popover()`, remove overlay scaffolding | 🔶 Partial — `OverlayContainer` replaced with native `.sheet()`/`.popover()` on 6 overlays. `ScrollView+LazyVStack`→`List` deferred (needs deeper rewrite). |
 | 6.5 | Materials & Glass | `.nativeGlassBackground()`→`.glassBackgroundEffect()`, remove `GlassStyle.swift`, audit all materials | 🔴 Not started |
 
 **Files to delete:** ~25 files (overlay scaffolding, GlassStyle, SettingsComponents, PanelCoordinator, LayoutView, WindowAccessor, ModernFileTree*, FileTree*, NavigationLocationsOverlay, RenameSymbolOverlay)
