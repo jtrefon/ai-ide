@@ -3,11 +3,12 @@
 ## Git State
 
 - **Branch:** `refocus-v1`
-- **Base:** Created from main branch. 15+ commits ahead.
+- **Base:** Created from main branch. 15+ commits ahead (plus uncommitted Gemma 4 E4B migration).
 - **Commits (chronological, newest first):**
 
 | Commit | Phase | Description |
-|---|---|---|
+|---|---|---|---|
+| (uncommitted) | 4.x | Gemma 4 E4B model swap: context 128K, TurboQuant re-enabled, removed Gemma-2 compat fields, deleted Qwen36Adapter/LocalModelAdapter, added test_gemma4_local.py |
 | 6f64caad | 5.3 | HNSW index for approximate ANN semantic search (4 new files, 517+ lines) |
 | 0d73a512 | 5.2 | Fix cloud pipeline orchestration bugs (usesLocalModel, non-fatal QA) |
 | (earlier) | 5.1 | Inline AI popover (InlineAIPopoverView + InlineAIPopoverManager) |
@@ -17,7 +18,7 @@
 | (earlier) | 1.x | Pipeline isolation (RAG out of local, orchestration out of local) |
 | (earliest) | 0.x | Vision docs, Scoring/ deletion, AIEnrichment deletion, protocol cleanup, test mocks |
 
-- **Stats:** 94 files changed, 1,737 additions, 7,966 deletions (net: -6,229 lines)
+- **Stats:** 98 files changed, 2,395 additions, 8,069 deletions (net: -5,674 lines). Plus working tree: 8 files changed, 31 added, 91 deleted (Qwen36Adapter/LocalModelAdapter removed, Gemma 4 E4B config shim + test script added)
 
 ## Phase 0 — Foundation ✅
 
@@ -83,18 +84,27 @@
 
 ---
 
-## Phase 4 — Model Optimization (Partial)
+## Phase 4 — Model Optimization (Migrated to Gemma 4 E4B)
 
-**Theme:** Lock in on Qwen3.6 4B 4bit. Thin adapter, deep optimization.
+**Theme:** Replace Qwen3.6 target with Gemma 4 E4B. Delete adapter pattern in favor of native config shim.
 
 | # | Item | Impact | Depends On | Status | Key Files |
 |---|---|---|---|---|---|
-| 4.1 | `LocalModelAdapter` protocol | 🏗️ | 2.3 | ✅ | `Services/LocalPipeline/LocalModelAdapter.swift` — 6 methods |
-| 4.2 | `Qwen36Adapter` | 🎯 | 4.1 | ✅ | `Services/LocalPipeline/Qwen36Adapter.swift` |
-| 4.3 | Benchmarks | 📊 | 4.2 | ⬜ | `CompletionBenchmarkService.swift` exists, needs execution |
-| 4.4 | <100ms p50 tuning | 🎯 | 4.3 | ⬜ | `.fast` limits applied; full tuning blocked on benchmarks |
+| 4.1 | Model swap: Gemma 4 E4B IT 4bit | 🎯 | — | ✅ | `Services/LocalModels/LocalModelCatalog.swift` — added `gemma_4_e4b_it_4bit()`, context length 131072 |
+| 4.2 | Delete `LocalModelAdapter` + `Qwen36Adapter` | 🗑️ | 4.1 | ✅ | Files deleted — unused since Qwen3 era |
+| 4.3 | Fix `LocalModelFileStore` gemma-4 runtime compat | ✅ | 4.1 | ✅ | Removed spurious Gemma-2 fields (`attn_logit_softcapping`, `query_pre_attn_scalar`, `rope_theta`); uses `gemma4_text` model type |
+| 4.4 | Re-enable TurboQuant for gemma-4 | ✅ | 4.1 | ✅ | `LocalModelProcessAIService.swift` — removed hardcoded gemma-4 disable. Full-attention layers use `QuantizedKVCache`; sliding layers use `RotatingKVCache` (correctly skipped by `maybeQuantizeKVCache`) |
+| 4.5 | 12B evaluated and rejected | 🚫 | — | ❌ | `gemma4_unified` model type unsupported in vendored mlx-swift-lm; memory-marginal on 16GB M4 |
+| 4.6 | Test script: `test_gemma4_local.py` | 🎯 | 4.1 | ✅ | Replaces `test_gemma.swift` — proper inference test |
 
-**Note:** `Qwen3.6` has no 4B variant — only 27B (dense) and 35B-A3B (MoE). Adapter targets `mlx-community/Qwen3-4B-Instruct-2507-4bit`. Swap when upstream publishes Qwen3.6 MLX 4bit. Benchmarks (4.3-4.4) blocked on real model execution.
+**Note:** E4B is the confirmed primary model. The 12B variant (`gemma-4-12b-it-4bit`) uses `gemma4_unified` which our vendored mlx-swift-lm cannot load without vendor code changes, and its memory footprint (~11-12 GB total) leaves insufficient headroom on a 16GB M4 MacBook Pro with Docker, browser, and IDE overhead.
+
+### 4.x Implementation Details
+- **`LocalModelCatalog.swift`:** E4B definition at `gemma_4_e4b_it_4bit()`. Context length raised from 8192 → 131072 (128K). Uses `toolCallFormat: .gemma` (Gemma's native tool call format, no adapter needed).
+- **`LocalModelFileStore.swift`:** `requiresRuntimeCompatibilityDirectory` returns `true` for gemma-4. `normalizedRuntimeConfigData` inlines `text_config` to root and rewrites `model_type` from `gemma4` → `gemma4_text` (text-only). Removed 3 spurious Gemma-2 fields: `attn_logit_softcapping`, `query_pre_attn_scalar`, `rope_theta`.
+- **`LocalModelProcessAIService.swift`:** Removed the hardcoded `effectiveTurboQuant = model.id.contains("gemma-4") ? false : turboQuantEnabled` guard. Full-attention layers in Gemma 4 use `QuantizedKVCache` (4-bit KV), which works correctly. Sliding-window attention layers use `RotatingKVCache`, which is correctly skipped by `maybeQuantizeKVCache` in the MLX runtime — no exclusion needed.
+- **Deleted files:** `Qwen36Adapter.swift` (34 lines) and `LocalModelAdapter.swift` (18 lines) — dead code from the Qwen3 era.
+- **`test_gemma4_local.py`:** Standalone Python inference test script. Loads the model via `mlx-lm`, runs prompt/completion, reports tokens/sec and memory usage.
 
 ---
 
@@ -127,7 +137,7 @@
 - **Integration:** `DatabaseCodeChunkManager` same pattern but with composite keys (`resourceId:chunkIndex`). N+1 metadata fetch (each result is a PK-indexed lookup — acceptable for N ≤ 20).
 - **Thread safety:** Callers serialize via `DatabaseManager.queue` (serial DispatchQueue). No internal locking in `HNSWIndex`.
 
-**Gate:** All tests pass. Manual QA pass. Ready for alpha release. ⬜ (blocked on 5.4, 5.5, and 4.3-4.4)
+**Gate:** All tests pass. Manual QA pass. Ready for alpha release. ⬜ (blocked on 5.4, 5.5)
 
 ---
 
@@ -140,6 +150,7 @@
 5. **~50+ force unwraps** — Tracked for Phase 5.5. Widespread across entire codebase.
 6. **HNSW index not persisted** — Rebuilt from SQLite on first search after startup or data mutation. ~100-500ms rebuild cost for 5000 vectors. Acceptable.
 7. **HNSW `rebuildIfNeeded()`** exists but is not called automatically. Lazy deletions accumulate. If active:deleted ratio exceeds 70:30, quality may degrade.
+8. **Gemma 4 E4B `modelType` shim** — `LocalModelFileStore` rewrites `gemma4`→`gemma4_text` in a runtime compatibility directory. Fragile if upstream mlx-swift-lm adds native `gemma4_text` support (shim becomes unnecessary but harmless).
 
 ## Build Verification Command
 
@@ -148,6 +159,31 @@ xcodebuild build -scheme osx-ide 2>&1 | grep -E "\.swift:.*error:"
 ```
 
 Expected: no Swift compilation errors from our changes. Non-zero exit may be from SPM pre-existing issue (see Open Issues #3).
+
+---
+
+## Phase 6 — macOS 26 Native UI Refactoring [IN PROGRESS]
+
+**Theme:** Replace all custom UI components with macOS 26 native SwiftUI APIs. Full spec at `docs/ui-refactor-plan.md`.
+
+| Phase | Scope | Key Changes | Status |
+|-------|-------|-------------|--------|
+| 6.0 | ShapeStyles & Typography | `.foregroundColor()`→`.foregroundStyle()`, `.font(.system(size:))`→semantic fonts, `Color(NSColor.*)`→SwiftUI ShapeStyles | 🔴 Not started |
+| 6.1 | Layout & Navigation | `NavigationSplitView` layout, `NSOutlineView`→`List(children:)`, remove `WindowAccessor`/`LayoutView`/`PanelCoordinator` | 🔴 Not started |
+| 6.2 | Toolbar & Search | `.toolbar {}` for all tab bars, `.searchable()` for all search fields (6 instances) | 🔴 Not started |
+| 6.3 | Settings | `Form` + `Section` + `.formStyle(.grouped)` for all settings tabs, remove `SettingsCard`/`SettingsRow` | 🔴 Not started |
+| 6.4 | Lists & Overlays | `ScrollView+LazyVStack`→native `List`, `OverlayContainer`→`.sheet()`/`.popover()`, remove overlay scaffolding | 🔴 Not started |
+| 6.5 | Materials & Glass | `.nativeGlassBackground()`→`.glassBackgroundEffect()`, remove `GlassStyle.swift`, audit all materials | 🔴 Not started |
+
+**Files to delete:** ~25 files (overlay scaffolding, GlassStyle, SettingsComponents, PanelCoordinator, LayoutView, WindowAccessor, ModernFileTree*, FileTree*, NavigationLocationsOverlay, RenameSymbolOverlay)
+
+**Verification per phase:**
+1. `./run.sh build` — zero errors
+2. `./run.sh test` — all existing tests pass
+3. Visual smoke test — changed components render correctly
+4. `grep` audit — no remaining deprecated patterns
+
+---
 
 ## Recovery Commands
 
