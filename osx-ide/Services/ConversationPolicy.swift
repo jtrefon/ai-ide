@@ -19,7 +19,7 @@ final class ConversationPolicy: ConversationPolicyProtocol {
         "list_dir",
         "conversation_fold"
     ]
-    private let toolLoopExecutionToolNames: Set<String> = [
+private let toolLoopExecutionToolNames: Set<String> = [
         "index_find_files",
         "index_list_files",
         "index_search_text",
@@ -32,7 +32,9 @@ final class ConversationPolicy: ConversationPolicyProtocol {
         "create_file",
         "delete_file",
         "replace_in_file",
-        "run_command"
+        "run_command",
+        "web_search",
+        "web_browse"
     ]
 
     func allowedTools(
