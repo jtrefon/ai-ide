@@ -5,8 +5,9 @@ import Foundation
 /// Each session maintains its own browser state (cookies, history, JS context).
 struct WebBrowseTool: AITool {
     let name = "web_browse"
-    let description = "Browse web pages with a persistent session. Supports full JavaScript execution, " +
-        "clicking links, navigation, and content extraction. Use action=open to start, then session_id to continue. " +
+    let description = "Read full web pages with a persistent browser session. USE THIS to open documentation, tutorials, and full articles " +
+        "when web_search snippets are insufficient. Supports full JavaScript rendering, clicking links, and navigation. " +
+        "Workflow: action=open with url to start a session -> returns session_id and page text -> use session_id to continue. " +
         "Actions: open (navigate to URL), read (extract text from current page), click (click element by CSS selector), " +
         "links (list clickable links), go_back, go_forward, reload, close."
 

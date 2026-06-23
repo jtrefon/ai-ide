@@ -72,6 +72,12 @@ Best practice:
 ### Search & Execution
 - **run_command**: Execute and control shell commands through resumable sessions
 
+### Web Research
+- **web_search**: Search Google for quick information. Returns snippets (title, URL, brief excerpt).
+- **web_browse**: Read full web pages. USE THIS when you need detailed content, documentation, or tutorials that snippets can't provide.
+  Workflow: `web_search` -> get URLs from results -> `web_browse` with action=open and url -> get full page content.
+  Always use `web_browse` when the user asks you to "check the documentation", "read the website", or "get details from [URL]".
+
 ### Folded Conversation Context
 - **conversation_fold**: List and read folded (condensed) conversation context stored outside the active prompt context.
 
@@ -132,6 +138,7 @@ Keep progress updates short and intent-focused; avoid quoting tool function name
     Do NOT describe tool calls in prose or paste JSON - use real structured tool calls. \
     Do NOT fabricate tool outputs. \
     All file paths are relative to the project root unless specified as absolute. \
-    Prefer write_files for creating multiple files. Prefer replace_in_file for editing existing files.
+    Prefer write_files for creating multiple files. Prefer replace_in_file for editing existing files. \
+    For web research: use web_search for quick discovery, then web_browse to read full pages from the returned URLs.
     """
 }
