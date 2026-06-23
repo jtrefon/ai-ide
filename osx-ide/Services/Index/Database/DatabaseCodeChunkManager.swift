@@ -142,7 +142,7 @@ final class DatabaseCodeChunkManager {
         WHERE c.model_id = ?;
         """
 
-        guard let matches = try? database.withPreparedStatement(sql: sql, parameters: [modelId]) { statement in
+        let matches = (try? database.withPreparedStatement(sql: sql, parameters: [modelId]) { statement -> [(String, Int, [Float])]? in
             var rows: [(String, Int, [Float])] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 let resourceId = String(cString: sqlite3_column_text(statement, 0))
@@ -154,7 +154,7 @@ final class DatabaseCodeChunkManager {
                 rows.append((resourceId, chunkIndex, vector))
             }
             return rows
-        } else { return }
+        }) ?? []; if matches.isEmpty { return }
 
         for (resourceId, chunkIndex, vector) in matches {
             let key = chunkKey(resourceId: resourceId, chunkIndex: chunkIndex)
@@ -223,24 +223,7 @@ final class DatabaseCodeChunkManager {
         }
     }
 
-    private func normalize(_ vector: [Float]) -> [Float] {
-        let sumSquares = vector.reduce(Float(0)) { partial, value in
-            partial + (value * value)
-        }
-        guard sumSquares > 0 else { return [] }
-
-        let norm = sqrt(sumSquares)
-        return vector.map { $0 / norm }
-    }
-
-    private func cosineSimilarity(lhs: [Float], rhs: [Float]) -> Double {
-        guard lhs.count == rhs.count else { return -1.0 }
-        let score = zip(lhs, rhs).reduce(Float(0)) { partial, pair in
-            partial + (pair.0 * pair.1)
-        }
-        return Double(score)
-    }
-}
+  }
 
 struct CodeChunkRecord: Sendable {
     let chunkIndex: Int

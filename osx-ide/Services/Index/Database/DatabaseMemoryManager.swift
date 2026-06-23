@@ -145,7 +145,7 @@ final class DatabaseMemoryManager {
         WHERE e.model_id = ?;
         """
 
-        guard let matches = try? database.withPreparedStatement(sql: sql, parameters: [modelId]) { statement in
+        let matches = (try? database.withPreparedStatement(sql: sql, parameters: [modelId]) { statement -> [(String, [Float])]? in
             var rows: [(String, [Float])] = []
             while sqlite3_step(statement) == SQLITE_ROW {
                 let memoryId = String(cString: sqlite3_column_text(statement, 0))
@@ -156,7 +156,7 @@ final class DatabaseMemoryManager {
                 rows.append((memoryId, vector))
             }
             return rows
-        } else { return }
+        }) ?? []; if matches.isEmpty { return }
 
         for (id, vector) in matches {
             index.insert(id: id, vector: vector)

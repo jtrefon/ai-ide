@@ -212,20 +212,8 @@ public actor DatabaseStore {
         try database.getIndexedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowedExtensions)
     }
 
-    public func getAIEnrichedResourceCountScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Int {
-        try database.getAIEnrichedResourceCountScoped(projectRoot: projectRoot, allowedExtensions: allowedExtensions)
-    }
-
-    public func getAverageAIQualityScoreScoped(projectRoot: URL, allowedExtensions: Set<String>) throws -> Double {
-        try database.getAverageAIQualityScoreScoped(projectRoot: projectRoot, allowedExtensions: allowedExtensions)
-    }
-
     public func getSymbolKindCounts() throws -> [String: Int] {
         try database.getSymbolKindCounts()
-    }
-
-    public func getAverageQualityScore() throws -> Double {
-        try database.getAverageQualityScore()
     }
 
     // MARK: - Raw Operations

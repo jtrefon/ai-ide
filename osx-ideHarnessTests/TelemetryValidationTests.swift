@@ -48,7 +48,9 @@ final class TelemetryValidationTests: XCTestCase {
     }
     
     // MARK: - Test: Inference Performance Metrics
-    
+
+    // SKIP: RAGTelemetryAggregator class was removed; restore when class is reimplemented
+    /*
     func testInferencePerformanceMetrics() async throws {
         print("\n=== Test: Inference Performance Metrics ===")
         let eventBus = EventBus()
@@ -83,4 +85,5 @@ final class TelemetryValidationTests: XCTestCase {
         XCTAssertGreaterThan(snapshot.contextTokenEfficiency, 0)
         XCTAssertGreaterThanOrEqual(snapshot.policyViolationRate, 0)
     }
+    */
 }

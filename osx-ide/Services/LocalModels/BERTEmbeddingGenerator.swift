@@ -52,24 +52,20 @@ public final class BERTEmbeddingGenerator: MemoryEmbeddingGenerating, @unchecked
     }
     
     /// Load a bundled CoreML embedding model
+    /// Note: All bundled CoreML models have fixed input shape of 128 tokens.
+    /// To increase sequence length, the models must be re-exported with flexible shapes.
     public static func loadBundledModel(
         modelName: String,
         dimensions: Int,
         sequenceLength: Int = 128
     ) async -> BERTEmbeddingGenerator? {
-        // Xcode copies resources to the app bundle root (flattened structure)
-        // Try multiple locations in order of preference
-        let searchPaths = [
-            // Try direct bundle resource (Xcode copies to bundle root)
+        let searchPaths: [URL?] = [
             Bundle.main.resourceURL,
-            // Try app bundle
             Bundle.main.bundleURL,
-            // Try Resources subdirectory (for development builds)
             Bundle.main.bundleURL.appendingPathComponent("Resources"),
-            // Try EmbeddingModels subdirectory
             Bundle.main.bundleURL.appendingPathComponent("Resources/EmbeddingModels"),
         ]
-        
+
         for basePath in searchPaths {
             guard let base = basePath else { continue }
             let modelURL = base.appendingPathComponent("\(modelName).mlmodelc")
@@ -77,37 +73,61 @@ public final class BERTEmbeddingGenerator: MemoryEmbeddingGenerating, @unchecked
                 return await loadModelFromURL(modelURL, modelName: modelName, dimensions: dimensions, sequenceLength: sequenceLength)
             }
         }
-        
-        // Fallback: try Bundle.main.url forResource
+
         if let modelURL = Bundle.main.url(forResource: modelName, withExtension: "mlmodelc") {
             return await loadModelFromURL(modelURL, modelName: modelName, dimensions: dimensions, sequenceLength: sequenceLength)
         }
-        
+
         return nil
     }
     
-    /// Load model from a specific URL
+     /// Load model from a specific URL
     public static func loadModelFromURL(
         _ modelURL: URL,
         modelName: String,
         dimensions: Int,
-        sequenceLength: Int = 128
+        sequenceLength: Int = 512
     ) async -> BERTEmbeddingGenerator? {
         await Task.detached(priority: .userInitiated) {
             do {
                 let configuration = MLModelConfiguration()
                 configuration.computeUnits = .cpuAndNeuralEngine
-                
+
                 let model = try MLModel(contentsOf: modelURL, configuration: configuration)
-                
-                // Our models are converted as mlprogram format which supports Neural Engine
-                // With .cpuAndNeuralEngine compute units, CoreML will use NPU when available
+
                 let usesNPU = true
-                
-                // Use simple tokenizer (character-level fallback)
-                // For production, you'd want to bundle vocab.txt files
-                let tokenizer = SimpleTokenizer(maxLength: sequenceLength)
-                
+
+                // Try to load BERTTokenizer from vocab.txt alongside the model
+                let vocabURL = modelURL.deletingLastPathComponent()
+                    .appendingPathComponent("\(modelName).vocab.txt")
+                let tokenizer: any Sendable & _TokenizerProtocol
+
+                if FileManager.default.fileExists(atPath: vocabURL.path) {
+                    do {
+                        tokenizer = try BERTTokenizer.load(from: vocabURL)
+                        print("[BERTEmbeddingGenerator] Loaded BERTTokenizer from \(vocabURL.path)")
+                    } catch {
+                        print("[BERTEmbeddingGenerator] Failed to load vocab.txt: \(error), falling back to SimpleTokenizer")
+                        tokenizer = SimpleTokenizer(maxLength: sequenceLength)
+                    }
+                } else {
+                    // Also check parent directories for vocab.txt
+                    let altVocabURL = modelURL.deletingLastPathComponent()
+                        .appendingPathComponent("vocab.txt")
+                    if FileManager.default.fileExists(atPath: altVocabURL.path) {
+                        do {
+                            tokenizer = try BERTTokenizer.load(from: altVocabURL)
+                            print("[BERTEmbeddingGenerator] Loaded BERTTokenizer from \(altVocabURL.path)")
+                        } catch {
+                            print("[BERTEmbeddingGenerator] Failed to load vocab.txt: \(error), falling back to SimpleTokenizer")
+                            tokenizer = SimpleTokenizer(maxLength: sequenceLength)
+                        }
+                    } else {
+                        print("[BERTEmbeddingGenerator] No vocab.txt found, using SimpleTokenizer (embedding quality will be reduced)")
+                        tokenizer = SimpleTokenizer(maxLength: sequenceLength)
+                    }
+                }
+
                 return BERTEmbeddingGenerator(
                     model: model,
                     modelIdentifier: "bert_\(modelName)",

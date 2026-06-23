@@ -427,7 +427,11 @@ extension AIToolExecutor {
             "apply_patch": ["replace_in_file", "write_file"],
             "cli-mcp-server_run_command": ["run_command"],
             "run_terminal_command": ["run_command"],
-            "run_shell_command": ["run_command"]
+            "run_shell_command": ["run_command"],
+            "browse": ["web_browse"],
+            "web_browse": ["browse"],
+            "web": ["web_search", "web_browse"],
+            "search_web": ["web_search"]
         ]
 
         guard let candidates = aliases[toolCall.name] else {
@@ -573,6 +577,11 @@ extension AIToolExecutor {
             let explicitWait = parseRunCommandWaitSeconds(arguments)
             let effectiveWait = explicitWait ?? 30
             return max(effectiveWait + 5, 15)
+        }
+
+        // Web tools: bounded timeout to prevent indefinite hangs
+        if toolName == "web_search" || toolName == "web_browse" {
+            return 35
         }
 
         let stored = UserDefaults.standard.double(forKey: AppConstantsStorage.cliTimeoutSecondsKey)

@@ -1,6 +1,8 @@
 import Foundation
 
 final class HNSWIndex: @unchecked Sendable {
+    private let lock = NSLock()
+
     final class Node {
         let id: String
         let normalizedVector: [Float]
@@ -37,10 +39,25 @@ final class HNSWIndex: @unchecked Sendable {
         self.mL = 1.0 / log(Float(M))
     }
 
-    var isEmpty: Bool { nodes.isEmpty }
-    var activeCount: Int { nodes.count - deletedCount }
+    var isEmpty: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return nodes.isEmpty
+    }
+
+    var activeCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return nodes.count - deletedCount
+    }
 
     func insert(id: String, vector: [Float]) {
+        lock.lock()
+        defer { lock.unlock() }
+        insertLocked(id: id, vector: vector)
+    }
+
+    private func insertLocked(id: String, vector: [Float]) {
         guard !vector.isEmpty else { return }
 
         if let existing = nodes[id], !existing.isDeleted {
@@ -94,6 +111,12 @@ final class HNSWIndex: @unchecked Sendable {
     }
 
     func search(query: [Float], limit: Int, efSearch: Int = 50) -> [(id: String, similarity: Float)] {
+        lock.lock()
+        defer { lock.unlock() }
+        return searchLocked(query: query, limit: limit, efSearch: efSearch)
+    }
+
+    private func searchLocked(query: [Float], limit: Int, efSearch: Int = 50) -> [(id: String, similarity: Float)] {
         guard !query.isEmpty, let entryId = entryPointId else { return [] }
 
         var entryPoint = entryId
@@ -114,10 +137,11 @@ final class HNSWIndex: @unchecked Sendable {
     }
 
     func remove(id: String) {
+        lock.lock()
+        defer { lock.unlock() }
         guard let node = nodes[id], !node.isDeleted else { return }
         node.isDeleted = true
         deletedCount += 1
-
         for (layer, connections) in node.connections.enumerated() {
             for neighborId in connections {
                 nodes[neighborId]?.connections[layer].remove(id)
@@ -127,6 +151,8 @@ final class HNSWIndex: @unchecked Sendable {
     }
 
     func removeAll() {
+        lock.lock()
+        defer { lock.unlock() }
         nodes.removeAll()
         entryPointId = nil
         currentMaxLevel = 0
@@ -134,10 +160,12 @@ final class HNSWIndex: @unchecked Sendable {
     }
 
     func rebuildIfNeeded() {
-        guard deletedCount > 0, activeCount > 0, Float(deletedCount) / Float(activeCount + deletedCount) > 0.3 else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        guard deletedCount > 0, nodes.count > deletedCount else { return }
+        guard Float(deletedCount) / Float(nodes.count) > 0.3 else { return }
 
         let active = nodes.values.filter { !$0.isDeleted }
-        let oldEntry = entryPointId
 
         nodes.removeAll()
         entryPointId = nil
@@ -145,7 +173,7 @@ final class HNSWIndex: @unchecked Sendable {
         deletedCount = 0
 
         for node in active.sorted(by: { $0.level > $1.level }) {
-            insert(id: node.id, vector: node.normalizedVector.map { $0 }) // stored normalized, denormalize later?
+            insertLocked(id: node.id, vector: node.normalizedVector.map { $0 })
         }
     }
 
