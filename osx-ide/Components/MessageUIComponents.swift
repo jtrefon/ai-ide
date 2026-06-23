@@ -82,7 +82,7 @@ struct MessageUIComponents {
         private func addRightEdge(_ path: inout Path, points: CornerPoints) {
             // Right edge to bottom-right
             if corners.contains(.bottomRight) {
-                path.addLine(to: CGPoint(x: points.bottomRight.x - radius, y: points.bottomRight.y))
+                path.addLine(to: CGPoint(x: points.bottomRight.x, y: points.bottomRight.y - radius))
                 addArc(
                     &path,
                     center: CGPoint(x: points.bottomRight.x - radius, y: points.bottomRight.y - radius),

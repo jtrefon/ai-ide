@@ -78,10 +78,10 @@ struct MessageListView: View {
         visibleMessages.suffix(40).map(\.id.uuidString).joined(separator: "~")
     }
 
-    private func scrollToBottom(proxy: ScrollViewProxy) {
+          private func scrollToBottom(proxy: ScrollViewProxy) {
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 50_000_000)
-            withAnimation(.easeOut(duration: 0.2)) {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            withAnimation(.easeOut(duration: 0.15)) {
                 proxy.scrollTo("__bottom__", anchor: .bottom)
             }
         }
@@ -115,14 +115,6 @@ struct MessageListView: View {
                                 isReasoningHidden: reasoningHiddenBinding(for: message.id)
                             )
                             .id(message.id)
-                            .transition(
-                                AnyTransition.asymmetric(
-                                    insertion: AnyTransition.opacity
-                                        .combined(with: AnyTransition.offset(y: 10))
-                                        .combined(with: AnyTransition.scale(scale: 0.98)),
-                                    removal: AnyTransition.opacity
-                                )
-                            )
                         }
 
                         typingIndicator(maxBubbleWidth: maxBubbleWidth)
@@ -134,7 +126,7 @@ struct MessageListView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                 }
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.automatic)
                 .onAppear {
                     scrollToBottom(proxy: proxy)
                 }
