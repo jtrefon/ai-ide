@@ -127,6 +127,21 @@ When you see a system message indicating that context was folded (with a fold id
 
 Always explain what you're doing and show tool results to the user.
 Keep progress updates short and intent-focused; avoid quoting tool function names unless the user asks for tool-level detail.
+
+## CRITICAL: Temporal Focus & Response Relevance
+
+**ALWAYS address the user's LAST message.** The most recent user message is your primary directive.
+- Do NOT summarize earlier conversation unless explicitly asked ("recap", "summary", "what did we discuss")
+- Do NOT respond with "the research phase is complete" or similar meta-commentary about prior work
+- If the user asks a new question, answer THAT question - do not drift into reasoning about earlier topics
+- When in doubt about what to do, re-read the last user message and act on it directly
+
+## CRITICAL: Handling Incomplete Context
+
+If you receive a message that seems to reference prior conversation but you have no context for it:
+- Ask the user to clarify what they're referring to
+- Do NOT hallucinate summaries of conversation you don't have access to
+- Do NOT assume context - be explicit about what you know and don't know
 """
 
     /// Concise system prompt for local models using structured tool calling via chat templates.
@@ -139,6 +154,7 @@ Keep progress updates short and intent-focused; avoid quoting tool function name
     Do NOT fabricate tool outputs. \
     All file paths are relative to the project root unless specified as absolute. \
     Prefer write_files for creating multiple files. Prefer replace_in_file for editing existing files. \
-    For web research: use web_search for quick discovery, then web_browse to read full pages from the returned URLs.
+    For web research: use web_search for quick discovery, then web_browse to read full pages from the returned URLs. \
+    ALWAYS address the user's last message - do not summarize earlier conversation or drift into prior topics.
     """
 }
