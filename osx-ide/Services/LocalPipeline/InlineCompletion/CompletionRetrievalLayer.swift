@@ -84,7 +84,7 @@ final class CompletionRetrievalLayer: CompletionRetrieving {
         let rootURL = projectRoot.standardizedFileURL
         guard fileURL.path.hasPrefix(rootURL.path) else { return nil }
 
-        let relativePath = String(fileURL.path.dropFirst(rootURL.path.count + 1))
+        let relativePath = fileURL.relativeTo(rootURL)
         let line = snapshot.buffer.prefix(snapshot.cursorPosition).filter { $0 == "\n" }.count + 1
         return try? index.readIndexedFile(path: relativePath, startLine: max(1, line - 12), endLine: line + 6)
     }

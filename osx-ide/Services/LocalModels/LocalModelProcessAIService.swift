@@ -73,6 +73,7 @@ actor LocalModelGenerationPerformanceRecorder {
     static let shared = LocalModelGenerationPerformanceRecorder()
 
     private var snapshots: [LocalModelGenerationPerformanceSnapshot] = []
+    private let maxSnapshots = 100
 
     func clear() {
         snapshots.removeAll()
@@ -80,6 +81,9 @@ actor LocalModelGenerationPerformanceRecorder {
 
     func record(_ snapshot: LocalModelGenerationPerformanceSnapshot) {
         snapshots.append(snapshot)
+        if snapshots.count > maxSnapshots {
+            snapshots.removeFirst(snapshots.count - maxSnapshots)
+        }
     }
 
     func latest() -> LocalModelGenerationPerformanceSnapshot? {
@@ -167,9 +171,25 @@ actor LocalModelProcessAIService: AIService {
         private static let defaultTestingRSSLimitMB = 8 * 1024
         private static let defaultOperationalRSSLimitMB = 10 * 1024
 
+        /// Shared MLX engine for unit tests. Prevents repeated model loading and GPU memory explosion.
+        nonisolated static let sharedTestGenerator: LocalModelGenerating = {
+            struct NoOpEventBus: EventBusProtocol {
+                func publish<E: Event>(_ event: E) {}
+                func subscribe<E: Event>(to eventType: E.Type, handler: @escaping (E) -> Void) -> AnyCancellable {
+                    AnyCancellable {}
+                }
+            }
+            return NativeMLXGenerator(eventBus: NoOpEventBus())
+        }()
+
         init(eventBus: EventBusProtocol) {
             self.eventBus = eventBus
             Memory.cacheLimit = Self.mlxCacheLimitBytes
+        }
+
+        deinit {
+            Stream().synchronize()
+            Memory.clearCache()
         }
 
         private func performInference<R>(_ body: @escaping @Sendable () async throws -> R) async throws -> R {
@@ -818,9 +838,11 @@ actor LocalModelProcessAIService: AIService {
                 await prefixCacheForPressureHandling.clearAll()
             }
         }
-        Task {
-            await registerLifecycleObservers()
-            await preloadSelectedModelIfNeeded()
+        if !launchContext.isTesting {
+            Task {
+                await registerLifecycleObservers()
+                await preloadSelectedModelIfNeeded()
+            }
         }
     }
 

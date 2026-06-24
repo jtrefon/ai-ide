@@ -249,13 +249,9 @@ public final class WorkspaceNavigationService {
     }
 
     private static func relativePath(projectRoot: URL, filePath: String) -> String {
-        let root = projectRoot.standardizedFileURL
-        let path = URL(fileURLWithPath: filePath).standardizedFileURL.path
-
-        if path.hasPrefix(root.path + "/") {
-            return String(path.dropFirst(root.path.count + 1))
-        }
-
-        return URL(fileURLWithPath: filePath).lastPathComponent
+        let url = URL(fileURLWithPath: filePath)
+        let rel = url.relativeTo(projectRoot)
+        if rel != url.standardizedFileURL.path { return rel }
+        return url.lastPathComponent
     }
 }

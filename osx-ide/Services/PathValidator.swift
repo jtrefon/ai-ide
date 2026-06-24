@@ -104,15 +104,9 @@ struct PathValidator {
 
     /// Get relative path from project root
     func relativePath(for url: URL) -> String {
-        let absolutePath = url.standardizedFileURL.path
-        let rootPath = standardizedProjectRoot.path
-
-        if absolutePath.hasPrefix(rootPath + "/") {
-            return String(absolutePath.dropFirst(rootPath.count + 1))
-        } else if absolutePath == rootPath {
-            return "."
-        } else {
-            return absolutePath
-        }
+        let abs = url.standardizedFileURL.path
+        let root = standardizedProjectRoot.standardizedFileURL.path
+        if abs == root { return "." }
+        return url.relativeTo(projectRoot)
     }
 }

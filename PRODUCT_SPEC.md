@@ -206,5 +206,5 @@ This list is as important as the feature list. These are things that seem tempti
 - ConversationManager size: **880 lines** (was 981, split via SessionManager; target <300)
 - ToolLoopHandler size: **2824 lines** (unchanged — Phase 3 did not touch)
 - HNSWIndex: **~300 lines** (new, clean, annotated)
-- Files deleted during refocus: **~7,966 lines removed**, **1,737 added** (net: ~6,229 fewer lines)
+- Files deleted during refocus: **~8,069 lines removed**, **2,395 added** (net: ~5,674 fewer lines). Plus Gemma 4 E4B migration: 91 lines deleted (Qwen36Adapter/LocalModelAdapter), 31+ added (E4B config shim, inference test script)
 - Build: **Zero Swift compilation errors from refocus changes** (pre-existing SPM dependency issue on test target only)

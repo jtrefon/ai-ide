@@ -369,7 +369,7 @@ osx-ide/
 
 ## Migration Log (What Was Actually Done)
 
-The refocus branch (`refocus-v1`) executed a 5-phase migration over 15+ commits, 94 files changed, 1,737 added, 7,966 deleted. Below is the record of what was done so recovery from any pivot is possible.
+The refocus branch (`refocus-v1`) executed a 5-phase migration (plus later Gemma 4 E4B model swap) over commits totalling 98 files changed, 2,395 added, 8,069 deleted. Below is the record of what was done so recovery from any pivot is possible.
 
 ### Phase 0 — Foundation (Cuts)
 | What | Details |
@@ -397,7 +397,7 @@ The refocus branch (`refocus-v1`) executed a 5-phase migration over 15+ commits,
 | `ConversationFlow/` → `CloudPipeline/` | Directory rename with Xcode 16 `fileSystemSynchronizedGroups` |
 | `InlineCompletion/` → `LocalPipeline/InlineCompletion/` | Moved under local pipeline |
 | `LocalInteractionService` | Created at `Services/LocalPipeline/LocalInteractionService.swift` |
-| `LocalModelAdapter` + `Qwen36Adapter` | Created at `Services/LocalPipeline/` |
+| `LocalModelAdapter` + `Qwen36Adapter` | Created at `Services/LocalPipeline/` (later deleted — replaced by Gemma 4 E4B with native `toolCallFormat: .gemma` in `LocalModelCatalog`, no adapter needed) |
 | `CompletionBenchmarkService` | Created at `Services/LocalPipeline/CompletionBenchmarkService.swift` |
 
 ### Phase 3 — Architecture Completion
@@ -408,13 +408,17 @@ The refocus branch (`refocus-v1`) executed a 5-phase migration over 15+ commits,
 | `RAGTelemetryAggregator` | Deleted |
 | `CompletionContextAssembler` | `.fast` limits as default (prefix 4K→500, output 120→40 chars) |
 
-### Phase 4 — Model Optimization (Partial)
+### Phase 4 — Model Optimization (Migrated to Gemma 4 E4B)
 | What | Details |
 |------|---------|
-| `LocalModelAdapter` protocol | 6 methods: tokenize, decode, formatPrompt, contextLength, toolCallFormat, additionalContext + reasoning/turbo flags |
-| `Qwen36Adapter` | Conforms to LocalModelAdapter. Targets mlx-community/Qwen3-4B-Instruct-2507-4bit (no official Qwen3.6 4B exists yet) |
-| `CompletionBenchmarkService` | p50/p90/p99 latency measurement |
-| 4.3–4.4 benchmarks | ⬜ BLOCKED — require real model execution on user machine |
+| Model swap | Replaced Qwen3.6 target with `mlx-community/gemma-4-e4b-it-4bit@62b0e4e` (Gemma 4 E4B IT 4bit) |
+| `LocalModelAdapter` protocol | 6 methods — **deleted** (unused; Gemma 4's native `.gemma` tool call format in `LocalModelCatalog` eliminates adapter pattern) |
+| `Qwen36Adapter` | **Deleted** — replaced by gemma4 `normalizedRuntimeConfigData` shim in `LocalModelFileStore` |
+| `LocalModelCatalog` | E4B context length set to 131072 (128K); `toolCallFormat: .gemma` |
+| `LocalModelFileStore` | Removed spurious Gemma-2 runtime compat fields (`attn_logit_softcapping`, `query_pre_attn_scalar`, `rope_theta`) |
+| `LocalModelProcessAIService` | Removed hardcoded gemma-4 TurboQuant disable; both KV cache types now work correctly |
+| `test_gemma.swift` | Replaced with proper inference test script `test_gemma4_local.py` |
+| 12B rejected | `gemma-4-12b-it-4bit` — `gemma4_unified` model type unsupported in vendored mlx-swift-lm; memory-marginal on 16GB M4 (~11-12 GB) |
 
 ### Phase 5 — Polish (3/5 Complete)
 | What | Details |
@@ -429,6 +433,5 @@ The refocus branch (`refocus-v1`) executed a 5-phase migration over 15+ commits,
 1. **`IndexStats` still has `aiEnrichedResourceCount`/`averageAIQualityScore`** — always 0 since AIEnrichment deleted. Cosmetic only.
 2. **28 singletons remain** — Phase 5.4 target
 3. **~50+ force unwraps** — Phase 5.5 target
-4. **Blocked benchmarks** — Phase 4.3–4.4 need real model
-5. **SPM test target broken** — Pre-existing `EventSource` dependency on swift-nio/CNIOExtrasZlib
-6. **Qwen3.6 4B doesn't exist** — Adapter targets Qwen3-4B-2507. Swap when upstream publishes MLX 4bit
+4. **SPM test target broken** — Pre-existing `EventSource` dependency on swift-nio/CNIOExtrasZlib
+5. **Gemma 4 E4B in-tree `modelType` shim** — `LocalModelFileStore` rewrites `gemma4`→`gemma4_text` in a runtime compatibility directory. Fragile if upstream mlx-swift-lm adds native `gemma4_text` support (the shim would become unnecessary but harmless).

@@ -61,13 +61,8 @@ struct IndexFileEnumerator {
     }
 
     private static func relativePath(from root: URL, to url: URL) -> String {
-        let rootPath = root.standardizedFileURL.path
-        let full = url.standardizedFileURL.path
-        if full == rootPath { return "" }
-        if full.hasPrefix(rootPath + "/") {
-            return String(full.dropFirst(rootPath.count + 1))
-        }
-        return full
+        let rel = url.relativeTo(root)
+        return rel == root.standardizedFileURL.path ? "" : rel
     }
 
     private static func shouldExclude(relativePath: String, excludePatterns: [String]) -> Bool {

@@ -64,15 +64,14 @@ final class QAReviewHandler {
                 ))
                 .get()
         } catch {
-            AppLogger.shared.warning(
+            await AppLogger.shared.warning(
                 category: .conversation,
                 message: "qa.tool_output_review_failed",
                 context: AppLogger.LogCallContext(metadata: ["error": error.localizedDescription])
             )
             return response
         }
-
-        let qaReport = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        _ = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         Task.detached(priority: .utility) {
             await AppLogger.shared.info(
@@ -155,7 +154,7 @@ final class QAReviewHandler {
                 ))
                 .get()
         } catch {
-            AppLogger.shared.warning(
+            await AppLogger.shared.warning(
                 category: .conversation,
                 message: "qa.quality_review_failed",
                 context: AppLogger.LogCallContext(metadata: ["error": error.localizedDescription])

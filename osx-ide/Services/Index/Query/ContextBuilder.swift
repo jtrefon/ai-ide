@@ -13,11 +13,7 @@ public enum ContextBuilder {
 
         func relPath(_ absPath: String) -> String {
             guard let projectRoot else { return absPath }
-            let root = projectRoot.standardizedFileURL.path
-            if absPath.hasPrefix(root + "/") {
-                return String(absPath.dropFirst(root.count + 1))
-            }
-            return absPath
+            return absPath.relativeToRoot(projectRoot)
         }
 
         if let explicitContext, !explicitContext.isEmpty {

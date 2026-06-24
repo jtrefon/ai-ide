@@ -346,14 +346,9 @@ class AppState: ObservableObject, IDEContext {
     /// Standardized method to resolve relative path from project root.
     func relativePath(for url: URL) -> String? {
         guard let projectRoot = workspace.currentDirectory?.standardizedFileURL else { return nil }
-        let standardizedURL = url.standardizedFileURL
-
-        if standardizedURL.path.hasPrefix(projectRoot.path) {
-            var relative = String(standardizedURL.path.dropFirst(projectRoot.path.count))
-            if relative.hasPrefix("/") { relative.removeFirst() }
-            return relative.isEmpty ? "." : relative
-        }
-        return nil
+        let rel = url.relativeTo(projectRoot)
+        guard rel != url.standardizedFileURL.path else { return nil }
+        return rel.isEmpty ? "." : rel
     }
 
     /// Standardized method to resolve absolute URL from relative path.

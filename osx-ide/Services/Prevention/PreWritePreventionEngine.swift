@@ -337,12 +337,7 @@ struct PreWritePreventionEngine {
     }
 
     private func relativePath(for url: URL) -> String {
-        let absolutePath = url.standardizedFileURL.path
-        let rootPath = projectRoot.standardizedFileURL.path
-        if absolutePath.hasPrefix(rootPath + "/") {
-            return String(absolutePath.dropFirst(rootPath.count + 1))
-        }
-        return absolutePath
+        url.relativeTo(projectRoot)
     }
 
     private func projectTextFiles() -> [URL] {

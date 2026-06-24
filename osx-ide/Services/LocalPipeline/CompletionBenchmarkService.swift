@@ -56,7 +56,7 @@ final class CompletionBenchmarkService {
 
     private func makeSnapshot(for sample: CompletionBenchmarkSamples.Sample) -> InlineCompletionEditorSnapshot {
         InlineCompletionEditorSnapshot(
-            paneID: "benchmark",
+            paneID: .primary,
             filePath: "benchmark.swift",
             language: "swift",
             buffer: sample.prefix + "█" + sample.suffix,

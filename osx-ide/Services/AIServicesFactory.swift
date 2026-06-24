@@ -64,8 +64,12 @@ enum AIServicesFactory {
         let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
         let providerSelectionStore = AIProviderSelectionStore(settingsStore: settingsStore)
         let localModelEventBus: (any EventBusProtocol)? = launchContext.isTesting ? nil : eventBus
+        let testGenerator: LocalModelProcessAIService.LocalModelGenerating? = launchContext.isTesting
+            ? LocalModelProcessAIService.NativeMLXGenerator.sharedTestGenerator
+            : nil
         let localModelService = LocalModelProcessAIService(
             selectionStore: selectionStore,
+            generator: testGenerator,
             eventBus: localModelEventBus,
             activityCoordinator: activityCoordinator,
             launchContext: launchContext

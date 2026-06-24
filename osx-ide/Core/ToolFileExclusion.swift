@@ -22,24 +22,15 @@ struct ToolFileExclusion {
 
     /// Returns the project-relative path for an absolute URL.
     func relativePath(for url: URL) -> String {
-        let rootPath = projectRoot.standardizedFileURL.path
-        let fullPath = url.standardizedFileURL.path
-        if fullPath == rootPath { return "" }
-        if fullPath.hasPrefix(rootPath + "/") {
-            return String(fullPath.dropFirst(rootPath.count + 1))
-        }
-        return fullPath
+        let rel = url.relativeTo(projectRoot)
+        return rel == projectRoot.standardizedFileURL.path ? "" : rel
     }
 
     /// Returns the relative path of a URL from the project root, or nil if outside.
     func tryRelativePath(for url: URL) -> String? {
-        let rootPath = projectRoot.standardizedFileURL.path
-        let fullPath = url.standardizedFileURL.path
-        if fullPath == rootPath { return "" }
-        if fullPath.hasPrefix(rootPath + "/") {
-            return String(fullPath.dropFirst(rootPath.count + 1))
-        }
-        return nil
+        let rel = url.relativeTo(projectRoot)
+        guard rel != url.standardizedFileURL.path else { return nil }
+        return rel
     }
 }
 

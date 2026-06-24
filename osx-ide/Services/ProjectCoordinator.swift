@@ -179,6 +179,22 @@ class ProjectCoordinator: ObservableObject {
                     )
                 }
 
+                // Initialize project memories in background (LLM-assisted)
+                Task.detached(priority: .utility) {
+                    let memoryStart = Date()
+                    let initializer = ProjectMemoryInitializer(
+                        index: index,
+                        aiService: aiService,
+                        projectRoot: root
+                    )
+                    let created = await initializer.initializeIfEmpty()
+                    if created {
+                        await IndexLogger.shared.log(
+                            "ProjectCoordinator: Created project memories in \(String(format: "%.1f", Date().timeIntervalSince(memoryStart)))s"
+                        )
+                    }
+                }
+
                 Swift.print(
                     "[DIAG] ProjectCoordinator initializationTask COMPLETE in \(String(format: "%.2f", Date().timeIntervalSince(configStart) * 1000))ms"
                 )
@@ -320,6 +336,16 @@ class ProjectCoordinator: ObservableObject {
                 } else {
                     await IndexLogger.shared.log(
                         "ProjectCoordinator: Reindex requested but Codebase Index is disabled")
+                }
+
+                // Initialize project memories in background (LLM-assisted)
+                Task.detached(priority: .utility) {
+                    let initializer = ProjectMemoryInitializer(
+                        index: index,
+                        aiService: aiService,
+                        projectRoot: projectRoot
+                    )
+                    _ = await initializer.initializeIfEmpty()
                 }
             } catch {
                 await MainActor.run {

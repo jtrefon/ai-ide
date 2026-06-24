@@ -171,9 +171,9 @@ final class WorkspaceSymbolSearchService {
     }
 
     static func relativePath(projectRoot: URL, absolutePath: String) -> String? {
-        let root = projectRoot.standardizedFileURL.path
-        let abs = URL(fileURLWithPath: absolutePath).standardizedFileURL.path
-        guard abs.hasPrefix(root + "/") else { return nil }
-        return String(abs.dropFirst(root.count + 1))
+        let url = URL(fileURLWithPath: absolutePath)
+        let rel = url.relativeTo(projectRoot)
+        guard rel != url.standardizedFileURL.path else { return nil }
+        return rel
     }
 }

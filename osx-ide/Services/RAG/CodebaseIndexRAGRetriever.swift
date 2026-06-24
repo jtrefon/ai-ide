@@ -273,11 +273,7 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
     }
 
     private func relPath(_ absPath: String, projectRoot: URL) -> String {
-        let root = projectRoot.standardizedFileURL.path
-        if absPath.hasPrefix(root + "/") {
-            return String(absPath.dropFirst(root.count + 1))
-        }
-        return absPath
+        absPath.relativeToRoot(projectRoot)
     }
 
     private func tokenizeForSymbolSearch(_ userInput: String) -> [String] {

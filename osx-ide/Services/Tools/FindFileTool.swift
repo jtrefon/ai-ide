@@ -57,7 +57,7 @@ struct FindFileTool: AITool {
 
             let fileName = fileURL.lastPathComponent.lowercased()
             if fileName.contains(lowerPattern) {
-                let relativePath = fileURL.path.replacingOccurrences(of: url.path + "/", with: "")
+                let relativePath = fileURL.relativeTo(url)
                 matches.append(relativePath)
             }
 

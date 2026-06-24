@@ -69,11 +69,15 @@ The professional macOS developer who wants AI that's always available, always fa
 
 ## State as of Refocus (June 2026)
 
-**Completed:** Phases 0–3 (foundation cuts, pipeline isolation, structural reorg, architecture completion). Phase 5 items 5.1 (Inline AI popover), 5.2 (cloud pipeline bug fixes: `usesLocalModel` parameter drop in ConditionalToolLoopNode, non-fatal QA review), 5.3 (HNSW ANN index for semantic search).
+**Primary local model:** Gemma 4 E4B IT 4bit (`gemma-4-e4b-it-4bit`) — context window raised to 128K, `gemma4_text` runtime model type via `LocalModelFileStore` compatibility shim, TurboQuant re-enabled for full-attention layers (QuantizedKVCache compatible; sliding layers use RotatingKVCache, correctly skipped by `maybeQuantizeKVCache`).
 
-**Remaining:** Phase 4 benchmarks (require real model on user machine), Phase 5.4–5.5 (28 singleton migration, ~50 force unwrap removals).
+**12B evaluated and rejected:** `mlx-community/gemma-4-12b-it-4bit` uses `gemma4_unified` model type not handled by vendored mlx-swift-lm runtime, would require vendor code changes, and is memory-marginal on 16GB M4 (~11-12 GB total vs Docker/browser/IDE overhead).
 
-**Build:** All 15+ commits compile with zero Swift errors. Pre-existing SPM dependency issues (`EventSource` → swift-nio) break the test target only.
+**Completed:** Phases 0–3 (foundation cuts, pipeline isolation, structural reorg, architecture completion). Phase 5 items 5.1 (Inline AI popover), 5.2 (cloud pipeline bug fixes), 5.3 (HNSW ANN index). Deleted dead `Qwen36Adapter.swift` and `LocalModelAdapter.swift` (unused since Qwen3 era).
+
+**Remaining:** Phase 5.4–5.5 (28 singleton migration, ~50 force unwrap removals).
+
+**Build:** All commits compile with zero Swift errors. Pre-existing SPM dependency issues (`EventSource` → swift-nio) break the test target only.
 
 ## What Success Looks Like
 

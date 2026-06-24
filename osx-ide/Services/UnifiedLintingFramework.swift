@@ -134,11 +134,9 @@ final class UnifiedLintingFramework {
 
     private func relativePath(for fileURL: URL) -> String? {
         guard let rootURL = workspaceRootProvider()?.standardizedFileURL else { return nil }
-        let normalized = fileURL.standardizedFileURL
-        guard normalized.path.hasPrefix(rootURL.path) else { return nil }
-        var relative = String(normalized.path.dropFirst(rootURL.path.count))
-        if relative.hasPrefix("/") { relative.removeFirst() }
-        return relative
+        let rel = fileURL.relativeTo(rootURL)
+        guard rel != fileURL.standardizedFileURL.path else { return nil }
+        return rel
     }
 
     private func runBuiltinRules(rules: [LintRuleDefinition], content: String, relativePath: String) -> [Diagnostic] {

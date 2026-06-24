@@ -3,6 +3,23 @@ import Combine
 
 @testable import osx_ide
 
+/// Simple actor-based lock for test synchronization.
+private actor TestLock {
+    private var isLocked = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func lock() async {
+        if !isLocked { isLocked = true; return }
+        await withCheckedContinuation { waiters.append($0) }
+        isLocked = true
+    }
+
+    func unlock() {
+        if !waiters.isEmpty { waiters.removeFirst().resume() }
+        else { isLocked = false }
+    }
+}
+
 @MainActor
 final class ConversationSendCoordinatorTests: XCTestCase {
     private final class MockEventBus: EventBusProtocol {
@@ -67,7 +84,7 @@ final class ConversationSendCoordinatorTests: XCTestCase {
     }
 
     private final class SpyAIService: AIService, @unchecked Sendable {
-        private let lock = AsyncLock()
+        private let lock = TestLock()
         private(set) var historyRequests: [AIServiceHistoryRequest] = []
         private(set) var messageRequests: [AIServiceMessageWithProjectRootRequest] = []
         private(set) var streamingRequests: [AIServiceHistoryRequest] = []

@@ -164,9 +164,15 @@ final class ProjectSessionCoordinator {
 
         let visibleFrame = (window?.screen ?? NSScreen.main)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        var normalizedWindowRect = session.windowFrame?.rect
+        let uiConfig = session.uiConfiguration
+        let editorConfig = session.editor
+        let fileState = session.fileState
+        let splitEditorState = session.splitEditor
+        let fileTreeState = session.fileTree
 
-        if let frame = session.windowFrame?.rect {
+        var normalizedWindowRect = uiConfig.windowFrame?.rect
+
+        if let frame = uiConfig.windowFrame?.rect {
             let targetFrame = UILayoutNormalizer.normalizeWindowFrame(
                 frame,
                 screenVisibleFrame: visibleFrame
@@ -177,29 +183,29 @@ final class ProjectSessionCoordinator {
             }
         }
 
-        ui.isSidebarVisible = session.isSidebarVisible
-        ui.isTerminalVisible = session.isTerminalVisible
-        ui.isAIChatVisible = session.isAIChatVisible
+        ui.isSidebarVisible = uiConfig.isSidebarVisible
+        ui.isTerminalVisible = uiConfig.isTerminalVisible
+        ui.isAIChatVisible = uiConfig.isAIChatVisible
         let referenceFrame = window?.frame
             ?? normalizedWindowRect
             ?? NSRect(x: 0, y: 0, width: visibleFrame.width, height: visibleFrame.height)
         var normalizedSidebarWidth = UILayoutNormalizer.normalizeSidebarWidth(
-            session.sidebarWidth,
+            uiConfig.sidebarWidth,
             windowWidth: referenceFrame.width
         )
         var normalizedChatPanelWidth = UILayoutNormalizer.normalizeChatPanelWidth(
-            session.chatPanelWidth,
+            uiConfig.chatPanelWidth,
             windowWidth: referenceFrame.width
         )
         let normalizedTerminalHeight = UILayoutNormalizer.normalizeTerminalHeight(
-            session.terminalHeight,
+            uiConfig.terminalHeight,
             windowHeight: referenceFrame.height
         )
         let balanced = UILayoutNormalizer.rebalanceHorizontalPanels(
             sidebarWidth: normalizedSidebarWidth,
             chatWidth: normalizedChatPanelWidth,
-            isSidebarVisible: session.isSidebarVisible,
-            isChatVisible: session.isAIChatVisible,
+            isSidebarVisible: uiConfig.isSidebarVisible,
+            isChatVisible: uiConfig.isAIChatVisible,
             windowWidth: referenceFrame.width,
             minimumEditorWidth: 400
         )
@@ -209,35 +215,35 @@ final class ProjectSessionCoordinator {
         ui.terminalHeight = normalizedTerminalHeight
         ui.chatPanelWidth = normalizedChatPanelWidth
 
-        if let theme = AppTheme(rawValue: session.selectedThemeRawValue) {
+        if let theme = AppTheme(rawValue: editorConfig.selectedThemeRawValue) {
             ui.selectedTheme = theme
         }
-        ui.showLineNumbers = session.showLineNumbers
-        ui.wordWrap = session.wordWrap
-        ui.minimapVisible = session.minimapVisible
+        ui.showLineNumbers = editorConfig.showLineNumbers
+        ui.wordWrap = editorConfig.wordWrap
+        ui.minimapVisible = editorConfig.minimapVisible
 
-        setShowHiddenFilesInFileTree(session.showHiddenFilesInFileTree)
+        setShowHiddenFilesInFileTree(editorConfig.showHiddenFilesInFileTree)
 
-        setLanguageOverridesByRelativePath(session.languageOverridesByRelativePath)
+        setLanguageOverridesByRelativePath(fileTreeState.languageOverridesByRelativePath)
 
         if let mode = AIMode(rawValue: session.aiModeRawValue) {
             conversationManager.currentMode = mode
         }
 
-        setFileTreeExpandedRelativePaths(Set(session.fileTreeExpandedRelativePaths))
+        setFileTreeExpandedRelativePaths(Set(fileTreeState.fileTreeExpandedRelativePaths))
 
         fileEditor.newFile()
 
-        let splitAxis = FileEditorStateManager.SplitAxis(rawValue: session.splitAxisRawValue) ?? .vertical
+        let splitAxis = FileEditorStateManager.SplitAxis(rawValue: splitEditorState.splitAxisRawValue) ?? .vertical
         fileEditor.splitAxis = splitAxis
-        fileEditor.isSplitEditor = session.isSplitEditor
-        let focused = FileEditorStateManager.PaneID(rawValue: session.focusedEditorPaneRawValue) ?? .primary
+        fileEditor.isSplitEditor = splitEditorState.isSplitEditor
+        let focused = FileEditorStateManager.PaneID(rawValue: splitEditorState.focusedEditorPaneRawValue) ?? .primary
         fileEditor.focusedPane = focused
 
-        let primaryRelPaths = !session.primaryOpenTabRelativePaths.isEmpty
-            ? session.primaryOpenTabRelativePaths
-            : session.openTabRelativePaths
-        let primaryActiveRel = session.primaryActiveTabRelativePath ?? session.activeTabRelativePath
+        let primaryRelPaths = !splitEditorState.primaryOpenTabRelativePaths.isEmpty
+            ? splitEditorState.primaryOpenTabRelativePaths
+            : fileState.openTabRelativePaths
+        let primaryActiveRel = splitEditorState.primaryActiveTabRelativePath ?? fileState.activeTabRelativePath
 
         restoreTabs(
             pane: .primary,
@@ -246,18 +252,18 @@ final class ProjectSessionCoordinator {
             activeTabRelativePath: primaryActiveRel
         )
 
-        if session.isSplitEditor {
+        if splitEditorState.isSplitEditor {
             restoreTabs(
                 pane: .secondary,
                 projectRoot: projectRoot,
-                openTabRelativePaths: session.secondaryOpenTabRelativePaths,
-                activeTabRelativePath: session.secondaryActiveTabRelativePath
+                openTabRelativePaths: splitEditorState.secondaryOpenTabRelativePaths,
+                activeTabRelativePath: splitEditorState.secondaryActiveTabRelativePath
             )
         }
 
         fileEditor.focus(focused)
 
-        if primaryRelPaths.isEmpty, let rel = session.lastOpenFileRelativePath {
+        if primaryRelPaths.isEmpty, let rel = fileState.lastOpenFileRelativePath {
             loadExistingNonDirectoryFileIfPresent(projectRoot.appendingPathComponent(rel))
         }
     }

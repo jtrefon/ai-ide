@@ -40,7 +40,7 @@ struct ListAllFilesTool: AITool {
                 continue
             }
 
-            let relativePath = fileURL.path.replacingOccurrences(of: projectRoot.path + "/", with: "")
+            let relativePath = fileURL.relativeTo(projectRoot)
             files.append(relativePath)
         }
 
