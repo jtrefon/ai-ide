@@ -1,5 +1,4 @@
 import Foundation
-import AppKit
 
 enum AppConstantsSettings {
     static let cardPadding: CGFloat = 16

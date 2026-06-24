@@ -1,5 +1,4 @@
 import Foundation
-import AppKit
 
 enum AppConstantsLayout {
     static let defaultSidebarWidth: Double = 200

@@ -1,5 +1,4 @@
 import Foundation
-import AppKit
 
 enum AppConstantsOverlay {
     static let containerPadding: CGFloat = 16

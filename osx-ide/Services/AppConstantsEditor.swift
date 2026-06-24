@@ -1,5 +1,4 @@
 import Foundation
-import AppKit
 
 enum AppConstantsEditor {
     static let defaultFontSize: Double = 12
