@@ -1,5 +1,4 @@
 import XCTest
-import Tokenizers
 @preconcurrency import MLXLMCommon
 
 @testable import osx_ide
