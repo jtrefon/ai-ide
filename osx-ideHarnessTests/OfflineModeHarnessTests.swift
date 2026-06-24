@@ -887,7 +887,7 @@ final class OfflineModeHarnessTests: XCTestCase {
         let pathValidator = PathValidator(projectRoot: projectRoot)
         let fileSystemService = FileSystemService()
         return [
-            CreateFileTool(pathValidator: pathValidator, eventBus: eventBus),
+            WriteFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus),
             ListFilesTool(pathValidator: pathValidator),
             ReadFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator)
         ]

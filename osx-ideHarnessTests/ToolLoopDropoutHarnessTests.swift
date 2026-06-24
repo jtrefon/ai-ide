@@ -894,7 +894,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             conversationId: conversationId,
             runId: UUID().uuidString,
             availableTools: [
-                WriteFilesTool(
+                WriteFileTool(
                     fileSystemService: FileSystemService(),
                     pathValidator: PathValidator(projectRoot: projectRoot),
                     eventBus: MockEventBus()
@@ -1908,7 +1908,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                     fileSystemService: FileSystemService(),
                     pathValidator: PathValidator(projectRoot: projectRoot)
                 ),
-                CreateFileTool(pathValidator: PathValidator(projectRoot: projectRoot), eventBus: MockEventBus()),
+                WriteFileTool(fileSystemService: FileSystemService(), pathValidator: PathValidator(projectRoot: projectRoot), eventBus: MockEventBus()),
                 ReplaceInFileTool(
                     fileSystemService: FileSystemService(),
                     pathValidator: PathValidator(projectRoot: projectRoot),
@@ -2048,7 +2048,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             conversationId: conversationId,
             availableTools: [
                 ReadFileTool(fileSystemService: FileSystemService(), pathValidator: pathValidator),
-                WriteFilesTool(fileSystemService: FileSystemService(), pathValidator: pathValidator, eventBus: MockEventBus()),
+                WriteFileTool(fileSystemService: FileSystemService(), pathValidator: pathValidator, eventBus: MockEventBus()),
                 ListFilesTool(pathValidator: pathValidator)
             ],
             cancelledToolCallIds: { [] },

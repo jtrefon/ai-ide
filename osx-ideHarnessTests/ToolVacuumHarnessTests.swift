@@ -83,7 +83,6 @@ final class ToolVacuumHarnessTests: XCTestCase {
         let eventBus = EventBus()
         let fileSystemService = FileSystemService()
 
-        let createFileTool = CreateFileTool(pathValidator: pathValidator, eventBus: eventBus)
         let writeFileTool = WriteFileTool(
             fileSystemService: fileSystemService,
             pathValidator: pathValidator,
@@ -100,11 +99,6 @@ final class ToolVacuumHarnessTests: XCTestCase {
         )
         let listFilesTool = ListFilesTool(pathValidator: pathValidator)
         let deleteFileTool = DeleteFileTool(pathValidator: pathValidator, eventBus: eventBus)
-
-        let reservationResult = try await createFileTool.execute(arguments: ToolArguments([
-            "path": "src/App.jsx"
-        ]))
-        XCTAssertTrue(reservationResult.localizedCaseInsensitiveContains("reserved file path"))
 
         let writeResult = try await writeFileTool.execute(arguments: ToolArguments([
             "path": "src/App.jsx",
@@ -153,7 +147,12 @@ final class ToolVacuumHarnessTests: XCTestCase {
         let eventBus = EventBus()
         let fileSystemService = FileSystemService()
 
-        let writeFilesTool = WriteFilesTool(
+        let writeFileTool1 = WriteFileTool(
+            fileSystemService: fileSystemService,
+            pathValidator: pathValidator,
+            eventBus: eventBus
+        )
+        let writeFileTool2 = WriteFileTool(
             fileSystemService: fileSystemService,
             pathValidator: pathValidator,
             eventBus: eventBus
@@ -164,20 +163,19 @@ final class ToolVacuumHarnessTests: XCTestCase {
         )
         let listFilesTool = ListFilesTool(pathValidator: pathValidator)
 
-        let batchResult = try await writeFilesTool.execute(arguments: ToolArguments([
-            "files": [
-                [
-                    "path": "src/main.jsx",
-                    "content": "import App from './App'\n"
-                ],
-                [
-                    "path": "src/App.jsx",
-                    "content": "export default function App() { return null }\n"
-                ]
-            ]
+        let result1 = try await writeFileTool1.execute(arguments: ToolArguments([
+            "path": "src/main.jsx",
+            "content": "import App from './App'\n",
+            "_conversation_id": "tool-vacuum-batch"
         ]))
+        XCTAssertTrue(result1.localizedCaseInsensitiveContains("successfully wrote"))
 
-        XCTAssertTrue(batchResult.localizedCaseInsensitiveContains("successfully wrote 2 file(s)"))
+        let result2 = try await writeFileTool2.execute(arguments: ToolArguments([
+            "path": "src/App.jsx",
+            "content": "export default function App() { return null }\n",
+            "_conversation_id": "tool-vacuum-batch"
+        ]))
+        XCTAssertTrue(result2.localizedCaseInsensitiveContains("successfully wrote"))
 
         let mainFileRead = try await readFileTool.execute(arguments: ToolArguments([
             "path": "src/main.jsx",
@@ -256,36 +254,20 @@ final class ToolVacuumHarnessTests: XCTestCase {
         XCTAssertTrue(symbolSearchResult.contains("src/App.jsx:1-3"))
     }
 
-    func testPlanningToolsProduceStructuredPlansInIsolation() async throws {
-        let plannerTool = PlannerTool()
-        let strategicPlanTool = StrategicPlanTool()
-        let tacticalPlanTool = TacticalPlanTool()
+    func testPlanSynthesizersProduceStructuredPlansInIsolation() async throws {
+        let userInput = "Validate basic tool execution coverage for the local agent pipeline"
 
-        let plannerResult = try await plannerTool.execute(arguments: ToolArguments([
-            "action": "set",
-            "plan": "# Implementation Plan\n\n- [ ] Validate isolated tools\n",
-            "_conversation_id": "tool-vacuum-plan"
-        ]))
-        XCTAssertTrue(plannerResult.contains("Implementation Plan"))
+        let strategicPlan = await StrategicPlanSynthesizer.build(userInput: userInput)
+        XCTAssertTrue(strategicPlan.contains("# Implementation Plan"))
+        XCTAssertTrue(strategicPlan.contains("Goal:"))
 
-        let strategicResult = try await strategicPlanTool.execute(arguments: ToolArguments([
-            "userInput": "Validate basic tool execution coverage for the local agent pipeline"
-        ]))
-        XCTAssertTrue(strategicResult.contains("# Implementation Plan"))
-        XCTAssertTrue(strategicResult.contains("Goal:"))
-
-        let tacticalResult = try await tacticalPlanTool.execute(arguments: ToolArguments([
-            "strategicPlan": strategicResult,
-            "userInput": "Validate basic tool execution coverage for the local agent pipeline"
-        ]))
-        let tacticalPayload = try XCTUnwrap(tacticalResult.data(using: .utf8))
-        let tacticalResponse = try JSONDecoder().decode(
-            TacticalPlanToolHarnessResult.self,
-            from: tacticalPayload
+        let tacticalPlan = await TacticalPlanSynthesizer.mergeIntoStrategicPlan(
+            strategicPlan: strategicPlan,
+            userInput: userInput,
+            preserveCurrentPlan: false
         )
-        XCTAssertEqual(tacticalResponse.kind, "tactical_plan")
-        XCTAssertTrue(tacticalResponse.plan.lowercased().contains("read relevant source files"), "TACTICAL OUTPUT: \(tacticalResult)")
-        XCTAssertTrue(tacticalResponse.plan.lowercased().contains("apply focused edits"), "TACTICAL OUTPUT: \(tacticalResult)")
+        XCTAssertTrue(tacticalPlan.lowercased().contains("read relevant source files"))
+        XCTAssertTrue(tacticalPlan.lowercased().contains("apply focused edits"))
     }
 
     func testIndexMemoryToolsPersistAndListStableResultsInIsolation() async throws {
@@ -319,10 +301,5 @@ final class ToolVacuumHarnessTests: XCTestCase {
     private func cleanup(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
     }
-}
-
-private struct TacticalPlanToolHarnessResult: Decodable {
-    let goal: String
-    let plan: String
-    let kind: String
+  }
 }
