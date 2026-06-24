@@ -300,6 +300,5 @@ final class ToolVacuumHarnessTests: XCTestCase {
 
     private func cleanup(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
-    }
-  }
+      }
 }

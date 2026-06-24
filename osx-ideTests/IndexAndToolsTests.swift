@@ -126,19 +126,20 @@ struct IndexAndToolsTests {
 
         let fileSystemService = FileSystemService()
         let validator = PathValidator(projectRoot: tempRoot)
+        let eventBus = EventBus()
 
-        let writeFilesTool = WriteFilesTool(fileSystemService: fileSystemService, pathValidator: validator, eventBus: EventBus())
-        _ = try await writeFilesTool.execute(arguments: ToolArguments([
-            "files": [
-                [
-                    "path": "src/pages/Register.tsx",
-                    "content": "export default function Register() { return null }\n"
-                ],
-                [
-                    "path": "src/components/Button.tsx",
-                    "content": "export function Button() { return null }\n"
-                ]
-            ]
+        let writeFileTool1 = WriteFileTool(fileSystemService: fileSystemService, pathValidator: validator, eventBus: eventBus)
+        _ = try await writeFileTool1.execute(arguments: ToolArguments([
+            "path": "src/pages/Register.tsx",
+            "content": "export default function Register() { return null }\n",
+            "_conversation_id": "file-tools-test"
+        ]))
+
+        let writeFileTool2 = WriteFileTool(fileSystemService: fileSystemService, pathValidator: validator, eventBus: eventBus)
+        _ = try await writeFileTool2.execute(arguments: ToolArguments([
+            "path": "src/components/Button.tsx",
+            "content": "export function Button() { return null }\n",
+            "_conversation_id": "file-tools-test"
         ]))
 
         let registerURL = tempRoot.appendingPathComponent("src/pages/Register.tsx")
@@ -150,15 +151,17 @@ struct IndexAndToolsTests {
         let registerContent = try fileSystemService.readFile(at: registerURL)
         #expect(registerContent.contains("function Register"), "Register.tsx content should match")
 
-        let createFileTool = CreateFileTool(pathValidator: validator, eventBus: EventBus())
-        _ = try await createFileTool.execute(arguments: ToolArguments([
-            "path": "src/styles/app.css"
+        let writeFileTool3 = WriteFileTool(fileSystemService: fileSystemService, pathValidator: validator, eventBus: eventBus)
+        _ = try await writeFileTool3.execute(arguments: ToolArguments([
+            "path": "src/styles/app.css",
+            "content": "",
+            "_conversation_id": "file-tools-test"
         ]))
 
         let cssURL = tempRoot.appendingPathComponent("src/styles/app.css")
         let cssDirectoryURL = tempRoot.appendingPathComponent("src/styles", isDirectory: true)
-        #expect(FileManager.default.fileExists(atPath: cssDirectoryURL.path), "Nested create_file should prepare parent directories")
-        #expect(!FileManager.default.fileExists(atPath: cssURL.path), "create_file should not materialize an empty file before content is written")
+        #expect(FileManager.default.fileExists(atPath: cssDirectoryURL.path), "Nested write_file should prepare parent directories")
+        #expect(FileManager.default.fileExists(atPath: cssURL.path), "write_file should materialize the file")
     }
 
     @Test func testFileToolsNormalizeProjectPseudoRootPaths() async throws {
@@ -185,15 +188,21 @@ struct IndexAndToolsTests {
         #expect(FileManager.default.fileExists(atPath: rootIndexURL.path), "Pseudo-root /project/index.html should resolve to the real project root")
         #expect(!FileManager.default.fileExists(atPath: nestedProjectIndexURL.path), "Pseudo-root /project/index.html must not create a nested project directory")
 
-        let createFileTool = CreateFileTool(pathValidator: validator, eventBus: eventBus)
-        _ = try await createFileTool.execute(arguments: ToolArguments([
-            "path": "project/src/App.jsx"
+        let writeFileTool3 = WriteFileTool(
+            fileSystemService: fileSystemService,
+            pathValidator: validator,
+            eventBus: eventBus
+        )
+        _ = try await writeFileTool3.execute(arguments: ToolArguments([
+            "path": "project/src/App.jsx",
+            "content": "export default function App() { return null }",
+            "_conversation_id": "file-tools-test"
         ]))
 
         let appDirectoryURL = tempRoot.appendingPathComponent("src", isDirectory: true)
         let nestedProjectAppURL = tempRoot.appendingPathComponent("project/src/App.jsx")
         #expect(FileManager.default.fileExists(atPath: appDirectoryURL.path), "project/src/App.jsx should resolve to src/App.jsx under the real root")
-        #expect(!FileManager.default.fileExists(atPath: nestedProjectAppURL.path), "project/src/App.jsx must not materialize a nested project directory")
+        #expect(!FileManager.default.fileExists(atPath: nestedProjectAppURL.path), "project/src/App.jsx must not create a nested project directory")
     }
 
     @Test func testListFilesReturnsEmptyForMissingProjectRelativeDirectory() async throws {
@@ -211,32 +220,41 @@ struct IndexAndToolsTests {
         #expect(result.isEmpty, "Missing project-relative directories should return an empty listing instead of failing")
     }
 
-    @Test func testCreateFileThrowsWhenProjectRelativePathAlreadyExists() async throws {
-        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_existing_create_file_\(UUID().uuidString)")
+    @Test func testWriteFileRejectsOverwritingExistingFile() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_existing_write_file_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let existingURL = tempRoot.appendingPathComponent("package.json")
         try "{}".write(to: existingURL, atomically: true, encoding: .utf8)
 
-        let createFileTool = CreateFileTool(pathValidator: PathValidator(projectRoot: tempRoot), eventBus: EventBus())
+        let writeFileTool = WriteFileTool(
+            fileSystemService: FileSystemService(),
+            pathValidator: PathValidator(projectRoot: tempRoot),
+            eventBus: EventBus()
+        )
         do {
-            _ = try await createFileTool.execute(arguments: ToolArguments([
-                "path": "package.json"
+            _ = try await writeFileTool.execute(arguments: ToolArguments([
+                "path": "package.json",
+                "content": "new content"
             ]))
-            #expect(false, "Expected create_file to reject existing project-relative files")
+            #expect(false, "Expected write_file to reject overwriting existing files")
         } catch {
-            #expect(error.localizedDescription.localizedCaseInsensitiveContains("already exists"))
+            #expect(error.localizedDescription.localizedCaseInsensitiveContains("Refused full-file overwrite"))
         }
     }
 
-    @Test func testCreateFileWritesProvidedContentImmediately() async throws {
-        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_create_file_with_content_\(UUID().uuidString)")
+    @Test func testWriteFileWritesContentImmediately() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_write_file_content_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
-        let createFileTool = CreateFileTool(pathValidator: PathValidator(projectRoot: tempRoot), eventBus: EventBus())
-        let result = try await createFileTool.execute(arguments: ToolArguments([
+        let writeFileTool = WriteFileTool(
+            fileSystemService: FileSystemService(),
+            pathValidator: PathValidator(projectRoot: tempRoot),
+            eventBus: EventBus()
+        )
+        let result = try await writeFileTool.execute(arguments: ToolArguments([
             "path": "src/App.jsx",
             "content": "export default function App() { return null }\n"
         ]))
@@ -244,22 +262,27 @@ struct IndexAndToolsTests {
         let createdURL = tempRoot.appendingPathComponent("src/App.jsx")
         let persisted = try String(contentsOf: createdURL, encoding: .utf8)
 
-        #expect(result.localizedCaseInsensitiveContains("wrote provided content"))
+        #expect(result.localizedCaseInsensitiveContains("successfully wrote"))
         #expect(persisted.contains("function App"))
     }
 
-    @Test func testCreateFileTreatsMatchingExistingContentAsNoOp() async throws {
-        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_create_file_content_noop_\(UUID().uuidString)")
+    @Test func testWriteFileNoOpWithMatchingContent() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_write_file_noop2_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let existingURL = tempRoot.appendingPathComponent("package.json")
         try "{}\n".write(to: existingURL, atomically: true, encoding: .utf8)
 
-        let createFileTool = CreateFileTool(pathValidator: PathValidator(projectRoot: tempRoot), eventBus: EventBus())
-        let result = try await createFileTool.execute(arguments: ToolArguments([
+        let writeFileTool = WriteFileTool(
+            fileSystemService: FileSystemService(),
+            pathValidator: PathValidator(projectRoot: tempRoot),
+            eventBus: EventBus()
+        )
+        let result = try await writeFileTool.execute(arguments: ToolArguments([
             "path": "package.json",
-            "content": "{}\n"
+            "content": "{}\n",
+            "_conversation_id": "write-file-noop-test2"
         ]))
 
         #expect(result.localizedCaseInsensitiveContains("already matches"))
@@ -291,26 +314,28 @@ struct IndexAndToolsTests {
         }
     }
 
-    @Test func testCreateFileThrowsWhenPathAlreadyExists() async throws {
-        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_create_error_\(UUID().uuidString)")
+    @Test func testWriteFileThrowsWhenPathAlreadyExists() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_write_error_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let fileURL = tempRoot.appendingPathComponent("existing.txt")
         try "hello".write(to: fileURL, atomically: true, encoding: .utf8)
 
-        let tool = CreateFileTool(
+        let tool = WriteFileTool(
+            fileSystemService: FileSystemService(),
             pathValidator: PathValidator(projectRoot: tempRoot),
             eventBus: EventBus()
         )
 
         do {
             _ = try await tool.execute(arguments: ToolArguments([
-                "path": "existing.txt"
+                "path": "existing.txt",
+                "content": "world"
             ]))
-            #expect(false, "Expected create_file to throw when file already exists")
+            #expect(false, "Expected write_file to throw when file already exists")
         } catch {
-            #expect(error.localizedDescription.localizedCaseInsensitiveContains("already exists"))
+            #expect(error.localizedDescription.localizedCaseInsensitiveContains("Refused full-file overwrite"))
         }
     }
 

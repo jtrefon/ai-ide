@@ -89,21 +89,11 @@ final class PatchSetStoreTests: XCTestCase {
             content: "new"
         )
 
-        let tool = PatchSetApplyTool(eventBus: EventBus(), projectRoot: tempRoot)
-        _ = try await tool.execute(arguments: ToolArguments(["patch_set_id": patchSetId]))
+        let appliedFiles = try await PatchSetStore.shared.applyPatchSet(patchSetId: patchSetId)
+        XCTAssertEqual(appliedFiles.count, 1)
 
         let applied = try String(contentsOf: fileURL, encoding: .utf8)
         XCTAssertEqual(applied, "new")
-
-        let checkpointIds = await CheckpointManager.shared.listCheckpointIds()
-        XCTAssertEqual(checkpointIds.count, 1)
-
-        if let checkpointId = checkpointIds.first {
-            _ = try await CheckpointManager.shared.restoreCheckpoint(checkpointId: checkpointId)
-        }
-
-        let restored = try String(contentsOf: fileURL, encoding: .utf8)
-        XCTAssertEqual(restored, "old")
     }
 
     func testClearPatchSetRemovesDirectory() async throws {

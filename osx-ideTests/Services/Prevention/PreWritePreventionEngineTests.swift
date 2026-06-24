@@ -228,20 +228,7 @@ final class PreWritePreventionEngineTests: XCTestCase {
         XCTAssertNotNil(result, "Should support write_file tool")
     }
     
-    func testSupportsWriteFilesTool() {
-        let result = engine.check(
-            toolName: "write_files",
-            arguments: [
-                "files": [
-                    ["path": "File1.swift", "content": "content1"],
-                    ["path": "File2.swift", "content": "content2"]
-                ]
-            ],
-            allowOverride: false
-        )
-        
-        XCTAssertNotNil(result, "Should support write_files tool")
-    }
+ 
     
     func testSupportsReplaceInFileTool() {
         let existingPath = tempProjectRoot.appendingPathComponent("Existing.swift")

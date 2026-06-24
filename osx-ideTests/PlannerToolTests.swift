@@ -11,7 +11,6 @@ final class PlannerToolTests: XCTestCase {
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         await store.setProjectRoot(tempDir)
 
-        let tool = PlannerTool()
         let conversationId = "planner-update-replace"
         let originalPlan = """
         # Implementation Plan
@@ -26,21 +25,11 @@ final class PlannerToolTests: XCTestCase {
         - [ ] Step two
         """
 
-        _ = try await tool.execute(arguments: ToolArguments([
-            "action": "set",
-            "plan": originalPlan,
-            "_conversation_id": conversationId
-        ]))
-
-        let result = try await tool.execute(arguments: ToolArguments([
-            "action": "update",
-            "plan": updatedPlan,
-            "_conversation_id": conversationId
-        ]))
+        await store.set(conversationId: conversationId, plan: originalPlan)
+        await store.set(conversationId: conversationId, plan: updatedPlan)
 
         let storedPlan = await store.get(conversationId: conversationId)
 
-        XCTAssertEqual(result, updatedPlan)
         XCTAssertEqual(storedPlan, updatedPlan)
         XCTAssertFalse(storedPlan?.contains("- [ ] Step one\n- [ ] Step two\n\n# Implementation Plan") ?? false)
 
@@ -54,7 +43,6 @@ final class PlannerToolTests: XCTestCase {
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         await store.setProjectRoot(tempDir)
 
-        let tool = PlannerTool()
         let conversationId = "planner-update-same"
         let plan = """
         # Implementation Plan
@@ -63,21 +51,11 @@ final class PlannerToolTests: XCTestCase {
         - [ ] Step two
         """
 
-        _ = try await tool.execute(arguments: ToolArguments([
-            "action": "set",
-            "plan": plan,
-            "_conversation_id": conversationId
-        ]))
-
-        let result = try await tool.execute(arguments: ToolArguments([
-            "action": "update",
-            "plan": plan,
-            "_conversation_id": conversationId
-        ]))
+        await store.set(conversationId: conversationId, plan: plan)
+        await store.set(conversationId: conversationId, plan: plan)
 
         let storedPlan = await store.get(conversationId: conversationId)
 
-        XCTAssertEqual(result, plan)
         XCTAssertEqual(storedPlan, plan)
         XCTAssertEqual(storedPlan?.components(separatedBy: "# Implementation Plan").count, 2)
 
