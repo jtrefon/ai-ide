@@ -25,7 +25,7 @@ final class UICompositionRootTests: XCTestCase {
 
         let registry = UIRegistry()
         registry.register(point: .sidebarLeft, name: "Internal.FileExplorer", icon: "folder", view: EmptyView())
-        registry.register(point: .panelBottom, name: AppConstants.UI.internalTerminalPanelName, icon: "terminal", view: EmptyView())
+        registry.register(point: .panelBottom, name: AppConstants.Overlay.internalTerminalPanelName, icon: "terminal", view: EmptyView())
         registry.register(point: .panelBottom, name: "Internal.Logs", icon: "doc.text", view: EmptyView())
         registry.register(point: .panelBottom, name: "Internal.Problems", icon: "triangle", view: EmptyView())
         registry.register(point: .panelRight, name: "Internal.AIChat", icon: "sparkles", view: EmptyView())

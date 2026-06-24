@@ -2,7 +2,6 @@ import Foundation
 import AppKit
 
 enum AppConstantsOverlay {
-    static let backdropOpacity: Double = 0.25
     static let containerPadding: CGFloat = 16
     static let containerCornerRadius: CGFloat = 12
     static let containerShadowRadius: CGFloat = 30
@@ -19,4 +18,6 @@ enum AppConstantsOverlay {
 
     static let textFieldMinWidth: CGFloat = 520
     static let searchFieldMinWidth: CGFloat = 420
+
+    static let internalTerminalPanelName: String = "Internal.Terminal"
 }

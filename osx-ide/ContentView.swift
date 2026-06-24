@@ -332,7 +332,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func bottomPanelLeadingControls(selectedName: String) -> some View {
-        if selectedName == AppConstants.UI.internalTerminalPanelName {
+        if selectedName == AppConstants.Overlay.internalTerminalPanelName {
             Button(
                 action: {
                     appState.eventBus.publish(TerminalClearRequestedEvent())
@@ -359,7 +359,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func bottomPanelTrailingControls(selectedName: String) -> some View {
-        if selectedName == AppConstants.UI.internalTerminalPanelName {
+        if selectedName == AppConstants.Overlay.internalTerminalPanelName {
             Text(workspace.currentDirectory?.lastPathComponent ?? localized("bottom_panel.terminal"))
                 .font(.system(size: max(10, uiState.fontSize - 3)))
                 .foregroundColor(.secondary)

@@ -58,7 +58,7 @@ enum UICompositionRoot {
 
         let bottomNames = Set(bottomViews.map(\.name))
         let requiredBottom: Set<String> = [
-            AppConstants.UI.internalTerminalPanelName,
+            AppConstants.Overlay.internalTerminalPanelName,
             "Internal.Logs",
             "Internal.Problems"
         ]

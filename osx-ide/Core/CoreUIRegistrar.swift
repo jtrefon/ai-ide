@@ -24,7 +24,7 @@ struct CoreUIRegistrar<Context: IDEContext & ObservableObject> {
     private func registerBottomPanelComponents() {
         registry.register(
             point: .panelBottom,
-            name: AppConstants.UI.internalTerminalPanelName,
+            name: AppConstants.Overlay.internalTerminalPanelName,
             icon: "terminal",
             view: NativeTerminalView(
                 currentDirectory: Binding(

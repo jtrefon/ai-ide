@@ -23,7 +23,7 @@ class UIStateManager: ObservableObject {
     @Published var isAIChatVisible: Bool = true {
         didSet { trackChange("isAIChatVisible", from: oldValue, to: isAIChatVisible) }
     }
-    @Published var bottomPanelSelectedName: String = AppConstants.UI.internalTerminalPanelName {
+    @Published var bottomPanelSelectedName: String = AppConstants.Overlay.internalTerminalPanelName {
         didSet { trackChange("bottomPanelSelectedName", from: oldValue, to: bottomPanelSelectedName) }
     }
     @Published var sidebarWidth: Double = AppConstants.Layout.defaultSidebarWidth {

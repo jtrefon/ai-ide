@@ -74,7 +74,7 @@ struct OSXIDEApp: App {
             appSt.ui.isSidebarVisible = true
             appSt.ui.isTerminalVisible = true
             appSt.ui.isAIChatVisible = true
-            appSt.ui.bottomPanelSelectedName = AppConstants.UI.internalTerminalPanelName
+            appSt.ui.bottomPanelSelectedName = AppConstants.Overlay.internalTerminalPanelName
         }
 
         if launchContext.isUITesting {
@@ -411,7 +411,7 @@ private struct AppRootView: View {
                         appState.ui.isSidebarVisible = true
                         appState.ui.isTerminalVisible = true
                         appState.ui.isAIChatVisible = true
-                        appState.ui.bottomPanelSelectedName = AppConstants.UI.internalTerminalPanelName
+                        appState.ui.bottomPanelSelectedName = AppConstants.Overlay.internalTerminalPanelName
                     }
                     NSApp.activate(ignoringOtherApps: true)
                 }
@@ -420,7 +420,7 @@ private struct AppRootView: View {
                         appState.ui.isSidebarVisible = true
                         appState.ui.isTerminalVisible = true
                         appState.ui.isAIChatVisible = true
-                        appState.ui.bottomPanelSelectedName = AppConstants.UI.internalTerminalPanelName
+                        appState.ui.bottomPanelSelectedName = AppConstants.Overlay.internalTerminalPanelName
                     }
                     UICompositionRoot.compose(
                         appState: appState,
