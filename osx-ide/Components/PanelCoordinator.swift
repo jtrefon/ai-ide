@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AppKit
 
 /// Manages terminal and bottom panel configuration and rendering
 @MainActor

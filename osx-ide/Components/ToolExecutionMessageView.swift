@@ -7,7 +7,6 @@
 
 import SwiftUI
 import Foundation
-import AppKit
 
 /// View for displaying tool execution messages with status and progress
 struct ToolExecutionMessageView: View {

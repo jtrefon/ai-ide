@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AppKit
 import Combine
 
 /// Modern terminal view with native zsh shell integration for macOS 26

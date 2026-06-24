@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 struct EditorPaneView: View {
     let paneID: FileEditorStateManager.PaneID

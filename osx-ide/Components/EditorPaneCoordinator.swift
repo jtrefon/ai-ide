@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AppKit
 
 /// Manages editor pane configuration and rendering
 @MainActor

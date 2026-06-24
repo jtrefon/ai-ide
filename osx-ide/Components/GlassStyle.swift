@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 /// Modern macOS v26 liquid glass surface configurations
 enum NativeGlassSurface {

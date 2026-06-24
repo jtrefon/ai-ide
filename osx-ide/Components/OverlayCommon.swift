@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 struct OverlayHeaderConfiguration {
     let title: String

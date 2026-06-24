@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AppKit
 
 /// Manages the main application layout and panel resizing
 @MainActor

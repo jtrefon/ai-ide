@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 import Combine
 
 struct ProblemsView<Context: IDEContext>: View {
