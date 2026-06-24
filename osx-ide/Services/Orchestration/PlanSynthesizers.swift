@@ -1,65 +1,25 @@
 import Foundation
 
-/// Tool that allows the agent to explicitly generate tactical sub-steps for an implementation plan.
-/// This encapsulates the logic previously hardwired into TacticalPlanningNode.
-struct TacticalPlanTool: AITool {
-    let name = "generate_tactical_plan"
-    let description =
-        "Generate detailed tactical sub-steps for an existing implementation plan. "
-        + "Use this when you have a high-level strategy but need to break it down into concrete file-level actions."
+/// Plan synthesis logic extracted from StrategicPlanTool and TacticalPlanTool.
+/// Used by StrategicPlanningNode and TacticalPlanningNode in the orchestration graph.
 
-    var parameters: [String: Any] {
-        [
-            "type": "object",
-            "properties": [
-                "strategicPlan": [
-                    "type": "string",
-                    "description": "The current high-level markdown plan.",
-                ],
-                "userInput": [
-                    "type": "string",
-                    "description": "The original user objective.",
-                ],
-            ],
-            "required": ["strategicPlan", "userInput"],
-        ]
-    }
+@MainActor
+enum StrategicPlanSynthesizer {
+    static func build(userInput: String) -> String {
+        return """
+            # Implementation Plan
 
-    func execute(arguments: ToolArguments) async throws -> String {
-        let args = arguments.raw
-        guard let strategicPlan = args["strategicPlan"] as? String else {
-            throw AppError.aiServiceError("Missing 'strategicPlan' for generate_tactical_plan")
-        }
-        guard let userInput = args["userInput"] as? String else {
-            throw AppError.aiServiceError("Missing 'userInput' for generate_tactical_plan")
-        }
+            **Goal:** \(userInput)
 
-        let plan = await TacticalPlanSynthesizer.mergeIntoStrategicPlan(
-            strategicPlan: strategicPlan,
-            userInput: userInput,
-            preserveCurrentPlan: false
-        )
-
-        let result = TacticalPlanToolResult(
-            goal: userInput,
-            plan: plan,
-            kind: "tactical_plan"
-        )
-        let data = try JSONEncoder().encode(result)
-        guard let json = String(data: data, encoding: .utf8) else {
-            throw AppError.aiServiceError("Failed to encode generate_tactical_plan result")
-        }
-        return json
+            ## Strategy
+            1. [ ] Identify target files and understand current structure
+            2. [ ] Design minimal change set to satisfy the request
+            3. [ ] Implement changes
+            4. [ ] Verify correctness and report completion
+            """
     }
 }
 
-private struct TacticalPlanToolResult: Encodable {
-    let goal: String
-    let plan: String
-    let kind: String
-}
-
-/// Extracted from TacticalPlanningNode to be shared
 @MainActor
 enum TacticalPlanSynthesizer {
     static func mergeIntoStrategicPlan(
