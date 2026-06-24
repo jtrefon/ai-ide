@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import SwiftUI
 
 /// Handles search functionality for the file tree
 @MainActor
