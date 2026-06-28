@@ -382,9 +382,7 @@ struct OSXIDEApp: App {
             if isUnitTesting {
                 EmptyView()
             } else {
-                SettingsView(ui: appState.ui) {
-                    appState.reindexProjectNow()
-                }
+                SettingsView(ui: appState.ui)
             }
         }
     }

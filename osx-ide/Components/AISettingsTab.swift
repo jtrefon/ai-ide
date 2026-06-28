@@ -14,7 +14,6 @@ struct AISettingsTab: View {
     @ObservedObject var deepSeekViewModel: OpenRouterSettingsViewModel
     @ObservedObject var providerSelectionViewModel: AIProviderSelectionViewModel
     @ObservedObject var localModelViewModel: LocalModelSettingsViewModel
-    @ObservedObject var embeddingModelViewModel: EmbeddingModelSettingsViewModel
     @State private var showAdvanced = false
 
     private var activeViewModel: OpenRouterSettingsViewModel {
@@ -126,12 +125,6 @@ struct AISettingsTab: View {
                     subtitle: "Download and manage local/offline model artifacts."
                 ) {
                     LocalModelSettingsView(viewModel: localModelViewModel)
-                }
-                SettingsCard(
-                    title: "Embedding Models",
-                    subtitle: "Download models for semantic search in the codebase index."
-                ) {
-                    EmbeddingModelSettingsView(viewModel: embeddingModelViewModel)
                 }
             }
             .padding(.top, 4)
