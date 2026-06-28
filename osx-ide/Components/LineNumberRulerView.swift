@@ -1,31 +1,33 @@
 import AppKit
-import SwiftUI
 
-/// Modern macOS v26 line number ruler with enhanced performance and liquid glass styling
 final class ModernLineNumberRulerView: NSRulerView {
     private weak var textView: NSTextView?
     private var font: NSFont
     private let textColor: NSColor
-    private let backgroundColor: NSColor
     private let selectionColor: NSColor
-    private let currentLineColor: NSColor
 
     init(scrollView: NSScrollView, textView: NSTextView) {
         self.textView = textView
-        // Enhanced typography for macOS v26
         self.font = textView.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         self.textColor = NSColor.secondaryLabelColor
-        self.backgroundColor = NSColor.clear // Transparent for liquid glass
         self.selectionColor = NSColor.systemBlue.withAlphaComponent(0.1)
-        self.currentLineColor = NSColor.systemBlue.withAlphaComponent(0.05)
 
         super.init(scrollView: scrollView, orientation: .verticalRuler)
         self.clientView = textView
         self.ruleThickness = 50
-
-        // Modern styling for macOS v26
         self.wantsLayer = true
         self.layer?.backgroundColor = NSColor.clear.cgColor
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(scrollViewDidScroll),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+    }
+
+    @objc private func scrollViewDidScroll() {
+        needsDisplay = true
     }
 
     func updateFont(_ font: NSFont?) {
@@ -66,8 +68,7 @@ final class ModernLineNumberRulerView: NSRulerView {
             return
         }
 
-        // Draw transparent background for liquid glass effect
-        backgroundColor.setFill()
+        NSColor.clear.setFill()
         rect.fill()
 
         let relativePoint = convert(NSPoint.zero, from: textView)
@@ -158,14 +159,4 @@ final class ModernLineNumberRulerView: NSRulerView {
         label.draw(at: NSPoint(x: labelX, y: labelY), withAttributes: drawContext.attrs)
     }
 
-    // Modern macOS v26 compatibility methods
-    override var wantsUpdateLayer: Bool {
-        return true
-    }
-
-    override func updateLayer() {
-        super.updateLayer()
-        // Enhanced layer setup for liquid glass effect
-        self.layer?.backgroundColor = NSColor.clear.cgColor
-    }
 }

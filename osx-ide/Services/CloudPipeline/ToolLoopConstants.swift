@@ -11,8 +11,14 @@ enum ToolLoopConstants {
     /// Maximum tool loop iterations for non-agent modes
     static let maxNonAgentIterations = 10
 
-    /// Maximum tool loop iterations for MLX/local models (reduced to prevent loops)
-    static let maxMLXIterations = 5
+    /// Maximum tool loop iterations for MLX/local models
+    /// Tuned for Gemma 4 with RAG context + ToolLoopHandler stall detection
+    static let maxMLXIterations = 10
+
+    /// Maximum times BranchReviewNode can route back to ToolLoopNode when the model
+    /// returns no tool calls. Prevents infinite graph cycles where the plan is incomplete
+    /// but the model never produces tool calls to make progress.
+    static let maxExecutionCycles = 3
 
     /// Returns the appropriate max iterations based on mode and model capability
     static func maxIterations(for mode: AIMode?, isMLX: Bool = false) -> Int {

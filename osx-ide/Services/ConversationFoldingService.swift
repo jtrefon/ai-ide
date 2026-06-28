@@ -42,14 +42,25 @@ public enum ConversationFoldingService {
             .map { $0.content.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
-        let toolSnippets = messages
+        // Collect tool activity with status and file paths
+        let toolEntries = messages
             .filter { $0.role == .tool }
             .compactMap { msg -> String? in
-                guard let toolCallId = msg.toolCallId else { return nil }
+                let toolName = msg.toolName ?? "unknown_tool"
                 let status = msg.toolStatus?.rawValue ?? "unknown"
                 let preview = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
                 if preview.isEmpty { return nil }
-                return "- \(msg.toolName ?? "unknown_tool") (\(toolCallId)) [\(status)]"
+                let truncated = String(preview.prefix(200))
+                return "- \(toolName) [\(status)]: \(truncated)"
+            }
+
+        // Collect failed tool calls specifically
+        let failedTools = messages
+            .filter { $0.role == .tool && $0.toolStatus?.rawValue == "error" }
+            .compactMap { msg -> String? in
+                let toolName = msg.toolName ?? "unknown_tool"
+                let preview = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                return "- \(toolName): \(String(preview.prefix(150)))"
             }
 
         let reasoningOutcomeSnippets = messages
@@ -58,10 +69,11 @@ public enum ConversationFoldingService {
             .filter { $0.hasPrefix("ReasoningOutcome:") }
 
         let timeHeader = "Folded \(messages.count) messages (\(fmt.string(from: start)) → \(fmt.string(from: end)))."
-        let userHeader = userSnippets.isEmpty ? "(none)" : userSnippets.prefix(5).joined(separator: " | ")
-        let assistantHeader = assistantSnippets.isEmpty ? "(none)" : assistantSnippets.prefix(3).joined(separator: " | ")
+        let userHeader = userSnippets.isEmpty ? "(none)" : userSnippets.joined(separator: "\n- ")
+        let assistantHeader = assistantSnippets.isEmpty ? "(none)" : assistantSnippets.prefix(5).joined(separator: " | ")
 
-        let toolSection = toolSnippets.isEmpty ? "(none)" : toolSnippets.prefix(8).joined(separator: "\n")
+        let toolSection = toolEntries.isEmpty ? "(none)" : toolEntries.prefix(15).joined(separator: "\n")
+        let failureSection = failedTools.isEmpty ? "(none)" : failedTools.prefix(10).joined(separator: "\n")
         let outcomeSection = reasoningOutcomeSnippets.isEmpty ? "(none)" : reasoningOutcomeSnippets.suffix(3).joined(separator: "\n\n")
 
         return """
@@ -69,13 +81,16 @@ public enum ConversationFoldingService {
         \(timeHeader)
 
         User requests/topics:
-        \(userHeader)
+        - \(userHeader)
 
         Assistant responses (high level):
         \(assistantHeader)
 
         Tool activity (collapsed):
         \(toolSection)
+
+        Tool failures:
+        \(failureSection)
 
         Latest ReasoningOutcome (collapsed):
         \(outcomeSection)

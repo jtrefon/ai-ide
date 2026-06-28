@@ -5,7 +5,11 @@ final class ConversationSendCoordinator {
     private let historyCoordinator: ChatHistoryCoordinator
     private let aiInteractionCoordinator: AIInteractionCoordinator
     private let toolExecutionCoordinator: ToolExecutionCoordinator
-    var clearStreamingBuffer: (@MainActor () -> Void)?
+    var clearStreamingBuffer: (@MainActor () -> Void)? {
+        didSet {
+            toolLoopHandler.clearStreamingBuffer = clearStreamingBuffer
+        }
+    }
 
     private let foldingHandler: ConversationFoldingHandler
     private let initialResponseHandler: InitialResponseHandler
@@ -32,7 +36,8 @@ final class ConversationSendCoordinator {
         self.toolLoopHandler = ToolLoopHandler(
             historyCoordinator: historyCoordinator,
             aiInteractionCoordinator: aiInteractionCoordinator,
-            toolExecutionCoordinator: toolExecutionCoordinator
+            toolExecutionCoordinator: toolExecutionCoordinator,
+            clearStreamingBuffer: clearStreamingBuffer
         )
         self.qaReviewHandler = QAReviewHandler(
             historyCoordinator: historyCoordinator,
@@ -62,7 +67,8 @@ final class ConversationSendCoordinator {
         try await foldingHandler.foldIfNeeded(
             historyCoordinator: historyCoordinator,
             projectRoot: request.projectRoot,
-            mode: request.mode
+            mode: request.mode,
+            usesLocalModel: request.usesLocalModel
         )
         let foldDuration = foldStartTime.duration(to: ContinuousClock.now)
         await AppLogger.shared.debug(
@@ -140,13 +146,13 @@ final class ConversationSendCoordinator {
         request: SendRequest,
         localTools: [AITool]
     ) async throws -> AIServiceResponse {
-        let maxIterations = 5
+        let maxIterations = 8
         var callFrequencies: [CallSignature: Int] = [:]
         let maxSameCall = 3
         var promptedForExecution = false
 
         for iteration in 0..<maxIterations {
-            let messages = historyCoordinator.messages
+            let messages = historyCoordinator.messages.filter { !$0.isDraft }
             let result = await aiInteractionCoordinator.sendMessageWithRetry(
                 AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: messages,
@@ -164,10 +170,8 @@ final class ConversationSendCoordinator {
             let response = try result.get()
             let rawContent = response.content ?? ""
 
-            // Parse response for reasoning + content + tool calls
             let parsed = ChatPromptBuilder.parseModelResponse(rawContent)
 
-            // Prefer structured tool calls from the MLX framework (cleaner parsing)
             let toolCalls: [AIToolCall]
             if let structured = response.toolCalls, !structured.isEmpty {
                 toolCalls = structured
@@ -175,12 +179,9 @@ final class ConversationSendCoordinator {
                 toolCalls = parsed.toolCalls
             }
 
-            // Clear streaming buffer so consolidation pass starts fresh
             await clearStreamingBuffer?()
 
-            // No tool calls
             guard !toolCalls.isEmpty else {
-                // If the response looks like a plan with no execution, prompt the model once to act
                 if !promptedForExecution, looksLikePlanWithoutAction(rawContent) {
                     promptedForExecution = true
                     let planMsg = ChatMessage(
@@ -195,7 +196,6 @@ final class ConversationSendCoordinator {
                 return response
             }
 
-            // Count call frequencies and break if same call seen 3+ times
             var shouldBreak = false
             for call in toolCalls {
                 let sig = CallSignature(name: call.name, arguments: call.arguments)
@@ -208,9 +208,6 @@ final class ConversationSendCoordinator {
                 return response
             }
 
-            // Store assistant message with reasoning + tool calls BEFORE executing.
-            // This preserves reasoning in the conversation for the UI to display
-            // (the cloud tool loop does the same pattern).
             let displayContent = ChatPromptBuilder.contentForDisplay(from: rawContent)
             let assistantMsg = ChatMessage(
                 role: .assistant,
@@ -220,7 +217,6 @@ final class ConversationSendCoordinator {
             )
             historyCoordinator.append(assistantMsg)
 
-            // Execute tool calls and append results
             let toolResults = await toolExecutionCoordinator.executeToolCalls(
                 toolCalls,
                 availableTools: localTools,
@@ -231,8 +227,6 @@ final class ConversationSendCoordinator {
             )
             for msg in toolResults {
                 historyCoordinator.append(msg)
-                // If a tool failed with "Tool not found", redirect the agent to
-                // available tools instead of a dead-end error.
                 if msg.content.contains("Tool not found") {
                     let available = localTools.map(\.name).sorted().joined(separator: ", ")
                     let correctionMsg = ChatMessage(
@@ -244,10 +238,9 @@ final class ConversationSendCoordinator {
             }
         }
 
-        // Final attempt after exhausting iterations
         let result = await aiInteractionCoordinator.sendMessageWithRetry(
             AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: historyCoordinator.messages,
+                messages: historyCoordinator.messages.filter { !$0.isDraft },
                 mediaAttachments: request.mediaAttachments,
                 explicitContext: request.explicitContext,
                 tools: localTools,
@@ -264,10 +257,8 @@ final class ConversationSendCoordinator {
 
     private func looksLikePlanWithoutAction(_ text: String) -> Bool {
         let lower = text.lowercased()
-        // Has planning language and numbered steps but no evidence of execution
         let hasPlanMarker = lower.contains("plan:") || lower.contains("**plan**") || lower.contains("# plan")
         let hasSteps = lower.contains("1.") || lower.contains("step 1") || lower.contains("step one")
-        // But no tool call indicators (model said it would do something but didn't)
         let hasToolCall = lower.contains("read_file") || lower.contains("search_project") ||
                           lower.contains("find_file") || lower.contains("grep") ||
                           lower.contains("list_dir") || lower.contains("get_project_structure")
@@ -292,9 +283,5 @@ final class ConversationSendCoordinator {
         static func == (lhs: CallSignature, rhs: CallSignature) -> Bool {
             lhs.name == rhs.name && lhs.arguments == rhs.arguments
         }
-    }
-
-    private func appendRunSnapshot(payload: RunSnapshotPayload) async {
-        await ToolLoopUtilities.appendRunSnapshot(payload: payload)
     }
 }

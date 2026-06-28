@@ -5,6 +5,15 @@ protocol OrchestrationNode: Sendable {
     func run(state: OrchestrationState) async throws -> OrchestrationState
 }
 
+extension OrchestrationNode {
+    func requireResponse(from state: OrchestrationState) throws -> AIServiceResponse {
+        guard let response = state.response else {
+            throw AppError.unknown("\(Self.self): expected response to be set")
+        }
+        return response
+    }
+}
+
 struct OrchestrationGraph: Sendable {
     let entryNodeId: String
     private let nodesById: [String: any OrchestrationNode]

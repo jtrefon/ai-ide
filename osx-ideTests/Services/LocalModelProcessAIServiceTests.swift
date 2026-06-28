@@ -7,7 +7,7 @@ import XCTest
 final class LocalModelProcessAIServiceTests: XCTestCase {
     private func makeSelectionStore(
         selectedModelId: String,
-        turboQuantEnabled: Bool = false,
+        kvCache4BitEnabled: Bool = false,
         contextLength: Int? = nil
     ) async -> LocalModelSelectionStore {
         let suiteName = "LocalModelProcessAIServiceTests.\(UUID().uuidString)"
@@ -17,7 +17,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             settingsStore: SettingsStore(userDefaults: defaults)
         )
         await selectionStore.setSelectedModelId(selectedModelId)
-        await selectionStore.setTurboQuantEnabled(turboQuantEnabled)
+        await selectionStore.setKVCache4BitEnabled(kvCache4BitEnabled)
         await selectionStore.setContextLength(contextLength)
         return selectionStore
     }
@@ -526,7 +526,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
                 topP: 0.92,
                 repetitionPenalty: 1.03,
                 repetitionContextSize: 64,
-                turboQuantEnabled: false
+                kvCache4BitEnabled: false
             ),
         )
     }

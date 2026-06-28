@@ -1,13 +1,11 @@
 import SwiftUI
-import Combine
 import Foundation
 
 /// An AI chat panel that uses the user's code selection as context for AI queries and displays responses.
 struct AIChatPanel: View {
     @ObservedObject var selectionContext: CodeSelectionContext
-    let conversationManager: any ConversationManagerProtocol
+    @ObservedObject var conversationManager: ConversationManager
     @ObservedObject var ui: UIStateManager
-    @State private var renderRefreshToken: UInt = 0
     @State private var isOfflineMode: Bool = false
     @State private var modelDisplayName: String = "Cloud"
     @State private var reasoningIntensity: ReasoningIntensity = .default
@@ -17,7 +15,6 @@ struct AIChatPanel: View {
     }
 
     var body: some View {
-        let _ = renderRefreshToken
         let displayedTabs = conversationManager.conversationTabs.isEmpty
             ? [ConversationTabItem(id: conversationManager.currentConversationId, title: "Chat 1")]
             : conversationManager.conversationTabs
@@ -28,25 +25,30 @@ struct AIChatPanel: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 2) {
                         ForEach(displayedTabs) { tab in
-                            Button {
-                                conversationManager.switchConversation(to: tab.id)
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text(tab.title)
-                                        .font(.body)
-                                        .lineLimit(1)
-                                    if displayedTabs.count > 1 {
-                                        Image(systemName: "xmark")
+                            HStack(spacing: 4) {
+                                Text(tab.title)
+                                    .font(.body)
+                                    .lineLimit(1)
+                                if displayedTabs.count > 1 {
+                                    Button {
+                                        conversationManager.closeConversation(id: tab.id)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
                                             .font(.caption2.weight(.medium))
                                             .foregroundStyle(.secondary)
                                     }
+                                    .buttonStyle(.plain)
+                                    .help("Close conversation")
                                 }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(tab.id == conversationManager.currentConversationId ? Color.accentColor.opacity(0.15) : Color.clear)
-                                .cornerRadius(4)
                             }
-                            .buttonStyle(.plain)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(tab.id == conversationManager.currentConversationId ? Color.accentColor.opacity(0.15) : Color.clear)
+                            .cornerRadius(4)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                conversationManager.switchConversation(to: tab.id)
+                            }
                             .accessibilityIdentifier("ConversationTab_\(tab.id)")
                         }
                     }
@@ -57,17 +59,17 @@ struct AIChatPanel: View {
                 Button(action: {
                     conversationManager.startNewConversation()
                 }) {
-                    Image(systemName: "plus")
-                        .font(.caption2.weight(.semibold))
-                        .frame(width: 18, height: 18)
+                    Image(systemName: "plus.circle.fill")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .help(localized("ai_chat.new_conversation_help"))
                 .accessibilityIdentifier(AccessibilityID.aiChatNewConversationButton)
                 .padding(.trailing, 6)
             }
-            .frame(height: 26)
-            .background(.windowBackground)
+            .frame(height: 28)
+            .padding(.horizontal, 4)
             .overlay(
                 Rectangle()
                     .frame(height: 1)
@@ -113,7 +115,7 @@ struct AIChatPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.aiChatPanel)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(.regularMaterial)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Picker(localized("ai_chat.mode"), selection: modeBinding) {
@@ -149,12 +151,12 @@ struct AIChatPanel: View {
                         Button {
                             Task {
                                 let store = LocalModelSelectionStore()
-                                await store.setSelectedModelId(gemmaE4bModel.id)
+                                await store.setSelectedModelId(quickSelectModel.id)
                                 await store.setOfflineModeEnabled(true)
                             }
                         } label: {
                             HStack {
-                                Text(gemmaE4bModel.displayName)
+                                Text(quickSelectModel.displayName)
                                 if isOfflineMode {
                                     Image(systemName: "checkmark")
                                 }
@@ -200,9 +202,6 @@ struct AIChatPanel: View {
         .onReceive(NotificationCenter.default.publisher(for: .localModelSelectionDidChange)) { _ in
             refreshModelState()
         }
-        .onReceive(conversationManager.statePublisher) { _ in
-            renderRefreshToken &+= 1
-        }
     }
 
     private func refreshModelState() {
@@ -234,8 +233,8 @@ struct AIChatPanel: View {
         }
     }
 
-    private var gemmaE4bModel: LocalModelDefinition {
-        LocalModelCatalog.model(id: "mlx-community/gemma-4-e4b-it-4bit@62b0e4e")!
+    private var quickSelectModel: LocalModelDefinition {
+        LocalModelCatalog.defaultModel
     }
 
     var currentSelection: String? {

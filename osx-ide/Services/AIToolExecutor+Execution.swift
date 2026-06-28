@@ -465,6 +465,8 @@ extension AIToolExecutor {
             toolName: request.toolCall.name,
             arguments: request.toolCall.arguments
         )
+        let toolExecStart = ContinuousClock.now
+        print("[TOOL-EXEC] start tool=\(request.toolCall.name) timeout=\(timeoutSeconds)s args=\(request.toolCall.arguments)")
         await MainActor.run {
             ToolTimeoutCenter.shared.begin(
                 toolCallId: request.toolCall.id,
@@ -511,6 +513,8 @@ extension AIToolExecutor {
                 toolCall: request.toolCall,
                 resultLength: content.count
             )
+            let elapsedMs = Int(toolExecStart.duration(to: ContinuousClock.now).components.seconds * 1000 + toolExecStart.duration(to: ContinuousClock.now).components.attoseconds / 1_000_000_000_000_000)
+            print("[TOOL-EXEC] success tool=\(request.toolCall.name) duration_ms=\(elapsedMs) resultLen=\(content.count)")
             return .success(content)
         } catch {
             let enriched = Self.enrichError(
@@ -525,6 +529,8 @@ extension AIToolExecutor {
                 toolCall: request.toolCall,
                 error: enriched
             )
+            let errElapsedMs = Int(toolExecStart.duration(to: ContinuousClock.now).components.seconds * 1000 + toolExecStart.duration(to: ContinuousClock.now).components.attoseconds / 1_000_000_000_000_000)
+            print("[TOOL-EXEC] error tool=\(request.toolCall.name) duration_ms=\(errElapsedMs) error=\(enriched)")
             return .failure(enriched)
         }
     }
@@ -582,6 +588,11 @@ extension AIToolExecutor {
         // Web tools: bounded timeout to prevent indefinite hangs
         if toolName == "web_search" || toolName == "web_browse" {
             return 35
+        }
+
+        // Search project: bounded timeout — semantic/symbol/full-text should be fast
+        if toolName == "search_project" {
+            return 30
         }
 
         let stored = UserDefaults.standard.double(forKey: AppConstantsStorage.cliTimeoutSecondsKey)

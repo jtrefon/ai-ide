@@ -45,17 +45,25 @@ struct MessageContentCoordinator {
                     message: message,
                     fontSize: fontSize
                 )
-            } else if hasReasoning {
+            } else {
+                assistantMessageContent
+            }
+        }
+    }
+
+    private var assistantMessageContent: some View {
+        VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 6) {
+            if hasReasoning {
                 ReasoningMessageView(
-                    message: message,
+                    reasoning: message.reasoning ?? "",
                     fontSize: fontSize,
-                    fontFamily: fontFamily,
                     isReasoningHidden: $isReasoningHidden
                 )
-            } else if message.role == .assistant {
-                let displayContent = assistantDisplayContent
+            }
+
+            if hasVisibleContent {
                 MarkdownMessageView(
-                    content: displayContent,
+                    content: visibleContent,
                     fontSize: fontSize,
                     fontFamily: fontFamily
                 )
@@ -68,19 +76,13 @@ struct MessageContentCoordinator {
                 .contextMenu {
                     copyMessageButton
                 }
-            } else {
-                Text(message.content)
-                    .font(.system(size: CGFloat(fontSize)))
-                    .lineSpacing(2)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(bubbleBackground(for: message))
-                    .foregroundColor(bubbleForegroundColor(for: message))
-                    .cornerRadius(12, corners: bubbleCorners(for: message))
-                    .textSelection(.enabled)
-                    .contextMenu {
-                        copyMessageButton
-                    }
+            }
+
+            if hasToolCalls {
+                ToolCallsSummaryView(
+                    toolCalls: message.toolCalls ?? [],
+                    fontSize: fontSize
+                )
             }
         }
     }
@@ -92,7 +94,7 @@ struct MessageContentCoordinator {
             return Color.accentColor
         }
 
-        return Color(nsColor: .controlBackgroundColor)
+        return Color(nsColor: .secondarySystemFill)
     }
 
     private func bubbleForegroundColor(for message: ChatMessage) -> Color {
@@ -116,12 +118,17 @@ struct MessageContentCoordinator {
         return !reasoning.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty
     }
 
-    private var assistantDisplayContent: String {
-        let cleaned = ChatPromptBuilder.contentForDisplay(from: message.content)
-        if cleaned.isEmpty {
-            return ""
-        }
-        return cleaned
+    private var hasToolCalls: Bool {
+        !(message.toolCalls?.isEmpty ?? true)
+    }
+
+    private var hasVisibleContent: Bool {
+        !visibleContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var visibleContent: String {
+        let split = ChatPromptBuilder.splitReasoning(from: message.content)
+        return split.content
     }
 
     private var isReasoningOutcomeMessage: Bool {

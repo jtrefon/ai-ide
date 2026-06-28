@@ -85,6 +85,6 @@ struct OpenRouterSettings: Equatable {
         systemPrompt: "",
         reasoningMode: .modelAndAgent,
         toolPromptMode: .fullStatic,
-        ragEnabledDuringToolLoop: true
+        ragEnabledDuringToolLoop: false
     )
 }

@@ -84,26 +84,25 @@ final class AIInteractionCoordinator {
         var lastError: AppError?
         let settings = settingsStore.load(includeApiKey: false)
         let augmentedContext: String?
-        if request.usesLocalModel {
-            augmentedContext = request.explicitContext
-        } else {
-            let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
-            let retriever: (any RAGRetriever)?
-            if let codebaseIndex, shouldUseRAGRetrieval(for: request.stage, settings: settings) {
-                retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
-            } else {
-                retriever = nil
-            }
-            augmentedContext = await RAGContextBuilder.buildContext(
-                userInput: userInput,
-                explicitContext: request.explicitContext,
-                retriever: retriever,
-                projectRoot: request.projectRoot,
-                stage: request.stage,
-                conversationId: request.conversationId,
-                eventBus: eventBus
-            )
+        if Task.isCancelled {
+            return .failure(.aiServiceError("Request cancelled"))
         }
+        let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
+        let retriever: (any RAGRetriever)?
+        if let codebaseIndex, shouldUseRAGRetrieval(for: request.stage, settings: settings, usesLocalModel: request.usesLocalModel) {
+            retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
+        } else {
+            retriever = nil
+        }
+        augmentedContext = await RAGContextBuilder.buildContext(
+            userInput: userInput,
+            explicitContext: request.explicitContext,
+            retriever: retriever,
+            projectRoot: request.projectRoot,
+            stage: request.stage,
+            conversationId: request.conversationId,
+            eventBus: eventBus
+        )
 
         for attempt in 1...maxAttempts {
             if Task.isCancelled {
@@ -113,14 +112,18 @@ final class AIInteractionCoordinator {
             let retryMessages: [ChatMessage]
             if attempt > 1 {
                 let retryReason = lastError?.localizedDescription ?? "previous attempt failed"
+                let isEmptyResponseError = retryReason.contains("Empty response")
+                let promptKey = isEmptyResponseError
+                    ? "ConversationFlow/Corrections/empty_response_correction"
+                    : "ConversationFlow/Corrections/retry_context_message"
                 let retryPromptTemplate: String
                 do {
                     retryPromptTemplate = try PromptRepository.shared.prompt(
-                        key: "ConversationFlow/Corrections/retry_context_message",
+                        key: promptKey,
                         projectRoot: request.projectRoot
                     )
                 } catch {
-                    return .failure(Self.mapToAppError(error, operation: "prompt.retry_context_message"))
+                    return .failure(Self.mapToAppError(error, operation: "prompt.\(promptKey)"))
                 }
                 let retryContextMessage = ChatMessage(
                     role: .system,
@@ -164,6 +167,26 @@ final class AIInteractionCoordinator {
                 do {
                     let response = try await aiService.sendMessageStreaming(
                         historyRequest, runId: runId)
+                    if Self.isEmptyResponse(response) && attempt < maxAttempts {
+                        await AIToolTraceLogger.shared.log(type: "chat.empty_response_retry", data: [
+                            "runId": runId,
+                            "attempt": attempt,
+                            "stage": request.stage?.rawValue ?? "unknown",
+                            "contentLength": response.content?.count ?? 0,
+                            "hasToolCalls": !(response.toolCalls?.isEmpty ?? true)
+                        ])
+                        lastError = .aiServiceError("Empty response: model returned no visible content")
+                        let waitSeconds = retryDelayNanoseconds(
+                            forAttempt: attempt,
+                            stage: request.stage,
+                            isRateLimitError: false,
+                            isRunningUnitTests: isUnitTestRun
+                        )
+                        guard await sleepRespectingCancellation(nanoseconds: waitSeconds) else {
+                            return .failure(.aiServiceError("Request cancelled"))
+                        }
+                        continue
+                    }
                     return .success(response)
                 } catch {
                     if isCancellationError(error) || Task.isCancelled {
@@ -201,7 +224,26 @@ final class AIInteractionCoordinator {
                 let result = await aiService.sendMessageResult(historyRequest)
 
                 switch result {
-                case .success:
+                case .success(let response):
+                    if Self.isEmptyResponse(response) && attempt < maxAttempts {
+                        await AIToolTraceLogger.shared.log(type: "chat.empty_response_retry", data: [
+                            "attempt": attempt,
+                            "stage": request.stage?.rawValue ?? "unknown",
+                            "contentLength": response.content?.count ?? 0,
+                            "hasToolCalls": !(response.toolCalls?.isEmpty ?? true)
+                        ])
+                        lastError = .aiServiceError("Empty response: model returned no visible content")
+                        let waitSeconds = retryDelayNanoseconds(
+                            forAttempt: attempt,
+                            stage: request.stage,
+                            isRateLimitError: false,
+                            isRunningUnitTests: isUnitTestRun
+                        )
+                        guard await sleepRespectingCancellation(nanoseconds: waitSeconds) else {
+                            return .failure(.aiServiceError("Request cancelled"))
+                        }
+                        continue
+                    }
                     return result
                 case .failure(let error):
                     if isCancellationError(error) || Task.isCancelled {
@@ -239,6 +281,17 @@ final class AIInteractionCoordinator {
         }
 
         return .failure(lastError ?? .unknown("ConversationManager: sendMessageWithRetry failed"))
+    }
+
+    private static func isEmptyResponse(_ response: AIServiceResponse) -> Bool {
+        let hasToolCalls = !(response.toolCalls?.isEmpty ?? true)
+        if hasToolCalls { return false }
+        guard let content = response.content else { return true }
+        let split = ChatPromptBuilder.splitReasoning(from: content)
+        let visibleContent = split.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !visibleContent.isEmpty { return false }
+        let hasReasoning = !(split.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        return !hasReasoning
     }
 
     private static func mapToAppError(_ error: Error, operation: String) -> AppError {
@@ -336,12 +389,11 @@ final class AIInteractionCoordinator {
 
     private func shouldUseRAGRetrieval(
         for stage: AIRequestStage?,
-        settings: OpenRouterSettings
+        settings: OpenRouterSettings,
+        usesLocalModel: Bool = false
     ) -> Bool {
-        guard stage != .tool_loop else {
-            return settings.ragEnabledDuringToolLoop
-        }
-        return true
+        if usesLocalModel { return false }
+        return settings.ragEnabledDuringToolLoop
     }
 
     func shouldUseStreamingForRequest(

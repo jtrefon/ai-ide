@@ -7,4 +7,5 @@ public enum LogCategory: String, Codable, Sendable {
     case tool
     case eventBus
     case error
+    case localModel
 }

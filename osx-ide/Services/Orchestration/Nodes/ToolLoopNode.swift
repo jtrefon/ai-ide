@@ -42,10 +42,4 @@ struct ToolLoopNode: OrchestrationNode {
         return nextState
     }
 
-    private func requireResponse(from state: OrchestrationState) throws -> AIServiceResponse {
-        guard let response = state.response else {
-            throw AppError.unknown("ToolLoopNode: expected response to be set")
-        }
-        return response
-    }
 }

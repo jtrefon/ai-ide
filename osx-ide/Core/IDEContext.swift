@@ -16,7 +16,7 @@ protocol IDEContext: AnyObject {
     var codebaseIndex: CodebaseIndexProtocol? { get }
 
     var selectionContext: CodeSelectionContext { get }
-  var conversationManager: any ConversationManagerProtocol { get }
+  var conversationManager: ConversationManager { get }
 
   var workspaceService: any WorkspaceServiceProtocol { get }
 

@@ -51,7 +51,7 @@ class AppState: ObservableObject, IDEContext {
     let uiService: UIServiceProtocol
     let workspaceService: WorkspaceServiceProtocol
     let fileEditorService: FileEditorServiceProtocol
-    let conversationManager: ConversationManagerProtocol
+    let conversationManager: ConversationManager
     let fileDialogService: FileDialogServiceProtocol
     let fileSystemService: FileSystemService
 
@@ -148,7 +148,7 @@ class AppState: ObservableObject, IDEContext {
         uiService: UIServiceProtocol,
         workspaceService: WorkspaceServiceProtocol,
         fileEditorService: FileEditorServiceProtocol,
-        conversationManager: ConversationManagerProtocol,
+        conversationManager: ConversationManager,
         fileDialogService: FileDialogServiceProtocol,
         fileSystemService: FileSystemService,
         eventBus: EventBusProtocol,

@@ -1,6 +1,15 @@
 {
-  "originHash" : "1af68cf021dea0caa0eac9a974e4a903b4e1c845263542c8fab7cc80261284b8",
+  "originHash" : "9f6cf78a30b3fd0a107611d18d5bdfec7bfd924503728acfb2ed2915eec3b32f",
   "pins" : [
+    {
+      "identity" : "codeeditlanguages",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/CodeEditApp/CodeEditLanguages",
+      "state" : {
+        "revision" : "32a1ddcb44d0bcf9bdb41ae426fa1bb7198e62fe",
+        "version" : "0.1.21"
+      }
+    },
     {
       "identity" : "eventsource",
       "kind" : "remoteSourceControl",
@@ -15,8 +24,26 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ml-explore/mlx-swift",
       "state" : {
-        "revision" : "61b9e011e09a62b489f6bd647958f1555bdf2896",
-        "version" : "0.31.3"
+        "revision" : "0.31.4",
+        "version" : "0.31.4"
+      }
+    },
+    {
+      "identity" : "neon",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ChimeHQ/Neon",
+      "state" : {
+        "branch" : "main",
+        "revision" : "484d6fb9e0c4fb679a1d5f5ddaf2cac2ecf21165"
+      }
+    },
+    {
+      "identity" : "rearrange",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ChimeHQ/Rearrange",
+      "state" : {
+        "revision" : "4de8be41dba304192e87dc0a11e0aa39e72aa2e8",
+        "version" : "2.1.1"
       }
     },
     {
@@ -116,6 +143,24 @@
       "state" : {
         "revision" : "eed7264ac5e4ec5dfa6165c6e5c5577364344fe4",
         "version" : "1.2.0"
+      }
+    },
+    {
+      "identity" : "swifttreesitter",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ChimeHQ/SwiftTreeSitter",
+      "state" : {
+        "branch" : "main",
+        "revision" : "0f40435cdb41673ce4194d731571cf2a2f7c3285"
+      }
+    },
+    {
+      "identity" : "tree-sitter",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tree-sitter/tree-sitter",
+      "state" : {
+        "revision" : "da6fe9beb4f7f67beb75914ca8e0d48ae48d6406",
+        "version" : "0.25.10"
       }
     },
     {

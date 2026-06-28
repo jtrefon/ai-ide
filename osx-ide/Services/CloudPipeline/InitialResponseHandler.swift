@@ -24,7 +24,7 @@ final class InitialResponseHandler {
     ) async throws -> AIServiceResponse {
         var response = try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: historyCoordinator.messages,
+                messages: historyCoordinator.messages.filter { !$0.isDraft },
                 explicitContext: explicitContext,
                 tools: availableTools,
                 mode: mode,

@@ -23,7 +23,6 @@ struct CodeEditorView: View {
     var wordWrap: Bool = false
     var fontSize: Double = AppConstantsEditor.defaultFontSize
     var fontFamily: String = AppConstantsEditor.defaultFontFamily
-    @ObservedObject private var highlightDiagnostics = EditorHighlightDiagnosticsStore.shared
     @ObservedObject private var inlineCompletionDebugStore = InlineCompletionDebugStore.shared
     @ObservedObject var inlineQAPopoverManager: InlineAIPopoverManager = .disabled
 
@@ -45,10 +44,6 @@ struct CodeEditorView: View {
             )
             .frame(width: geometry.size.width, height: geometry.size.height)
             .overlay(
-                diagnosticsOverlay,
-                alignment: .topLeading
-            )
-            .overlay(
                 inlineCompletionDebugOverlay,
                 alignment: .topTrailing
             )
@@ -68,23 +63,6 @@ struct CodeEditorView: View {
                     y: inlineQAPopoverManager.anchorRect.origin.y
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
-        }
-    }
-
-    @ViewBuilder
-    private var diagnosticsOverlay: some View {
-        if ProcessInfo.processInfo.environment["XCUI_TESTING"] == "1" {
-            let diagnosticsText = highlightDiagnostics.diagnostics.isEmpty ? "pending" : highlightDiagnostics.diagnostics
-            Text(diagnosticsText)
-                .font(.caption2)
-                .foregroundStyle(.primary)
-                .opacity(0.01)
-                .allowsHitTesting(false)
-                .accessibilityElement(children: .ignore)
-                .accessibilityHidden(false)
-                .accessibilityIdentifier(AccessibilityID.editorHighlightDiagnostics)
-                .accessibilityLabel(diagnosticsText)
-                .accessibilityValue(diagnosticsText)
         }
     }
 

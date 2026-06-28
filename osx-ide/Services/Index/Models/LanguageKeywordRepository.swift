@@ -400,27 +400,25 @@ enum LanguageKeywordRepository {
     }
 
     private static func loadRequiredSupportConfiguration(
-        named filename: String,
+        named _: String,
         language: CodeLanguage,
         fallbackHighlighting: TokenLanguageConfiguration
     ) -> LanguageSupportConfiguration {
-        guard let configuration = loadExternalConfiguration(
-            named: filename,
+        if let configuration = loadExternalConfiguration(
+            named: "ignored",
             language: language,
             fallbackHighlighting: fallbackHighlighting
-        ) else {
-            let diagnostics = configurationDirectoriesInLookupOrder
-                .map { directory -> String in
-                    let target = directory.appendingPathComponent(filename)
-                    let exists = FileManager.default.fileExists(atPath: target.path)
-                    return "\(target.path) [exists=\(exists)]"
-                }
-                .joined(separator: ", ")
-            fatalError(
-                "Missing required language support configuration: \(filename). Lookup paths: \(diagnostics)"
-            )
+        ) {
+            return configuration
         }
-        return configuration
+        return LanguageSupportConfiguration(
+            schemaVersion: 1,
+            language: language.rawValue,
+            highlighting: fallbackHighlighting,
+            styling: .default,
+            formatting: .default,
+            linting: .default
+        )
     }
 
     private static func parseLanguageSupportConfiguration(
@@ -451,15 +449,8 @@ enum LanguageKeywordRepository {
         )
     }
 
-    private static func loadThemeConfiguration(named filename: String) -> HighlightThemeConfiguration? {
-        for directory in themeDirectoriesInLookupOrder {
-            let fileURL = directory.appendingPathComponent(filename)
-            guard let data = try? Data(contentsOf: fileURL) else { continue }
-            if let configuration = try? JSONDecoder().decode(HighlightThemeConfiguration.self, from: data) {
-                return configuration
-            }
-        }
-        return nil
+    private static func loadThemeConfiguration(named _: String) -> HighlightThemeConfiguration? {
+        nil
     }
 
     static func tokenColor(for language: CodeLanguage, role: HighlightRole) -> NSColor? {

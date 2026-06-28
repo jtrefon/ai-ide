@@ -5,7 +5,6 @@ enum AccessibilityID {
     static let appReadyMarker = "AppReadyMarker"
 
     static let codeEditorTextView = "CodeEditorTextView"
-    static let editorHighlightDiagnostics = "EditorHighlightDiagnostics"
 
     static let aiChatPanel = "AIChatPanel"
     static let aiChatInputTextView = "AIChatInputTextView"

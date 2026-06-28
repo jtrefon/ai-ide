@@ -114,6 +114,7 @@ private final class GatedDeltaKernelManager: Sendable {
     private init() {
         kernel = makeGatedDeltaKernel(hasMask: false)
         kernelMasked = makeGatedDeltaKernel(hasMask: true)
+        print("[GDN-INIT] kernel=\(kernel != nil) kernelMasked=\(kernelMasked != nil)")
     }
 }
 
@@ -260,6 +261,12 @@ func gatedDeltaOps(
         )
         ys.append(y)
         state = newState
+
+        if t > 0 && t % 64 == 0 {
+            eval(state)
+            for i in 0..<ys.count { eval(ys[i]) }
+            Memory.clearCache()
+        }
     }
 
     let y = MLX.stacked(ys, axis: 1)
@@ -290,8 +297,14 @@ func gatedDeltaUpdate(
     let state = state ?? MLXArray.zeros([B, Hv, Dv, Dk], dtype: q.dtype)
 
     if GatedDeltaKernelManager.shared.kernel != nil {
+        if B > 0 && q.dim(1) > 1 && q.dim(1) >= 128 {
+            print("[GDN-PATH] kernel T=\(q.dim(1))")
+        }
         return gatedDeltaKernel(q: q, k: k, v: v, g: g, beta: beta, state: state, mask: mask)
     }
 
+    if B > 0 && q.dim(1) > 1 && q.dim(1) >= 128 {
+        print("[GDN-PATH] ops_fallback T=\(q.dim(1))")
+    }
     return gatedDeltaOps(q: q, k: k, v: v, g: g, beta: beta, state: state, mask: mask)
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import SyntaxHighlighting
 
 @MainActor
 struct TextViewRepresentable: NSViewRepresentable {
@@ -27,7 +28,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         configureScrollView(scrollView, documentView: textView)
         scheduleInitialWordWrapApply(scrollView, textView: textView)
         configureLineNumbersIfNeeded(scrollView, textView: textView)
-        scheduleInitialHighlight(textView: textView, coordinator: context.coordinator, font: resolvedFont)
+        attachHighlighter(to: textView, language: language)
 
         return scrollView
     }
@@ -42,8 +43,6 @@ struct TextViewRepresentable: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
 
-        // UI Tests need a stable identifier; otherwise `app.textViews.firstMatch` can
-        // accidentally match the AI chat input instead of the editor.
         textView.setAccessibilityIdentifier(AccessibilityID.codeEditorTextView)
         (textView as? CodeEditorTextView)?.configureFolding()
     }
@@ -64,17 +63,14 @@ struct TextViewRepresentable: NSViewRepresentable {
     }
 
     private func setInitialText(in textView: NSTextView, coordinator: Coordinator) {
-        // Set initial text without syntax highlighting to avoid initialization issues
         coordinator.isProgrammaticUpdate = true
         textView.string = text
         coordinator.isProgrammaticUpdate = false
     }
 
     private func attachCoordinator(_ coordinator: Coordinator, to textView: NSTextView) {
-        // Assign delegate only after initial programmatic setup to avoid publishing SwiftUI state during view updates.
         textView.delegate = coordinator
         coordinator.attach(textView: textView)
-        textView.textStorage?.delegate = coordinator.textStorageDelegateProxy
     }
 
     private func configureScrollView(_ scrollView: NSScrollView, documentView: NSTextView) {
@@ -99,16 +95,14 @@ struct TextViewRepresentable: NSViewRepresentable {
         scrollView.rulersVisible = true
         scrollView.verticalRulerView = ModernLineNumberRulerView(scrollView: scrollView, textView: textView)
 
-        // Ensure the ruler is laid out and painted on first draw (otherwise it can appear only after scrolling).
         Task { @MainActor in
             scrollView.tile()
             scrollView.verticalRulerView?.needsDisplay = true
         }
     }
 
-    private func scheduleInitialHighlight(textView: NSTextView, coordinator: Coordinator, font: NSFont) {
-        // Apply syntax highlighting after the view is set up asynchronously
-        coordinator.performAsyncHighlight(for: text, in: textView, language: language, font: font)
+    private func attachHighlighter(to textView: NSTextView, language: String) {
+        TreeSitterHighlightService.shared.attachHighlighter(to: textView, languageIdentifier: language)
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
@@ -120,13 +114,13 @@ struct TextViewRepresentable: NSViewRepresentable {
         context.coordinator.currentLanguageIdentifier = language
         context.coordinator.currentFilePath = filePath
         let needsRehighlight = syncFont(resolvedFont, for: textView, in: scrollView)
+
+        if languageDidChange || fileDidChange {
+            TreeSitterHighlightService.shared.attachHighlighter(to: textView, languageIdentifier: language)
+        }
+
         scheduleWordWrapUpdate(for: scrollView, textView: textView)
-        syncTextAndHighlightIfNeeded(
-            for: textView,
-            coordinator: context.coordinator,
-            resolvedFont: resolvedFont,
-            needsRehighlight: needsRehighlight || languageDidChange
-        )
+        syncTextIfNeeded(for: textView, coordinator: context.coordinator, resolvedFont: resolvedFont, needsRehighlight: needsRehighlight)
         syncSelectionIfNeeded(for: textView, coordinator: context.coordinator)
         syncRulerVisibilityIfNeeded(for: scrollView, textView: textView)
         if fileDidChange {
@@ -154,7 +148,7 @@ struct TextViewRepresentable: NSViewRepresentable {
         }
     }
 
-    private func syncTextAndHighlightIfNeeded(
+    private func syncTextIfNeeded(
         for textView: NSTextView,
         coordinator: Coordinator,
         resolvedFont: NSFont,
@@ -163,12 +157,6 @@ struct TextViewRepresentable: NSViewRepresentable {
         let current = textView.string
         if current != text {
             applyProgrammaticTextUpdate(text, to: textView, coordinator: coordinator)
-            scheduleHighlight(text, in: textView, coordinator: coordinator, font: resolvedFont)
-            return
-        }
-
-        if needsRehighlight {
-            scheduleHighlight(current, in: textView, coordinator: coordinator, font: resolvedFont)
         }
     }
 
@@ -176,15 +164,6 @@ struct TextViewRepresentable: NSViewRepresentable {
         coordinator.isProgrammaticUpdate = true
         textView.string = newText
         coordinator.isProgrammaticUpdate = false
-    }
-
-    private func scheduleHighlight(
-        _ text: String,
-        in textView: NSTextView,
-        coordinator: Coordinator,
-        font: NSFont
-    ) {
-        coordinator.performAsyncHighlight(for: text, in: textView, language: language, font: font)
     }
 
     private func syncSelectionIfNeeded(for textView: NSTextView, coordinator: Coordinator) {

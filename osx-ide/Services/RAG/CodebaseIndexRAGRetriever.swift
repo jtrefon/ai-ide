@@ -143,7 +143,8 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
                     preview: "- \(match.entry.content)",
                     searchableText: match.entry.content,
                     qualityScore: nil,
-                    freshness: 0.7 + (normalizedSimilarity * 0.3)
+                    freshness: 0.7 + (normalizedSimilarity * 0.3),
+                    embeddingSimilarity: normalizedSimilarity
                 )
             }
         }
@@ -182,7 +183,8 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
                     preview: "- [segment] \(match.filePath):\(match.lineStart)-\(match.lineEnd): \(match.snippet)",
                     searchableText: "\(match.filePath) \(match.snippet)",
                     qualityScore: inferredQualityScore(from: match.snippet),
-                    freshness: 0.75 + max(0, min(0.2, match.similarityScore * 0.2))
+                    freshness: 0.75 + max(0, min(0.2, match.similarityScore * 0.2)),
+                    embeddingSimilarity: max(0, min(1, match.similarityScore))
                 )
             }
         }

@@ -56,6 +56,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published private(set) var isLiveModelOutputPreviewVisible: Bool = true
     @Published private(set) var conversationTabs: [ConversationTabItem] = []
     @Published private(set) var providerIssue: ConversationProviderIssueState?
+    @Published private(set) var messages: [ChatMessage] = []
 
     // MARK: - Dependencies
 
@@ -96,17 +97,20 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var pendingStreamingBuffer: String = ""
     private var pendingReasoningBuffer: String = ""
     private var streamingRenderTask: Task<Void, Never>?
-    private let streamingRenderIntervalNanoseconds: UInt64 = 16_000_000
-    private let maxStreamingCharactersPerTick = 8
+    private let streamingRenderIntervalNanoseconds: UInt64 = 150_000_000
+    private var lastRenderedDraftContent: String = ""
+    private var lastRenderedDraftReasoning: String = ""
+    private let outputBuffer = StreamingOutputBuffer()
     private var activeSendTask: Task<Void, Never>?
     private let maxPreviewCharacters = 12_000
     private let maxStatusPreviewCharacters = 4_000
 
-    // MARK: - Computed Properties
+    // Coalesced live preview support
+    private var pendingPreviewBuffer: String = ""
+    private var previewPublishTask: Task<Void, Never>?
+    private let previewCoalesceIntervalNanoseconds: UInt64 = 200_000_000
 
-    var messages: [ChatMessage] {
-        historyCoordinator.messages
-    }
+    // MARK: - Computed Properties
 
     var currentConversationId: String {
         sessionManager.selectedId
@@ -185,6 +189,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         setupPowerManagementObservation()
         setupStreamingSubscriptions()
         observeSessionTabs()
+        observeHistoryMessages()
         startTraceLogging()
         configureLoggingStores(root: root)
     }
@@ -200,6 +205,14 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         sessionManager.$conversationTabs
             .sink { [weak self] tabs in
                 self?.conversationTabs = tabs
+            }
+            .store(in: &cancellables)
+    }
+
+    private func observeHistoryMessages() {
+        historyManager.$messages
+            .sink { [weak self] msgs in
+                self?.messages = msgs
             }
             .store(in: &cancellables)
     }
@@ -321,13 +334,16 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             while self.activeStreamingRunId != nil {
                 guard !Task.isCancelled else { break }
 
-                if self.pendingStreamingBuffer.isEmpty {
+                if self.pendingStreamingBuffer.isEmpty && self.pendingReasoningBuffer.isEmpty {
                     do { try await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds) } catch { break }
                     continue
                 }
 
-                let delta = self.dequeueStreamingDelta()
-                let reasoningDelta = self.dequeueReasoningDelta()
+                let delta = self.pendingStreamingBuffer
+                let reasoningDelta = self.pendingReasoningBuffer
+                self.pendingStreamingBuffer = ""
+                self.pendingReasoningBuffer = ""
+
                 guard !delta.isEmpty || !reasoningDelta.isEmpty else {
                     do { try await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds) } catch { break }
                     continue
@@ -336,17 +352,32 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
                 self.draftAssistantText.append(delta)
                 self.draftReasoningText.append(reasoningDelta)
-                let displayText = ChatPromptBuilder.contentForDisplay(from: self.draftAssistantText)
+
+                self.outputBuffer.appendContent(delta)
+                self.outputBuffer.appendReasoning(reasoningDelta)
+
+                let renderContent = self.outputBuffer.hasContent ? self.outputBuffer.content : ""
+                let renderReasoning: String? = self.outputBuffer.hasReasoning ? self.outputBuffer.reasoning : nil
+
+                let contentChanged = renderContent != self.lastRenderedDraftContent
+                let reasoningChanged = (renderReasoning ?? "") != self.lastRenderedDraftReasoning
+                guard contentChanged || reasoningChanged else {
+                    do { try await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds) } catch { break }
+                    continue
+                }
+                self.lastRenderedDraftContent = renderContent
+                self.lastRenderedDraftReasoning = renderReasoning ?? ""
+
                 let draftTimestamp = self.historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date()
 
                 self.historyCoordinator.upsertDraftMessage(
                     ChatMessage(
                         id: draftId,
                         role: .assistant,
-                        content: displayText.isEmpty ? "Generating..." : displayText,
+                        content: renderContent,
                         timestamp: draftTimestamp,
                         context: ChatMessageContentContext(
-                            reasoning: self.draftReasoningText.isEmpty ? nil : self.draftReasoningText
+                            reasoning: renderReasoning
                         ),
                         isDraft: true
                     )
@@ -357,50 +388,31 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         }
     }
 
-    private func dequeueStreamingDelta() -> String {
-        guard !pendingStreamingBuffer.isEmpty else { return "" }
-        let take = min(maxStreamingCharactersPerTick, pendingStreamingBuffer.count)
-        let splitIndex = pendingStreamingBuffer.index(
-            pendingStreamingBuffer.startIndex,
-            offsetBy: take
-        )
-        let chunk = String(pendingStreamingBuffer[..<splitIndex])
-        pendingStreamingBuffer.removeSubrange(pendingStreamingBuffer.startIndex..<splitIndex)
-        return chunk
-    }
-
-    private func dequeueReasoningDelta() -> String {
-        guard !pendingReasoningBuffer.isEmpty else { return "" }
-        let take = min(maxStreamingCharactersPerTick, pendingReasoningBuffer.count)
-        let splitIndex = pendingReasoningBuffer.index(
-            pendingReasoningBuffer.startIndex,
-            offsetBy: take
-        )
-        let chunk = String(pendingReasoningBuffer[..<splitIndex])
-        pendingReasoningBuffer.removeSubrange(pendingReasoningBuffer.startIndex..<splitIndex)
-        return chunk
-    }
-
     private func flushPendingStreamingBuffer() {
         guard let draftId = draftAssistantMessageId, !pendingStreamingBuffer.isEmpty else { return }
         guard historyCoordinator.getDraftMessage(id: draftId) != nil else {
             pendingStreamingBuffer = ""
+            pendingReasoningBuffer = ""
             return
         }
+        outputBuffer.appendContent(pendingStreamingBuffer)
+        outputBuffer.appendReasoning(pendingReasoningBuffer)
         draftAssistantText.append(pendingStreamingBuffer)
         draftReasoningText.append(pendingReasoningBuffer)
         pendingStreamingBuffer = ""
         pendingReasoningBuffer = ""
-        let displayText = ChatPromptBuilder.contentForDisplay(from: draftAssistantText)
+
+        let renderContent = outputBuffer.hasContent ? outputBuffer.content : ""
+        let renderReasoning: String? = outputBuffer.hasReasoning ? outputBuffer.reasoning : nil
         let draftTimestamp = historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date()
         historyCoordinator.upsertDraftMessage(
             ChatMessage(
                 id: draftId,
                 role: .assistant,
-                content: displayText.isEmpty ? "Generating..." : displayText,
+                content: renderContent,
                 timestamp: draftTimestamp,
                 context: ChatMessageContentContext(
-                    reasoning: draftReasoningText.isEmpty ? nil : draftReasoningText
+                    reasoning: renderReasoning
                 ),
                 isDraft: true
             )
@@ -622,8 +634,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         let isOffline = aiRouter.usesLocalModel
         let contextTokens = settingsStore.integer(forKey: "LocalModel.ContextLength")
         let contextWindowChars: Int? = (isOffline && contextTokens > 0) ? contextTokens * 4 : nil
-        let turboQuantEnabled = settingsStore.bool(forKey: "LocalModel.TurboQuantEnabled", default: false)
-        let compressionRatio: Double? = (isOffline && turboQuantEnabled) ? 8.0 : nil
+        let kvCache4BitEnabled = settingsStore.bool(forKey: "LocalModel.KVCache4BitEnabled", default: false)
+        let compressionRatio: Double? = (isOffline && kvCache4BitEnabled) ? 8.0 : nil
         eventBus.publish(ConversationContextEvent(
             totalCharCount: totalChars,
             messageCount: msgs.count,
@@ -636,7 +648,25 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     private func appendToLiveModelPreview(_ chunk: String) {
         guard !chunk.isEmpty else { return }
-        liveModelOutputPreview.append(chunk)
+        pendingPreviewBuffer.append(chunk)
+        schedulePreviewPublish()
+    }
+
+    private func schedulePreviewPublish() {
+        guard previewPublishTask == nil else { return }
+        previewPublishTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do { try await Task.sleep(nanoseconds: self.previewCoalesceIntervalNanoseconds) } catch { return }
+            guard !Task.isCancelled else { return }
+            self.flushPendingPreview()
+        }
+    }
+
+    private func flushPendingPreview() {
+        previewPublishTask = nil
+        guard !pendingPreviewBuffer.isEmpty else { return }
+        liveModelOutputPreview.append(pendingPreviewBuffer)
+        pendingPreviewBuffer = ""
         if liveModelOutputPreview.count > maxPreviewCharacters {
             liveModelOutputPreview = String(liveModelOutputPreview.suffix(maxPreviewCharacters))
         }
@@ -682,6 +712,12 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         draftReasoningText = ""
         pendingStreamingBuffer = ""
         pendingReasoningBuffer = ""
+        lastRenderedDraftContent = ""
+        lastRenderedDraftReasoning = ""
+        outputBuffer.clear()
+        previewPublishTask?.cancel()
+        previewPublishTask = nil
+        pendingPreviewBuffer = ""
         streamingRenderTask?.cancel()
         streamingRenderTask = nil
     }
@@ -694,6 +730,9 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         draftReasoningText = ""
         pendingStreamingBuffer = ""
         pendingReasoningBuffer = ""
+        lastRenderedDraftContent = ""
+        lastRenderedDraftReasoning = ""
+        outputBuffer.clear()
     }
 
     private func resetConversationInteractionState() {
@@ -755,6 +794,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 )
 
                 self.flushPendingStreamingBuffer()
+                self.historyCoordinator.flushPendingDraftUpdate()
+                self.flushPendingPreview()
                 if let finalAssistantMessage = self.messages.last(where: { $0.role == .assistant && !$0.isDraft }) {
                     self.setLiveModelPreview(finalAssistantMessage.content)
                 }
@@ -829,6 +870,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         setLiveModelPreview("")
         setLiveModelStatusPreview("")
         saveCurrentSessionSnapshot()
+        historyCoordinator.clearConversation()
 
         let oldConversationId = sessionManager.selectedId
         let newConversationId = sessionManager.startNew(

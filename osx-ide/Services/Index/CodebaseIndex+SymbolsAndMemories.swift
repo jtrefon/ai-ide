@@ -45,11 +45,23 @@ extension CodebaseIndex: MemoryEmbeddingSearchProviding {
         // Embedding generation can take 100ms-1s+ on NPU/CPU, which would freeze the app.
         // Also wrap with power management to prevent sleep during long operations.
         let generator = memoryEmbeddingGenerator
+        let modelId = generator.modelIdentifier
+        let embedStart = ContinuousClock.now
         let queryVector = try await Task.detached(priority: .userInitiated) {
             try await AgentActivityCoordinator.shared.withActivity(type: .embeddingGeneration) {
                 try await generator.generateEmbedding(for: userInput)
             }
         }.value
+        let embedMs = Int(embedStart.duration(to: ContinuousClock.now).components.seconds * 1000)
+        + Int(embedStart.duration(to: ContinuousClock.now).components.attoseconds / 1_000_000_000_000_000)
+        print("[RAG] memory embedding took \(embedMs)ms model=\(modelId) vectorSize=\(queryVector.count)")
+        await AIToolTraceLogger.shared.log(type: "rag.embedding", data: [
+            "operation": "memory_search",
+            "embeddingModel": modelId,
+            "embeddingMs": embedMs,
+            "vectorSize": queryVector.count,
+            "userInputLength": userInput.count
+        ])
 
         guard !queryVector.isEmpty else {
             let fallback = try await queryService.getMemories(tier: .longTerm)
@@ -59,7 +71,7 @@ extension CodebaseIndex: MemoryEmbeddingSearchProviding {
         }
 
         let similar = try await queryService.searchSimilarMemories(
-            modelId: memoryEmbeddingGenerator.modelIdentifier,
+            modelId: modelId,
             queryVector: queryVector,
             limit: safeLimit,
             tier: .longTerm
@@ -79,15 +91,27 @@ extension CodebaseIndex: CodeChunkEmbeddingSearchProviding {
     public func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult] {
         let safeLimit = max(1, limit)
         let generator = memoryEmbeddingGenerator
+        let modelId = generator.modelIdentifier
+        let embedStart = ContinuousClock.now
         let queryVector = try await Task.detached(priority: .userInitiated) {
             try await AgentActivityCoordinator.shared.withActivity(type: .embeddingGeneration) {
                 try await generator.generateEmbedding(for: userInput)
             }
         }.value
+        let embedMs = Int(embedStart.duration(to: ContinuousClock.now).components.seconds * 1000)
+        + Int(embedStart.duration(to: ContinuousClock.now).components.attoseconds / 1_000_000_000_000_000)
+        print("[RAG] code chunk embedding took \(embedMs)ms model=\(modelId) vectorSize=\(queryVector.count)")
+        await AIToolTraceLogger.shared.log(type: "rag.embedding", data: [
+            "operation": "code_chunk_search",
+            "embeddingModel": modelId,
+            "embeddingMs": embedMs,
+            "vectorSize": queryVector.count,
+            "userInputLength": userInput.count
+        ])
 
         guard !queryVector.isEmpty else { return [] }
         return try await queryService.searchSimilarCodeChunks(
-            modelId: memoryEmbeddingGenerator.modelIdentifier,
+            modelId: modelId,
             queryVector: queryVector,
             limit: safeLimit
         )

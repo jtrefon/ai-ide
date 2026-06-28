@@ -732,12 +732,16 @@ public class QuantizedKVCache: BaseKVCache, QuantizedKVCacheProtocol {
     public let groupSize: Int
     public let bits: Int
     public let mode: QuantizationMode
+    private var _maxSize: Int?
 
-    public init(groupSize: Int = 64, bits: Int = 8, mode: QuantizationMode = .affine) {
+    public override var maxSize: Int? { _maxSize }
+
+    public init(groupSize: Int = 64, bits: Int = 8, mode: QuantizationMode = .affine, maxSize: Int? = nil) {
         self.groupSize = groupSize
         self.bits = bits
         self.step = 256
         self.mode = mode
+        self._maxSize = maxSize
         super.init()
     }
 
@@ -881,11 +885,29 @@ public class QuantizedKVCache: BaseKVCache, QuantizedKVCacheProtocol {
         self.keys = currentKeys
         self.values = currentValues
 
-        // Return quantized tuples
-        let trimmedKeys = treeMap({ $0[.ellipsis, ..<offset, 0...] }, currentKeys)
-        let trimmedValues = treeMap({ $0[.ellipsis, ..<offset, 0...] }, currentValues)
+        // Apply sliding window if maxSize is set
+        let returnKeys: (MLXArray, MLXArray, MLXArray?)
+        let returnValues: (MLXArray, MLXArray, MLXArray?)
+        if let maxSize = _maxSize, offset > maxSize {
+            let trimStart = offset - maxSize
+            let trimmedKeys = treeMap({ $0[.ellipsis, trimStart..., 0...] }, currentKeys)
+            let trimmedValues = treeMap({ $0[.ellipsis, trimStart..., 0...] }, currentValues)
+            // Eval and store the trimmed cache to prevent unbounded growth
+            eval(trimmedKeys.0, trimmedKeys.1)
+            eval(trimmedValues.0, trimmedValues.1)
+            if let kb = trimmedKeys.2 { eval(kb) }
+            if let vb = trimmedValues.2 { eval(vb) }
+            self.keys = trimmedKeys
+            self.values = trimmedValues
+            Memory.clearCache()
+            returnKeys = trimmedKeys
+            returnValues = trimmedValues
+        } else {
+            returnKeys = treeMap({ $0[.ellipsis, ..<offset, 0...] }, currentKeys)
+            returnValues = treeMap({ $0[.ellipsis, ..<offset, 0...] }, currentValues)
+        }
 
-        return (trimmedKeys, trimmedValues)
+        return (returnKeys, returnValues)
     }
 
     /// This method is required by the KVCache protocol, but it is not intended to be used with QuantizedKVCache.
@@ -1140,9 +1162,17 @@ public class ArraysCache: BaseKVCache {
         leftPadding = nil
     }
 
+    /// Advance sequence-relative metadata after consuming `N` tokens.
+    public func advance(_ N: Int) {
+        offset += N
+        if let leftPadding {
+            self.leftPadding = leftPadding - N
+        }
+    }
+
     /// Create attention mask based on left padding
     public func makeMask(N: Int) -> MLXArray? {
-        if cache[0] == nil, let leftPadding = leftPadding {
+        if let leftPadding {
             return MLXArray(0 ..< N) .>= leftPadding[0..., .newAxis]
         } else {
             return nil

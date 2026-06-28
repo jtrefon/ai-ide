@@ -473,3 +473,18 @@ struct RunSnapshotPayload {
     let toolCalls: [AIToolCall]
     let toolResults: [ChatMessage]
 }
+
+// MARK: - Textual Tool Call Detection
+
+extension ToolLoopUtilities {
+    static func containsLiteralToolCallMarkup(_ content: String?) -> Bool {
+        guard let content, !content.isEmpty else { return false }
+        let text = content.lowercased()
+        return text.contains("[tool_call]")
+            || text.contains("<tool_name>")
+            || text.contains("tool calls:")
+            || text.contains("tool call:")
+            || text.contains("<minimax:tool_call>")
+            || text.contains("<invoke name=")
+    }
+}

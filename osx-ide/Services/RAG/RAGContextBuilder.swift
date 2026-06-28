@@ -46,6 +46,8 @@ public enum RAGContextBuilder {
         // Publish retrieval started event
         eventBus?.publish(RAGRetrievalStartedEvent(userInputPreview: userInput))
 
+        let retrievalStart = ContinuousClock.now
+
         // Wrap RAG retrieval with power management to prevent sleep during long operations
         let retrieval = await AgentActivityCoordinator.shared.withActivity(type: .ragRetrieval) {
             await retriever.retrieve(
@@ -57,6 +59,22 @@ public enum RAGContextBuilder {
                 )
             )
         }
+        let retrievalMs = Int(retrievalStart.duration(to: ContinuousClock.now).components.seconds * 1000)
+        + Int(retrievalStart.duration(to: ContinuousClock.now).components.attoseconds / 1_000_000_000_000_000)
+        print("[RAGContext] retrieval took \(retrievalMs)ms evidence=\(retrieval.evidenceCards.count) intent=\(retrieval.intent.rawValue)")
+        await AIToolTraceLogger.shared.log(type: "rag.retrieval", data: [
+            "conversationId": conversationId ?? "",
+            "stage": stage?.rawValue ?? "unknown",
+            "retrievalMs": retrievalMs,
+            "evidenceCount": retrieval.evidenceCards.count,
+            "symbolCount": retrieval.symbolLines.count,
+            "overviewCount": retrieval.projectOverviewLines.count,
+            "memoryCount": retrieval.memoryLines.count,
+            "segmentCount": retrieval.segmentLines.count,
+            "retrievalIntent": retrieval.intent.rawValue,
+            "retrievalConfidence": retrieval.retrievalConfidence,
+            "userInputLength": userInput.count
+        ])
         var ragBlock = formatRAGBlock(retrieval)
 
         eventBus?.publish(
@@ -97,6 +115,14 @@ public enum RAGContextBuilder {
         let result = parts.isEmpty ? nil : parts.joined(separator: "\n\n")
         if let result {
             print("[RAGContext] Total context size: \(result.count) chars (budget: \(budget))")
+            await AIToolTraceLogger.shared.log(type: "rag.context_built", data: [
+                "conversationId": conversationId ?? "",
+                "stage": stage?.rawValue ?? "unknown",
+                "totalContextChars": result.count,
+                "ragBlockChars": ragBlock?.count ?? 0,
+                "budget": budget,
+                "explicitContextChars": explicitContextSize
+            ])
         }
         return result
     }

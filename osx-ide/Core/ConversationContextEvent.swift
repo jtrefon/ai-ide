@@ -15,7 +15,7 @@ public struct ConversationContextEvent: Event {
     public let messageCount: Int
     /// Model context window size in characters (approximate), nil if unknown
     public let contextWindowChars: Int?
-    /// Compression ratio if KV cache compression is active (e.g. turboquant), nil otherwise
+    /// Compression ratio if KV cache 4-bit quantization is active, nil otherwise
     public let compressionRatio: Double?
 
     public init(

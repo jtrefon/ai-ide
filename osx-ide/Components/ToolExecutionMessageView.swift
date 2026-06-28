@@ -104,7 +104,7 @@ struct ToolExecutionMessageView: View {
                 toolExecutionContent
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(.ultraThinMaterial)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)

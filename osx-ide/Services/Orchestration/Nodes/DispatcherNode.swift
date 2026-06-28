@@ -50,11 +50,11 @@ struct DispatcherNode: OrchestrationNode {
         } else if signals.deliveryState == .needsWork && signals.planProgress.hasChecklist && state.thinkingTurnsCount < 2 {
             // Self-correction: model says it needs work AND we have a plan context - retry tool loop
             nextNodeId = toolLoopNodeId
-            updatedState = updatedState.incrementingThinkingTurns()
+            updatedState = updatedState.incrementingThinkingTurns().incrementingExecutionCycle()
         } else if signals.shouldForceToolFollowup || signals.shouldForceExecutionFollowup {
             // Model indicated intent to use tools or execute actions but failed to emit actual tool calls
             nextNodeId = toolLoopNodeId
-            updatedState = updatedState.incrementingThinkingTurns()
+            updatedState = updatedState.incrementingThinkingTurns().incrementingExecutionCycle()
         } else {
             nextNodeId = finalResponseNodeId
             updatedState = updatedState.resettingThinkingTurns()

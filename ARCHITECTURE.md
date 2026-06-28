@@ -420,6 +420,85 @@ The refocus branch (`refocus-v1`) executed a 5-phase migration (plus later Gemma
 | `test_gemma.swift` | Replaced with proper inference test script `test_gemma4_local.py` |
 | 12B rejected | `gemma-4-12b-it-4bit` — `gemma4_unified` model type unsupported in vendored mlx-swift-lm; memory-marginal on 16GB M4 (~11-12 GB) |
 
+## Syntax Highlighting (Neon + Tree-sitter)
+
+The syntax highlighting engine lives in `Packages/SyntaxHighlighting/` — a local SPM wrapper depending on `ChimeHQ/Neon` and `CodeEditApp/CodeEditLanguages` (35+ tree-sitter grammars bundled as a single xcframework).
+
+### Architecture
+
+```
+NSTextView
+  └─ Neon.TextViewHighlighter          [attached by TreeSitterHighlightService]
+       ├─ TreeSitterClient             [incremental parsing via SwiftTreeSitter]
+       │    └─ LanguageConfiguration   [parser + highlights.scm queries per language]
+       └─ TokenAttributeProvider       [maps capture names → NSAttributedString attributes]
+            └─ switch on token.name    [defined in TreeSitterHighlightService.swift]
+```
+
+### How coloring works
+
+1. Neon's `TextViewHighlighter` attaches to `NSTextView` and becomes the `NSTextStorage` delegate.
+2. On text change, `TreeSitterClient` incrementally re-parses only the affected ranges.
+3. The parsed tree is matched against `highlights.scm` queries (bundled per-language by `CodeEditLanguages`).
+4. Each query match produces a `Token` with a `.name` (the capture name, e.g. `"keyword"`, `"type"`, `"function"`).
+5. The `TokenAttributeProvider` closure maps `token.name` to a dictionary of `NSAttributedString.Key` attributes (foreground color, font, etc.).
+
+All languages share the **same** `TokenAttributeProvider` — the coloring is capture-name-based, not language-based. A `@keyword` capture in Swift, Python, and TypeScript all get the same color. This keeps the scheme uniform and simple.
+
+### Customizing the color scheme
+
+Edit `TreeSitterHighlightService.swift` in `Packages/SyntaxHighlighting/Sources/SyntaxHighlighting/`.
+
+The `attributeProvider` closure is a large `switch` on `token.name`. Each `case` maps a capture name prefix to a color:
+
+```swift
+private static let attributeProvider: TokenAttributeProvider = { token in
+    var attrs: [NSAttributedString.Key: Any] = [:]
+    switch token.name {
+    case let s where s.hasPrefix("keyword"):
+        attrs[.foregroundColor] = nsColor(0x56, 0x9C, 0xD6)  // blue
+    case let s where s.hasPrefix("type") || s.hasPrefix("type_") || s.hasPrefix("predefined_type"):
+        attrs[.foregroundColor] = nsColor(0x4E, 0xC9, 0xB0)  // teal
+    // ... add more cases here
+    default:
+        attrs[.foregroundColor] = nsColor(0xDC, 0xDC, 0xDC)  // light gray
+    }
+    return attrs
+}
+```
+
+**To figure out what `token.name` values your language produces:**
+
+1. Enable the debug log by uncommenting the `print` in the `default` case:
+   ```swift
+   default:
+       print("[token] \(token.name)")  // log unknown capture names
+       attrs[.foregroundColor] = nsColor(0xDC, 0xDC, 0xDC)
+   ```
+2. Open a file in that language and watch the console output.
+3. Add new `case` entries for any discoverd capture names that need distinct coloring.
+
+You can also use the `range` property on `Token` to see the exact character range if needed.
+
+### Per-language customization (advanced)
+
+If you need language-specific coloring beyond what capture names provide, you can inspect `token.name` for language-specific patterns. For example, TypeScript's grammar produces captures like `"type_identifier"` and `"predefined_type"` that don't follow the common `@type.*` convention:
+
+```swift
+case "type_identifier", "predefined_type":
+    attrs[.foregroundColor] = nsColor(0x4E, 0xC9, 0xB0)
+```
+
+### Adding a new language grammar
+
+Currently supported languages are defined by `CodeEditLanguages` (35+ grammars bundled via `CodeLanguagesContainer.xcframework`). No action is needed to add a new language if it's already in CodeEditLanguages — the grammar's `highlights.scm` query file is automatically loaded.
+
+To add a language *not* supported by CodeEditLanguages, you would need to:
+
+1. Add the tree-sitter grammar as an SPM dependency in `Packages/SyntaxHighlighting/Package.swift`
+2. Add the language mapping in `TreeSitterHighlightService.resolveCodeLanguage()`
+3. The grammar's `highlights.scm` must be bundled in its SPM resources
+
 ### Phase 5 — Polish (3/5 Complete)
 | What | Details |
 |------|---------|

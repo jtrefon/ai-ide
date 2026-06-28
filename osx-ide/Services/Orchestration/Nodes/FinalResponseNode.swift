@@ -15,7 +15,6 @@ struct FinalResponseNode: OrchestrationNode {
     }
 
     func run(state: OrchestrationState) async throws -> OrchestrationState {
-        print("====== FinalResponseNode RUN ======")
         let request = state.request
         let response = try requireResponse(from: state)
 
@@ -36,10 +35,4 @@ struct FinalResponseNode: OrchestrationNode {
         return nextState
     }
 
-    private func requireResponse(from state: OrchestrationState) throws -> AIServiceResponse {
-        guard let response = state.response else {
-            throw AppError.unknown("FinalResponseNode: expected response to be set")
-        }
-        return response
-    }
 }

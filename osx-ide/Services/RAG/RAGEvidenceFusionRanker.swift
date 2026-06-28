@@ -10,6 +10,33 @@ struct RAGEvidenceCandidate: Sendable {
     let searchableText: String
     let qualityScore: Double?
     let freshness: Double
+    /// Cosine similarity from embedding-based semantic search, if available.
+    /// When present, this is used instead of token overlap for semanticSimilarity scoring.
+    let embeddingSimilarity: Double?
+
+    init(
+        id: String,
+        type: EvidenceType,
+        filePath: String?,
+        lineStart: Int?,
+        lineEnd: Int?,
+        preview: String,
+        searchableText: String,
+        qualityScore: Double?,
+        freshness: Double,
+        embeddingSimilarity: Double? = nil
+    ) {
+        self.id = id
+        self.type = type
+        self.filePath = filePath
+        self.lineStart = lineStart
+        self.lineEnd = lineEnd
+        self.preview = preview
+        self.searchableText = searchableText
+        self.qualityScore = qualityScore
+        self.freshness = freshness
+        self.embeddingSimilarity = embeddingSimilarity
+    }
 }
 
 public struct RAGEvidenceFusionRanker: Sendable {
@@ -32,7 +59,7 @@ public struct RAGEvidenceFusionRanker: Sendable {
         userInput: String,
         intent: RetrievalIntent
     ) -> EvidenceCard {
-        let semanticSimilarity = normalizedTokenOverlap(query: userInput, text: candidate.searchableText)
+        let semanticSimilarity = candidate.embeddingSimilarity ?? normalizedTokenOverlap(query: userInput, text: candidate.searchableText)
         let intentWeight = intentWeight(for: intent, evidenceType: candidate.type)
         let architectureProximity = normalizedTokenOverlap(query: userInput, text: candidate.filePath ?? "")
         let qualityHotspotBoost = qualityHotspotBoost(for: candidate.qualityScore)

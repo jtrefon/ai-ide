@@ -25,7 +25,7 @@ final class AlibabaSettingsStore: ProviderOpenRouterSettingsStore, @unchecked Se
             defaultBaseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
             defaultReasoningMode: .modelAndAgent,
             defaultToolPromptMode: .fullStatic,
-            defaultRAGEnabledDuringToolLoop: true
+            defaultRAGEnabledDuringToolLoop: false
         )
     }
 }

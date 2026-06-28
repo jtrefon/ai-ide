@@ -7,13 +7,13 @@ struct LocalModelSettingsView: View {
         Form {
             Section {
                 Toggle("Offline Mode (disable OpenRouter)", isOn: $viewModel.offlineModeEnabled)
-                Toggle("Turbo Quant (4-bit KV Cache)", isOn: $viewModel.turboQuantEnabled)
+                Toggle("4-bit KV Cache", isOn: $viewModel.kvCache4BitEnabled)
             } header: {
                 Text("Local Models")
             }
 
             Section {
-                Slider(value: $viewModel.contextLength, in: 2048...131072, step: 1024) {
+                Slider(value: $viewModel.contextLength, in: 2048...262144, step: 1024) {
                     Text("Context Length: \(Int(viewModel.contextLength)) tokens")
                 }
             }

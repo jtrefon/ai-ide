@@ -73,7 +73,7 @@ class ProviderOpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sen
         defaultBaseURL: String,
         defaultReasoningMode: ReasoningMode = .modelAndAgent,
         defaultToolPromptMode: ToolPromptMode = .fullStatic,
-        defaultRAGEnabledDuringToolLoop: Bool = true
+        defaultRAGEnabledDuringToolLoop: Bool = false
     ) {
         self.settingsStore = settingsStore
         self.environment = ProcessInfo.processInfo.environment

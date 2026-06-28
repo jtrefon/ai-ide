@@ -28,7 +28,11 @@ extension LLMModel {
         while y.tokens.size > prefillStepSize {
             let input = y[.newAxis, ..<prefillStepSize]
             _ = self(input, cache: cache.isEmpty ? nil : cache, state: nil)
+            // Only eval the cache - don't eval logits during prefill chunks.
+            // Logits are [1, 512, 248320] = ~500MB and are not needed during prefill.
+            // The per-layer eval in the model's forward pass handles freeing intermediates.
             eval(cache)
+            Memory.clearCache()
             y = y[prefillStepSize...]
         }
 

@@ -12,12 +12,14 @@ struct LocalModelDefinition: Identifiable, Hashable, Sendable {
     let artifacts: [LocalModelArtifact]
     let defaultContextLength: Int
     let toolCallFormat: ToolCallFormat?
+    let supportsQuantizedKVCache: Bool
 
-    init(id: String, displayName: String, artifacts: [LocalModelArtifact], defaultContextLength: Int = 4096, toolCallFormat: ToolCallFormat? = nil) {
+    init(id: String, displayName: String, artifacts: [LocalModelArtifact], defaultContextLength: Int = 4096, toolCallFormat: ToolCallFormat? = nil, supportsQuantizedKVCache: Bool = true) {
         self.id = id
         self.displayName = displayName
         self.artifacts = artifacts
         self.defaultContextLength = defaultContextLength
         self.toolCallFormat = toolCallFormat
+        self.supportsQuantizedKVCache = supportsQuantizedKVCache
     }
 }

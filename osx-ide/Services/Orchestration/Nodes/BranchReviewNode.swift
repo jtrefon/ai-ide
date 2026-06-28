@@ -48,10 +48,20 @@ struct BranchReviewNode: OrchestrationNode {
             }
 
             if shouldRetry {
+                if state.executionCycleCount >= ToolLoopConstants.maxExecutionCycles {
+                    await AIToolTraceLogger.shared.log(type: "chat.branch_review_cycle_limit_reached", data: [
+                        "runId": state.request.runId,
+                        "executionCycleCount": state.executionCycleCount,
+                        "hasToolCalls": signals.hasToolCalls,
+                        "hasIncompletePlan": signals.hasIncompletePlan
+                    ])
+                    return state.transitioning(to: finalNodeId, executionSignals: signals)
+                }
                 return state.transitioning(to: executionNodeId, executionSignals: signals)
+                    .incrementingExecutionCycle()
             }
 
-            return state.transitioning(to: finalNodeId)
+            return state.transitioning(to: finalNodeId, executionSignals: signals)
         }
 
         if await continuationDecider.shouldResumeExecution(
@@ -62,6 +72,15 @@ struct BranchReviewNode: OrchestrationNode {
         }
 
         guard branchExecution.hasAdditionalBranches else {
+            return state.transitioning(
+                to: finalNodeId,
+                branchExecution: branchExecution
+            )
+        }
+
+        let hasToolCalls = !(state.response?.toolCalls?.isEmpty ?? true)
+        let hasContent = !(state.response?.content?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        if !hasToolCalls && hasContent && !branchExecution.hasAdditionalBranches {
             return state.transitioning(
                 to: finalNodeId,
                 branchExecution: branchExecution

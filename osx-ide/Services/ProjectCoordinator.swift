@@ -179,21 +179,9 @@ class ProjectCoordinator: ObservableObject {
                     )
                 }
 
-                // Initialize project memories in background (LLM-assisted)
-                Task.detached(priority: .utility) {
-                    let memoryStart = Date()
-                    let initializer = ProjectMemoryInitializer(
-                        index: index,
-                        aiService: aiService,
-                        projectRoot: root
-                    )
-                    let created = await initializer.initializeIfEmpty()
-                    if created {
-                        await IndexLogger.shared.log(
-                            "ProjectCoordinator: Created project memories in \(String(format: "%.1f", Date().timeIntervalSince(memoryStart)))s"
-                        )
-                    }
-                }
+                // ProjectMemoryInitializer disabled — it fires a full local model inference
+                // on every project open, competing with user requests for the MLX engine.
+                // Re-enable when cloud-only routing is available for this background task.
 
                 Swift.print(
                     "[DIAG] ProjectCoordinator initializationTask COMPLETE in \(String(format: "%.2f", Date().timeIntervalSince(configStart) * 1000))ms"
@@ -338,15 +326,7 @@ class ProjectCoordinator: ObservableObject {
                         "ProjectCoordinator: Reindex requested but Codebase Index is disabled")
                 }
 
-                // Initialize project memories in background (LLM-assisted)
-                Task.detached(priority: .utility) {
-                    let initializer = ProjectMemoryInitializer(
-                        index: index,
-                        aiService: aiService,
-                        projectRoot: projectRoot
-                    )
-                    _ = await initializer.initializeIfEmpty()
-                }
+                // ProjectMemoryInitializer disabled — see comment above.
             } catch {
                 await MainActor.run {
                     self.codebaseIndex = nil

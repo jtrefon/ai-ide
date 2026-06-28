@@ -43,6 +43,10 @@ final class ChatHistoryCoordinator {
     func upsertDraftMessage(_ message: ChatMessage) {
         historyManager.upsertDraftMessage(message)
     }
+
+    func flushPendingDraftUpdate() {
+        historyManager.flushPendingDraftUpdate()
+    }
     
     /// Finalizes a draft message by converting it to a regular message
     func finalizeDraftMessage(id: UUID, content: String, reasoning: String? = nil) {

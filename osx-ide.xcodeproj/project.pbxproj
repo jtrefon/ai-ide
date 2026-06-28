@@ -154,6 +154,7 @@
 				6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */,
 				6E8A1B002F9A000100ABC123 /* MLXVLM */,
 				6D2E6F842C2F4A7F00A1B2C8 /* MLX */,
+				9A9A00022C2F4A7F00A1B001 /* SyntaxHighlighting */,
 			);
 			productName = "osx-ide";
 			productReference = 04C2CE092E5C8E9D007A5EF7 /* osx-ide.app */;
@@ -267,6 +268,7 @@
 			packageReferences = (
 				6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */,
 				6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */,
+				9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "SyntaxHighlighting" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 04C2CE0A2E5C8E9D007A5EF7 /* Products */;
@@ -716,6 +718,13 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+		9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "SyntaxHighlighting" */ = {
+			isa = XCLocalSwiftPackageReference;
+			path = "Packages/SyntaxHighlighting";
+			relativePath = "Packages/SyntaxHighlighting";
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -742,6 +751,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */;
 			productName = MLX;
+		};
+		9A9A00022C2F4A7F00A1B001 /* SyntaxHighlighting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "SyntaxHighlighting" */;
+			productName = SyntaxHighlighting;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

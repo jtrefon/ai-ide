@@ -16,7 +16,7 @@ private struct TypingDotsBubbleView: View {
     let isActive: Bool
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !isActive)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 10.0, paused: !isActive)) { timeline in
             let time = timeline.date.timeIntervalSinceReferenceDate
             HStack(spacing: 6) {
                 ForEach(0..<3, id: \.self) { index in
@@ -29,7 +29,7 @@ private struct TypingDotsBubbleView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(Color(nsColor: .quaternaryLabelColor).opacity(0.2))
+            .background(Color(nsColor: .secondarySystemFill).opacity(0.5))
             .clipShape(Capsule())
             .frame(height: 34)
             .opacity(isActive ? 1 : 0)
@@ -57,43 +57,35 @@ struct MessageListView: View {
     var fontSize: Double
     var fontFamily: String
     
-    // Global reasoning visibility: one toggle for all messages.
-    // Auto-opens during streaming; auto-closes 5s after streaming stops
-    // unless the user manually toggled it open.
     @State private var globalReasoningExpanded = false
     @State private var userManuallyToggledReasoning = false
     @State private var reasoningAutoCloseTask: Task<Void, Never>?
 
     private let filterCoordinator = MessageFilterCoordinator()
 
-    private var orderedMessages: [ChatMessage] {
-        messages
-    }
-
     private var visibleMessages: [ChatMessage] {
-        orderedMessages.filter { filterCoordinator.shouldDisplayMessage($0, in: orderedMessages) }
+        messages.filter { filterCoordinator.shouldDisplayMessage($0, in: messages) }
     }
 
-    private var visibleMessageIDsSignature: String {
-        visibleMessages.suffix(40).map(\.id.uuidString).joined(separator: "~")
+    private var messageCount: Int {
+        visibleMessages.count
     }
 
-          private func scrollToBottom(proxy: ScrollViewProxy) {
+    private func scrollToBottom(proxy: ScrollViewProxy) {
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            try? await Task.sleep(nanoseconds: 50_000_000)
             withAnimation(.easeOut(duration: 0.15)) {
                 proxy.scrollTo("__bottom__", anchor: .bottom)
             }
         }
     }
 
-    private func reasoningHiddenBinding(for messageId: UUID) -> Binding<Bool> {
+    private var reasoningHiddenBinding: Binding<Bool> {
         Binding(
             get: { !globalReasoningExpanded },
             set: { isHidden in
                 userManuallyToggledReasoning = true
                 globalReasoningExpanded = !isHidden
-                // Cancel auto-close if user manually interacted
                 reasoningAutoCloseTask?.cancel()
             }
         )
@@ -112,7 +104,7 @@ struct MessageListView: View {
                                 fontSize: fontSize,
                                 fontFamily: fontFamily,
                                 maxBubbleWidth: maxBubbleWidth,
-                                isReasoningHidden: reasoningHiddenBinding(for: message.id)
+                                isReasoningHidden: reasoningHiddenBinding
                             )
                             .id(message.id)
                         }
@@ -130,7 +122,7 @@ struct MessageListView: View {
                 .onAppear {
                     scrollToBottom(proxy: proxy)
                 }
-                .onChange(of: visibleMessageIDsSignature) { _ in
+                .onChange(of: messageCount) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
                 .onChange(of: isSending) { _, newValue in

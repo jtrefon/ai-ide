@@ -95,7 +95,24 @@ public final class BERTEmbeddingGenerator: MemoryEmbeddingGenerating, @unchecked
 
                 let model = try MLModel(contentsOf: modelURL, configuration: configuration)
 
-                let usesNPU = true
+                // Verify NPU is actually being used by measuring first inference
+                // CoreML with .cpuAndNeuralEngine may silently fall back to CPU
+                // if the model has operations not supported on the Neural Engine.
+                // We detect this by measuring inference time — NPU should be <50ms,
+                // CPU fallback is typically >100ms for these model sizes.
+                let testProvider = try MultiArrayFeatureProvider(
+                    inputIds: try createTestMultiArray(sequenceLength: sequenceLength),
+                    attentionMask: try createTestMultiArray(sequenceLength: sequenceLength),
+                    tokenTypeIds: try createTestMultiArray(sequenceLength: sequenceLength)
+                )
+                let testStart = ContinuousClock.now
+                _ = try? await model.prediction(from: testProvider)
+                let testMs = Int(testStart.duration(to: ContinuousClock.now).components.seconds * 1000)
+                + Int(testStart.duration(to: ContinuousClock.now).components.attoseconds / 1_000_000_000_000_000)
+                let usesNPU = testMs < 100
+                if !usesNPU {
+                    print("[BERTEmbeddingGenerator] WARNING: \(modelName) inference took \(testMs)ms — likely CPU fallback, not NPU")
+                }
 
                 // Try to load BERTTokenizer from vocab.txt alongside the model
                 let vocabURL = modelURL.deletingLastPathComponent()
@@ -177,6 +194,15 @@ public final class BERTEmbeddingGenerator: MemoryEmbeddingGenerating, @unchecked
         let pointer = array.dataPointer.bindMemory(to: Int32.self, capacity: values.count)
         for (index, value) in values.enumerated() {
             pointer[index] = Int32(value)
+        }
+        return array
+    }
+
+    private static func createTestMultiArray(sequenceLength: Int) throws -> MLMultiArray {
+        let array = try MLMultiArray(shape: [1, NSNumber(value: sequenceLength)], dataType: .int32)
+        let pointer = array.dataPointer.bindMemory(to: Int32.self, capacity: sequenceLength)
+        for i in 0..<sequenceLength {
+            pointer[i] = 0
         }
         return array
     }
@@ -262,18 +288,40 @@ public enum BERTEmbeddingGeneratorFactory {
         ("nomic-embed-text-v1.5", 768, "Nomic Embed Text v1.5"),
     ]
     
-    /// Load the first available bundled model
+    /// Load the first available bundled model that performs well on NPU.
+    /// Models are tried smallest-first. After loading, a quick benchmark is run.
+    /// If the benchmark shows the model is running on CPU fallback (>100ms per embedding),
+    /// the model is rejected and the next smaller one is tried.
     public static func loadFirstAvailable() async -> BERTEmbeddingGenerator? {
-        for (name, dimensions, _) in bundledModels {
-            if let generator = await BERTEmbeddingGenerator.loadBundledModel(
+        for (name, dimensions, displayName) in bundledModels {
+            guard let generator = await BERTEmbeddingGenerator.loadBundledModel(
                 modelName: name,
                 dimensions: dimensions
-            ) {
-                print("[BERTEmbeddingGenerator] Loaded bundled model: \(name)")
-                return generator
+            ) else {
+                continue
             }
+
+            // Quick benchmark: if embedding takes >100ms, model is likely on CPU fallback
+            let benchmarkText = "func test() -> Int { return 42 }"
+            let benchStart = ContinuousClock.now
+            do {
+                _ = try await generator.generateEmbedding(for: benchmarkText)
+            } catch {
+                print("[BERTEmbeddingGenerator] \(displayName) failed benchmark: \(error)")
+                continue
+            }
+            let benchMs = Int(benchStart.duration(to: ContinuousClock.now).components.seconds * 1000)
+            + Int(benchStart.duration(to: ContinuousClock.now).components.attoseconds / 1_000_000_000_000_000)
+
+            if benchMs > 100 {
+                print("[BERTEmbeddingGenerator] \(displayName) rejected: \(benchMs)ms per embedding (likely CPU fallback, not NPU). Trying next model.")
+                continue
+            }
+
+            print("[BERTEmbeddingGenerator] Loaded bundled model: \(name) (\(benchMs)ms per embedding, NPU confirmed)")
+            return generator
         }
-        print("[BERTEmbeddingGenerator] No bundled models found")
+        print("[BERTEmbeddingGenerator] No bundled models passed NPU performance check, falling back to hashing")
         return nil
     }
     

@@ -14,6 +14,9 @@ final class GoogleWebSearchEngine {
     private init() {}
 
     func search(query: String, maxResults: Int = 10) async throws -> String {
+        let searchStart = ContinuousClock.now
+        print("[WEB-SEARCH] start query=\(query) maxResults=\(maxResults)")
+
         let engine = try await getSession()
 
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
@@ -24,8 +27,11 @@ final class GoogleWebSearchEngine {
 
         // Navigate — returns the page's body text after JS rendering completes
         let pageText = try await engine.navigate(to: url, timeout: 25)
+        let navMs = Int(searchStart.duration(to: ContinuousClock.now).components.seconds * 1000)
+        print("[WEB-SEARCH] navigate done in \(navMs)ms pageTextLen=\(pageText.count)")
 
         if await engine.isGoogleCAPTCHA() {
+            print("[WEB-SEARCH] BLOCKED by CAPTCHA")
             return """
             BLOCKED: Google presented a CAPTCHA challenge. This can happen due to:
             - Frequent searches from the same browser profile
@@ -36,13 +42,19 @@ final class GoogleWebSearchEngine {
 
         // Primary: parse from page text (most reliable — navigate already waited for full render)
         var results = parseTextSearchResults(pageText, max: maxResults)
+        print("[WEB-SEARCH] text parse found \(results.count) results")
 
         // Supplement: try JS extraction for richer results (gracefully ignored if it fails)
         if results.isEmpty {
+            let jsStart = ContinuousClock.now
             results = parseJSONLines(try await tryAwaitingSearchExtraction(engine, maxResults), max: maxResults)
+            let jsMs = Int(jsStart.duration(to: ContinuousClock.now).components.seconds * 1000)
+            print("[WEB-SEARCH] JS extraction found \(results.count) results in \(jsMs)ms")
         }
 
         if results.isEmpty {
+            let totalMs = Int(searchStart.duration(to: ContinuousClock.now).components.seconds * 1000)
+            print("[WEB-SEARCH] no results found in \(totalMs)ms")
             return """
             No search results found for: "\(query)"
             Google returned unexpected page structure. Try a different query or use web_browse to visit a URL directly.
@@ -50,6 +62,8 @@ final class GoogleWebSearchEngine {
         }
 
         lastUsed = Date()
+        let totalMs = Int(searchStart.duration(to: ContinuousClock.now).components.seconds * 1000)
+        print("[WEB-SEARCH] complete query=\(query) results=\(results.count) total_ms=\(totalMs)")
         return formatSearchResults(results, query: query)
     }
 

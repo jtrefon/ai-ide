@@ -130,9 +130,13 @@ public enum LocalModelFileStore {
     }
 
     private static func requiresRuntimeCompatibilityDirectory(model: LocalModelDefinition) -> Bool {
-        // The upgraded mlx-swift-lm runtime supports Qwen 3.5 natively, including its
-        // multimodal configuration and processor stack. Keep the compatibility path for
-        // older-model shims only; Qwen 3.5 should now load from the installed directory.
+        // Qwen 3.5's original chat_template.jinja has a multi_step_tool validation
+        // that raises "No user query found in messages" when tool results are sent
+        // back without a trailing user query. Our custom template handles this
+        // correctly by wrapping tool results as user messages with Tool Output prefix.
+        if model.id.contains("qwen3") || model.id.contains("Qwen3") {
+            return true
+        }
         if model.id.contains("gemma-4") {
             return true
         }
@@ -243,6 +247,15 @@ public enum LocalModelFileStore {
     ) throws -> URL {
         let runtimeDirectory = sourceDirectory.appendingPathComponent("osx-ide-runtime", isDirectory: true)
         let normalizedChatTemplate = try normalizedRuntimeChatTemplateData(for: model)
+        let templatePath = runtimeDirectory.appendingPathComponent("chat_template.jinja").path
+        let configPath = runtimeDirectory.appendingPathComponent("config.json").path
+
+        // Idempotent: skip recreation if directory and key files already exist
+        if FileManager.default.fileExists(atPath: runtimeDirectory.path),
+           FileManager.default.fileExists(atPath: templatePath),
+           FileManager.default.fileExists(atPath: configPath) {
+            return runtimeDirectory
+        }
 
         if FileManager.default.fileExists(atPath: runtimeDirectory.path) {
             try FileManager.default.removeItem(at: runtimeDirectory)
@@ -326,15 +339,13 @@ public enum LocalModelFileStore {
         var mutated = false
 
         if model.id == "mlx-community/Qwen3.5-4B-MLX-4bit@main" {
-            if let modelType = configObject["model_type"] as? String,
-               modelType == "qwen3_5" {
-                configObject["model_type"] = "qwen3_vl"
-                mutated = true
-            }
-
+            // Keep model_type as qwen3_5 — we load via LLM factory, not VLM.
+            // The runtime compatibility directory is only needed for the custom
+            // chat template that handles tool results correctly.
             if let textConfig = configObject["text_config"] as? [String: Any] {
                 configObject["text_config"] = textConfig
             }
+            mutated = true
         } else if model.id.contains("gemma-4") {
             if let modelType = configObject["model_type"] as? String,
                modelType == "gemma4" {
@@ -364,58 +375,154 @@ public enum LocalModelFileStore {
     }
 
     private static let qwen35JSONOnlyChatTemplate = #"""
-{%- if tools %}
-    {{- '<|im_start|>system\n' }}
-    {%- if messages[0].role == 'system' %}
-        {{- messages[0].content + '\n\n' }}
+{%- set image_count = namespace(value=0) %}
+{%- set video_count = namespace(value=0) %}
+{%- macro render_content(content, do_vision_count, is_system_content=false) %}
+    {%- if content is string %}
+        {{- content }}
+    {%- elif content is iterable and content is not mapping %}
+        {%- for item in content %}
+            {%- if 'image' in item or 'image_url' in item or item.type == 'image' %}
+                {%- if is_system_content %}
+                    {{- raise_exception('System message cannot contain images.') }}
+                {%- endif %}
+                {%- if do_vision_count %}
+                    {%- set image_count.value = image_count.value + 1 %}
+                {%- endif %}
+                {%- if add_vision_id %}
+                    {{- 'Picture ' ~ image_count.value ~ ': ' }}
+                {%- endif %}
+                {{- '<|vision_start|><|image_pad|><|vision_end|>' }}
+            {%- elif 'video' in item or item.type == 'video' %}
+                {%- if is_system_content %}
+                    {{- raise_exception('System message cannot contain videos.') }}
+                {%- endif %}
+                {%- if do_vision_count %}
+                    {%- set video_count.value = video_count.value + 1 %}
+                {%- endif %}
+                {%- if add_vision_id %}
+                    {{- 'Video ' ~ video_count.value ~ ': ' }}
+                {%- endif %}
+                {{- '<|vision_start|><|video_pad|><|vision_end|>' }}
+            {%- elif 'text' in item %}
+                {{- item.text }}
+            {%- else %}
+                {{- raise_exception('Unexpected item type in content.') }}
+            {%- endif %}
+        {%- endfor %}
+    {%- elif content is none or content is undefined %}
+        {{- '' }}
+    {%- else %}
+        {{- raise_exception('Unexpected content type.') }}
     {%- endif %}
-    {{- '# Tools\n\nYou have access to the following functions.\nReturn tool calls as JSON only. Do not use XML, HTML, or tag wrappers.\n\n' }}
+{%- endmacro %}
+{%- if not messages %}
+    {{- raise_exception('No messages provided.') }}
+{%- endif %}
+{%- if tools and tools is iterable and tools is not mapping %}
+    {{- '<|im_start|>system\n' }}
+    {{- "# Tools\n\nYou have access to the following functions:\n\n<tools>" }}
     {%- for tool in tools %}
-        {{- tool | tojson + '\n' }}
+        {{- "\n" }}
+        {{- tool | tojson }}
     {%- endfor %}
-    {{- '\nIf you choose to call a function, reply with a single JSON object and no trailing text.\nFormat:\n{"tool_calls":[{"name":"function_name","arguments":{"parameter":"value"}}]}' }}
+    {{- "\n</tools>" }}
+    {{- '\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT>' }}
+    {%- if messages[0].role == 'system' %}
+        {%- set content = render_content(messages[0].content, false, true)|trim %}
+        {%- if content %}
+            {{- '\n\n' + content }}
+        {%- endif %}
+    {%- endif %}
     {{- '<|im_end|>\n' }}
 {%- else %}
     {%- if messages[0].role == 'system' %}
-        {{- '<|im_start|>system\n' + messages[0].content + '<|im_end|>\n' }}
+        {%- set content = render_content(messages[0].content, false, true)|trim %}
+        {{- '<|im_start|>system\n' + content + '<|im_end|>\n' }}
     {%- endif %}
 {%- endif %}
-{%- for message in messages %}
-    {%- if message.content is string %}
-        {%- set content = message.content %}
-    {%- else %}
-        {%- set content = '' %}
+{%- set ns = namespace(last_query_index=messages|length - 1) %}
+{%- for message in messages[::-1] %}
+    {%- set index = (messages|length - 1) - loop.index0 %}
+    {%- if message.role == "user" %}
+        {%- set content = render_content(message.content, false)|trim %}
+        {%- if not(content.startswith('<tool_result>') and content.endswith('</tool_result>')) %}
+            {%- set ns.last_query_index = index %}
+            {%- break %}
+        {%- endif %}
     {%- endif %}
-    {%- if (message.role == "user") or (message.role == "system" and not loop.first) %}
-        {{- '<|im_start|>' + message.role + '\n' + content + '<|im_end|>\n' }}
+{%- endfor %}
+{%- for message in messages %}
+    {%- set content = render_content(message.content, true)|trim %}
+    {%- if message.role == "system" %}
+        {%- if not loop.first %}
+            {{- raise_exception('System message must be at the beginning.') }}
+        {%- endif %}
+    {%- elif message.role == "user" %}
+        {{- '<|im_start|>' + message.role + '\n' + content + '<|im_end|>' + '\n' }}
     {%- elif message.role == "assistant" %}
-        {{- '<|im_start|>' + message.role + '\n' + content }}
-        {%- if message.tool_calls %}
+        {%- set reasoning_content = '' %}
+        {%- if message.reasoning_content is string %}
+            {%- set reasoning_content = message.reasoning_content %}
+        {%- else %}
+            {%- if '</think>' in content %}
+                {%- set reasoning_content = content.split('</think>')[0].rstrip('\n').split('<think>')[-1].lstrip('\n') %}
+                {%- set content = content.split('</think>')[-1].lstrip('\n') %}
+            {%- endif %}
+        {%- endif %}
+        {%- set reasoning_content = reasoning_content|trim %}
+        {%- if loop.index0 > ns.last_query_index %}
+            {{- '<|im_start|>' + message.role + '\n<think>\n' + reasoning_content + '\n</think>\n\n' + content }}
+        {%- else %}
+            {{- '<|im_start|>' + message.role + '\n' + content }}
+        {%- endif %}
+        {%- if message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping %}
             {%- for tool_call in message.tool_calls %}
-                {%- if (loop.first and content) or (not loop.first) %}
-                    {{- '\n' }}
-                {%- endif %}
-                {%- if tool_call.function %}
+                {%- if tool_call.function is defined %}
                     {%- set tool_call = tool_call.function %}
                 {%- endif %}
-                {{- '{"tool_calls":[{"name":"' }}
-                {{- tool_call.name }}
-                {{- '","arguments":' }}
-                {%- if tool_call.arguments is string %}
-                    {{- tool_call.arguments }}
+                {%- if loop.first %}
+                    {%- if content|trim %}
+                        {{- '\n\n<tool_call>\n<function=' + tool_call.name + '>\n' }}
+                    {%- else %}
+                        {{- '<tool_call>\n<function=' + tool_call.name + '>\n' }}
+                    {%- endif %}
                 {%- else %}
-                    {{- tool_call.arguments | tojson }}
+                    {{- '\n<tool_call>\n<function=' + tool_call.name + '>\n' }}
                 {%- endif %}
-                {{- '}}]}' }}
+                {%- if tool_call.arguments is defined %}
+                    {%- for args_name, args_value in tool_call.arguments|items %}
+                        {{- '<parameter=' + args_name + '>\n' }}
+                        {%- set args_value = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}
+                        {{- args_value }}
+                        {{- '\n</parameter>\n' }}
+                    {%- endfor %}
+                {%- endif %}
+                {{- '</function>\n</tool_call>' }}
             {%- endfor %}
         {%- endif %}
         {{- '<|im_end|>\n' }}
     {%- elif message.role == "tool" %}
-        {{- '<|im_start|>user\nTool Output:\n' + content + '<|im_end|>\n' }}
+        {%- if loop.previtem and loop.previtem.role != "tool" %}
+            {{- '<|im_start|>user' }}
+        {%- endif %}
+        {{- '\n<tool_result>\n' }}
+        {{- content }}
+        {{- '\n</tool_result>' }}
+        {%- if not loop.last and loop.nextitem.role != "tool" %}
+            {{- '<|im_end|>\n' }}
+        {%- elif loop.last %}
+            {{- '<|im_end|>\n' }}
+        {%- endif %}
     {%- endif %}
 {%- endfor %}
 {%- if add_generation_prompt %}
     {{- '<|im_start|>assistant\n' }}
+    {%- if enable_thinking is defined and enable_thinking is false %}
+        {{- '<think>\n\n</think>\n\n' }}
+    {%- else %}
+        {{- '<think>\n' }}
+    {%- endif %}
 {%- endif %}
 """#
 

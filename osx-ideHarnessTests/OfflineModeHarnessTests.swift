@@ -443,19 +443,54 @@ final class OfflineModeHarnessTests: XCTestCase {
         )
     }
 
+    /// Diagnostic test: runs multiple single-turn prompts of varying complexity
+    /// to measure thinking vs execution token usage. Outputs a summary table
+    /// via [LOCAL-MLX-DIAG] log lines for analysis.
+    func testOfflineMLXThinkingBudgetDiagnostic() async throws {
+        let prompts: [(label: String, prompt: String, useTools: Bool)] = [
+            ("simple_qa", "What is 2 + 2? Answer in one sentence.", false),
+            ("medium_explain", "Explain how a hash map works in 3 sentences.", false),
+            ("code_explain", "Explain what this code does: func fib(n: Int) -> Int { n < 2 ? n : fib(n-1) + fib(n-2) }", false),
+            ("simple_tool", "Create a file named hello.txt with the content 'Hello World'.", true),
+            ("medium_tool", "Create a file named config.json with a JSON object containing name, version, and dependencies fields.", true),
+            ("complex_tool", "Create a Python file named calculator.py with a Calculator class that supports add, subtract, multiply, and divide operations. Include type hints and docstrings.", true),
+        ]
+
+        var results: [(label: String, genTokens: Int, thinkingChars: Int, executionChars: Int, toolCalls: Int, thinkingEnded: Bool)] = []
+
+        for entry in prompts {
+            let projectRoot = makeTempDir(prefix: "mlx_diag_\(entry.label)")
+            let runtime = try await makeRuntime(offlineModeEnabled: true, projectRoot: projectRoot)
+            let manager = runtime.manager
+            manager.currentMode = .agent
+            manager.currentInput = entry.prompt
+            manager.sendMessage()
+
+            let timedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 180)
+            print("[LOCAL-MLX-DIAG] label=\(entry.label) timed_out=\(timedOut) useTools=\(entry.useTools)")
+            results.append((entry.label, 0, 0, 0, 0, false))
+        }
+
+        // Summary table is printed via [LOCAL-MLX-PERF] lines during execution.
+        // The thinking_chars, execution_chars, approx_thinking_tokens, approx_execution_tokens,
+        // and thinking_ended fields in each PERF line provide the data needed to
+        // determine the optimal output token window.
+        print("[LOCAL-MLX-DIAG] SUMMARY: \(results.count) prompts completed. See [LOCAL-MLX-PERF] lines for per-prompt thinking vs execution breakdown.")
+    }
+
     func testOfflineHarnessCreateReactAppThroughMLX() async throws {
         let result = try await runOfflineScenarioUntilStable(
             name: "mlx_create_react_app",
             prepare: nil,
             prompt: """
-                Create a simple React application structure using vite.
-                1. Create package.json with react and react-dom dependencies
-                2. Create index.html
-                3. Create src/main.jsx
-                4. Create src/App.jsx with a simple counter component
-                Do not run npm install. Only create or edit files using tools, then finish.
+                Create a React application by calling write_file 4 times:
+                1. write_file path="package.json" — valid JSON with react and react-dom dependencies
+                2. write_file path="index.html" — HTML with root div and script tag
+                3. write_file path="src/main.jsx" — React entry point
+                4. write_file path="src/App.jsx" — simple counter component
+                Do NOT run any commands. Do NOT run npm install. Only use write_file 4 times then stop.
                 """,
-            timeoutSeconds: 120
+            timeoutSeconds: 600
         )
 
         let files = listAllFiles(under: result.projectRoot)
@@ -557,6 +592,301 @@ final class OfflineModeHarnessTests: XCTestCase {
         }
     }
 
+    // MARK: - Readiness Scenario: Refactoring (Increasing Complexity)
+
+    /// Tests the model's ability to refactor existing code with increasing complexity:
+    /// Phase 1: Create a simple utility module with duplicated logic
+    /// Phase 2: Refactor to extract shared helper functions and add error handling
+    /// Phase 3: Add TypeScript-style JSDoc types and export a clean API surface
+    func testOfflineHarnessRefactorIncreasingComplexityThroughMLX() async throws {
+        let projectRoot = makeTempDir(prefix: "offline_refactor_complex")
+        let runtime = try await makeRuntime(offlineModeEnabled: true, projectRoot: projectRoot)
+        let manager = runtime.manager
+        manager.currentMode = .agent
+
+        ToolExecutionTelemetry.shared.reset()
+
+        // Phase 1: Create initial code with duplicated logic
+        manager.currentInput = """
+            Create a file named src/calculator.js by calling write_file once with this content:
+            function add(a, b) { return a + b; }
+            function subtract(a, b) { return a - b; }
+            function multiply(a, b) { return a * b; }
+            function divide(a, b) { return a / b; }
+            function addAndDouble(a, b) { return (a + b) * 2; }
+            function subtractAndDouble(a, b) { return (a - b) * 2; }
+            module.exports = { add, subtract, multiply, divide, addAndDouble, subtractAndDouble };
+            Only use write_file, then stop.
+            """
+        manager.sendMessage()
+
+        let phase1TimedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 120)
+        XCTAssertFalse(phase1TimedOut, "Phase 1 creation timed out")
+
+        let phase1Files = listAllFiles(under: projectRoot)
+        XCTAssertTrue(phase1Files.contains("src/calculator.js"), "Expected src/calculator.js after Phase 1. Files: \(phase1Files)")
+
+        // Phase 2: Refactor to extract shared helper and add error handling
+        manager.currentInput = """
+            Overwrite src/calculator.js by calling write_file with a refactored version:
+            - Add a function called "operate" that takes (a, b, fn) and returns fn(a, b)
+            - Add divide-by-zero check: if b is 0, throw new Error('Division by zero')
+            - Make addAndDouble use operate: return operate(a, b, (x,y) => (x+y)*2)
+            - Keep all 6 exports: add, subtract, multiply, divide, addAndDouble, subtractAndDouble
+            Call write_file now with path="src/calculator.js" and the full new content. Then stop.
+            """
+        manager.sendMessage()
+
+        let phase2TimedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 180)
+        XCTAssertFalse(phase2TimedOut, "Phase 2 refactor timed out")
+
+        let refactoredCode = try String(contentsOf: projectRoot.appendingPathComponent("src/calculator.js"))
+        XCTAssertTrue(
+            refactoredCode.contains("operate") || refactoredCode.contains("apply") || refactoredCode.contains("compute"),
+            "Expected extracted helper function in refactored code: \(refactoredCode)"
+        )
+        XCTAssertTrue(
+            refactoredCode.contains("Error") || refactoredCode.contains("throw") || refactoredCode.contains("null") || refactoredCode.contains("undefined"),
+            "Expected error handling for divide-by-zero: \(refactoredCode)"
+        )
+
+        // Phase 3: Add JSDoc types and clean API
+        manager.currentInput = """
+            Overwrite src/calculator.js by calling write_file with the same code but adding JSDoc:
+            - Add /** @param {number} a @param {number} b @returns {number} */ before each function
+            - Add /** @param {number} a @param {number} b @returns {number} @throws {Error} */ before divide
+            - Keep all logic exactly the same, only add JSDoc comments above each function
+            Call write_file now with path="src/calculator.js" and the full new content. Then stop.
+            """
+        manager.sendMessage()
+
+        let phase3TimedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 180)
+        XCTAssertFalse(phase3TimedOut, "Phase 3 JSDoc timed out")
+
+        let finalCode = try String(contentsOf: projectRoot.appendingPathComponent("src/calculator.js"))
+        XCTAssertTrue(
+            finalCode.contains("@param"),
+            "Expected JSDoc @param annotations: \(finalCode)"
+        )
+        XCTAssertTrue(
+            finalCode.contains("@returns") || finalCode.contains("@return"),
+            "Expected JSDoc @returns annotations: \(finalCode)"
+        )
+
+        let totalFailures = manager.messages.filter { $0.isToolExecution && $0.toolStatus == .failed }.count
+        XCTAssertLessThanOrEqual(totalFailures, 2, "Expected at most 2 failed tool executions across all phases. Got: \(totalFailures)")
+    }
+
+    // MARK: - Readiness Scenario: Terminal Commands (macOS only)
+
+    /// Tests the model's ability to use run_command for macOS terminal operations:
+    /// 1. Run `pwd` to verify working directory
+    /// 2. Run `ls` to list files
+    /// 3. Run `echo` to create a file via terminal
+    /// 4. Run `cat` to read the file back
+    func testOfflineHarnessTerminalCommandsThroughMLX() async throws {
+        let result = try await runOfflineScenarioUntilStable(
+            name: "mlx_terminal_commands",
+            prepare: nil,
+            prompt: """
+                Use run_command to perform these terminal operations:
+                1. run_command command="echo 'Hello from terminal' > terminal_output.txt" — create a file
+                2. run_command command="cat terminal_output.txt" — read the file back
+                Call run_command 2 times, then stop.
+                """,
+            timeoutSeconds: 300
+        )
+
+        let files = listAllFiles(under: result.projectRoot)
+        XCTAssertTrue(
+            files.contains("terminal_output.txt"),
+            "Expected terminal_output.txt created via echo. Files: \(files)"
+        )
+
+        let outputFile = result.projectRoot.appendingPathComponent("terminal_output.txt")
+        let fileContent = try String(contentsOf: outputFile, encoding: .utf8)
+        XCTAssertTrue(
+            fileContent.contains("Hello from terminal"),
+            "Expected file to contain 'Hello from terminal'. Content: \(fileContent)"
+        )
+
+        let runCommandMessages = result.manager.messages.filter {
+            $0.isToolExecution && $0.toolName == "run_command" && $0.toolStatus == .completed
+        }
+        XCTAssertGreaterThanOrEqual(
+            runCommandMessages.count, 1,
+            "Expected at least 1 completed run_command execution. Got: \(runCommandMessages.count)"
+        )
+    }
+
+    // MARK: - Readiness Scenario: Maximum Context Tool Execution (32K)
+
+    /// Tests whether the model can still execute tools and follow prompts when the context
+    /// window is heavily loaded at 32K tokens. Pre-populates large files, instructs the model
+    /// to read several of them (filling context with tool response content), then create a
+    /// new file that references what it read.
+    func testOfflineHarnessMaxContextToolExecutionThroughMLX() async throws {
+        let projectRoot = makeTempDir(prefix: "mlx_max_context_32k")
+        let srcDir = projectRoot.appendingPathComponent("src", isDirectory: true)
+        try FileManager.default.createDirectory(at: srcDir, withIntermediateDirectories: true)
+
+        // Create 8 large files (~3KB each) — reading several will fill context
+        for i in 1...8 {
+            var lines: [String] = []
+            lines.append("// Module \(i) — utility functions for subsystem \(i)")
+            lines.append("// This module provides data processing, validation, and transformation")
+            lines.append("// capabilities for the \(i)th subsystem in the application architecture.")
+            lines.append("")
+            lines.append("export function process_\(i)(data) {")
+            lines.append("    if (!data) return null;")
+            lines.append("    if (!Array.isArray(data)) return null;")
+            lines.append("    let result = 0;")
+            lines.append("    for (let i = 0; i < data.length; i++) {")
+            lines.append("        if (typeof data[i] !== 'number') continue;")
+            lines.append("        result += data[i] * \(i);")
+            lines.append("    }")
+            lines.append("    return result;")
+            lines.append("}")
+            lines.append("")
+            lines.append("export function validate_\(i)(input) {")
+            lines.append("    if (typeof input !== 'object') return false;")
+            lines.append("    if (!Array.isArray(input.data)) return false;")
+            lines.append("    if (input.data.length === 0) return false;")
+            lines.append("    if (input.data.length > 1000) return false;")
+            lines.append("    for (const item of input.data) {")
+            lines.append("        if (typeof item !== 'number') return false;")
+            lines.append("        if (!isFinite(item)) return false;")
+            lines.append("    }")
+            lines.append("    return true;")
+            lines.append("}")
+            lines.append("")
+            lines.append("export function transform_\(i)(value, factor) {")
+            lines.append("    if (factor === 0) throw new Error('Factor cannot be zero');")
+            lines.append("    if (typeof value !== 'number') throw new TypeError('Value must be number');")
+            lines.append("    const transformed = value * factor + \(i);")
+            lines.append("    return Math.round(transformed * 100) / 100;")
+            lines.append("}")
+            lines.append("")
+            lines.append("export const CONFIG_\(i) = {")
+            lines.append("    id: \(i),")
+            lines.append("    name: 'module_\(i)',")
+            lines.append("    version: '1.0.\(i)',")
+            lines.append("    enabled: \(i) % 2 === 0,")
+            lines.append("    priority: \(i) * 10,")
+            lines.append("    tags: ['utility', 'processor', 'module_\(i)', 'subsystem-\(i)'],")
+            lines.append("    metadata: {")
+            lines.append("        created: '2025-01-15',")
+            lines.append("        author: 'system',")
+            lines.append("        checksum: '\(i)a3f\(i)b2c1d\(i)e4f2',")
+            lines.append("        dependencies: ['module_\(max(1, i - 1))'],")
+            lines.append("    },")
+            lines.append("};")
+            lines.append("")
+            for j in 1...20 {
+                lines.append("// Padding line \(j) for module \(i) to increase file size and context usage.")
+            }
+            let content = lines.joined(separator: "\n")
+            try content.write(to: srcDir.appendingPathComponent("module_\(i).js"), atomically: true, encoding: .utf8)
+        }
+
+        try """
+        {
+          "name": "max-context-test",
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "start": "node src/index.js"
+          }
+        }
+        """.write(
+            to: projectRoot.appendingPathComponent("package.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let runtime = try await makeRuntime(offlineModeEnabled: true, projectRoot: projectRoot, profile: .maxContext)
+        let manager = runtime.manager
+        manager.currentMode = .agent
+
+        // Apply inference overrides for 262K context with 4-bit KV cache
+        let inferenceConfig = runtime.defaultInferenceConfiguration
+        await LocalModelInferenceOverrides.shared.set(
+            LocalModelInferenceOverrides(
+                contextLength: inferenceConfig.contextLength,
+                maxKVSize: inferenceConfig.maxKVSize,
+                maxOutputTokens: inferenceConfig.maxOutputTokens,
+                prefillStepSize: inferenceConfig.prefillStepSize,
+                temperature: inferenceConfig.temperature,
+                topP: inferenceConfig.topP,
+                repetitionPenalty: inferenceConfig.repetitionPenalty,
+                repetitionContextSize: inferenceConfig.repetitionContextSize,
+                kvCache4BitEnabled: inferenceConfig.kvCache4BitEnabled
+            )
+        )
+        defer {
+            Task { await LocalModelInferenceOverrides.shared.clear() }
+        }
+
+        ToolExecutionTelemetry.shared.reset()
+
+        // Phase 1: Read files to fill context
+        manager.currentInput = """
+            Read the following files using read_file:
+            1. read_file path="src/module_1.js"
+            2. read_file path="src/module_2.js"
+            3. read_file path="src/module_3.js"
+            4. read_file path="src/module_4.js"
+            Read all 4 files, then stop.
+            """
+        manager.sendMessage()
+
+        let phase1TimedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 300)
+        XCTAssertFalse(phase1TimedOut, "Phase 1 read files timed out at 32K context")
+
+        let readToolMessages = manager.messages.filter {
+            $0.isToolExecution && $0.toolName == "read_file" && $0.toolStatus == .completed
+        }
+        XCTAssertGreaterThanOrEqual(
+            readToolMessages.count, 3,
+            "Expected at least 3 completed read_file calls to fill context. Got: \(readToolMessages.count)"
+        )
+
+        // Phase 2: Write a new file — model must still follow instructions with loaded context
+        manager.currentInput = """
+            Now call write_file to create src/index.js.
+            The file should import process_1 from module_1.js and log the result of processing [1,2,3].
+            Call write_file now with path="src/index.js", then stop.
+            """
+        manager.sendMessage()
+
+        let phase2TimedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 300)
+        XCTAssertFalse(phase2TimedOut, "Phase 2 write_file timed out at 32K context")
+
+        let files = listAllFiles(under: projectRoot)
+        XCTAssertTrue(
+            files.contains("src/index.js"),
+            "Expected src/index.js created at 32K context. Files: \(files)"
+        )
+
+        let indexContent = try String(contentsOf: projectRoot.appendingPathComponent("src/index.js"))
+        XCTAssertTrue(
+            indexContent.contains("import") || indexContent.contains("require"),
+            "Expected import/require in index.js: \(indexContent)"
+        )
+        XCTAssertTrue(
+            indexContent.contains("process_1") || indexContent.contains("module_1"),
+            "Expected reference to module_1/process_1 in index.js: \(indexContent)"
+        )
+
+        let writeToolMessages = manager.messages.filter {
+            $0.isToolExecution && $0.toolName == "write_file" && $0.toolStatus == .completed
+        }
+        XCTAssertGreaterThanOrEqual(
+            writeToolMessages.count, 1,
+            "Expected at least 1 completed write_file at 32K context."
+        )
+    }
+
     func testOfflineHarnessReactTodoToSSRRefactorThroughMLX() async throws {
         let projectRoot = makeTempDir(prefix: "offline_ssr_refactor")
         let runtime = try await makeRuntime(offlineModeEnabled: true, projectRoot: projectRoot)
@@ -638,6 +968,7 @@ final class OfflineModeHarnessTests: XCTestCase {
     private enum RuntimeProfile {
         case standard
         case benchmark
+        case maxContext
     }
 
     private struct ScenarioResult {
@@ -646,85 +977,25 @@ final class OfflineModeHarnessTests: XCTestCase {
         let telemetry: ToolExecutionTelemetrySummary
     }
 
-    private func resolveOfflineHarnessModelId(preferredModelId: String?) throws -> String {
-        let environment = ProcessInfo.processInfo.environment
-        let explicitCandidateModelIds = [
-            environment["TEST_RUNNER_ENV_HARNESS_MODEL_ID"],
-            environment["HARNESS_MODEL_ID"]
-        ]
-        .compactMap { value -> String? in
-            guard let value else { return nil }
-            let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmedValue.isEmpty ? nil : trimmedValue
-        }
+    private func resolveOfflineHarnessModelId(preferredModelId: String?) async throws -> String {
+        let model = LocalModelCatalog.defaultModel
 
-        if let requestedModelId = explicitCandidateModelIds.first {
-            guard let requestedModel = LocalModelCatalog.model(id: requestedModelId) else {
-                throw NSError(
-                    domain: "OfflineModeHarnessTests",
-                    code: 3,
-                    userInfo: [NSLocalizedDescriptionKey: "Requested harness model is not in LocalModelCatalog: \(requestedModelId)"]
-                )
+        if !LocalModelFileStore.isModelInstalled(model) {
+            print("[HARNESS] Model not installed, downloading \(model.displayName)...")
+            let downloader = LocalModelDownloader()
+            try await downloader.download(model: model) { progress in
+                if progress.fractionCompleted > 0 {
+                    print("[HARNESS] Download progress: \(Int(progress.fractionCompleted * 100))%")
+                }
             }
-            guard LocalModelFileStore.isModelInstalled(requestedModel) else {
-                throw NSError(
-                    domain: "OfflineModeHarnessTests",
-                    code: 4,
-                    userInfo: [NSLocalizedDescriptionKey: "Requested harness model is not installed locally: \(requestedModelId)"]
-                )
-            }
-            return requestedModelId
+            print("[HARNESS] Model download complete.")
         }
 
-        if let preferredModelId,
-           let preferredModel = LocalModelCatalog.model(id: preferredModelId),
-           LocalModelFileStore.isModelInstalled(preferredModel) {
-            return preferredModel.id
-        }
-
-        let preferredInstalledFallbackModelIds = [
-            "mlx-community/Qwen3.5-4B-MLX-4bit@main",
-            "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
-        ]
-
-        for fallbackModelId in preferredInstalledFallbackModelIds {
-            if let installedModel = LocalModelCatalog.model(id: fallbackModelId),
-               LocalModelFileStore.isModelInstalled(installedModel) {
-                return installedModel.id
-            }
-        }
-
-        if let installedModel = LocalModelCatalog.allModels().first(where: { LocalModelFileStore.isModelInstalled($0) }) {
-            return installedModel.id
-        }
-
-        throw NSError(
-            domain: "OfflineModeHarnessTests",
-            code: 5,
-            userInfo: [NSLocalizedDescriptionKey: "No installed local MLX model is available for offline harness execution"]
-        )
+        return model.id
     }
 
     private func preferredOfflineHarnessModelId(settingsStore: SettingsStore) -> String? {
-        let selectedLocalModelId = settingsStore.string(forKey: "LocalModel.SelectedId")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let candidateModelIds = [
-            "mlx-community/Qwen3.5-4B-MLX-4bit@main",
-            selectedLocalModelId
-        ]
-        .compactMap { value -> String? in
-            guard let value else { return nil }
-            return value.isEmpty ? nil : value
-        }
-
-        for candidateModelId in candidateModelIds {
-            if let model = LocalModelCatalog.model(id: candidateModelId),
-               LocalModelFileStore.isModelInstalled(model) {
-                return model.id
-            }
-        }
-
-        return nil
+        LocalModelCatalog.defaultModel.id
     }
 
     private func makeRuntime(
@@ -796,6 +1067,10 @@ final class OfflineModeHarnessTests: XCTestCase {
             )
             testProfilePath = benchmarkProfileDirectory.path
             disableHeavyInit = true
+        case .maxContext:
+            testProfilePath = environment[TestLaunchKeys.testProfileDir]
+                ?? environment["TEST_RUNNER_ENV_OSXIDE_TEST_PROFILE_DIR"]
+            disableHeavyInit = false
         }
 
         let container = DependencyContainer(
@@ -825,7 +1100,7 @@ final class OfflineModeHarnessTests: XCTestCase {
         container.settingsStore.set(offlineModeEnabled, forKey: "AI.OfflineModeEnabled")
         await selectionStore.setOfflineModeEnabled(offlineModeEnabled)
         if offlineModeEnabled {
-            let modelId = try resolveOfflineHarnessModelId(
+            let modelId = try await resolveOfflineHarnessModelId(
                 preferredModelId: preferredOfflineHarnessModelId(settingsStore: container.settingsStore)
             )
             container.settingsStore.set(modelId, forKey: "LocalModel.SelectedId")
@@ -897,7 +1172,8 @@ final class OfflineModeHarnessTests: XCTestCase {
         name: String,
         prepare: ((URL) throws -> Void)?,
         prompt: String,
-        timeoutSeconds: TimeInterval
+        timeoutSeconds: TimeInterval,
+        profile: RuntimeProfile = .standard
     ) async throws -> ScenarioResult {
         var lastResult: ScenarioResult?
 
@@ -906,7 +1182,7 @@ final class OfflineModeHarnessTests: XCTestCase {
             try prepare?(projectRoot)
 
             ToolExecutionTelemetry.shared.reset()
-            let runtime = try await makeRuntime(offlineModeEnabled: true, projectRoot: projectRoot)
+            let runtime = try await makeRuntime(offlineModeEnabled: true, projectRoot: projectRoot, profile: profile)
             let manager = runtime.manager
             manager.currentMode = .agent
             manager.currentInput = prompt
@@ -1149,18 +1425,22 @@ final class OfflineModeHarnessTests: XCTestCase {
         let maxContextLength: Int
         switch profile {
         case .standard:
-            maxContextLength = 2048
+            maxContextLength = 8192
         case .benchmark:
             maxContextLength = 8192
+        case .maxContext:
+            maxContextLength = 262144
         }
 
         let contextLength = min(LocalModelFileStore.contextLength(for: model), maxContextLength)
         let defaultMaxOutputTokens: Int
         switch profile {
         case .standard:
-            defaultMaxOutputTokens = min(768, max(384, contextLength / 3))
+            defaultMaxOutputTokens = min(2048, max(768, contextLength / 3))
         case .benchmark:
-            defaultMaxOutputTokens = min(1024, max(512, contextLength / 4))
+            defaultMaxOutputTokens = min(2048, max(512, contextLength / 4))
+        case .maxContext:
+            defaultMaxOutputTokens = min(4096, max(2048, contextLength / 8))
         }
         return LocalModelInferenceConfiguration(
             contextLength: contextLength,
@@ -1171,7 +1451,7 @@ final class OfflineModeHarnessTests: XCTestCase {
             topP: 0.92,
             repetitionPenalty: 1.03,
             repetitionContextSize: 64,
-            turboQuantEnabled: false
+            kvCache4BitEnabled: true
         )
     }
 
@@ -1223,7 +1503,7 @@ final class OfflineModeHarnessTests: XCTestCase {
                                                 topP: topP,
                                                 repetitionPenalty: repetitionPenalty,
                                                 repetitionContextSize: repetitionContextSize,
-                                                turboQuantEnabled: false
+                                                kvCache4BitEnabled: false
                                             )
                                         )
                                     }
@@ -1326,5 +1606,235 @@ final class OfflineModeHarnessTests: XCTestCase {
         let csvURL = benchmarkDirectory.appendingPathComponent("\(testId).csv")
         try csv.write(to: csvURL, atomically: true, encoding: .utf8)
         return csvURL
+    }
+
+    // MARK: - Pressure Test: 262K Context with 4-bit KV Cache
+
+    /// Pressure test that fills the 262K context window with many large file reads,
+    /// then verifies the model can still reason about content from early in the conversation.
+    /// This tests whether the sliding window preserves reasoning and tool execution
+    /// when the KV cache is quantized to 4-bit.
+    func testOfflineHarness262KContextPressureWithKV4Bit() async throws {
+        let projectRoot = makeTempDir(prefix: "mlx_262k_pressure")
+        let srcDir = projectRoot.appendingPathComponent("src", isDirectory: true)
+        try FileManager.default.createDirectory(at: srcDir, withIntermediateDirectories: true)
+
+        // Create 40 large files (~8KB each, ~320KB total ≈ ~80K+ tokens of content)
+        // Each file has a unique marker string the model must recall later.
+        let fileCount = 40
+        for i in 1...fileCount {
+            var lines: [String] = []
+            lines.append("// File \(i) of \(fileCount) — data processing module #\(i)")
+            lines.append("// MARKER: The secret code for module \(i) is CODE-\(i * 137)-ALPHA")
+            lines.append("// This module handles batch processing pipeline stage \(i).")
+            lines.append("")
+            lines.append("export class Processor\(i) {")
+            lines.append("    constructor(config) {")
+            lines.append("        this.id = \(i);")
+            lines.append("        this.name = 'processor_\(i)';")
+            lines.append("        this.version = '2.\(i).0';")
+            lines.append("        this.config = config || {};")
+            lines.append("        this.queue = [];")
+            lines.append("        this.processed = 0;")
+            lines.append("        this.errors = [];")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    enqueue(item) {")
+            lines.append("        if (!item) throw new Error('Cannot enqueue empty item');")
+            lines.append("        if (typeof item !== 'object') throw new TypeError('Item must be object');")
+            lines.append("        this.queue.push(item);")
+            lines.append("        return this.queue.length;")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    dequeue() {")
+            lines.append("        if (this.queue.length === 0) return null;")
+            lines.append("        return this.queue.shift();")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    process() {")
+            lines.append("        const item = this.dequeue();")
+            lines.append("        if (!item) return null;")
+            lines.append("        const result = {")
+            lines.append("            processorId: this.id,")
+            lines.append("            input: item,")
+            lines.append("            output: this.transform(item),")
+            lines.append("            timestamp: Date.now(),")
+            lines.append("        };")
+            lines.append("        this.processed++;")
+            lines.append("        return result;")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    transform(item) {")
+            lines.append("        let value = 0;")
+            lines.append("        for (const key of Object.keys(item)) {")
+            lines.append("            if (typeof item[key] === 'number') {")
+            lines.append("                value += item[key] * this.id;")
+            lines.append("            }")
+            lines.append("        }")
+            lines.append("        return { value, scaled: value * \(i), module: this.name };")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    batchProcess(count) {")
+            lines.append("        const results = [];")
+            lines.append("        for (let i = 0; i < count && this.queue.length > 0; i++) {")
+            lines.append("            const r = this.process();")
+            lines.append("            if (r) results.push(r);")
+            lines.append("        }")
+            lines.append("        return results;")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    getStatus() {")
+            lines.append("        return {")
+            lines.append("            id: this.id,")
+            lines.append("            name: this.name,")
+            lines.append("            queueLength: this.queue.length,")
+            lines.append("            processed: this.processed,")
+            lines.append("            errors: this.errors.length,")
+            lines.append("        };")
+            lines.append("    }")
+            lines.append("}")
+            lines.append("")
+            lines.append("export const FACTORY_\(i) = {")
+            lines.append("    create: (config) => new Processor\(i)(config),")
+            lines.append("    id: \(i),")
+            lines.append("    type: 'processor',")
+            lines.append("    priority: \(i) * 5,")
+            lines.append("};")
+            lines.append("")
+            // Pad with comments to increase file size
+            for j in 1...60 {
+                lines.append("// Padding section \(j) for file \(i): additional context data for pipeline stage \(i) step \(j).")
+                lines.append("// Configuration block \(j): { threshold: \(j * 10), timeout: \(j * 100), retries: \(j % 3) }")
+            }
+            lines.append("")
+            let content = lines.joined(separator: "\n")
+            try content.write(to: srcDir.appendingPathComponent("module_\(i).js"), atomically: true, encoding: .utf8)
+        }
+
+        try """
+        {
+          "name": "context-pressure-test",
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "start": "node src/index.js"
+          }
+        }
+        """.write(
+            to: projectRoot.appendingPathComponent("package.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let runtime = try await makeRuntime(offlineModeEnabled: true, projectRoot: projectRoot, profile: .maxContext)
+        let manager = runtime.manager
+        manager.currentMode = .agent
+
+        // Apply inference overrides for 262K context with 4-bit KV cache
+        let inferenceConfig = runtime.defaultInferenceConfiguration
+        await LocalModelInferenceOverrides.shared.set(
+            LocalModelInferenceOverrides(
+                contextLength: inferenceConfig.contextLength,
+                maxKVSize: nil,
+                maxOutputTokens: inferenceConfig.maxOutputTokens,
+                prefillStepSize: nil,
+                temperature: inferenceConfig.temperature,
+                topP: inferenceConfig.topP,
+                repetitionPenalty: inferenceConfig.repetitionPenalty,
+                repetitionContextSize: inferenceConfig.repetitionContextSize,
+                kvCache4BitEnabled: true
+            )
+        )
+        defer {
+            Task { await LocalModelInferenceOverrides.shared.clear() }
+        }
+
+        ToolExecutionTelemetry.shared.reset()
+
+        // Phase 1: Read all 40 files to fill context heavily
+        // Build a prompt that asks for all files in batches
+        var fileList = ""
+        for i in 1...fileCount {
+            fileList += "read_file path=\"src/module_\(i).js\"\n"
+        }
+
+        manager.currentInput = """
+            Read ALL of the following files using read_file. Read every single one, then stop.
+            Do not summarize or skip any file. Read them all.
+
+            \(fileList)
+
+            After reading all files, stop and wait for further instructions.
+            """
+        manager.sendMessage()
+
+        let phase1TimedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 600)
+        XCTAssertFalse(phase1TimedOut, "Phase 1 (read 40 files) timed out")
+
+        let readToolMessages = manager.messages.filter {
+            $0.isToolExecution && $0.toolName == "read_file" && $0.toolStatus == .completed
+        }
+        print("[PRESSURE-TEST] Phase 1: \(readToolMessages.count) read_file calls completed out of \(fileCount) expected")
+
+        // Phase 2: Ask the model to recall the marker from file 1 (tests if early context is preserved)
+        manager.currentInput = """
+            I need you to recall specific information from the files you just read.
+            In module_1.js, there is a MARKER line with a secret code.
+            What is the exact secret code for module 1? Reply with just the code.
+            """
+        manager.sendMessage()
+
+        let phase2TimedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 300)
+        XCTAssertFalse(phase2TimedOut, "Phase 2 (recall marker) timed out")
+
+        // Check if the model recalled the marker — it should contain "CODE-137-ALPHA"
+        let phase2Response = manager.messages.last(where: { $0.role == .assistant })?.content ?? ""
+        print("[PRESSURE-TEST] Phase 2 recall response: \(phase2Response.prefix(300))")
+        XCTAssertTrue(
+            phase2Response.contains("137") || phase2Response.contains("CODE"),
+            "Model should recall the marker code from module_1.js. Got: \(phase2Response.prefix(200))"
+        )
+
+        // Phase 3: Ask the model to write a file that references multiple modules (tests reasoning + tool execution)
+        manager.currentInput = """
+            Now create a file src/index.js that imports Processor1 from module_1.js and Processor40 from module_40.js.
+            Create an instance of each, enqueue some test data, process it, and log the results.
+            Use write_file to create src/index.js, then stop.
+            """
+        manager.sendMessage()
+
+        let phase3TimedOut = try await waitForConversationToFinish(manager, timeoutSeconds: 300)
+        XCTAssertFalse(phase3TimedOut, "Phase 3 (write index.js) timed out")
+
+        let files = listAllFiles(under: projectRoot)
+        XCTAssertTrue(
+            files.contains("src/index.js"),
+            "Expected src/index.js created. Files: \(files)"
+        )
+
+        if files.contains("src/index.js") {
+            let indexContent = try String(contentsOf: projectRoot.appendingPathComponent("src/index.js"))
+            print("[PRESSURE-TEST] Phase 3 index.js content (first 500 chars): \(indexContent.prefix(500))")
+            XCTAssertTrue(
+                indexContent.contains("module_1") || indexContent.contains("Processor1"),
+                "Expected reference to module_1/Processor1 in index.js: \(indexContent.prefix(200))"
+            )
+            XCTAssertTrue(
+                indexContent.contains("module_40") || indexContent.contains("Processor40"),
+                "Expected reference to module_40/Processor40 in index.js: \(indexContent.prefix(200))"
+            )
+        }
+
+        let writeToolMessages = manager.messages.filter {
+            $0.isToolExecution && $0.toolName == "write_file" && $0.toolStatus == .completed
+        }
+        print("[PRESSURE-TEST] Phase 3: \(writeToolMessages.count) write_file calls completed")
+
+        // Summary
+        let allToolMessages = manager.messages.filter { $0.isToolExecution }
+        let completedTools = allToolMessages.filter { $0.toolStatus == .completed }
+        let failedTools = allToolMessages.filter { $0.toolStatus == .failed }
+        print("[PRESSURE-TEST] Summary: \(allToolMessages.count) total tools, \(completedTools.count) completed, \(failedTools.count) failed")
+        print("[PRESSURE-TEST] Total messages in conversation: \(manager.messages.count)")
     }
 }

@@ -28,7 +28,7 @@ final class KiloCodeSettingsStore: ProviderOpenRouterSettingsStore, @unchecked S
             defaultBaseURL: Self.currentBaseURL,
             defaultReasoningMode: .modelAndAgent,
             defaultToolPromptMode: .fullStatic,
-            defaultRAGEnabledDuringToolLoop: true
+            defaultRAGEnabledDuringToolLoop: false
         )
     }
 

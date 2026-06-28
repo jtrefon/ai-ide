@@ -16,6 +16,11 @@ public class ChatHistoryManager: ObservableObject {
     private static let defaultGreetingMessage = "Hello! I'm your AI coding assistant. How can I help you today?"
     private var saveTask: Task<Void, Never>?
 
+    // Coalesced draft update support
+    private var pendingDraftUpdate: ChatMessage?
+    private var draftPublishTask: Task<Void, Never>?
+    private let draftCoalesceIntervalNanoseconds: UInt64 = 150_000_000
+
     public init() {
         ensureDefaultGreetingMessageIfNeeded()
     }
@@ -78,6 +83,30 @@ public class ChatHistoryManager: ObservableObject {
             return
         }
 
+        pendingDraftUpdate = message
+        scheduleDraftPublish()
+    }
+
+    /// Immediately applies any pending draft update and publishes to SwiftUI.
+    public func flushPendingDraftUpdate() {
+        draftPublishTask?.cancel()
+        draftPublishTask = nil
+        applyPendingDraftUpdate()
+    }
+
+    private func scheduleDraftPublish() {
+        draftPublishTask?.cancel()
+        draftPublishTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do { try await Task.sleep(nanoseconds: self.draftCoalesceIntervalNanoseconds) } catch { return }
+            guard !Task.isCancelled else { return }
+            self.applyPendingDraftUpdate()
+        }
+    }
+
+    private func applyPendingDraftUpdate() {
+        guard let message = pendingDraftUpdate else { return }
+        pendingDraftUpdate = nil
         if let index = messages.firstIndex(where: { $0.id == message.id }) {
             messages[index] = message
         } else {
@@ -87,6 +116,7 @@ public class ChatHistoryManager: ObservableObject {
     
     /// Finalizes a draft message by converting it to a regular message with content
     public func finalizeDraftMessage(id: UUID, content: String, reasoning: String? = nil) {
+        flushPendingDraftUpdate()
         guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
         let oldMessage = messages[index]
         messages[index] = ChatMessage(
@@ -110,6 +140,7 @@ public class ChatHistoryManager: ObservableObject {
     
     /// Removes a draft message by ID (used when operation is cancelled or fails)
     public func removeDraftMessage(id: UUID) {
+        flushPendingDraftUpdate()
         messages.removeAll { $0.id == id && $0.isDraft }
         saveHistoryAsync()
     }

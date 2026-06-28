@@ -307,23 +307,19 @@ public struct CategoricalSampler: LogitSampler {
     }
 }
 
-/// GPU-resident ring buffer of recent token IDs.
+/// Ring buffer of recent token IDs for penalty processors.
 ///
 /// Shared by penalty processors to avoid duplicating ring buffer logic.
-/// Uses `MLX.where` mask operations for GPU-only updates (no CPU←GPU sync),
-/// preserving `asyncEval()` pipelining in `TokenIterator`.
 struct TokenRing {
     private(set) var buffer: MLXArray
     private(set) var count = 0
     private var writeIndex = 0
     let capacity: Int
-    private let positions: MLXArray
 
     init(capacity: Int) {
         precondition(capacity > 0)
         self.capacity = capacity
         self.buffer = MLXArray.zeros([capacity], type: Int32.self)
-        self.positions = MLXArray.arange(capacity)
     }
 
     /// The valid portion of the ring (all of it once full), or `nil` if empty.
@@ -352,10 +348,16 @@ struct TokenRing {
         }
     }
 
-    /// Append a single token using GPU-only mask write (no CPU←GPU sync).
+    /// Append a single token to the ring buffer.
     mutating func append(_ token: MLXArray) {
-        let mask = positions .== Int32(writeIndex)
-        buffer = MLX.where(mask, token.asType(.int32), buffer)
+        let tokenInt = token.asType(.int32).reshaped([1])
+        if writeIndex == 0 {
+            buffer = concatenated([tokenInt, buffer[1...]])
+        } else if writeIndex == capacity - 1 {
+            buffer = concatenated([buffer[..<writeIndex], tokenInt])
+        } else {
+            buffer = concatenated([buffer[..<writeIndex], tokenInt, buffer[(writeIndex + 1)...]])
+        }
         writeIndex = (writeIndex + 1) % capacity
         count = min(count + 1, capacity)
     }
@@ -537,6 +539,9 @@ public struct TokenIterator: TokenIteratorProtocol {
     let kvGroupSize: Int
     let quantizedKVStart: Int
 
+    // Per-step cache clearing toggle (env: MLX_CLEAR_CACHE_PER_STEP, default 0)
+    let clearCachePerStep: Bool
+
     // Internal metrics
     var promptPrefillTime: TimeInterval = 0.0
 
@@ -564,6 +569,8 @@ public struct TokenIterator: TokenIteratorProtocol {
         self.kvBits = parameters.kvBits
         self.kvGroupSize = parameters.kvGroupSize
         self.quantizedKVStart = parameters.quantizedKVStart
+
+        self.clearCachePerStep = Int(ProcessInfo.processInfo.environment["MLX_CLEAR_CACHE_PER_STEP"] ?? "0") != 0
 
         self.promptPrefillTime = try measure {
             try prepare(input: .init(text: y), windowSize: parameters.prefillStepSize)
@@ -598,6 +605,8 @@ public struct TokenIterator: TokenIteratorProtocol {
         self.kvGroupSize = parameters.kvGroupSize
         self.quantizedKVStart = parameters.quantizedKVStart
 
+        self.clearCachePerStep = Int(ProcessInfo.processInfo.environment["MLX_CLEAR_CACHE_PER_STEP"] ?? "0") != 0
+
         self.promptPrefillTime = try measure {
             try prepare(input: input, windowSize: parameters.prefillStepSize)
         }
@@ -631,6 +640,8 @@ public struct TokenIterator: TokenIteratorProtocol {
         self.kvGroupSize = 64
         self.quantizedKVStart = 0
 
+        self.clearCachePerStep = Int(ProcessInfo.processInfo.environment["MLX_CLEAR_CACHE_PER_STEP"] ?? "0") != 0
+
         self.promptPrefillTime = try measure {
             try prepare(input: input, windowSize: prefillStepSize)
         }
@@ -647,10 +658,12 @@ public struct TokenIterator: TokenIteratorProtocol {
             let token = step(previous: y)
             y = .init(tokens: token)
             asyncEval(y.tokens)
+            Memory.clearCache()
 
         case .logits(let result):
             y = .init(tokens: convertToToken(logits: result.logits))
             asyncEval(y.tokens)
+            Memory.clearCache()
 
             break
         }
@@ -698,6 +711,11 @@ public struct TokenIterator: TokenIteratorProtocol {
         let token = step(previous: previousY)
         y = .init(tokens: token)
         asyncEval(token)
+
+        // Reclaim intermediate buffers from the forward pass to keep memory footprint low
+        if clearCachePerStep {
+            Memory.clearCache()
+        }
 
         tokenCount += 1
 
@@ -1302,7 +1320,8 @@ public func generate(
         generationTokenCount: result.generatedTokenIds.count,
         promptTime: result.promptTime + result.promptPrefillTime,
         generationTime: result.generateTime,
-        stopReason: result.stopReason
+        stopReason: result.stopReason,
+        generatedTokenIds: result.generatedTokenIds
     )
 }
 
@@ -1680,6 +1699,7 @@ private func generateLoopTask<Handler: TokenLoopHandler>(
             var promptTime: TimeInterval = 0
             var tokenCount = 0
             var stopReason: GenerateStopReason?
+            var generatedTokenIds: [Int] = []
 
             let stopTokenIds = buildStopTokenIds(
                 modelConfiguration: modelConfiguration,
@@ -1713,6 +1733,7 @@ private func generateLoopTask<Handler: TokenLoopHandler>(
                 }
 
                 tokenCount += 1
+                generatedTokenIds.append(token)
                 if !handler.onToken(token, emit: continuation.yield) {
                     stopReason = .cancelled
                     break
@@ -1739,7 +1760,8 @@ private func generateLoopTask<Handler: TokenLoopHandler>(
                 generationTokenCount: tokenCount,
                 promptTime: promptTime + iterator.promptPrefillTime,
                 generationTime: generateTime,
-                stopReason: stopReason ?? .cancelled
+                stopReason: stopReason ?? .cancelled,
+                generatedTokenIds: generatedTokenIds
             )
             _ = continuation.yield(handler.infoEvent(info))
 
@@ -1809,6 +1831,25 @@ public struct GenerateCompletionInfo: Sendable {
     /// Reason generation stopped.
     public let stopReason: GenerateStopReason
 
+    /// Generated token IDs (for cache persistence).
+    public let generatedTokenIds: [Int]
+
+    public init(
+        promptTokenCount: Int,
+        generationTokenCount: Int,
+        promptTime: TimeInterval,
+        generationTime: TimeInterval,
+        stopReason: GenerateStopReason,
+        generatedTokenIds: [Int] = []
+    ) {
+        self.promptTokenCount = promptTokenCount
+        self.generationTokenCount = generationTokenCount
+        self.promptTime = promptTime
+        self.generateTime = generationTime
+        self.stopReason = stopReason
+        self.generatedTokenIds = generatedTokenIds
+    }
+
     /// The number of tokens processed per second during the prompt phase.
     public var promptTokensPerSecond: Double {
         Double(promptTokenCount) / promptTime
@@ -1831,6 +1872,7 @@ public struct GenerateCompletionInfo: Sendable {
         self.promptTime = promptTime
         self.generateTime = generationTime
         self.stopReason = stopReason
+        self.generatedTokenIds = []
     }
 
     public func summary() -> String {

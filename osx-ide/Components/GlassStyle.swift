@@ -32,33 +32,14 @@ enum NativeGlassSurface {
         }
     }
 
-    /// Subtle blur effect for backgrounds only
-    var backgroundBlur: CGFloat {
-        switch self {
-        case .header, .toolbar:
-            return 8
-        case .sidebar:
-            return 12
-        case .panel, .popover:
-            return 10
-        case .sheet:
-            return 15
-        }
-    }
 }
 
 extension View {
-    /// Applies macOS v26 native liquid glass background with enhanced depth and clarity
+    /// Applies macOS v26 native liquid glass background
     @ViewBuilder
     func nativeGlassBackground(_ surface: NativeGlassSurface) -> some View {
         self
             .background(surface.material)
-            .background(
-                Rectangle()
-                    .fill(Color.clear)
-                    .blur(radius: surface.backgroundBlur)
-                    .allowsHitTesting(false)
-            )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
@@ -67,12 +48,6 @@ extension View {
     func nativeGlassBackground(_ surface: NativeGlassSurface, cornerRadius: CGFloat) -> some View {
         self
             .background(surface.material)
-            .background(
-                Rectangle()
-                    .fill(Color.clear)
-                    .blur(radius: surface.backgroundBlur)
-                    .allowsHitTesting(false)
-            )
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 
@@ -81,12 +56,6 @@ extension View {
     func liquidGlassCard(elevation: Double = 0.3) -> some View {
         self
             .background(.ultraThinMaterial)
-            .background(
-                Rectangle()
-                    .fill(Color.clear)
-                    .blur(radius: 8 + elevation * 8)
-                    .allowsHitTesting(false)
-            )
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)

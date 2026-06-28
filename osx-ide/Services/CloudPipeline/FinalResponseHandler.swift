@@ -22,7 +22,8 @@ final class FinalResponseHandler {
         runId: String,
         conversationId: String
     ) async throws -> AIServiceResponse {
-        let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let split = ChatPromptBuilder.splitReasoning(from: response.content ?? "")
+        let draft = split.content.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if isDeterministicFallbackResponse(draft) {
             return response
@@ -57,6 +58,8 @@ final class FinalResponseHandler {
                     followupReason: followupReason
                 )
             }
+
+            return response
         }
 
         return try await requestFinalResponse(
@@ -84,17 +87,6 @@ final class FinalResponseHandler {
             "gathering context",
         ]
         return genericPatterns.contains { lowercased.contains($0) }
-    }
-
-    private func containsLiteralToolCallMarkup(_ content: String) -> Bool {
-        let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return false }
-
-        return normalized.contains("[tool_call]")
-            || normalized.contains("<tool_name>")
-            || normalized.contains("</tool_call>")
-            || normalized.contains("<minimax:tool_call>")
-            || normalized.contains("<invoke name=")
     }
 
     private func containsUnfinishedWorkSignals(_ content: String) -> Bool {
@@ -173,7 +165,7 @@ final class FinalResponseHandler {
             try await aiInteractionCoordinator
             .sendMessageWithRetry(
                 AIInteractionCoordinator.SendMessageWithRetryRequest(
-                    messages: historyCoordinator.messages + [correctionSystem],
+                    messages: historyCoordinator.messages.filter { !$0.isDraft } + [correctionSystem],
                     explicitContext: explicitContext,
                     tools: [],
                     mode: followupMode,
@@ -184,12 +176,12 @@ final class FinalResponseHandler {
         )
         .get()
 
-        let firstFollowupContent = followup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let firstFollowupContent,
-           !firstFollowupContent.isEmpty,
+        let firstSplit = ChatPromptBuilder.splitReasoning(from: followup.content ?? "")
+        let firstFollowupContent = firstSplit.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !firstFollowupContent.isEmpty,
            !isGenericStatusMessage(firstFollowupContent),
-           !containsLiteralToolCallMarkup(firstFollowupContent) {
-            return AIServiceResponse(content: followup.content, toolCalls: nil)
+           !ToolLoopUtilities.containsLiteralToolCallMarkup(firstFollowupContent) {
+            return AIServiceResponse(content: firstSplit.content, toolCalls: nil, reasoning: firstSplit.reasoning ?? followup.reasoning)
         }
 
         let retryPrompt = try await buildFinalResponsePrompt(
@@ -202,7 +194,7 @@ final class FinalResponseHandler {
         let retryFollowup = try await aiInteractionCoordinator
             .sendMessageWithRetry(
                 AIInteractionCoordinator.SendMessageWithRetryRequest(
-                    messages: historyCoordinator.messages + [ChatMessage(role: .system, content: retryPrompt)],
+                    messages: historyCoordinator.messages.filter { !$0.isDraft } + [ChatMessage(role: .system, content: retryPrompt)],
                     explicitContext: explicitContext,
                     tools: [],
                     mode: followupMode,
@@ -213,12 +205,12 @@ final class FinalResponseHandler {
             )
             .get()
 
-        let retryFollowupContent = retryFollowup.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let retryFollowupContent,
-           !retryFollowupContent.isEmpty,
+        let retrySplit = ChatPromptBuilder.splitReasoning(from: retryFollowup.content ?? "")
+        let retryFollowupContent = retrySplit.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !retryFollowupContent.isEmpty,
            !isGenericStatusMessage(retryFollowupContent),
-           !containsLiteralToolCallMarkup(retryFollowupContent) {
-            return AIServiceResponse(content: retryFollowup.content, toolCalls: nil)
+           !ToolLoopUtilities.containsLiteralToolCallMarkup(retryFollowupContent) {
+            return AIServiceResponse(content: retrySplit.content, toolCalls: nil, reasoning: retrySplit.reasoning ?? retryFollowup.reasoning)
         }
 
         let deterministicSummary = await buildDeterministicFinalSummaryFallback(
@@ -407,12 +399,14 @@ final class FinalResponseHandler {
         // DeepSeek/OpenRouter native reasoning arrives via response.reasoning,
         // not embedded in the text content. Preserve it for the next request.
         let effectiveReasoning = response.reasoning ?? splitFinal.reasoning
-        let sanitizedDisplay = ChatPromptBuilder.contentForDisplay(from: response.content ?? "No response received.")
+        let sanitizedDisplay = ChatPromptBuilder.contentForDisplay(from: response.content ?? "")
         let trimmedContent = sanitizedDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
-        let displayContent =
-            trimmedContent.isEmpty
-            ? "Assistant returned no user-visible response. Please retry or rephrase."
-            : sanitizedDisplay
+        let displayContent: String
+        if !trimmedContent.isEmpty {
+            displayContent = sanitizedDisplay
+        } else {
+            displayContent = ""
+        }
         if let reasoning = splitFinal.reasoning,
             let outcome = ChatPromptBuilder.reasoningOutcome(from: reasoning)
         {

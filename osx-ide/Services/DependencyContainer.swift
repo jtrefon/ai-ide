@@ -298,7 +298,7 @@ class DependencyContainer: ObservableObject {
     }
 
     /// Conversation manager instance
-    var conversationManager: any ConversationManagerProtocol {
+    var conversationManager: ConversationManager {
         return _conversationManager
     }
 
@@ -390,7 +390,7 @@ class DependencyContainer: ObservableObject {
     private let _unifiedLintingFramework: UnifiedLintingFramework
     private let _languageModuleManager: LanguageModuleManager
     private var _aiService: any AIService
-    private var _conversationManager: any ConversationManagerProtocol
+    private var _conversationManager: ConversationManager
     private var _projectCoordinator: ProjectCoordinator
     private let _inlineCompletionEngine: InlineCompletionEngine
     private let _activityCoordinator: any AgentActivityCoordinating

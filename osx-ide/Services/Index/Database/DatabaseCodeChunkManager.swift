@@ -170,43 +170,60 @@ final class DatabaseCodeChunkManager {
     ) throws -> [CodeChunkSimilarityResult] {
         guard !ids.isEmpty else { return [] }
 
-        var results: [CodeChunkSimilarityResult] = []
+        // Parse all keys upfront
+        let parsed: [(resourceId: String, chunkIndex: Int, similarity: Float)] = ids.compactMap { entry in
+            guard let colonRange = entry.id.range(of: ":") else { return nil }
+            let resourceId = String(entry.id[..<colonRange.lowerBound])
+            let chunkIndex = Int(entry.id[colonRange.upperBound...]) ?? 0
+            return (resourceId, chunkIndex, entry.similarity)
+        }
+        guard !parsed.isEmpty else { return [] }
 
-        for (key, similarity) in ids {
-            guard let colonRange = key.range(of: ":") else { continue }
-            let resourceId = String(key[..<colonRange.lowerBound])
-            let chunkIndex = Int(key[colonRange.upperBound...]) ?? 0
+        // Build a single query with OR conditions for each (resource_id, chunk_index) pair
+        let conditions = parsed.map { _ in "(c.resource_id = ? AND c.chunk_index = ?)" }.joined(separator: " OR ")
+        let sql = """
+        SELECT r.path, c.line_start, c.line_end, c.snippet, c.resource_id, c.chunk_index
+        FROM code_chunks c
+        INNER JOIN resources r ON r.id = c.resource_id
+        WHERE c.model_id = ? AND (\(conditions));
+        """
 
-            let sql = """
-            SELECT r.path, c.line_start, c.line_end, c.snippet
-            FROM code_chunks c
-            INNER JOIN resources r ON r.id = c.resource_id
-            WHERE c.resource_id = ? AND c.model_id = ? AND c.chunk_index = ?;
-            """
+        var parameters: [Any] = [modelId]
+        for entry in parsed {
+            parameters.append(entry.resourceId)
+            parameters.append(entry.chunkIndex)
+        }
 
-            let rows = try database.withPreparedStatement(
-                sql: sql,
-                parameters: [resourceId, modelId, chunkIndex]
-            ) { statement in
-                var rows: [(String, Int, Int, String)] = []
-                while sqlite3_step(statement) == SQLITE_ROW {
-                    let path = String(cString: sqlite3_column_text(statement, 0))
-                    let ls = Int(sqlite3_column_int(statement, 1))
-                    let le = Int(sqlite3_column_int(statement, 2))
-                    let snippet = String(cString: sqlite3_column_text(statement, 3))
-                    rows.append((path, ls, le, snippet))
-                }
-                return rows
+        let rows = try database.withPreparedStatement(sql: sql, parameters: parameters) { statement in
+            var rows: [(String, Int, Int, String, String, Int)] = []
+            while sqlite3_step(statement) == SQLITE_ROW {
+                let path = String(cString: sqlite3_column_text(statement, 0))
+                let ls = Int(sqlite3_column_int(statement, 1))
+                let le = Int(sqlite3_column_int(statement, 2))
+                let snippet = String(cString: sqlite3_column_text(statement, 3))
+                let resId = String(cString: sqlite3_column_text(statement, 4))
+                let chunkIdx = Int(sqlite3_column_int(statement, 5))
+                rows.append((path, ls, le, snippet, resId, chunkIdx))
             }
+            return rows
+        }
 
-            guard let row = rows.first else { continue }
-            results.append(CodeChunkSimilarityResult(
+        // Build a lookup map for fast similarity score joining
+        var similarityMap: [String: Float] = [:]
+        for entry in parsed {
+            similarityMap["\(entry.resourceId):\(entry.chunkIndex)"] = entry.similarity
+        }
+
+        let results: [CodeChunkSimilarityResult] = rows.compactMap { row in
+            let key = "\(row.4):\(row.5)"
+            guard let similarity = similarityMap[key] else { return nil }
+            return CodeChunkSimilarityResult(
                 filePath: row.0,
                 lineStart: row.1,
                 lineEnd: row.2,
                 snippet: row.3,
                 similarityScore: Double(similarity)
-            ))
+            )
         }
 
         return results.sorted { $0.similarityScore > $1.similarityScore }

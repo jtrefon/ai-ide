@@ -233,6 +233,8 @@ final class Qwen35GatedDeltaNet: Module {
         let B = inputs.dim(0)
         let S = inputs.dim(1)
 
+
+
         var qkv = inProjQKV(inputs)
         let z = inProjZ(inputs).reshaped(B, S, numVHeads, headVDim)
         let b = inProjB(inputs)
@@ -251,7 +253,7 @@ final class Qwen35GatedDeltaNet: Module {
 
         let convInput = concatenated([convState, qkv], axis: 1)
         if let cache {
-            cache[0] = convInput[0..., (-(convKernelSize - 1))...]
+            cache[0] = contiguous(convInput[0..., (-(convKernelSize - 1))..., 0...])
         }
 
         let convOut = silu(conv1d(convInput))
@@ -271,6 +273,7 @@ final class Qwen35GatedDeltaNet: Module {
             MLXArray(invScale).asType(dtype)
             * MLXFast.rmsNorm(k, weight: MLXArray.mlxNone, eps: 1e-6)
 
+
         var out: MLXArray
 
         (out, state) = gatedDeltaUpdate(
@@ -285,8 +288,10 @@ final class Qwen35GatedDeltaNet: Module {
             mask: mask
         )
 
+
         if let cache {
             cache[1] = state
+            cache.advance(S)
         }
 
         out = norm(out, gate: z)
@@ -347,6 +352,8 @@ final class Qwen35Attention: Module {
         let B = x.dim(0)
         let L = x.dim(1)
 
+
+
         let qProjOutput = qProj(x)
         let qSplit = qProjOutput.reshaped(B, L, attentionHeads, -1).split(parts: 2, axis: -1)
         var queries = qSplit[0]
@@ -362,6 +369,7 @@ final class Qwen35Attention: Module {
         queries = applyRotaryPosition(rope, to: queries, cache: cache)
         keys = applyRotaryPosition(rope, to: keys, cache: cache)
 
+
         let output = attentionWithCacheUpdate(
             queries: queries,
             keys: keys,
@@ -372,6 +380,7 @@ final class Qwen35Attention: Module {
         )
         .transposed(0, 2, 1, 3)
         .reshaped(B, L, -1)
+
 
         return oProj(sigmoidMultiply(output, gate))
     }
@@ -534,6 +543,9 @@ public class Qwen35TextModelInner: Module {
         let faMask = createAttentionMask(h: hiddenStates, cache: cacheArray?[faIdx])
         let ssmMask = createSSMMask(h: hiddenStates, cache: cacheArray?[ssmIdx] as? MambaCache)
 
+        let modelDtype = hiddenStates.dtype
+        let isPrefill = inputs.dim(1) > 1
+
         for (i, layer) in layers.enumerated() {
             let mask = layer.isLinear ? ssmMask : nil
             let attnMask =
@@ -541,7 +553,15 @@ public class Qwen35TextModelInner: Module {
                 ? MLXFast.ScaledDotProductAttentionMaskMode.none : faMask
             hiddenStates = layer(
                 hiddenStates, attentionMask: attnMask, ssmMask: mask, cache: cacheArray?[i])
-        }
+            hiddenStates = hiddenStates.asType(modelDtype)
+
+            if isPrefill {
+                eval(hiddenStates)
+                if let c = cacheArray?[i] { eval(c) }
+                Memory.clearCache()
+            }
+            }
+
 
         return norm(hiddenStates)
     }
@@ -578,9 +598,20 @@ public class Qwen35TextModel: Module, LLMModel, KVCacheDimensionProvider {
     }
 
     public func newCache(parameters: GenerateParameters?) -> [KVCache] {
+        let maxKVSize = parameters?.maxKVSize
+        let kvBits = parameters?.kvBits
         return model.layers.map { layer in
             if layer.isLinear {
                 return MambaCache()
+            }
+            // Create QuantizedKVCache directly when kvBits is set.
+            // maybeQuantizeKVCache is NOT called during prefill chunks, so KVCacheSimple
+            // would stay FP16 and accumulate ~10GB before post-prefill quantization.
+            if let kvBits = kvBits, kvBits < 8 {
+                return QuantizedKVCache(groupSize: 64, bits: kvBits, maxSize: maxKVSize) as KVCache
+            }
+            if let maxKVSize = maxKVSize {
+                return RotatingKVCache(maxSize: maxKVSize, keep: 4) as KVCache
             }
             return KVCacheSimple()
         }

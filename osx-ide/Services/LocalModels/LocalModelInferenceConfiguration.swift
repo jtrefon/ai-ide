@@ -9,7 +9,7 @@ struct LocalModelInferenceConfiguration: Sendable, Equatable, Hashable {
     let topP: Float
     let repetitionPenalty: Float?
     let repetitionContextSize: Int
-    let turboQuantEnabled: Bool
+    let kvCache4BitEnabled: Bool
 
     var cacheKind: String {
         maxKVSize < contextLength ? "rotating-window" : "rotating-full"
@@ -24,8 +24,8 @@ struct LocalModelInferenceConfiguration: Sendable, Equatable, Hashable {
         } else {
             repetitionLabel = "rp0-rc0"
         }
-        let tqLabel = turboQuantEnabled ? "TQ" : "noTQ"
-        return "ctx\(contextLength)-kv\(maxKVSize)-out\(maxOutputTokens)-prefill\(prefillStepSize)-temp\(tempLabel)-topp\(topPLabel)-\(repetitionLabel)-\(tqLabel)"
+        let kvLabel = kvCache4BitEnabled ? "KV4" : "noKV4"
+        return "ctx\(contextLength)-kv\(maxKVSize)-out\(maxOutputTokens)-prefill\(prefillStepSize)-temp\(tempLabel)-topp\(topPLabel)-\(repetitionLabel)-\(kvLabel)"
     }
 }
 
@@ -38,7 +38,7 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
     var topP: Float?
     var repetitionPenalty: Float??
     var repetitionContextSize: Int?
-    var turboQuantEnabled: Bool?
+    var kvCache4BitEnabled: Bool?
 
     static let shared = Store()
 
@@ -64,7 +64,7 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
             defaultTopP: Float,
             defaultRepetitionPenalty: Float?,
             defaultRepetitionContextSize: Int,
-            defaultTurboQuantEnabled: Bool
+            defaultKVCache4BitEnabled: Bool
         ) -> LocalModelInferenceConfiguration {
             Self.resolve(
                 defaultContextLength: defaultContextLength,
@@ -73,7 +73,7 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
                 defaultTopP: defaultTopP,
                 defaultRepetitionPenalty: defaultRepetitionPenalty,
                 defaultRepetitionContextSize: defaultRepetitionContextSize,
-                defaultTurboQuantEnabled: defaultTurboQuantEnabled,
+                defaultKVCache4BitEnabled: defaultKVCache4BitEnabled,
                 environment: ProcessInfo.processInfo.environment,
                 overrides: overrides
             )
@@ -86,7 +86,7 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
             defaultTopP: Float,
             defaultRepetitionPenalty: Float?,
             defaultRepetitionContextSize: Int,
-            defaultTurboQuantEnabled: Bool,
+            defaultKVCache4BitEnabled: Bool,
             environment: [String: String],
             overrides: LocalModelInferenceOverrides?
         ) -> LocalModelInferenceConfiguration {
@@ -102,7 +102,7 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
             let contextLength = clamp(
                 overrides?.contextLength ?? envContext ?? defaultContextLength,
                 min: 256,
-                max: 32_768
+                max: 262_144
             )
             let maxKVSize = clamp(
                 overrides?.maxKVSize ?? envMaxKV ?? contextLength,
@@ -114,8 +114,10 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
                 min: 64,
                 max: 8_192
             )
+            let kvCache4BitEnabled = overrides?.kvCache4BitEnabled ?? (environment["OSXIDE_LOCAL_MODEL_KV_CACHE_4BIT"] == "0" ? false : defaultKVCache4BitEnabled)
+
             let prefillStepSize = clamp(
-                overrides?.prefillStepSize ?? envPrefill ?? 512,
+                overrides?.prefillStepSize ?? envPrefill ?? 128,
                 min: 64,
                 max: 4_096
             )
@@ -135,8 +137,6 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
                 min: 0,
                 max: contextLength
             )
-            let turboQuantEnabled = overrides?.turboQuantEnabled ?? (environment["OSXIDE_LOCAL_MODEL_TURBO_QUANT"] == "1" ? true : defaultTurboQuantEnabled)
-
             return LocalModelInferenceConfiguration(
                 contextLength: contextLength,
                 maxKVSize: maxKVSize,
@@ -146,7 +146,7 @@ struct LocalModelInferenceOverrides: Sendable, Equatable {
                 topP: topP,
                 repetitionPenalty: repetitionPenalty,
                 repetitionContextSize: repetitionContextSize,
-                turboQuantEnabled: turboQuantEnabled
+                kvCache4BitEnabled: kvCache4BitEnabled
             )
         }
 

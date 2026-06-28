@@ -30,9 +30,9 @@ final class LocalModelSettingsViewModel: ObservableObject {
         }
     }
 
-    @Published var turboQuantEnabled: Bool {
+    @Published var kvCache4BitEnabled: Bool {
         didSet {
-            persistTurboQuantEnabled()
+            persistKVCache4BitEnabled()
         }
     }
 
@@ -54,7 +54,7 @@ final class LocalModelSettingsViewModel: ObservableObject {
 
     private let selectedModelKey = "LocalModel.SelectedId"
     private let offlineModeEnabledKey = "AI.OfflineModeEnabled"
-    private let turboQuantEnabledKey = "LocalModel.TurboQuantEnabled"
+    private let kvCache4BitEnabledKey = "LocalModel.KVCache4BitEnabled"
 
     init(
         downloader: LocalModelDownloader = LocalModelDownloader(),
@@ -66,7 +66,7 @@ final class LocalModelSettingsViewModel: ObservableObject {
         self.models = LocalModelCatalog.allModels()
         self.selectedModelId = settingsStore.string(forKey: selectedModelKey) ?? ""
         self.offlineModeEnabled = settingsStore.bool(forKey: offlineModeEnabledKey, default: false)
-        self.turboQuantEnabled = settingsStore.bool(forKey: turboQuantEnabledKey, default: false)
+        self.kvCache4BitEnabled = settingsStore.bool(forKey: kvCache4BitEnabledKey, default: true)
         let ctx = settingsStore.integer(forKey: "LocalModel.ContextLength")
         let selectedModel = LocalModelCatalog.model(id: settingsStore.string(forKey: selectedModelKey) ?? "")
         let defaultCtx = selectedModel?.defaultContextLength ?? 8192
@@ -156,10 +156,10 @@ final class LocalModelSettingsViewModel: ObservableObject {
         updateOfflineStatusMessage()
     }
 
-    private func persistTurboQuantEnabled() {
-        let turboQuantEnabled = self.turboQuantEnabled
+    private func persistKVCache4BitEnabled() {
+        let kvCache4BitEnabled = self.kvCache4BitEnabled
         Task {
-            await selectionStore.setTurboQuantEnabled(turboQuantEnabled)
+            await selectionStore.setKVCache4BitEnabled(kvCache4BitEnabled)
         }
     }
 

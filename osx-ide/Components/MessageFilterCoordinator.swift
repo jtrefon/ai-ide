@@ -26,7 +26,8 @@ struct MessageFilterCoordinator {
         if message.role == .assistant {
             let cleaned = ChatPromptBuilder.contentForDisplay(from: message.content)
             let hasReasoning = !(message.reasoning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-            if cleaned.isEmpty && !hasReasoning {
+            let hasContent = !cleaned.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if !hasContent && !hasReasoning {
                 return false
             }
         }

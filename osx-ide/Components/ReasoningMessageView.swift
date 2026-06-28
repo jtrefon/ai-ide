@@ -10,9 +10,8 @@ import Foundation
 
 /// View for displaying collapsible reasoning content
 struct ReasoningMessageView: View {
-    let message: ChatMessage
+    let reasoning: String
     var fontSize: Double
-    var fontFamily: String
     @Binding var isReasoningHidden: Bool
     @State private var showFullReasoning = false
 
@@ -22,20 +21,6 @@ struct ReasoningMessageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                MarkdownMessageView(
-                    content: message.content,
-                    fontSize: fontSize,
-                    fontFamily: fontFamily
-                )
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .foregroundStyle(.primary)
-                .cornerRadius(16)
-                .textSelection(.enabled)
-            }
-
             reasoningToggleButton
 
             if !isReasoningHidden {
@@ -44,7 +29,7 @@ struct ReasoningMessageView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(.ultraThinMaterial)
         .cornerRadius(12)
     }
 
@@ -74,7 +59,7 @@ struct ReasoningMessageView: View {
 
     private var reasoningContent: some View {
         VStack(alignment: .leading, spacing: 4) {
-            let text = ChatPromptBuilder.reasoningForDisplay(message.reasoning ?? "")
+            let text = ChatPromptBuilder.reasoningForDisplay(reasoning)
                 .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 
             if showFullReasoning || text.count <= 300 {

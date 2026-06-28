@@ -9,7 +9,7 @@ actor LocalModelSelectionStore {
     private let settingsStore: SettingsStore
     private let selectedModelKey = "LocalModel.SelectedId"
     private let offlineModeEnabledKey = "AI.OfflineModeEnabled"
-    private let turboQuantEnabledKey = "LocalModel.TurboQuantEnabled"
+    private let kvCache4BitEnabledKey = "LocalModel.KVCache4BitEnabled"
     private let contextLengthKey = "LocalModel.ContextLength"
 
     init(settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)) {
@@ -46,12 +46,12 @@ actor LocalModelSelectionStore {
         )
     }
 
-    func isTurboQuantEnabled() -> Bool {
-        settingsStore.bool(forKey: turboQuantEnabledKey, default: false)
+    func isKVCache4BitEnabled() -> Bool {
+        settingsStore.bool(forKey: kvCache4BitEnabledKey, default: true)
     }
 
-    func setTurboQuantEnabled(_ enabled: Bool) {
-        settingsStore.set(enabled, forKey: turboQuantEnabledKey)
+    func setKVCache4BitEnabled(_ enabled: Bool) {
+        settingsStore.set(enabled, forKey: kvCache4BitEnabledKey)
     }
 
     func contextLength() -> Int? {

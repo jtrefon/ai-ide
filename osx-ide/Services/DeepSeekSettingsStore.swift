@@ -25,7 +25,7 @@ final class DeepSeekSettingsStore: ProviderOpenRouterSettingsStore, @unchecked S
             defaultBaseURL: "https://api.deepseek.com/v1",
             defaultReasoningMode: .modelAndAgent,
             defaultToolPromptMode: .fullStatic,
-            defaultRAGEnabledDuringToolLoop: true
+            defaultRAGEnabledDuringToolLoop: false
         )
     }
 }

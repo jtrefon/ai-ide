@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import MLX
+@preconcurrency import MLXLLM
 @preconcurrency import MLXLMCommon
 import MLXVLM
 import Tokenizers
@@ -9,8 +10,8 @@ import Darwin
 protocol MemoryPressureObserving: Sendable {}
 
 private struct LocalModelTestBudget {
-    static let maximumOperationalContextLength = 8192
-    static let maximumOperationalOutputTokens = 1024
+    static let maximumOperationalContextLength = 65536
+    static let maximumOperationalOutputTokens = 2048
 
     let contextLength: Int
     let retainedMessages: [ChatMessage]
@@ -35,12 +36,12 @@ private struct LocalModelTestBudget {
             )
         }
 
-        let clampedContextLength = min(contextLength, 2048)
+        let clampedContextLength = min(contextLength, 65536)
         let retainedMessages = trimMessages(request.messages, maxMessages: 4)
         return LocalModelTestBudget(
             contextLength: clampedContextLength,
             retainedMessages: retainedMessages,
-            maxOutputTokens: min(768, max(384, clampedContextLength / 3))
+            maxOutputTokens: min(2048, max(768, clampedContextLength / 3))
         )
     }
 
@@ -91,7 +92,10 @@ actor LocalModelGenerationPerformanceRecorder {
     }
 }
 
-/// Helper class to manage memory pressure observation with a closure callback
+/// Helper class to manage memory pressure observation with a closure callback.
+/// Note: NSMemoryWarningNotification is iOS-only and does not fire on macOS.
+/// This effectively keeps the model hot on macOS, which is the desired behavior
+/// for local MLX inference performance.
 final class MemoryPressureObserver: MemoryPressureObserving, @unchecked Sendable {
     private var observer: NSObjectProtocol?
     private let onMemoryPressure: @Sendable () -> Void
@@ -160,6 +164,30 @@ actor LocalModelProcessAIService: AIService {
         func generate(modelId: String, modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat?, runId: String?, inferenceConfiguration: LocalModelInferenceConfiguration, conversationId: String?) async throws -> AIServiceResponse
     }
 
+    final class PromptCacheEntry: @unchecked Sendable {
+        var cache: [KVCache]?
+        var promptTokenIds: [Int] = []
+        private let lock = NSLock()
+
+        func set(cache: [KVCache]?, tokenIds: [Int]) {
+            lock.lock(); defer { lock.unlock() }
+            self.cache = cache
+            self.promptTokenIds = tokenIds
+        }
+
+        func get() -> (cache: [KVCache]?, tokenIds: [Int]) {
+            lock.lock(); defer { lock.unlock() }
+            return (cache, promptTokenIds)
+        }
+
+        func clear() {
+            lock.lock(); defer { lock.unlock() }
+            cache = nil
+            promptTokenIds = []
+            Memory.clearCache()
+        }
+    }
+
     actor NativeMLXGenerator: LocalModelGenerating {
         private let eventBus: EventBusProtocol
         private var containersByModelDirectory: [URL: ModelContainer] = [:]
@@ -167,9 +195,11 @@ actor LocalModelProcessAIService: AIService {
         private var accessOrder: [URL] = []
         private let maxCachedModels = 1  // Conservative - one model at a time given memory constraints
         private var generationCount: Int = 0
-        private static let mlxCacheLimitBytes = 256 * 1024 * 1024  // 256 MB Metal buffer pool cap
+        private static let mlxCacheLimitBytes = 128 * 1024 * 1024  // 128 MB Metal buffer pool cap
+        private static let mlxMemoryLimitBytes = 3072 * 1024 * 1024  // 3072 MB total MLX memory cap
         private static let defaultTestingRSSLimitMB = 8 * 1024
         private static let defaultOperationalRSSLimitMB = 10 * 1024
+        private var promptCacheByConversation: [String: PromptCacheEntry] = [:]
 
         /// Shared MLX engine for unit tests. Prevents repeated model loading and GPU memory explosion.
         nonisolated static let sharedTestGenerator: LocalModelGenerating = {
@@ -185,6 +215,30 @@ actor LocalModelProcessAIService: AIService {
         init(eventBus: EventBusProtocol) {
             self.eventBus = eventBus
             Memory.cacheLimit = Self.mlxCacheLimitBytes
+            Memory.memoryLimit = Self.mlxMemoryLimitBytes
+            Task { await Self.logDeviceAndMemoryInfo() }
+        }
+
+        nonisolated static func logDeviceAndMemoryInfo() async {
+            let defaultDevice = Device.defaultDevice()
+            let deviceType = defaultDevice.deviceType?.rawValue ?? "unknown"
+            let deviceDesc = String(describing: defaultDevice)
+            let gpuInfo = GPU.deviceInfo()
+            let gpuArch = gpuInfo.architecture
+            let maxWorkingSetMB = Int(gpuInfo.maxRecommendedWorkingSetSize / (1024 * 1024))
+            let systemMemMB = gpuInfo.memorySize / (1024 * 1024)
+            let cacheLimitMB = Memory.cacheLimit / (1024 * 1024)
+            let memoryLimitMB = Memory.memoryLimit / (1024 * 1024)
+            await AIToolTraceLogger.shared.log(type: "mlx.device_info", data: [
+                "defaultDeviceType": deviceType,
+                "deviceDescription": deviceDesc,
+                "gpuArchitecture": gpuArch,
+                "maxRecommendedWorkingSetMB": maxWorkingSetMB,
+                "systemMemoryMB": systemMemMB,
+                "mlxCacheLimitMB": cacheLimitMB,
+                "mlxMemoryLimitMB": memoryLimitMB
+            ])
+            print("[LOCAL-MLX] device_info type=\(deviceType) arch=\(gpuArch) maxWorkingSetMB=\(maxWorkingSetMB) systemMemMB=\(systemMemMB) cacheLimitMB=\(cacheLimitMB) memoryLimitMB=\(memoryLimitMB)")
         }
 
         deinit {
@@ -197,7 +251,37 @@ actor LocalModelProcessAIService: AIService {
         }
 
         func generate(modelId: String, modelDirectory: URL, userInput: sending UserInput, tools: [ToolSpec]?, toolCallFormat: ToolCallFormat? = nil, runId: String?, inferenceConfiguration: LocalModelInferenceConfiguration, conversationId: String? = nil) async throws -> AIServiceResponse {
-            print("[LOCAL-MLX] generate modelId=\(modelId) modelDirectory=\(modelDirectory.path) toolCallFormat=\(String(describing: toolCallFormat)) contextLength=\(inferenceConfiguration.contextLength) maxKVSize=\(inferenceConfiguration.maxKVSize) maxOutputTokens=\(inferenceConfiguration.maxOutputTokens) prefillStepSize=\(inferenceConfiguration.prefillStepSize) temperature=\(inferenceConfiguration.temperature) topP=\(inferenceConfiguration.topP) repetitionPenalty=\(String(describing: inferenceConfiguration.repetitionPenalty)) repetitionContextSize=\(inferenceConfiguration.repetitionContextSize) turboQuant=\(inferenceConfiguration.turboQuantEnabled)")
+            if Task.isCancelled {
+                print("[LOCAL-MLX] generate called but Task already cancelled, bailing early")
+                throw CancellationError()
+            }
+            let mlxStream = String(describing: StreamOrDevice.default)
+            let defaultDevice = Device.defaultDevice()
+            let deviceType = defaultDevice.deviceType?.rawValue ?? "unknown"
+            let messageCount: Int
+            switch userInput.prompt {
+            case .messages(let msgs): messageCount = msgs.count
+            case .chat(let msgs): messageCount = msgs.count
+            case .text: messageCount = 1
+            }
+            let toolCount = tools?.count ?? 0
+            print("[LOCAL-MLX] generate modelId=\(modelId) modelDirectory=\(modelDirectory.path) toolCallFormat=\(String(describing: toolCallFormat)) contextLength=\(inferenceConfiguration.contextLength) maxKVSize=\(inferenceConfiguration.maxKVSize) maxOutputTokens=\(inferenceConfiguration.maxOutputTokens) prefillStepSize=\(inferenceConfiguration.prefillStepSize) temperature=\(inferenceConfiguration.temperature) topP=\(inferenceConfiguration.topP) repetitionPenalty=\(String(describing: inferenceConfiguration.repetitionPenalty)) repetitionContextSize=\(inferenceConfiguration.repetitionContextSize) kvCache4Bit=\(inferenceConfiguration.kvCache4BitEnabled) stream=\(mlxStream) device=\(deviceType) messages=\(messageCount) tools=\(toolCount)")
+            await AIToolTraceLogger.shared.log(type: "mlx.generate_start", data: [
+                "runId": runId ?? "",
+                "modelId": modelId,
+                "deviceType": deviceType,
+                "contextLength": inferenceConfiguration.contextLength,
+                "maxKVSize": inferenceConfiguration.maxKVSize,
+                "maxOutputTokens": inferenceConfiguration.maxOutputTokens,
+                "prefillStepSize": inferenceConfiguration.prefillStepSize,
+                "temperature": inferenceConfiguration.temperature,
+                "topP": inferenceConfiguration.topP,
+                "kvCache4Bit": inferenceConfiguration.kvCache4BitEnabled,
+                "cacheKind": inferenceConfiguration.cacheKind,
+                "messageCount": messageCount,
+                "toolCount": toolCount,
+                "conversationId": conversationId ?? ""
+            ])
             let preparedUserInput = userInput
             let rssLimitMB = Self.resolvedRSSLimitMB()
             let generationStart = ContinuousClock.now
@@ -205,7 +289,7 @@ actor LocalModelProcessAIService: AIService {
             let parameters = GenerateParameters(
                 maxTokens: inferenceConfiguration.maxOutputTokens,
                 maxKVSize: inferenceConfiguration.maxKVSize,
-                kvBits: inferenceConfiguration.turboQuantEnabled ? 4 : nil,
+                kvBits: inferenceConfiguration.kvCache4BitEnabled ? 4 : nil,
                 temperature: inferenceConfiguration.temperature,
                 topP: inferenceConfiguration.topP,
                 repetitionPenalty: inferenceConfiguration.repetitionPenalty,
@@ -213,8 +297,19 @@ actor LocalModelProcessAIService: AIService {
                 prefillStepSize: inferenceConfiguration.prefillStepSize
             )
             let eventBus = self.eventBus
+            let cacheEntry: PromptCacheEntry? = conversationId.map { id in
+                if let existing = promptCacheByConversation[id] {
+                    return existing
+                }
+                let entry = PromptCacheEntry()
+                promptCacheByConversation[id] = entry
+                return entry
+            }
             do {
                 let response = try await performInference {
+                    if Task.isCancelled {
+                        throw CancellationError()
+                    }
                     let rssBeforeLoadMB = Self.currentProcessRSSMB()
                     try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "before_container_load")
                     let loadStart = ContinuousClock.now
@@ -222,12 +317,83 @@ actor LocalModelProcessAIService: AIService {
                     let loadDuration = loadStart.duration(to: ContinuousClock.now)
                     let rssAfterLoadMB = Self.currentProcessRSSMB()
                     try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "after_container_load")
+                    let mlxActiveAfterLoad = MLX.Memory.activeMemory / (1024 * 1024)
+                    let mlxPeakAfterLoad = MLX.Memory.peakMemory / (1024 * 1024)
+                    print("[LOCAL-MLX] model loaded load_ms=\(Self.milliseconds(loadDuration)) rss_after_load_mb=\(rssAfterLoadMB) mlx_active=\(mlxActiveAfterLoad)MB mlx_peak=\(mlxPeakAfterLoad)MB")
+                    await AIToolTraceLogger.shared.log(type: "mlx.model_loaded", data: [
+                        "runId": runId ?? "",
+                        "modelId": modelId,
+                        "loadMs": Self.milliseconds(loadDuration),
+                        "rssBeforeLoadMB": rssBeforeLoadMB,
+                        "rssAfterLoadMB": rssAfterLoadMB
+                    ])
                     return try await container.perform { context in
                         try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "before_generation")
 
                         let input = try await context.processor.prepare(input: preparedUserInput)
+                        let promptTokenCount = input.text.tokens.size
+                        let promptTokenIds = input.text.tokens.asArray(Int.self)
+                        print("[LOCAL-MLX] prompt prepared prompt_tokens=\(promptTokenCount)")
+                        await AIToolTraceLogger.shared.log(type: "mlx.prompt_prepared", data: [
+                            "runId": runId ?? "",
+                            "modelId": modelId,
+                            "promptTokens": promptTokenCount
+                        ])
+
+                        let (cachedCache, cachedTokenIds) = cacheEntry?.get() ?? (nil, [])
+                        var kvCache: [KVCache]? = nil
+                        var effectiveInput = input
+
+                        if let cachedCache, !cachedCache.isEmpty, !cachedTokenIds.isEmpty, !promptTokenIds.isEmpty {
+                            let commonLen = Self.commonPrefixLength(cachedTokenIds, promptTokenIds)
+                            let trimCount = cachedTokenIds.count - commonLen
+
+                            if commonLen > 0 {
+                                var reuseCache: [KVCache] = []
+                                var skipReuse = false
+                                for cache in cachedCache {
+                                    if let maxSize = cache.maxSize, cache.offset > maxSize {
+                                        skipReuse = true
+                                        break
+                                    }
+                                    if trimCount > 0 {
+                                        _ = cache.trim(trimCount)
+                                    }
+                                    reuseCache.append(cache)
+                                }
+
+                                if !skipReuse, commonLen < promptTokenIds.count {
+                                    let suffixTokens = Array(promptTokenIds[commonLen...])
+                                    let suffixArray = MLXArray(suffixTokens).expandedDimensions(axis: 0)
+                                    effectiveInput = LMInput(text: LMInput.Text(tokens: suffixArray), image: nil, video: nil)
+                                    kvCache = reuseCache
+                                    print("[LOCAL-MLX] KV cache reuse: cached=\(commonLen)/\(cachedTokenIds.count) suffix=\(suffixTokens.count) total=\(promptTokenIds.count)")
+                                } else if !skipReuse, commonLen == promptTokenIds.count {
+                                    kvCache = reuseCache
+                                    print("[LOCAL-MLX] KV cache reuse: full match cached=\(commonLen) suffix=0")
+                                }
+                            }
+                        }
+
+                        if kvCache == nil {
+                            // Clear old cache before creating new one to prevent
+                            // double KV cache allocation (old + new = memory explosion)
+                            if let cacheEntry {
+                                cacheEntry.clear()
+                            }
+                            kvCache = context.model.newCache(parameters: parameters)
+                        }
+
+                        let rssBeforeGen = Self.currentProcessRSSMB()
+                        let mlxActiveBeforeGen = MLX.Memory.activeMemory / (1024 * 1024)
+                        let mlxPeakBeforeGen = MLX.Memory.peakMemory / (1024 * 1024)
+                        let effectiveTokenCount = effectiveInput.text.tokens.size
+                        print("[LOCAL-MLX] before generate rss=\(rssBeforeGen)MB mlx_active=\(mlxActiveBeforeGen)MB mlx_peak=\(mlxPeakBeforeGen)MB prompt_tokens=\(promptTokenCount) effective_tokens=\(effectiveTokenCount) prefillStep=\(parameters.prefillStepSize) maxKV=\(parameters.maxKVSize ?? -1) kvBits=\(parameters.kvBits ?? -1) cacheReuse=\(kvCache != nil && (kvCache?.first?.offset ?? 0) > 0)")
+                        MLX.Memory.peakMemory = 0
+                        let genStart = ContinuousClock.now
                         let stream = try MLXLMCommon.generate(
-                            input: input,
+                            input: effectiveInput,
+                            cache: kvCache,
                             parameters: parameters,
                             context: context
                         )
@@ -235,24 +401,69 @@ actor LocalModelProcessAIService: AIService {
                         var output = ""
                         var collectedToolCalls: [AIToolCall] = []
                         var completionInfo: GenerateCompletionInfo?
+                        var chunkCount = 0
+                        var pendingChunkBuffer: [String] = []
+                        var isInThinking = false
+                        var thinkingCharCount = 0
+                        var executionCharCount = 0
+                        var thinkingEnded = false
 
-                        func publishStatus(_ message: String) async {
+                        func publishStatus(_ message: String) {
                             guard let runId else { return }
                             guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                            await MainActor.run {
-                                eventBus.publish(LocalModelStreamingStatusEvent(runId: runId, message: message))
-                            }
+                            eventBus.publish(LocalModelStreamingStatusEvent(runId: runId, message: message))
                         }
 
                         for await generation in stream {
-                            try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "streaming")
+                            if Task.isCancelled {
+                                print("[LOCAL-MLX] generation cancelled by Task cancellation, stopping stream")
+                                throw CancellationError()
+                            }
+                            if chunkCount % 50 == 0 {
+                                try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "streaming")
+                            }
+                            chunkCount += 1
+                            if chunkCount == 1 {
+                                let prefillMs = Self.milliseconds(genStart.duration(to: ContinuousClock.now))
+                                let rssAfterPrefill = Self.currentProcessRSSMB()
+                                let mlxActiveAfterPrefill = MLX.Memory.activeMemory / (1024 * 1024)
+                                let mlxPeakAfterPrefill = MLX.Memory.peakMemory / (1024 * 1024)
+                                print("[LOCAL-MLX] first token generated prefill_ms=\(prefillMs) prompt_tokens=\(promptTokenCount) rss=\(rssAfterPrefill)MB mlx_active=\(mlxActiveAfterPrefill)MB mlx_peak=\(mlxPeakAfterPrefill)MB")
+                                await AIToolTraceLogger.shared.log(type: "mlx.first_token", data: [
+                                    "runId": runId ?? "",
+                                    "modelId": modelId,
+                                    "prefillMs": prefillMs,
+                                    "promptTokens": promptTokenCount,
+                                    "promptTokensPerSecond": promptTokenCount > 0 ? Double(promptTokenCount) / (Double(prefillMs) / 1000.0) : 0
+                                ])
+                            }
+                            if chunkCount % 50 == 0 {
+                                let elapsedMs = Self.milliseconds(genStart.duration(to: ContinuousClock.now))
+                                print("[LOCAL-MLX] generation progress chunks=\(chunkCount) elapsed_ms=\(elapsedMs) output_chars=\(output.count)")
+                            }
 
                             switch generation {
                             case .chunk(let text):
+                                // Track thinking vs execution phases
+                                if text.contains("<|channel>") {
+                                    isInThinking = true
+                                }
+                                if text.contains("<channel|>") {
+                                    isInThinking = false
+                                    thinkingEnded = true
+                                }
+                                if isInThinking {
+                                    thinkingCharCount += text.count
+                                } else {
+                                    executionCharCount += text.count
+                                }
                                 output.append(text)
                                 if let runId, !text.isEmpty {
-                                    await MainActor.run {
-                                        eventBus.publish(LocalModelStreamingChunkEvent(runId: runId, chunk: text))
+                                    pendingChunkBuffer.append(text)
+                                    if pendingChunkBuffer.count >= 8 || chunkCount % 8 == 0 {
+                                        let batch = pendingChunkBuffer.joined()
+                                        pendingChunkBuffer.removeAll(keepingCapacity: true)
+                                        eventBus.publish(LocalModelStreamingChunkEvent(runId: runId, chunk: batch))
                                     }
                                 }
                             case .info:
@@ -261,15 +472,77 @@ actor LocalModelProcessAIService: AIService {
                                 }
                             case .toolCall(let toolCall):
                                 collectedToolCalls.append(Self.makeAIToolCall(from: toolCall))
-                                await publishStatus("Structured tool call detected: \(toolCall.function.name)")
+                                publishStatus("Structured tool call detected: \(toolCall.function.name)")
                             }
                         }
+                        if !pendingChunkBuffer.isEmpty, let runId {
+                            let batch = pendingChunkBuffer.joined()
+                            eventBus.publish(LocalModelStreamingChunkEvent(runId: runId, chunk: batch))
+                        }
+
+                        if let cacheEntry, let kvCache, !kvCache.isEmpty {
+                            let generatedIds = completionInfo?.generatedTokenIds ?? []
+                            let fullTokenIds = promptTokenIds + generatedIds
+                            cacheEntry.set(cache: kvCache, tokenIds: fullTokenIds)
+                        }
+
                         let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let totalDuration = generationStart.duration(to: ContinuousClock.now)
+                        let totalMs = Self.milliseconds(totalDuration)
+                        let genMs: Int
+                        let genTokens: Int
+                        let genTps: Double
+                        let promptMs: Int
+                        let promptTokens: Int
+                        let promptTps: Double
+                        if let info = completionInfo {
+                            promptMs = Int((info.promptTime * 1000).rounded())
+                            promptTokens = info.promptTokenCount
+                            promptTps = info.promptTokensPerSecond
+                            genMs = Int((info.generateTime * 1000).rounded())
+                            genTokens = info.generationTokenCount
+                            genTps = info.tokensPerSecond
+                        } else {
+                            promptMs = 0
+                            promptTokens = promptTokenCount
+                            promptTps = 0
+                            genMs = totalMs - Self.milliseconds(loadDuration)
+                            genTokens = chunkCount
+                            genTps = 0
+                        }
+                        await AIToolTraceLogger.shared.log(type: "mlx.generate_complete", data: [
+                            "runId": runId ?? "",
+                            "modelId": modelId,
+                            "deviceType": deviceType,
+                            "loadMs": Self.milliseconds(loadDuration),
+                            "promptMs": promptMs,
+                            "promptTokens": promptTokens,
+                            "promptTokensPerSecond": promptTps,
+                            "generationMs": genMs,
+                            "generationTokens": genTokens,
+                            "generationTokensPerSecond": genTps,
+                            "totalMs": totalMs,
+                            "outputChars": trimmedOutput.count,
+                            "toolCalls": collectedToolCalls.count,
+                            "chunkCount": chunkCount,
+                            "rssBeforeLoadMB": rssBeforeLoadMB,
+                            "rssAfterLoadMB": rssAfterLoadMB,
+                            "rssAfterGenMB": Self.currentProcessRSSMB(),
+                            "contextLength": inferenceConfiguration.contextLength,
+                            "maxKVSize": inferenceConfiguration.maxKVSize,
+                            "maxOutputTokens": inferenceConfiguration.maxOutputTokens,
+                            "kvCache4Bit": inferenceConfiguration.kvCache4BitEnabled,
+                            "cacheKind": inferenceConfiguration.cacheKind,
+                            "hasCompletionInfo": completionInfo != nil
+                        ])
+                        let approxThinkingTokens = max(0, thinkingCharCount) / 4
+                        let approxExecutionTokens = max(0, executionCharCount) / 4
+                        print("[LOCAL-MLX-PERF] model=\(modelId) load_ms=\(Self.milliseconds(loadDuration)) prompt_ms=\(promptMs) prompt_tps=\(String(format: "%.1f", promptTps)) gen_tokens=\(genTokens) gen_ms=\(genMs) gen_tps=\(String(format: "%.1f", genTps)) total_ms=\(totalMs) context=\(inferenceConfiguration.contextLength) max_kv=\(inferenceConfiguration.maxKVSize) max_output=\(inferenceConfiguration.maxOutputTokens) prefill_step=\(inferenceConfiguration.prefillStepSize) cache_kind=\(inferenceConfiguration.cacheKind) tool_calls=\(collectedToolCalls.count) output_chars=\(trimmedOutput.count) thinking_chars=\(thinkingCharCount) execution_chars=\(executionCharCount) approx_thinking_tokens=\(approxThinkingTokens) approx_execution_tokens=\(approxExecutionTokens) thinking_ended=\(thinkingEnded) rss_before_load_mb=\(rssBeforeLoadMB) rss_after_load_mb=\(rssAfterLoadMB) rss_after_gen_mb=\(Self.currentProcessRSSMB())")
                         Self.logGenerationPerformance(
                             modelId: modelId,
                             inferenceConfiguration: inferenceConfiguration,
                             loadDuration: loadDuration,
-                            totalDuration: generationStart.duration(to: ContinuousClock.now),
+                            totalDuration: totalDuration,
                             completionInfo: completionInfo,
                             outputCharacterCount: trimmedOutput.count,
                             toolCallCount: collectedToolCalls.count,
@@ -288,12 +561,14 @@ actor LocalModelProcessAIService: AIService {
                 generationCount += 1
                 logMLXMemorySnapshot()
                 if Self.shouldUnloadModelAfterGeneration() {
-                    unloadModel(modelDirectory: modelDirectory)
+                    print("[LOCAL-MLX] *** UNLOADING MODEL AFTER GENERATION (env flag set) ***")
+                    unloadModel(modelDirectory: modelDirectory, reason: "post_generation_env_flag")
                 }
 
                 return response
             } catch {
-                unloadModel(modelDirectory: modelDirectory)
+                print("[LOCAL-MLX] *** UNLOADING MODEL DUE TO ERROR: \(error) ***")
+                unloadModel(modelDirectory: modelDirectory, reason: "generation_error")
                 throw error
             }
         }
@@ -313,7 +588,18 @@ actor LocalModelProcessAIService: AIService {
 
         private func logMLXMemorySnapshot() {
             let snapshot = Memory.snapshot()
-            print("[MLXMemory] gen=\(generationCount) active=\(snapshot.activeMemory / (1024*1024))MB cache=\(snapshot.cacheMemory / (1024*1024))MB peak=\(snapshot.peakMemory / (1024*1024))MB")
+            let activeMB = snapshot.activeMemory / (1024 * 1024)
+            let cacheMB = snapshot.cacheMemory / (1024 * 1024)
+            let peakMB = snapshot.peakMemory / (1024 * 1024)
+            print("[MLXMemory] gen=\(generationCount) active=\(activeMB)MB cache=\(cacheMB)MB peak=\(peakMB)MB")
+            Task {
+                await AIToolTraceLogger.shared.log(type: "mlx.memory_snapshot", data: [
+                    "generationCount": generationCount,
+                    "activeMB": activeMB,
+                    "cacheMB": cacheMB,
+                    "peakMB": peakMB
+                ])
+            }
         }
 
         nonisolated private static func resolvedRSSLimitMB() -> Int {
@@ -388,9 +674,7 @@ actor LocalModelProcessAIService: AIService {
                     rssAfterGenerationMB: rssAfterGenerationMB,
                     timestamp: Date()
                 )
-                print(
-                    "[LOCAL-MLX-PERF] model=\(modelId) load_ms=\(loadMS) prompt_tokens=\(info.promptTokenCount) prompt_ms=\(promptMS) prompt_tps=\(promptTPS) gen_tokens=\(info.generationTokenCount) gen_ms=\(generateMS) gen_tps=\(generationTPS) total_ms=\(totalMS) context=\(inferenceConfiguration.contextLength) max_kv=\(inferenceConfiguration.maxKVSize) max_output=\(inferenceConfiguration.maxOutputTokens) prefill_step=\(inferenceConfiguration.prefillStepSize) cache_kind=\(inferenceConfiguration.cacheKind) tool_calls=\(toolCallCount) output_chars=\(outputCharacterCount) rss_before_load_mb=\(rssBeforeLoadMB) rss_after_load_mb=\(rssAfterLoadMB) rss_after_gen_mb=\(rssAfterGenerationMB)"
-                )
+                // PERF log moved to generate() with thinking breakdown
             } else {
                 snapshot = LocalModelGenerationPerformanceSnapshot(
                     modelId: modelId,
@@ -410,9 +694,7 @@ actor LocalModelProcessAIService: AIService {
                     rssAfterGenerationMB: rssAfterGenerationMB,
                     timestamp: Date()
                 )
-                print(
-                    "[LOCAL-MLX-PERF] model=\(modelId) load_ms=\(loadMS) total_ms=\(totalMS) context=\(inferenceConfiguration.contextLength) max_kv=\(inferenceConfiguration.maxKVSize) max_output=\(inferenceConfiguration.maxOutputTokens) prefill_step=\(inferenceConfiguration.prefillStepSize) cache_kind=\(inferenceConfiguration.cacheKind) tool_calls=\(toolCallCount) output_chars=\(outputCharacterCount) rss_before_load_mb=\(rssBeforeLoadMB) rss_after_load_mb=\(rssAfterLoadMB) rss_after_gen_mb=\(rssAfterGenerationMB) info=missing"
-                )
+                // PERF log moved to generate() with thinking breakdown
             }
 
             Task {
@@ -464,67 +746,109 @@ actor LocalModelProcessAIService: AIService {
             )
         }
 
+        nonisolated static func commonPrefixLength(_ a: [Int], _ b: [Int]) -> Int {
+            let minLen = min(a.count, b.count)
+            for i in 0..<minLen {
+                if a[i] != b[i] { return i }
+            }
+            return minLen
+        }
+
         nonisolated static func extractGemmaToolCalls(from content: String) -> [AIToolCall]? {
             // Actual Gemma 4 format: call:name{json_args} inside <|tool_call>...<tool_call|>
-            // Regex from tokenizer_config.json: call\:(?P<name>\w+)(?P<arguments>\{.*\})
-            let pattern = #"call:(\w+)\{((?:[^{}]|\{[^{}]*\})*)\}"#
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-                return nil
-            }
-            let range = NSRange(content.startIndex..<content.endIndex, in: content)
-            let matches = regex.matches(in: content, options: [], range: range)
-            guard !matches.isEmpty else { return nil }
+            // Use a balanced brace parser instead of regex to handle deeply nested JSON.
+            let calls = parseGemmaToolCalls(from: content)
+            guard !calls.isEmpty else { return nil }
+            return calls
+        }
 
-            let calls: [AIToolCall] = matches.compactMap { match in
-                guard match.numberOfRanges >= 3,
-                      let nameRange = Range(match.range(at: 1), in: content),
-                      let argsRange = Range(match.range(at: 2), in: content) else {
-                    return nil
+        nonisolated static func parseGemmaToolCalls(from content: String) -> [AIToolCall] {
+            let marker = "call:"
+            var results: [AIToolCall] = []
+            var searchStart = content.startIndex
+
+            while let markerRange = content.range(of: marker, range: searchStart..<content.endIndex) {
+                let afterMarker = markerRange.upperBound
+
+                // Parse tool name: \w+ characters after "call:"
+                var nameEnd = afterMarker
+                while nameEnd < content.endIndex, content[nameEnd].isLetter || content[nameEnd].isNumber || content[nameEnd] == "_" {
+                    nameEnd = content.index(after: nameEnd)
                 }
-                let name = String(content[nameRange])
-                var argsText = String(content[argsRange])
+                guard nameEnd > afterMarker else {
+                    searchStart = markerRange.upperBound
+                    continue
+                }
+                let name = String(content[afterMarker..<nameEnd])
+
+                // Skip whitespace until opening brace
+                var braceStart = nameEnd
+                while braceStart < content.endIndex, content[braceStart].isWhitespace {
+                    braceStart = content.index(after: braceStart)
+                }
+                guard braceStart < content.endIndex, content[braceStart] == "{" else {
+                    searchStart = nameEnd
+                    continue
+                }
+
+                // Balanced brace scan to find matching closing brace
+                var depth = 1
+                var pos = content.index(after: braceStart)
+                while pos < content.endIndex && depth > 0 {
+                    let ch = content[pos]
+                    if ch == "{" { depth += 1 }
+                    else if ch == "}" { depth -= 1 }
+                    if depth > 0 {
+                        pos = content.index(after: pos)
+                    }
+                }
+                guard depth == 0 else {
+                    searchStart = nameEnd
+                    continue
+                }
+                let argsText = String(content[content.index(after: braceStart)..<pos])
 
                 // Gemma 4 uses <|"|> (token id 52) as a string delimiter instead of
                 // regular quote characters. Replace with " so the text becomes valid JSON.
-                argsText = argsText.replacingOccurrences(of: "<|\"|>", with: "\"")
+                let cleanedArgs = argsText.replacingOccurrences(of: "<|\"|>", with: "\"")
 
                 // Try proper JSON parsing first (most reliable)
-                let jsonText = "{\(argsText)}"
+                let jsonText = "{\(cleanedArgs)}"
+                var arguments: [String: Any] = [:]
                 if let jsonData = jsonText.data(using: .utf8),
                    let jsonObj = try? JSONSerialization.jsonObject(with: jsonData),
                    let argsDict = jsonObj as? [String: Any] {
-                    return AIToolCall(
-                        id: UUID().uuidString,
-                        name: name,
-                        arguments: argsDict
-                    )
+                    arguments = argsDict
+                } else {
+                    // Fallback: parse bare key:value pairs
+                    var fallbackArgs: [String: String] = [:]
+                    let stripped = cleanedArgs.replacingOccurrences(of: "\"", with: "")
+                    let pairPattern = #"(\w+):(.*?)(?:,\s*\w+|$)"#
+                    if let pairRegex = try? NSRegularExpression(pattern: pairPattern, options: [.dotMatchesLineSeparators]) {
+                        let pairRange = NSRange(stripped.startIndex..<stripped.endIndex, in: stripped)
+                        let pairMatches = pairRegex.matches(in: stripped, options: [], range: pairRange)
+                        for pair in pairMatches {
+                            guard pair.numberOfRanges >= 3,
+                                  let keyRange = Range(pair.range(at: 1), in: stripped),
+                                  let valRange = Range(pair.range(at: 2), in: stripped) else { continue }
+                            let key = String(stripped[keyRange])
+                            let val = String(stripped[valRange]).trimmingCharacters(in: .whitespaces)
+                            fallbackArgs[key] = val
+                        }
+                    }
+                    arguments = fallbackArgs
                 }
 
-                // Fallback: parse bare key:value pairs (handles unquoted keys or other edge cases)
-                var args: [String: String] = [:]
-                let stripped = argsText
-                    .replacingOccurrences(of: "\"", with: "")
-                    .replacingOccurrences(of: "<|\"|>", with: "")
-                let pairPattern = #"(\w+):(.*?)(?:,\s*\w+|$)"#
-                if let pairRegex = try? NSRegularExpression(pattern: pairPattern, options: [.dotMatchesLineSeparators]) {
-                    let pairRange = NSRange(stripped.startIndex..<stripped.endIndex, in: stripped)
-                    let pairMatches = pairRegex.matches(in: stripped, options: [], range: pairRange)
-                    for pair in pairMatches {
-                        guard pair.numberOfRanges >= 3,
-                              let keyRange = Range(pair.range(at: 1), in: stripped),
-                              let valRange = Range(pair.range(at: 2), in: stripped) else { continue }
-                        let key = String(stripped[keyRange])
-                        let val = String(stripped[valRange]).trimmingCharacters(in: .whitespaces)
-                        args[key] = val
-                    }
-                }
-                return AIToolCall(
+                results.append(AIToolCall(
                     id: UUID().uuidString,
                     name: name,
-                    arguments: args
-                )
+                    arguments: arguments
+                ))
+
+                searchStart = content.index(after: pos)
             }
-            return calls.isEmpty ? nil : calls
+
+            return results
         }
 
         nonisolated static func extractFallbackToolCalls(
@@ -632,7 +956,8 @@ actor LocalModelProcessAIService: AIService {
         }
 
         /// Unload all cached models to free memory
-        func unloadAllModels() {
+        func unloadAllModels(reason: String = "unknown") {
+            print("[LOCAL-MLX] unloadAllModels reason=\(reason) containers=\(containersByModelDirectory.count) genCount=\(generationCount)")
             synchronizeMLXStream()
             containersByModelDirectory.removeAll()
             inFlightLoads.removeAll()
@@ -641,12 +966,14 @@ actor LocalModelProcessAIService: AIService {
         }
 
         /// Unload a specific model
-        func unloadModel(modelDirectory: URL) {
+        func unloadModel(modelDirectory: URL, reason: String = "unknown") {
+            print("[LOCAL-MLX] unloadModel reason=\(reason) path=\(modelDirectory.lastPathComponent)")
             synchronizeMLXStream()
             let cacheKey = modelDirectory.resolvingSymlinksInPath().standardizedFileURL
             containersByModelDirectory.removeValue(forKey: cacheKey)
             inFlightLoads.removeValue(forKey: cacheKey)
             accessOrder.removeAll { $0 == cacheKey }
+            promptCacheByConversation.removeAll()
             Memory.clearCache()
         }
 
@@ -749,7 +1076,7 @@ actor LocalModelProcessAIService: AIService {
                     print("[LOCAL-MLX] VLM loader failed for \(modelDirectory.lastPathComponent). Falling back to text-only container. error=\(error)")
                 }
             }
-            return try await MLXLMCommon.loadModelContainer(
+            return try await LLMModelFactory.shared.loadContainer(
                 from: modelDirectory, using: tokenizerLoader)
         }
 
@@ -804,6 +1131,8 @@ actor LocalModelProcessAIService: AIService {
     private let prefixCache = PromptPrefixCache()
     private let activityCoordinator: (any AgentActivityCoordinating)?
     private let launchContext: AppLaunchContext
+    private var cachedTokenizer: (directory: URL, tokenizer: any Tokenizers.Tokenizer)?
+    private var tokenizerLoadInFlight: Task<(URL, any Tokenizers.Tokenizer)?, Never>?
 
     init(
         selectionStore: LocalModelSelectionStore = LocalModelSelectionStore(),
@@ -831,8 +1160,16 @@ actor LocalModelProcessAIService: AIService {
         // Register for memory pressure notifications
         self.memoryPressureObserver = memoryPressureObserverFactory {
             Task {
+                await AppLogger.shared.warning(
+                    category: .localModel,
+                    message: "memory_pressure_unload",
+                    context: AppLogger.LogCallContext(metadata: [
+                        "timestamp": ISO8601DateFormatter().string(from: Date())
+                    ])
+                )
+                print("[LOCAL-MLX] *** MEMORY PRESSURE DETECTED — unloading all models ***")
                 if let mlxGenerator = generatorForPressureHandling as? NativeMLXGenerator {
-                    await mlxGenerator.unloadAllModels()
+                    await mlxGenerator.unloadAllModels(reason: "memory_pressure")
                 }
                 // Also clear prefix cache on memory pressure
                 await prefixCacheForPressureHandling.clearAll()
@@ -870,9 +1207,10 @@ actor LocalModelProcessAIService: AIService {
         }
 
         let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
+        ensureTokenizerLoaded(modelDirectory: modelDirectory)
         let storedContextLength = await selectionStore.contextLength()
-        let turboQuantEnabled = await selectionStore.isTurboQuantEnabled()
-        let effectiveTurboQuant = turboQuantEnabled
+        let kvCache4BitEnabled = await selectionStore.isKVCache4BitEnabled()
+        let effectiveKVCache4Bit = kvCache4BitEnabled && model.supportsQuantizedKVCache
         let testBudget = LocalModelTestBudget.applyIfNeeded(
             to: request,
             contextLength: storedContextLength ?? LocalModelFileStore.contextLength(for: model),
@@ -889,8 +1227,21 @@ actor LocalModelProcessAIService: AIService {
             defaultTopP: defaultSampling.topP,
             defaultRepetitionPenalty: defaultSampling.repetitionPenalty,
             defaultRepetitionContextSize: defaultSampling.repetitionContextSize,
-            defaultTurboQuantEnabled: effectiveTurboQuant
+            defaultKVCache4BitEnabled: effectiveKVCache4Bit
         )
+        let safeInferenceConfiguration = model.supportsQuantizedKVCache
+            ? inferenceConfiguration
+            : LocalModelInferenceConfiguration(
+                contextLength: inferenceConfiguration.contextLength,
+                maxKVSize: inferenceConfiguration.maxKVSize,
+                maxOutputTokens: inferenceConfiguration.maxOutputTokens,
+                prefillStepSize: inferenceConfiguration.prefillStepSize,
+                temperature: inferenceConfiguration.temperature,
+                topP: inferenceConfiguration.topP,
+                repetitionPenalty: inferenceConfiguration.repetitionPenalty,
+                repetitionContextSize: inferenceConfiguration.repetitionContextSize,
+                kvCache4BitEnabled: false
+            )
         let isTesting = launchContext.isTesting
         let settings = settingsStore.load(includeApiKey: false)
         
@@ -918,7 +1269,14 @@ actor LocalModelProcessAIService: AIService {
                 // Cache hit - the prefix is validated and can be used
                 // The actual benefit is tracking; MLX handles tokenization internally
                 let stats = await prefixCache.getStatistics()
-                print("[PrefixCache] Hit for conversation \(conversationId). Hit rate: \(String(format: "%.1f%%", stats.hitRate * 100))")
+                await AppLogger.shared.debug(
+                    category: .localModel,
+                    message: "prefix_cache_hit",
+                    context: AppLogger.LogCallContext(metadata: [
+                        "conversationId": conversationId,
+                        "hitRate": String(format: "%.1f%%", stats.hitRate * 100)
+                    ])
+                )
             }
         }
         
@@ -938,13 +1296,30 @@ actor LocalModelProcessAIService: AIService {
         let toolSpecs = convertToToolSpec(request.tools)
         
         // TELEMETRY: Log what we're sending to the model for tool calling diagnosis
-        logToolCallingTelemetry(
+        await logToolCallingTelemetry(
             modelId: modelId,
             modelToolCallFormat: model.toolCallFormat,
             toolSpecs: toolSpecs,
             systemContentLength: systemContent.count,
             messageCount: chatMessages.count
         )
+        await AIToolTraceLogger.shared.log(type: "mlx.send_message", data: [
+            "runId": request.runId ?? "",
+            "modelId": modelId,
+            "systemPromptChars": systemContent.count,
+            "systemPromptApproxTokens": approximateTokenCount(systemContent),
+            "messageCount": chatMessages.count,
+            "toolCount": toolSpecs?.count ?? 0,
+            "mode": request.mode?.rawValue ?? "unknown",
+            "stage": request.stage?.rawValue ?? "unknown",
+            "contextLength": safeInferenceConfiguration.contextLength,
+            "maxOutputTokens": safeInferenceConfiguration.maxOutputTokens,
+            "maxKVSize": safeInferenceConfiguration.maxKVSize,
+            "prefillStepSize": safeInferenceConfiguration.prefillStepSize,
+            "kvCache4Bit": safeInferenceConfiguration.kvCache4BitEnabled,
+            "cacheKind": safeInferenceConfiguration.cacheKind,
+            "conversationId": conversationId ?? ""
+        ])
 
         let additionalContext = additionalContext(
             for: model,
@@ -969,7 +1344,7 @@ actor LocalModelProcessAIService: AIService {
                     tools: toolSpecs,
                     toolCallFormat: model.toolCallFormat,
                     runId: request.runId,
-                    inferenceConfiguration: inferenceConfiguration,
+                    inferenceConfiguration: safeInferenceConfiguration,
                     conversationId: conversationId
                 )
             }
@@ -981,13 +1356,13 @@ actor LocalModelProcessAIService: AIService {
                 tools: toolSpecs,
                 toolCallFormat: model.toolCallFormat,
                 runId: request.runId,
-                inferenceConfiguration: inferenceConfiguration,
+                inferenceConfiguration: safeInferenceConfiguration,
                 conversationId: conversationId
             )
         }
         
         // TELEMETRY: Log what we got back from the model
-        logResponseTelemetry(
+        await logResponseTelemetry(
             modelId: modelId,
             response: response,
             toolCount: toolSpecs?.count ?? 0
@@ -1129,6 +1504,7 @@ actor LocalModelProcessAIService: AIService {
                 let toolContent = replayToolMessageContent(from: message)
                 rawMessages.append([
                     "role": "tool",
+                    "content": toolContent,
                     "tool_responses": [
                         [
                             "name": toolName,
@@ -1367,7 +1743,42 @@ actor LocalModelProcessAIService: AIService {
 
     private func approximateTokenCount(_ text: String) -> Int {
         guard !text.isEmpty else { return 0 }
+        if let cached = cachedTokenizer {
+            return cached.tokenizer.encode(text: text, addSpecialTokens: false).count
+        }
         return max(1, (text.count + 3) / 4)
+    }
+
+    private func ensureTokenizerLoaded(modelDirectory: URL) {
+        if cachedTokenizer != nil { return }
+        if tokenizerLoadInFlight != nil { return }
+        let dir = modelDirectory
+        tokenizerLoadInFlight = Task<(URL, any Tokenizers.Tokenizer)?, Never> {
+            do {
+                let tokenizer = try await AutoTokenizer.from(modelFolder: dir)
+                return (dir, tokenizer)
+            } catch {
+                return nil
+            }
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            if let result = await self.tokenizerLoadInFlight?.value {
+                await self.setCachedTokenizer(result.0, result.1)
+            } else {
+                await self.clearTokenizerLoadInFlight()
+            }
+        }
+    }
+
+    private func clearTokenizerLoadInFlight() {
+        tokenizerLoadInFlight = nil
+    }
+
+    private func setCachedTokenizer(_ directory: URL, _ tokenizer: any Tokenizers.Tokenizer) {
+        if let existing = cachedTokenizer, existing.directory == directory { return }
+        cachedTokenizer = (directory, tokenizer)
+        tokenizerLoadInFlight = nil
     }
 
     private func convertToSendable(_ dictionary: [String: Any]) -> [String: any Sendable] {
@@ -1406,12 +1817,13 @@ actor LocalModelProcessAIService: AIService {
     }
 
     private func handleOfflineModeChanged(enabled: Bool) async {
+        print("[LOCAL-MLX] *** OFFLINE MODE CHANGED: \(enabled) ***")
         if enabled {
             await preloadCurrentSelection(unloadExistingModels: true)
             return
         }
         if let nativeGenerator = generator as? NativeMLXGenerator {
-            await nativeGenerator.unloadAllModels()
+            await nativeGenerator.unloadAllModels(reason: "offline_mode_disabled")
         }
     }
 
@@ -1431,7 +1843,7 @@ actor LocalModelProcessAIService: AIService {
 
         do {
             if unloadExistingModels {
-                await nativeGenerator.unloadAllModels()
+                await nativeGenerator.unloadAllModels(reason: "preload_reload")
             }
             let modelDirectory = try fileStore.runtimeModelDirectory(for: model)
             if let activityCoordinator {
@@ -1450,7 +1862,14 @@ actor LocalModelProcessAIService: AIService {
                 )
             }
         } catch {
-            print("[LOCAL-MLX] preload failed modelId=\(model.id) error=\(error)")
+            await AppLogger.shared.error(
+                category: .localModel,
+                message: "preload_failed",
+                context: AppLogger.LogCallContext(metadata: [
+                    "modelId": model.id,
+                    "error": String(describing: error)
+                ])
+            )
         }
     }
 
@@ -1480,26 +1899,30 @@ actor LocalModelProcessAIService: AIService {
         toolSpecs: [ToolSpec]?,
         systemContentLength: Int,
         messageCount: Int
-    ) {
+    ) async {
         let toolCount = toolSpecs?.count ?? 0
         let formatDesc = modelToolCallFormat?.rawValue ?? "nil"
-        
-        print("[ToolCallingTelemetry] === REQUEST ===")
-        print("[ToolCallingTelemetry] Model: \(modelId)")
-        print("[ToolCallingTelemetry] ToolCallFormat: \(formatDesc)")
-        print("[ToolCallingTelemetry] Tools provided: \(toolCount)")
-        
+        var toolNames: [String] = []
         if let tools = toolSpecs, !tools.isEmpty {
-            for (index, tool) in tools.enumerated() {
+            for tool in tools {
                 if let function = tool["function"] as? [String: Any],
                    let name = function["name"] as? String {
-                    print("[ToolCallingTelemetry]   Tool[\(index)]: \(name)")
+                    toolNames.append(name)
                 }
             }
         }
-        
-        print("[ToolCallingTelemetry] System prompt length: \(systemContentLength) chars")
-        print("[ToolCallingTelemetry] Message count: \(messageCount)")
+        await AppLogger.shared.debug(
+            category: .localModel,
+            message: "tool_calling_request",
+            context: AppLogger.LogCallContext(metadata: [
+                "modelId": modelId,
+                "toolCallFormat": formatDesc,
+                "toolCount": toolCount,
+                "toolNames": toolNames.joined(separator: ", "),
+                "systemPromptLength": systemContentLength,
+                "messageCount": messageCount
+            ])
+        )
     }
     
     /// Log telemetry about what we got back from the model
@@ -1507,33 +1930,26 @@ actor LocalModelProcessAIService: AIService {
         modelId: String,
         response: AIServiceResponse,
         toolCount: Int
-    ) {
-        print("[ToolCallingTelemetry] === RESPONSE ===")
-        print("[ToolCallingTelemetry] Model: \(modelId)")
-        
-        if let toolCalls = response.toolCalls, !toolCalls.isEmpty {
-            print("[ToolCallingTelemetry] Tool calls generated: \(toolCalls.count)")
-            for (index, call) in toolCalls.enumerated() {
-                print("[ToolCallingTelemetry]   Call[\(index)]: \(call.name)(\(call.arguments.keys.joined(separator: ", ")))")
-            }
-        } else {
-            print("[ToolCallingTelemetry] Tool calls generated: 0 (tools were provided: \(toolCount > 0))")
-        }
-        
-        if let content = response.content, !content.isEmpty {
-            let preview = String(content.prefix(200))
-            print("[ToolCallingTelemetry] Content preview: \(preview)...")
-            
-            // Check for textual tool call patterns in output
-            let lowered = content.lowercased()
-            if lowered.contains("tool_call") || lowered.contains("toolcall") {
-                print("[ToolCallingTelemetry] WARNING: Model emitted 'tool_call' text pattern but no structured calls!")
-            }
-            if lowered.contains("```json") {
-                print("[ToolCallingTelemetry] INFO: Model emitted JSON code block")
-            }
-        } else {
-            print("[ToolCallingTelemetry] Content: (empty)")
-        }
+    ) async {
+        let toolCallCount = response.toolCalls?.count ?? 0
+        let toolCallNames = (response.toolCalls ?? []).map { "\($0.name)(\($0.arguments.keys.joined(separator: ", ")))" }.joined(separator: "; ")
+        let contentPreview = response.content.map { String($0.prefix(200)) } ?? "(empty)"
+        let hasTextToolCall = response.content?.lowercased().contains("tool_call") == true || response.content?.lowercased().contains("toolcall") == true
+        let hasJsonBlock = response.content?.lowercased().contains("```json") == true
+        print("[LOCAL-MLX-RESPONSE] toolCalls=\(toolCallCount) toolDetails=\(toolCallNames) contentPreview=\(contentPreview)")
+
+        await AppLogger.shared.debug(
+            category: .localModel,
+            message: "tool_calling_response",
+            context: AppLogger.LogCallContext(metadata: [
+                "modelId": modelId,
+                "toolCallsGenerated": toolCallCount,
+                "toolCallDetails": toolCallNames,
+                "toolsWereProvided": toolCount > 0,
+                "contentPreview": contentPreview,
+                "hasTextToolCallPattern": hasTextToolCall,
+                "hasJsonBlock": hasJsonBlock
+            ])
+        )
     }
 }

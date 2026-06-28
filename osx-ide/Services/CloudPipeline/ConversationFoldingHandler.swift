@@ -5,9 +5,17 @@ final class ConversationFoldingHandler {
     func foldIfNeeded(
         historyCoordinator: ChatHistoryCoordinator,
         projectRoot: URL,
-        mode: AIMode = .chat
+        mode: AIMode = .chat,
+        usesLocalModel: Bool = false
     ) async throws {
-        let thresholds: ConversationFoldingThresholds = (mode == .agent) ? .agent : .chat
+        let thresholds: ConversationFoldingThresholds
+        if usesLocalModel && mode == .agent {
+            thresholds = .localAgent
+        } else if mode == .agent {
+            thresholds = .agent
+        } else {
+            thresholds = .chat
+        }
         let messages = historyCoordinator.messages
         guard ConversationFoldingService.shouldFold(messages: messages, thresholds: thresholds) else { return }
 
