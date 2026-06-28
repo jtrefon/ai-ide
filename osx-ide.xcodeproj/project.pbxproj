@@ -155,6 +155,7 @@
 				6E8A1B002F9A000100ABC123 /* MLXVLM */,
 				6D2E6F842C2F4A7F00A1B2C8 /* MLX */,
 				9A9A00022C2F4A7F00A1B001 /* SyntaxHighlighting */,
+				9A9A00042C2F4A7F00A1B004 /* Terminal */,
 			);
 			productName = "osx-ide";
 			productReference = 04C2CE092E5C8E9D007A5EF7 /* osx-ide.app */;
@@ -269,6 +270,7 @@
 				6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */,
 				6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */,
 				9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "SyntaxHighlighting" */,
+				9A9A00032C2F4A7F00A1B003 /* XCLocalSwiftPackageReference "Terminal" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 04C2CE0A2E5C8E9D007A5EF7 /* Products */;
@@ -723,6 +725,11 @@
 			path = "Packages/SyntaxHighlighting";
 			relativePath = "Packages/SyntaxHighlighting";
 		};
+		9A9A00032C2F4A7F00A1B003 /* XCLocalSwiftPackageReference "Terminal" */ = {
+			isa = XCLocalSwiftPackageReference;
+			path = "Packages/Terminal";
+			relativePath = "Packages/Terminal";
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -756,6 +763,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "SyntaxHighlighting" */;
 			productName = SyntaxHighlighting;
+		};
+		9A9A00042C2F4A7F00A1B004 /* Terminal */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9A9A00032C2F4A7F00A1B003 /* XCLocalSwiftPackageReference "Terminal" */;
+			productName = Terminal;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

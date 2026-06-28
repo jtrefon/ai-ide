@@ -8,7 +8,6 @@
 import Foundation
 
 enum AppConstants {
-    typealias Terminal = AppConstantsTerminal
     typealias Editor = AppConstantsEditor
     typealias Layout = AppConstantsLayout
     typealias FileSystem = AppConstantsFileSystem

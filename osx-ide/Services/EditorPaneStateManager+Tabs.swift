@@ -33,9 +33,6 @@ extension EditorPaneStateManager {
             selectedFile = newPath
             fileEditorService.selectedFile = newPath
         }
-
-        endWatchingFile(at: oldPath)
-        beginWatchingFile(at: newPath)
     }
 
     func activateTab(id: UUID) {
@@ -44,7 +41,6 @@ extension EditorPaneStateManager {
         activeTabID = id
 
         let tab = tabs[idx]
-        beginWatchingFile(at: tab.filePath)
         isLoadingFile = true
         defer { isLoadingFile = false }
         selectedFile = tab.filePath
@@ -63,7 +59,6 @@ extension EditorPaneStateManager {
     func closeTab(id: UUID) {
         guard let idx = tabs.firstIndex(where: { $0.id == id }) else { return }
         let removed = tabs.remove(at: idx)
-        endWatchingFile(at: removed.filePath)
 
         if activeTabID == removed.id {
             if let newActive = tabs.last {
@@ -82,10 +77,6 @@ extension EditorPaneStateManager {
     func closeOtherTabs(keeping id: UUID) {
         guard let keepIdx = tabs.firstIndex(where: { $0.id == id }) else { return }
         let keep = tabs[keepIdx]
-        let removedPaths = tabs.filter { $0.id != id }.map { $0.filePath }
-        for path in removedPaths {
-            endWatchingFile(at: path)
-        }
         tabs = [keep]
         activateTab(id: keep.id)
     }

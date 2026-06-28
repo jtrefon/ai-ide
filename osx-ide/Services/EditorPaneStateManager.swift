@@ -21,7 +21,6 @@ final class EditorPaneStateManager: ObservableObject {
     let languageDetector: EditorLanguageDetecting
     let editingStateManager: EditingStateManager
     let tabManager: EditorTabManager
-    let fileWatchCoordinator: FileWatchCoordinator
 
     init(
         fileEditorService: FileEditorServiceProtocol,
@@ -36,12 +35,44 @@ final class EditorPaneStateManager: ObservableObject {
         self.languageDetector = languageDetector
         self.editingStateManager = EditingStateManager(languageDetector: languageDetector)
         self.tabManager = EditorTabManager()
-        self.fileWatchCoordinator = FileWatchCoordinator()
     }
 
-    deinit {
-        Task { @MainActor [weak self] in
-            self?.stopWatchingAllFiles()
+    func reloadFileIfOpen(path: String) {
+        guard tabs.contains(where: { $0.filePath == path }) else { return }
+        if !FileManager.default.fileExists(atPath: path) {
+            closeTab(filePath: path)
+        } else {
+            reloadFileFromDisk(for: path)
+        }
+    }
+
+    private func reloadFileFromDisk(for path: String) {
+        guard let idx = tabs.firstIndex(where: { $0.filePath == path }) else { return }
+        guard !tabs[idx].isDirty else { return }
+        guard FileManager.default.fileExists(atPath: path) else { return }
+
+        let url = URL(fileURLWithPath: path)
+        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        guard !isDirectory else { return }
+
+        guard let newContent = readFileContent(from: url) else { return }
+        guard newContent != tabs[idx].content else { return }
+
+        tabs[idx].content = newContent
+        tabs[idx].isDirty = false
+
+        if activeTabID == tabs[idx].id {
+            isLoadingFile = true
+            defer { isLoadingFile = false }
+            editorContent = newContent
+            isDirty = false
+        }
+    }
+
+    private func readFileContent(from url: URL) -> String? {
+        switch fileSystemService.readFileResult(at: url) {
+        case .success(let content): return content
+        case .failure: return nil
         }
     }
 }

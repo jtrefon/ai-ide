@@ -43,6 +43,20 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
     private var itemCache: [URL: FileTreeItem] = [:]
     private var searchResults: [FileTreeItem] = []
 
+    private let cacheLimit = 5_000
+
+    private func evictIfNeeded() {
+        if childrenCache.count > cacheLimit { childrenCache.removeAll() }
+        if isDirectoryCache.count > cacheLimit { isDirectoryCache.removeAll() }
+        if itemCache.count > cacheLimit { itemCache.removeAll() }
+    }
+
+    func resetCache(for url: URL) {
+        let std = url.standardized
+        childrenCache.removeValue(forKey: std)
+        isDirectoryCache.removeValue(forKey: std)
+    }
+
     // Stable sentinels to avoid creating new objects in transition states
     private lazy var fallbackItem = FileTreeItem(url: NSURL(fileURLWithPath: "/dev/null"))
 
@@ -177,6 +191,7 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
             let isDir = (try? itemPath.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             isDirectoryCache[itemPath] = isDir
         }
+        evictIfNeeded()
         return resultItems
     }
 
@@ -227,5 +242,12 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
     func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
         guard !isSearching, let ftItem = item as? FileTreeItem, ftItem != fallbackItem else { return false }
         return isDirectory(ftItem.url)
+    }
+
+    nonisolated func outlineView(_ outlineView: NSOutlineView, writeItems items: [Any], to pasteboard: NSPasteboard) -> Bool {
+        guard let item = items.first as? FileTreeItem else { return false }
+        pasteboard.clearContents()
+        pasteboard.writeObjects([item.asURL as NSURL])
+        return true
     }
 }

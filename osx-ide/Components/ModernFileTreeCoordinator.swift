@@ -57,15 +57,25 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         outlineView.target = self
         outlineView.doubleAction = #selector(onDoubleClick)
 
+        outlineView.registerForDraggedTypes([.fileURL])
+        outlineView.setDraggingSourceOperationMask(.copy, forLocal: false)
+
         // Apply initial appearance
         appearanceCoordinator.applyAppearanceToVisibleRows()
+    }
+
+    private func selectedFileTreeItem() -> FileTreeItem? {
+        guard let outlineView else { return nil }
+        let row = outlineView.selectedRow
+        guard row >= 0 else { return nil }
+        return outlineView.item(atRow: row) as? FileTreeItem
     }
 
     private func clickedFileTreeItem() -> FileTreeItem? {
         guard let outlineView else { return nil }
         let row = outlineView.clickedRow
-        guard row >= 0 else { return nil }
-        return outlineView.item(atRow: row) as? FileTreeItem
+        if row >= 0 { return outlineView.item(atRow: row) as? FileTreeItem }
+        return selectedFileTreeItem()
     }
 
     private func directoryForCreate() -> URL? {
@@ -84,6 +94,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         parameters: UpdateParameters
     ) {
         var needsReload = false
+        var isStructuralRefresh = false
 
         if self.fontSize != parameters.fontSize || self.fontFamily != parameters.fontFamily {
             self.fontSize = parameters.fontSize
@@ -93,7 +104,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
 
         if self.refreshToken != parameters.refreshToken {
             self.refreshToken = parameters.refreshToken
-            dataSource.resetCaches()
+            isStructuralRefresh = true
             needsReload = true
         }
 
@@ -102,6 +113,7 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
             lastRootPath = rootPath
             lastRootURL = rootURL.standardizedFileURL
             dataSource.setRootURL(rootURL)
+            isStructuralRefresh = true
             needsReload = true
         }
 
@@ -118,17 +130,38 @@ final class ModernFileTreeCoordinator: NSObject, NSOutlineViewDelegate, NSMenuDe
         }
 
         if needsReload {
-            // Avoid triggering delegate callbacks that publish SwiftUI state during view updates.
+            let savedSelectedPath = configuration.selectedRelativePath.wrappedValue
+
+            if isStructuralRefresh {
+                dataSource.resetCaches()
+            }
+
             Task { @MainActor [weak self] in
+                guard let self else { return }
                 await Task.yield()
-                self?.outlineView?.reloadData()
-                self?.applyExpandedStateIfNeeded()
-                self?.applyAppearanceToVisibleRows()
+
+                if isStructuralRefresh {
+                    self.outlineView?.reloadData()
+                } else {
+                    self.outlineView?.reloadItem(nil, reloadChildren: true)
+                }
+
+                self.applyExpandedStateIfNeeded()
+                self.restoreSelection(savedSelectedPath)
+                self.applyAppearanceToVisibleRows()
             }
         } else {
             applyExpandedStateIfNeeded()
             applyAppearanceToVisibleRows()
         }
+    }
+
+    private func restoreSelection(_ path: String?) {
+        guard let path, let outlineView else { return }
+        guard let item = dataSource.canonicalUrl(forRelativePath: path) else { return }
+        let row = outlineView.row(forItem: item)
+        guard row >= 0 else { return }
+        outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
     }
 
     private func applyExpandedStateIfNeeded() {

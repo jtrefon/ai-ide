@@ -12,7 +12,6 @@ enum AccessibilityID {
     static let aiChatNewConversationButton = "AIChatNewConversationButton"
     static let aiChatProviderIssueBanner = "AIChatProviderIssueBanner"
 
-    static let terminalTextView = "TerminalTextView"
     static let fileExplorerOutline = "FileExplorerOutline"
     static let statusBar = "StatusBar"
     static let leftSidebarPanel = "LeftSidebarPanel"

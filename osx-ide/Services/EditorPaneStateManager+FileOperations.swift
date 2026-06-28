@@ -55,7 +55,6 @@ extension EditorPaneStateManager {
     }
 
     func newFile() {
-        stopWatchingAllFiles()
         tabs.removeAll()
         activeTabID = nil
         selectedRange = nil
@@ -149,7 +148,6 @@ extension EditorPaneStateManager {
         let newTab = EditorTab(filePath: selectedPath, language: language, content: content, isDirty: false)
         tabs.append(newTab)
         activeTabID = newTab.id
-        beginWatchingFile(at: selectedPath)
 
         selectedFile = selectedPath
         editorContent = content
