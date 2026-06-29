@@ -6,17 +6,17 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       DERIVED_DATA_PATH: ./.build-ci
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode 26.1.1
+      - name: Select Xcode 26.2
         uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd
         with:
-          xcode-version: "26.1.1"
+          xcode-version: "26.2"
 
       - name: Xcode Version
         run: xcodebuild -version
@@ -40,7 +40,7 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
 
   ui-unit:
-    runs-on: macos-15
+    runs-on: macos-26
     needs: build
     env:
       DERIVED_DATA_PATH: ./.build-ci
@@ -48,10 +48,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode 26.1.1
+      - name: Select Xcode 26.2
         uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd
         with:
-          xcode-version: "26.1.1"
+          xcode-version: "26.2"
 
       - name: Resolve Package Dependencies
         run: >
@@ -79,7 +79,7 @@ jobs:
           TEST_AFTER_BUILD=YES
 
   ui-smoke-uitest:
-    runs-on: macos-15
+    runs-on: macos-26
     needs: ui-unit
     env:
       DERIVED_DATA_PATH: ./.build-ci
@@ -87,10 +87,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode 26.1.1
+      - name: Select Xcode 26.2
         uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd
         with:
-          xcode-version: "26.1.1"
+          xcode-version: "26.2"
 
       - name: Enforce no XCTSkip in core UI tests
         run: |
@@ -123,7 +123,7 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
 
   ui-full-uitest:
-    runs-on: macos-15
+    runs-on: macos-26
     needs: ui-smoke-uitest
     env:
       DERIVED_DATA_PATH: ./.build-ci
@@ -131,10 +131,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode 26.1.1
+      - name: Select Xcode 26.2
         uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd
         with:
-          xcode-version: "26.1.1"
+          xcode-version: "26.2"
 
       - name: Resolve Package Dependencies
         run: >
