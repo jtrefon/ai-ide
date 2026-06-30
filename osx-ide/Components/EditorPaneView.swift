@@ -1,4 +1,5 @@
 import SwiftUI
+import Markdown
 
 struct EditorPaneView: View {
     let paneID: FileEditorStateManager.PaneID
@@ -14,6 +15,13 @@ struct EditorPaneView: View {
     let fontSize: Double
     let fontFamily: String
 
+    private var isMarkdownView: Bool {
+        guard pane.markdownViewMode else { return false }
+        guard let filePath = pane.selectedFile else { return false }
+        let ext = URL(fileURLWithPath: filePath).pathExtension.lowercased()
+        return ext == "md" || ext == "markdown"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             EditorTabBar(
@@ -24,42 +32,80 @@ struct EditorPaneView: View {
                 onFocus: onFocus
             )
 
-            HStack(spacing: 0) {
-                CodeEditorView(
-                    paneID: paneID,
-                    text: $pane.editorContent,
-                    filePath: pane.selectedFile,
-                    language: pane.editorLanguage,
-                    selectedRange: $pane.selectedRange,
-                    selectionContext: selectionContext,
-                    inlineCompletionEngine: inlineCompletionEngine,
-                    inlineCompletionDebugOverlayEnabled: inlineCompletionDebugOverlayEnabled,
-                    showLineNumbers: showLineNumbers,
-                    wordWrap: wordWrap,
+            if isMarkdownView {
+                markdownPreview
+            } else {
+                editorContent
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var markdownPreview: some View {
+        ScrollView {
+            MarkdownView(
+                markdown: pane.editorContent,
+                fontSize: fontSize,
+                fontFamily: fontFamily
+            ) { code, language in
+                CodePreviewView(
+                    code: code,
+                    language: language,
+                    title: language?.capitalized ?? "Code",
                     fontSize: fontSize,
                     fontFamily: fontFamily
                 )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(
-                    Rectangle()
-                        .stroke(isFocused ? Color.accentColor.opacity(0.35) : Color.clear, lineWidth: 2)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onFocus()
-                }
-
-                if minimapVisible {
-                    Divider()
-                    MinimapView(
-                        text: $pane.editorContent,
-                        selectedRange: $pane.selectedRange,
-                        fontFamily: fontFamily
-                    )
-                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .textBackgroundColor))
+            .padding(16)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .textBackgroundColor))
+        .overlay(
+            Rectangle()
+                .stroke(isFocused ? Color.accentColor.opacity(0.35) : Color.clear, lineWidth: 2)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onFocus()
+        }
+    }
+
+    private var editorContent: some View {
+        HStack(spacing: 0) {
+            CodeEditorView(
+                paneID: paneID,
+                text: $pane.editorContent,
+                filePath: pane.selectedFile,
+                language: pane.editorLanguage,
+                selectedRange: $pane.selectedRange,
+                selectionContext: selectionContext,
+                inlineCompletionEngine: inlineCompletionEngine,
+                inlineCompletionDebugOverlayEnabled: inlineCompletionDebugOverlayEnabled,
+                showLineNumbers: showLineNumbers,
+                wordWrap: wordWrap,
+                fontSize: fontSize,
+                fontFamily: fontFamily
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(
+                Rectangle()
+                    .stroke(isFocused ? Color.accentColor.opacity(0.35) : Color.clear, lineWidth: 2)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onFocus()
+            }
+
+            if minimapVisible {
+                Divider()
+                MinimapView(
+                    text: $pane.editorContent,
+                    selectedRange: $pane.selectedRange,
+                    fontFamily: fontFamily
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .textBackgroundColor))
     }
 }

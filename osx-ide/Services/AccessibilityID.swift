@@ -18,4 +18,5 @@ enum AccessibilityID {
     static let rightChatPanel = "RightChatPanel"
     static let sidebarResizeHandle = "SidebarResizeHandle"
     static let chatResizeHandle = "ChatResizeHandle"
+    static let terminalTextView = "TerminalTextView"
 }

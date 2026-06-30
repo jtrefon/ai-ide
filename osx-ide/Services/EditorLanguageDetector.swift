@@ -31,6 +31,8 @@ struct DefaultEditorLanguageDetector: EditorLanguageDetecting {
         "py": "python",
         "html": "html",
         "css": "css",
-        "json": "json"
+        "json": "json",
+        "md": "markdown",
+        "markdown": "markdown"
     ]
 }

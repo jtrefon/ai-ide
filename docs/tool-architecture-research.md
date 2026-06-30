@@ -29,6 +29,8 @@
 20. [Summary: Full Architecture Diagram](#20-summary-what-the-full-architecture-looks-like)
 21. [Three-Tier Agent Modes](#21-three-tier-agent-modes)
 22. [Patch/Diff Tool](#22-patchdiff-tool--high-performance-line-precise-file-editing)
+23. [Resolved Design Decisions](#23-resolved-design-decisions)
+24. [Appendix: Conversation Flow Reference](#24-appendix-conversation-flow-reference)
 
 ---
 
@@ -2579,3 +2581,583 @@ You have three editing tools:
 3. **Patch format** — Should we support unified diff format (model-friendly) as well as JSON hunks (tool-friendly)? Both?
 
 4. **Conflict detection** — If two hunks overlap in the same call: fail the whole call? Apply in order (last wins)? Merge?
+
+---
+
+## 23. Resolved Design Decisions
+
+This section captures decisions reached during the review sessions. Each decision includes rationale, code design, and system prompt implications.
+
+### 23.1 Read-Before-Write Enforcement
+
+**Decision: Enforce at the framework level (SandboxDecorator), not just system prompt.**
+
+System prompt instructions are advisory — models ignore them, forget them, or hallucinate their own rules. Framework enforcement is deterministic, testable, and consistent across all models.
+
+#### The Rule
+
+The SandboxDecorator enforces: **"A mutation tool (write, edit, delete) on an EXISTING file requires a prior read of that file in the same conversation turn."**
+
+```swift
+struct SandboxDecorator: ToolExecutor {
+    let inner: ToolExecutor
+    let accessLedger: ToolFileAccessLedger  // tracks reads per turn
+    
+    func execute(_ call: ToolCall, context: ExecContext) async throws -> ToolResult {
+        // Step 1: Is this a mutation on an existing file?
+        guard case let .writesFile(path) = call.sideEffect,
+              fileExists(path) else {
+            // New file creation — no read required
+            return try await inner.execute(call, context: context)
+        }
+        
+        // Step 2: Has the agent read this file this turn?
+        guard accessLedger.hasRead(path, turnId: context.turnId) else {
+            // Blocked! Return clear error + alternative
+            throw ToolError.enforced(
+                code: "MUTATION_WITHOUT_PRIOR_READ",
+                message: "You must read '\(path)' before modifying it. This ensures you don't accidentally overwrite content you haven't reviewed.",
+                alternatives: [
+                    ToolAlternative(
+                        description: "Read the file first",
+                        suggestion: "read_file(path: \"\(path)\")",
+                        toolName: "read_file",
+                        arguments: ["path": path]
+                    ),
+                    ToolAlternative(
+                        description: "Search for the file content via index",
+                        suggestion: "index_read_file(path: \"\(path)\")",
+                        toolName: "index_read_file",
+                        arguments: ["path": path]
+                    )
+                ]
+            )
+        }
+        
+        // Step 3: Allowed — proceed
+        return try await inner.execute(call, context: context)
+    }
+}
+```
+
+#### Exceptions
+
+| Scenario | Allowed Without Prior Read? | Rationale |
+|----------|---------------------------|-----------|
+| Creating a **new** file | ✅ Yes | File doesn't exist, nothing to overwrite |
+| Writing to a file the agent **created** this turn | ✅ Yes | Agent just created it, knows its content |
+| Agent mode (full autonomy) | ✅ Yes | Orchestrator manages context at session level, per-turn reads are too restrictive |
+| `replace_in_file` on existing file | ❌ No | Must read first to know what's being replaced |
+| `delete_file` on existing file | ❌ No | Must read first to know what's being deleted |
+
+#### Why Framework Enforcement Beats System Prompt
+
+| Criteria | System Prompt Only | Framework Enforcement |
+|----------|-------------------|---------------------|
+| Consistency across models | Varies (some follow, some don't) | 100% (sandbox always checks) |
+| Testability | Can't test prompt adherence | Can test with mock ledger |
+| Error quality | Model generates its own error (varies) | Sandbox returns structured error + alternatives |
+| Agent recovery | Model must figure out what to do | Error tells agent EXACTLY what to do ("read_file first") |
+| Bypass risk | Model can ignore and write anyway | Impossible to bypass (sandbox is in the executor chain) |
+
+#### System Prompt Integration
+
+The system prompt explains the rule so the model can proactively read files before writing:
+
+```
+## File Mutation Rules
+
+Before modifying or deleting an EXISTING file, you MUST read it first.
+Use read_file or index_read_file to review the file content, then apply your changes.
+
+This rule is ENFORCED by the sandbox. If you attempt to modify a file you haven't
+read in this turn, the tool will return:
+
+status: error
+error.code: MUTATION_WITHOUT_PRIOR_READ
+
+When you see this error, read the file first, then retry.
+
+Files you CREATE (that don't exist yet) do not require a prior read.
+```
+
+#### Resolved To-Do
+
+| Item | Status |
+|------|--------|
+| Implement in SandboxDecorator | ⬜ Phase 1 |
+| Create ToolFileAccessLedger v2 (turn-aware) | ⬜ Phase 1 |
+| Document in system prompt template | ⬜ Phase 1 |
+| Test with mock ledger + mock tools | ⬜ Phase 1 |
+
+---
+
+### 23.2 Patch Tool Implementation: Phased Approach
+
+**Decision: Three-phase implementation, starting simple.**
+
+The patch tool should NOT start with mmap. Start with a clean `Data`-based implementation, then optimize:
+
+#### Phase 1 (Current priority): `Data`-based patch with line-numbered hunks
+
+```swift
+func applyPatch(path: String, hunks: [Hunk]) async throws -> PatchResult {
+    // 1. Read file content as Data (not String — avoid encoding overhead)
+    let data = try await fileSystem.readData(at: URL(fileURLWithPath: path))
+    
+    // 2. Split into lines (Data.split(separator: 0x0A) — fast, no String allocation)
+    var lines = data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: false)
+    
+    // 3. Sort hunks descending by start_line (safety: line numbers shift on insert)
+    let sortedHunks = hunks.sorted { $0.startLine > $1.startLine }
+    
+    // 4. Apply each hunk
+    for hunk in sortedHunks {
+        let idx = hunk.startLine - 1  // convert to 0-based
+        guard idx < lines.count else {
+            return PatchResult(status: .error, message: "Hunk start_line \(hunk.startLine) exceeds file line count \(lines.count)")
+        }
+        
+        // Count added/removed lines for the hunk
+        var added = 0
+        var removed = 0
+        let newLines: [Data] = hunk.lines.map { line in
+            if line.hasPrefix("+") { added += 1; return Data(line.dropFirst().utf8) }
+            if line.hasPrefix("-") { removed += 1; return nil }  // skip
+            if line.hasPrefix(" ") { return Data(line.dropFirst().utf8) }  // context
+            return Data(line.utf8)  // direct replacement
+        }.compactMap { $0 }
+        
+        // Replace the range
+        let replaceCount = removed > 0 ? removed : (hunk.lines.count - added)
+        lines.replaceSubrange(idx..<min(idx + replaceCount, lines.count), with: newLines)
+    }
+    
+    // 5. Write back (atomic)
+    let newData = lines.joined(separator: Data([UInt8(ascii: "\n")]))
+    try await fileSystem.atomicWrite(data: newData, to: URL(fileURLWithPath: path))
+    
+    return PatchResult(status: .success, linesChanged: lines.count, checksum: newData.sha256)
+}
+```
+
+**Performance**: ~100μs per hunk for the Data operations + 1 file read + 1 file write. No String allocation overhead. Still O(n) for reading the file, but n is the file size not the hunk size.
+
+**Why start here instead of mmap?**
+- Simpler to implement, test, and debug
+- Good enough for 100s of concurrent edits (each edit reads the file, applies hunks, writes back)
+- The atomic write via `rename()` prevents corruption
+- We can optimize to mmap in Phase 2 if profiling shows it's needed
+
+#### Phase 2 (Next): FileIOManager actor with mmap cache
+
+```swift
+/// Actor that manages file I/O with an LRU mmap cache.
+/// All file operations go through this actor, ensuring serialized access per file
+/// but concurrent access across files (actor isolation handles this automatically).
+actor FileIOManager {
+    private var cache: [String: MappedFile] = [:]
+    private var accessOrder: [String] = []
+    private let maxMappedBytes: Int
+    
+    /// Read specific lines from a file (no full-file load)
+    func readLines(path: String, range: Range<Int>) async throws -> [String] {
+        let mapped = try await getOrMap(path: path)
+        return mapped.lines[range]
+    }
+    
+    /// Apply a patch to a file (works on the mmap'd copy, writes back atomically)
+    func applyPatch(path: String, hunks: [Hunk]) async throws -> PatchResult {
+        let mapped = try await getOrMap(path: path)
+        let result = try mapped.apply(hunks: hunks)
+        try await atomicWrite(data: result.data, to: path)
+        // Invalidate cache entry so next read sees the new version
+        cache.removeValue(forKey: path)
+        return result
+    }
+    
+    /// Evict a file from cache (e.g., after git commit)
+    func evict(path: String) {
+        cache.removeValue(forKey: path)
+    }
+    
+    private func getOrMap(path: String) async throws -> MappedFile {
+        if let existing = cache[path] { return existing }
+        let mapped = try MappedFile(path: path)
+        cache[path] = mapped
+        accessOrder.append(path)
+        enforceBudget()
+        return mapped
+    }
+    
+    private func enforceBudget() {
+        while cache.values.reduce(0, { $0 + $1.size }) > maxMappedBytes {
+            let lru = accessOrder.removeFirst()
+            cache.removeValue(forKey: lru)
+        }
+    }
+}
+```
+
+**When Phase 2 matters**: When the same file is read multiple times in a session (common pattern: read, edit, read again to verify). The mmap cache keeps the file hot.
+
+#### Phase 3 (Future): XPC service
+
+If profiling shows that file I/O is a bottleneck AND the actor-based approach isn't enough, move file operations to an XPC service:
+
+```
+Process boundary → eliminates I/O pressure on the main process
+Independent GCD queue → I/O can be tuned separately
+Crash isolation → file I/O crash doesn't take down the IDE
+```
+
+**Likelihood of needing Phase 3**: Low. Swift actors with async file I/O are well-optimized on macOS. Phase 2 (mmap cache) should handle 1000s of concurrent edits on commodity hardware.
+
+#### Summary
+
+| Phase | What | When |
+|-------|------|------|
+| Phase 1 | `Data`-based patch with line-numbered hunks | Now (current implementation target) |
+| Phase 2 | `FileIOManager` actor + mmap cache | After Phase 1 ships, if profiling shows need |
+| Phase 3 | XPC service | Only if actor approach becomes a bottleneck |
+
+---
+
+### 23.3 Tool Chaining: Deferred
+
+**Decision: Do NOT implement tool chaining. The DAG scheduler (section 15) solves the same problem more cleanly.**
+
+#### When Tool Chaining Would Make Sense
+
+Tool chaining (one tool calling another) solves:
+
+| Problem | Example |
+|---------|---------|
+| Read-after-search | `search_project` reads top results automatically |
+| Read-after-grep | `grep` reads matching lines with context |
+| Write-and-verify | `write_file` reads back to confirm |
+| Multi-batch | Write file, then run linter |
+
+#### Why the DAG Scheduler is Better
+
+The model naturally issues tool calls in dependency order:
+```
+call_1: search_project("NetworkManager")
+call_2: read_file(path: "src/NetworkManager.swift")
+```
+
+The DAG scheduler detects that `call_2`'s path matches `call_1`'s results and schedules them accordingly:
+- `call_1` runs first
+- `call_2` runs after (but doesn't wait for `call_1` to finish — it waits for the path to be resolved)
+- If the model had issued `call_3: read_file(path: "src/Utils.swift")`, it would run in parallel with `call_1`
+
+This achieves the SAME performance benefit as tool chaining (overlapping I/O) without:
+- Adding complexity to tool implementations
+- Creating error-handling ambiguity (who handles the chained tool's error?)
+- Blurring the sandbox boundary (should a filesystem tool be able to call a network tool?)
+- Hiding tool calls from the model's awareness
+
+#### When to Revisit
+
+Revisit tool chaining if analysis shows BOTH:
+1. The model frequently issues search→read or grep→read patterns (wasting tool call slots)
+2. The DAG scheduler is not providing sufficient parallelization
+
+In that case, add a **declarative `autoRead` parameter** to search tools rather than full tool chaining:
+
+```json
+{
+  "name": "search_project",
+  "parameters": {
+    "query": "...",
+    "auto_read_top": {
+      "type": "integer",
+      "description": "If set, automatically read the top N matching files and include their content",
+      "optional": true
+    }
+  }
+}
+```
+
+This is a lightweight version of tool chaining — just the search→read pattern — without building a general-purpose chaining mechanism.
+
+---
+
+### 23.4 Plugin / Extensibility Architecture
+
+**Decision: Design for plugins (architecture should support it), but only implement built-in tools for v1. The plugin API is a v2 concern.**
+
+#### The Two-Tier Architecture
+
+```
+Tier 1 — Built-in Tools
+  Registered at compile time via ToolRegistry
+  Full access to internal APIs (FileSystemService, CodebaseIndex, etc.)
+  Sandboxed by the app's sandbox (standard macOS sandbox)
+
+Tier 2 — Plugin Tools (FUTURE)
+  Loaded at runtime from ~/.osx-ide/plugins/ or project .osx-ide/plugins/
+  Sandboxed additionally: capped memory, no terminal unless declared, no network unless declared
+  No access to internal APIs — only public PluginTool protocol
+  Format: .swift files compiled on first load, OR pre-compiled .swiftmodule
+```
+
+#### Plugin Protocol (Design for v1, Implement for v2)
+
+```swift
+/// Public protocol for third-party plugin tools.
+/// Plugin tools have LIMITED access compared to built-in tools.
+public protocol PluginTool: Sendable {
+    static var pluginName: String { get }
+    static var pluginVersion: String { get }
+    static var pluginAuthor: String { get }
+    
+    /// Tool definitions this plugin provides
+    static var toolDefinitions: [PluginToolDefinition] { get }
+    
+    /// Initialize with the plugin context
+    init(context: PluginContext) throws
+}
+
+public struct PluginToolDefinition: Sendable {
+    public let name: String
+    public let description: String
+    public let parameters: JSONSchema
+    public let capabilities: Set<ToolCapability>
+    public let sideEffects: Set<ToolSideEffect>
+    
+    /// Execute the tool
+    public let execute: @Sendable (PluginExecutionRequest) async throws -> PluginExecutionResult
+}
+
+public struct PluginContext: Sendable {
+    /// Sandboxed file access — only within allowed paths (project root or explicit dirs)
+    public let fileSystem: SandboxedFileSystem
+    
+    /// Network access — only to declared domains
+    public let network: SandboxedNetwork
+    
+    /// Terminal access — only if declared in manifest and user-approved
+    public let terminal: SandboxedTerminal?
+    
+    /// Logger (writes to app's log stream, not arbitrary files)
+    public let logger: PluginLogger
+    
+    /// Plugin data directory (~/.osx-ide/plugins/<name>/)
+    public let dataDirectory: URL
+}
+
+public struct PluginExecutionRequest: Sendable {
+    public let toolName: String
+    public let arguments: [String: PluginValue]
+    public let projectRoot: URL
+    public let conversationId: String
+    public let turnId: String
+}
+
+public struct PluginExecutionResult: Sendable {
+    /// Use the SAME ToolFeedback format as built-in tools!
+    public let feedback: ToolFeedback
+}
+```
+
+#### Why This Design is Future-Proof
+
+1. **`ToolRegistry.register()` already supports runtime registration.** Plugins just call `registry.register(definition)` at load time. No new infrastructure needed.
+
+2. **The Decorator chain applies uniformly.** The same `SandboxDecorator`, `TelemetryDecorator`, etc. wrap plugin tools. The sandbox is just stricter (PluginSandboxDecorator).
+
+3. **The feedback format is identical.** Plugin tools return `ToolFeedback` — the model treats them identically to built-in tools.
+
+4. **The DAG scheduler doesn't distinguish.** Plugin tools participate in DAG scheduling, parallel execution, etc. like any other tool.
+
+5. **The model adapter doesn't care.** Plugin tools produce the same `ToolDefinition` structure, so `OpenRouterToolAdapter` and `GemmaToolAdapter` work unchanged.
+
+#### Manifest Format (Future)
+
+```json
+{
+  "name": "my-plugin",
+  "version": "1.0.0",
+  "author": "Jane Doe",
+  "tools": [
+    {
+      "name": "my_custom_tool",
+      "description": "Does something useful",
+      "capabilities": ["fileRead"],
+      "sideEffects": ["readsFile"],
+      "networkAccess": false,
+      "terminalAccess": false
+    }
+  ]
+}
+```
+
+#### When to Implement
+
+| Phase | What | When |
+|-------|------|------|
+| v1 (now) | Design the PluginTool protocol (in docs) | ✅ Done (this section) |
+| v2 | Implement plugin loader, compiler, sandbox | After all built-in tools migrate to new architecture |
+| v3 | Plugin marketplace / discovery | If demand exists |
+
+The key is that the architecture DOESN'T PREVENT plugins. The `ToolRegistry` is designed for runtime registration. The decorator chain can wrap any tool. We just don't build the plugin loading machinery until v2.
+
+---
+
+### 23.5 Additional Decisions Reached During Review
+
+#### Read-Before-Write: Coder Mode Only
+
+The read-before-write enforcement applies to **Coder mode only**, not Agent mode:
+
+| Mode | Read-Before-Write | Rationale |
+|------|-------------------|-----------|
+| Chat | N/A (no tools) | — |
+| Coder | ✅ Enforced | Safety net for focused tasks |
+| Agent | ❌ Not enforced | Orchestrator manages context at higher level |
+
+In Agent mode, the orchestration layer ensures sub-agents have the context they need. Adding per-tool read-before-write enforcement would be too restrictive for multi-step planning.
+
+#### Tool File Access Ledger v2: Turn-Aware
+
+The existing `ToolFileAccessLedger` needs to be turn-aware:
+
+```swift
+actor ToolFileAccessLedger {
+    /// Track reads per conversation turn
+    private var readsByTurn: [String: Set<String>] = [:]
+    
+    /// Start a new turn (called by orchestrator before model invocation)
+    func startTurn(_ turnId: String) {
+        readsByTurn[turnId] = []
+    }
+    
+    /// Record a read
+    func recordRead(path: String, turnId: String) {
+        readsByTurn[turnId, default: []].insert(path)
+    }
+    
+    /// Check if a path was read this turn
+    func hasRead(path: String, turnId: String) -> Bool {
+        readsByTurn[turnId]?.contains(path) ?? false
+    }
+    
+    /// End a turn (cleanup)
+    func endTurn(_ turnId: String) {
+        readsByTurn.removeValue(forKey: turnId)
+    }
+}
+```
+
+#### Mode Configuration: Final Structure
+
+```swift
+enum AgentMode: String, Sendable, Codable {
+    case chat   // Conversation — no tools, any model
+    case coder  // DEFAULT — focused tasks with tools, single turn
+    case agent  // Opt-in — full autonomy, sub-agents, DAG, background jobs
+    
+    /// Whether this mode is available for the given model
+    func isAvailableForModel(_ model: ModelTier) -> Bool {
+        switch self {
+        case .chat:  return true
+        case .coder: return model.supportsToolCalling
+        case .agent: return model == .cloudPowerful
+        }
+    }
+}
+```
+
+## 24. Appendix: Conversation Flow Reference
+
+### Full Agent Mode Flow (End-to-End)
+
+This diagram shows how a "Build me a CRM" request flows through the entire system:
+
+```
+User: "Build me a REST API client for our CRM"
+  ↓
+[Intent Classification] → "project" intent → Agent mode suggested
+  ↓
+[Mode Escalation] → Agent mode confirmed (user sees cost badge)
+  ↓
+[Orchestrator: Strategic Planning]
+  ├── Analyze codebase (via search_project + index tools)
+  ├── Decompose into sub-tasks
+  └── Create execution plan
+  ↓
+[Orchestrator → User]: "I'll work in 3 phases:
+   1. Analyze existing networking layer (~1 min)
+   2. Design API schema (~30s)
+   3. Implement client (~3 min)"
+  ↓
+[Git: Create branch agent/session-abc123]
+  ↓
+[Orchestrator: Spawn Sub-Agent 1]
+  └── Sub-Agent 1: "Analyze existing networking layer"
+      ├── Branch: agent/session-abc123/sub-task-1
+      ├── Tools: search_project, read_file, grep
+      ├── Read-before-write: NOT enforced (Agent mode)
+      ├── Status: running
+      └── Progress stream → Orchestrator
+  ↓
+[Orchestrator: Spawn Sub-Agent 2]
+  └── Sub-Agent 2: "Design API schema" (BLOCKED — needs Sub-Agent 1 results)
+      └── Status: awaiting dependency
+  ↓
+[Sub-Agent 1 → Orchestrator]: milestoneReached("Found 3 networking files")
+  ↓
+[Orchestrator → User UI]: "🔍 Analyzing networking layer... found 3 files"
+  ↓
+[Sub-Agent 1 → Orchestrator]: completed(summary: "URLSession with custom delegate")
+  ↓
+[Git: Commit — "feat: networking layer analysis complete"]
+  ↓
+[Orchestrator → Sub-Agent 2]: continueWith(context: "Use URLSession, not Alamofire")
+  ↓
+[Sub-Agent 2: UNBLOCKED]
+  ├── Designs API schema
+  └── → Orchestrator: milestoneReached("12 endpoints designed")
+  ↓
+[Sub-Agent 2 → Orchestrator]: blocked(reason: "REST vs GraphQL?")
+  ↓
+[Orchestrator → User]: "Sub-agent needs your input: REST or GraphQL?"
+  └── User selects dropdown: "REST with versioning"
+  ↓
+[Orchestrator → Sub-Agent 2]: userResponse("REST with /v1/ prefix")
+  ↓
+[Sub-Agent 2: CONTINUES]
+  └── → Orchestrator: completed(summary: "Schema ready, 12 endpoints")
+  ↓
+[Git: Commit — "feat: API schema designed"]
+  ↓
+[Orchestrator: Spawn Sub-Agent 3]
+  └── Sub-Agent 3: "Implement API client"
+      ├── Branch: agent/session-abc123/sub-task-3
+      ├── Uses patch_file for bulk edits (parallel hunks)
+      └── → Orchestrator: completed(summary: "3 files created, 2 modified")
+  ↓
+[Git: Commit — "feat: API client implemented"]
+  ↓
+[Orchestrator: Merge all sub-agent branches]
+  ├── git merge sub-task-1
+  ├── git merge sub-task-2
+  └── git merge sub-task-3
+  ↓
+[Orchestrator: QA Review]
+  ├── QAToolOutputReview: verify all tool results
+  └── QAQualityReview: verify against requirements
+  ↓
+[Orchestrator → User]:
+  "✅ CRM API client built.
+   - 3 new files, 245 lines added
+   - 2 existing files modified
+   - auth, rate-limiting, logging included
+   
+   Changes are on branch agent/session-abc123.
+   Run `git diff main` to review, or ask me to make adjustments."
+  ↓
+[Git: Create summary commit on branch]
+  └── Ready for squash-merge into main when user approves
+```

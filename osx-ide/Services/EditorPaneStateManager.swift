@@ -12,6 +12,11 @@ final class EditorPaneStateManager: ObservableObject {
     @Published var isDirty: Bool = false
     @Published var selectedRange: NSRange?
     @Published var isLoadingFile: Bool = false
+    @Published var markdownViewMode: Bool {
+        didSet {
+            UserDefaults.standard.set(markdownViewMode, forKey: AppConstants.Storage.markdownViewModeKey)
+        }
+    }
 
     let fileEditorService: any FileEditorServiceProtocol
     let fileDialogService: any FileDialogServiceProtocol
@@ -34,6 +39,16 @@ final class EditorPaneStateManager: ObservableObject {
         self.languageDetector = languageDetector
         self.editingStateManager = EditingStateManager(languageDetector: languageDetector)
         self.tabManager = EditorTabManager()
+
+        if UserDefaults.standard.object(forKey: AppConstants.Storage.markdownViewModeKey) != nil {
+            self.markdownViewMode = UserDefaults.standard.bool(forKey: AppConstants.Storage.markdownViewModeKey)
+        } else {
+            self.markdownViewMode = true
+        }
+    }
+
+    func toggleMarkdownViewMode() {
+        markdownViewMode.toggle()
     }
 
     func reloadFileIfOpen(path: String) {

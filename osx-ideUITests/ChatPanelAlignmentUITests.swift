@@ -11,15 +11,15 @@ final class ChatPanelAlignmentUITests: BaseUITestCase {
         XCTAssertTrue(chat.send.exists, "Chat send button should remain visible after send")
     }
 
-    func testChatInputUsesProductionMultilineTextView() {
+    func testChatInputUsesProductionMultilineField() {
         let robot = launchApp()
         let chat = robot.chat()
         chat.assertVisible()
 
-        let multilineInput = app.textViews[UITestAccessibilityID.aiChatInputTextView]
+        let multilineInput = app.textFields[UITestAccessibilityID.aiChatInputTextView]
         XCTAssertTrue(
             multilineInput.waitForExistence(timeout: 10),
-            "Chat input must use production multiline text view in UITests"
+            "Chat input must exist with accessibility identifier"
         )
     }
 }

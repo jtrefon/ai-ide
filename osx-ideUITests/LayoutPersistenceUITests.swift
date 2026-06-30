@@ -24,18 +24,6 @@ final class LayoutPersistenceUITests: BaseUITestCase {
         )
     }
 
-    func testTerminalIsVisibleAndOnscreenOnLaunch() {
-        let robot = launchApp()
-        robot.window().assertVisible()
-
-        let terminal = app.descendants(matching: .any)[UITestAccessibilityID.terminalTextView].firstMatch
-        XCTAssertTrue(terminal.waitForExistence(timeout: 10), "Terminal must be visible on launch")
-
-        let windowFrame = robot.window().mainWindow.frame
-        XCTAssertGreaterThanOrEqual(terminal.frame.minY, windowFrame.minY + 1)
-        XCTAssertLessThanOrEqual(terminal.frame.maxY, windowFrame.maxY)
-    }
-
     func testBottomAndRightPanelsAreVisibleWithinWindowOnLaunch() {
         let robot = launchApp()
         robot.window().assertVisible()

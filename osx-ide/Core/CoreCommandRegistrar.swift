@@ -255,6 +255,10 @@ struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
             context.ui.toggleMinimap()
         }
 
+        commandRegistry.register(command: .viewToggleMarkdownPreview) { _ in
+            context.fileEditor.focusedPaneState.toggleMarkdownViewMode()
+        }
+
         commandRegistry.register(command: .searchFindInWorkspace) { _ in
             context.isGlobalSearchPresented = true
             context.isQuickOpenPresented = false

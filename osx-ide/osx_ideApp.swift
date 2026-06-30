@@ -170,6 +170,14 @@ struct OSXIDEApp: App {
                     set: { appState.showHiddenFilesInFileTree = $0 }
                 ))
                 .keyboardShortcut(".", modifiers: [.command, .shift])
+
+                Divider()
+
+                Toggle(localized("menu.toggle.markdown_view"), isOn: Binding(
+                    get: { appState.fileEditor.focusedPaneState.markdownViewMode },
+                    set: { appState.fileEditor.focusedPaneState.markdownViewMode = $0 }
+                ))
+                .keyboardShortcut("m", modifiers: [.command, .shift])
             }
 
             CommandMenu(localized("menu.tools")) {

@@ -30,6 +30,7 @@ struct NativeTerminalView: View {
             onClear: clearPublisher.eraseToAnyPublisher()
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier(AccessibilityID.terminalTextView)
         .onAppear {
             _ = eventBus.subscribe(to: TerminalClearRequestedEvent.self) { _ in
                 clearPublisher.send()

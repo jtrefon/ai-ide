@@ -39,6 +39,7 @@ extension CommandID {
     public static let editorAIInlineQuestion: CommandID = "editor.aiInlineQuestion"
 
     public static let viewToggleMinimap: CommandID = "view.toggleMinimap"
+    public static let viewToggleMarkdownPreview: CommandID = "view.toggleMarkdownPreview"
 
     public static let editorGoToDefinition: CommandID = "editor.goToDefinition"
     public static let editorFindReferences: CommandID = "editor.findReferences"

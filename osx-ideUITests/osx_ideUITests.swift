@@ -215,33 +215,39 @@ struct SettingsRobot {
     let app: XCUIApplication
 
     func openSettings() {
-        app.typeKey(",", modifierFlags: [.command])
-        if app.windows.count < 2 {
-            let appMenu = app.menuBars.menuBarItems["osx-ide"]
-            if appMenu.exists {
-                appMenu.click()
-                if app.menuItems["Settings…"].exists {
-                    app.menuItems["Settings…"].click()
-                } else if app.menuItems["Settings..."].exists {
-                    app.menuItems["Settings..."].click()
-                }
-            }
+        // Navigate via menu bar: App Menu > Settings
+        let appMenuName = ProcessInfo.processInfo.processName
+        let appMenu = app.menuBars.menuBarItems[appMenuName]
+        guard appMenu.waitForExistence(timeout: 5) else {
+            // Last resort: try keyboard shortcut
+            app.typeKey(",", modifierFlags: [.command])
+            return
+        }
+        appMenu.click()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+
+        let settingsItem = app.menuItems.matching(NSPredicate(format: "title BEGINSWITH 'Settings'")).firstMatch
+        if settingsItem.waitForExistence(timeout: 3) {
+            settingsItem.click()
+        } else {
+            // Fallback: try keyboard shortcut
+            app.typeKey(",", modifierFlags: [.command])
         }
     }
 
-    func assertWordWrapToggleVisible() {
+    func assertWordWrapToggleVisible(timeout: TimeInterval = 4) {
         let toggle = app.switches["Settings.WordWrap"]
-        if toggle.waitForExistence(timeout: 3) {
+        if toggle.waitForExistence(timeout: timeout) {
             return
         }
 
         let checkbox = app.checkBoxes["Settings.WordWrap"]
-        if checkbox.waitForExistence(timeout: 3) {
+        if checkbox.waitForExistence(timeout: timeout) {
             return
         }
 
         let any = app.descendants(matching: .any)["Settings.WordWrap"]
-        XCTAssertTrue(any.waitForExistence(timeout: 4), "Word wrap toggle must exist")
+        XCTAssertTrue(any.waitForExistence(timeout: timeout), "Word wrap toggle must exist")
     }
 }
 
