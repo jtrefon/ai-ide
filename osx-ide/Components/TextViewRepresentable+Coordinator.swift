@@ -58,7 +58,9 @@ extension TextViewRepresentable {
                 parent.selectedRange = range
                 lastKnownBufferText = text
                 updateSelectionContext(from: textView)
-                scheduleAutomaticInlineCompletionIfNeeded(for: textView)
+                if !isProgrammaticUpdate {
+                    scheduleAutomaticInlineCompletionIfNeeded(for: textView)
+                }
 
             case .selectionDidChange(let text, let range, let isProgrammatic):
                 parent.selectedRange = range
@@ -175,10 +177,10 @@ extension TextViewRepresentable {
                 let replacement = open + selectedText + close
 
                 isProgrammaticUpdate = true
-                defer { isProgrammaticUpdate = false }
-
                 textView.insertText(replacement, replacementRange: selected)
                 textView.setSelectedRange(NSRange(location: selected.location + 1 + selected.length, length: 0))
+                isProgrammaticUpdate = false
+                mutationSubject.send(.textDidChange(textView.string, textView.selectedRange))
                 return false
             }
 
@@ -187,10 +189,10 @@ extension TextViewRepresentable {
             }
 
             isProgrammaticUpdate = true
-            defer { isProgrammaticUpdate = false }
-
             textView.insertText(open + close, replacementRange: affectedCharRange)
             textView.setSelectedRange(NSRange(location: affectedCharRange.location + 1, length: 0))
+            isProgrammaticUpdate = false
+            mutationSubject.send(.textDidChange(textView.string, textView.selectedRange))
             return false
         }
 
@@ -232,11 +234,11 @@ extension TextViewRepresentable {
                 let insertion = "\n" + innerIndent + "\n" + baseIndent
 
                 isProgrammaticUpdate = true
-                defer { isProgrammaticUpdate = false }
-
                 textView.insertText(insertion, replacementRange: NSRange(location: safeCursor, length: 0))
                 let newCursor = safeCursor + 1 + (innerIndent as NSString).length
                 textView.setSelectedRange(NSRange(location: newCursor, length: 0))
+                isProgrammaticUpdate = false
+                mutationSubject.send(.textDidChange(textView.string, textView.selectedRange))
                 return false
             }
 
@@ -250,11 +252,11 @@ extension TextViewRepresentable {
             let insertion = "\n" + targetIndent
 
             isProgrammaticUpdate = true
-            defer { isProgrammaticUpdate = false }
-
             textView.insertText(insertion, replacementRange: NSRange(location: safeCursor, length: 0))
             let newCursor = safeCursor + 1 + (targetIndent as NSString).length
             textView.setSelectedRange(NSRange(location: newCursor, length: 0))
+            isProgrammaticUpdate = false
+            mutationSubject.send(.textDidChange(textView.string, textView.selectedRange))
             return false
         }
 

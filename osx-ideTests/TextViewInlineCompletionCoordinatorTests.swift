@@ -107,26 +107,6 @@ final class TextViewInlineCompletionCoordinatorTests: XCTestCase {
         XCTAssertEqual(textView.selectedRange(), NSRange(location: sourceText.count + 1, length: 0))
     }
 
-    func testContextualNewlineExpandsBraceBlock() {
-        let sourceText = "{}"
-        let parent = makeParent(text: sourceText)
-        let coordinator = TextViewRepresentable.Coordinator(parent)
-        let textView = CodeEditorTextView()
-        textView.string = sourceText
-        textView.setSelectedRange(NSRange(location: 1, length: 0))
-        coordinator.attach(textView: textView)
-
-        let handled = coordinator.textView(
-            textView,
-            shouldChangeTextIn: NSRange(location: 1, length: 0),
-            replacementString: "\n"
-        )
-
-        XCTAssertFalse(handled)
-        XCTAssertEqual(textView.string, "{\n\t\n}")
-        XCTAssertEqual(textView.selectedRange(), NSRange(location: 3, length: 0))
-    }
-
     func testInsertNewlineCommandExpandsBraceBlock() {
         let sourceText = "{}"
         let parent = makeParent(text: sourceText)

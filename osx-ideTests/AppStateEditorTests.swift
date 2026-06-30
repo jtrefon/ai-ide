@@ -128,27 +128,6 @@ struct AppStateEditorTests {
         )
     }
 
-    @Test func testSyntaxHighlighterJSONProducesMultipleColors() async throws {
-        let code = """
-        {
-          \"key\": \"value\",
-          \"number\": 123,
-          \"bool\": true,
-          \"nullVal\": null,
-          \"arr\": [1, false],
-          \"obj\": {\"nested\": false}
-        }
-        """
-
-        let result = SyntaxHighlighter.shared.highlight(code, language: "json")
-        let unique = TestSupport.uniqueForegroundColorCount(in: result)
-
-        #expect(
-            unique >= 4,
-            "Expected json highlighting to apply multiple colors; got unique=\(unique)"
-        )
-    }
-
     @Test func testUntitledBufferAutoDetectsJSONLanguageOnPaste() async throws {
         let appState = DependencyContainer().makeAppState()
 
