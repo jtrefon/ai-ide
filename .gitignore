@@ -39,7 +39,6 @@ build/ModuleCache.noindex/
 build/SDKStatCaches.noindex/
 
 # Swift Package Manager
-Packages/
 build/SourcePackages/
 .swiftpm/
 
