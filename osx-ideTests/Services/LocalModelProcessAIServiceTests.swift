@@ -134,7 +134,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
 
     func testSendMessageBuildsPromptAndPassesContextLengthToGenerator() async throws {
         await LocalModelInferenceOverrides.shared.clear()
-        let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
+        let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
         let selectionStore = await makeSelectionStore(selectedModelId: selectedModelId)
 
         guard let model = LocalModelCatalog.model(id: selectedModelId) else {
@@ -180,10 +180,11 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
         XCTAssertEqual(capturedModelId, selectedModelId)
         XCTAssertEqual(capturedDirectory, modelDirectory)
         XCTAssertEqual(capturedRunId, runId)
-        XCTAssertEqual(capturedInferenceConfiguration?.contextLength, min(LocalModelFileStore.contextLength(for: model), 2048))
+        XCTAssertEqual(capturedInferenceConfiguration?.contextLength, LocalModelFileStore.contextLength(for: model))
         XCTAssertEqual(capturedInferenceConfiguration?.maxKVSize, capturedInferenceConfiguration?.contextLength)
-        XCTAssertEqual(capturedInferenceConfiguration?.maxOutputTokens, min(768, max(384, (capturedInferenceConfiguration?.contextLength ?? 0) / 3)))
-        XCTAssertEqual(capturedInferenceConfiguration?.prefillStepSize, 512)
+        let expectedMaxOutput = min(2048, max(768, (capturedInferenceConfiguration?.contextLength ?? 0) / 3))
+        XCTAssertEqual(capturedInferenceConfiguration?.maxOutputTokens, expectedMaxOutput)
+        XCTAssertEqual(capturedInferenceConfiguration?.prefillStepSize, 128)
         
         // Verify tools were passed
         XCTAssertNotNil(capturedTools)
@@ -205,7 +206,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
 
     func testSendMessagePrefersCustomSystemPromptFromSettings() async throws {
         await LocalModelInferenceOverrides.shared.clear()
-        let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
+        let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
         let selectionStore = await makeSelectionStore(selectedModelId: selectedModelId)
 
         let modelDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -245,7 +246,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
 
     func testSendMessageDoesNotInjectReasoningPromptDuringToolLoop() async throws {
         await LocalModelInferenceOverrides.shared.clear()
-        let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
+        let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
         let selectionStore = LocalModelSelectionStore()
         await selectionStore.setSelectedModelId(selectedModelId)
 
@@ -280,7 +281,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
 
     func testSendMessageReturnsToolCallsFromGenerator() async throws {
         await LocalModelInferenceOverrides.shared.clear()
-        let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
+        let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
         let selectionStore = LocalModelSelectionStore()
         await selectionStore.setSelectedModelId(selectedModelId)
 
@@ -490,7 +491,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             }
         }
 
-        let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
+        let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
         let selectionStore = await makeSelectionStore(selectedModelId: selectedModelId)
 
         let modelDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -532,7 +533,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
     }
 
     func testSendMessagePreservesTextualToolLikeOutputWhenUsingSpyGenerator() async throws {
-        let selectedModelId = "mlx-community/Qwen3-4B-Instruct-2507-4bit@50d4277"
+        let selectedModelId = "mlx-community/Qwen3.5-4B-MLX-4bit@main"
         let selectionStore = LocalModelSelectionStore()
         await selectionStore.setSelectedModelId(selectedModelId)
 

@@ -1331,7 +1331,16 @@ actor LocalModelProcessAIService: AIService {
             explicitContext: request.context,
             systemContent: systemContent
         )
-        let userInput = UserInput(messages: rawMessages, tools: toolSpecs, additionalContext: additionalContext)
+        let allImages = budgetedMessages.flatMap { message in
+            imageInputs(from: message.mediaAttachments)
+        }
+        let allVideos = budgetedMessages.flatMap { message in
+            videoInputs(from: message.mediaAttachments)
+        }
+        let userInput = UserInput(
+            messages: rawMessages, images: allImages, videos: allVideos,
+            tools: toolSpecs, additionalContext: additionalContext
+        )
         
         // Wrap MLX inference with power management to prevent sleep during long generations
         let response: AIServiceResponse

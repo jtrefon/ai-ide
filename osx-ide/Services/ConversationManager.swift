@@ -803,10 +803,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     func startNewConversation() {
         cancelActiveSendTask()
         resetConversationInteractionState()
+        saveCurrentSessionSnapshot()
         currentInput = ""
         setLiveModelPreview("")
         setLiveModelStatusPreview("")
-        saveCurrentSessionSnapshot()
         historyCoordinator.clearConversation()
 
         let oldConversationId = sessionManager.selectedId

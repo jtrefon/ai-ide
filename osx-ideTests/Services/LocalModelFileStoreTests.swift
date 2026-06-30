@@ -34,7 +34,11 @@ final class LocalModelFileStoreTests: XCTestCase {
         )
         let textConfigObject = try XCTUnwrap(runtimeConfigObject["text_config"] as? [String: Any])
 
-        XCTAssertEqual(runtimeDirectory, try LocalModelFileStore.modelDirectory(modelId: qwen35ModelId))
+        XCTAssertEqual(
+            runtimeDirectory,
+            try LocalModelFileStore.modelDirectory(modelId: qwen35ModelId)
+                .appendingPathComponent("osx-ide-runtime")
+        )
         XCTAssertEqual(runtimeConfigObject["model_type"] as? String, "qwen3_5")
         XCTAssertEqual(textConfigObject["model_type"] as? String, "qwen3")
         XCTAssertEqual(textConfigObject["max_position_embeddings"] as? Int, 262144)
@@ -75,9 +79,25 @@ final class LocalModelFileStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyDirectory.path))
     }
 
+    private static let requiredRuntimeArtifacts = [
+        "preprocessor_config.json",
+        "processor_config.json",
+        "video_preprocessor_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json"
+    ]
+
     private func installQwen35FixtureConfig() throws {
         let modelDirectory = try LocalModelFileStore.modelDirectory(modelId: qwen35ModelId)
         try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+
+        for artifact in Self.requiredRuntimeArtifacts {
+            try "{}".write(
+                to: modelDirectory.appendingPathComponent(artifact),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
 
         let config = """
         {

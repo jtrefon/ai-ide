@@ -122,7 +122,9 @@ final class FinalResponseHandlerTests: XCTestCase {
         let projectRoot = try makeProjectRoot()
         let scriptedService = ScriptedAIService(responses: [
             AIServiceResponse(content: "", toolCalls: nil),
-            AIServiceResponse(content: "continuing", toolCalls: nil)
+            AIServiceResponse(content: "continuing", toolCalls: nil),
+            AIServiceResponse(content: "", toolCalls: nil),
+            AIServiceResponse(content: "", toolCalls: nil)
         ])
         let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
         historyCoordinator.append(ChatMessage(role: .user, content: "review dashboard"))

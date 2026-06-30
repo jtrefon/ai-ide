@@ -149,7 +149,7 @@ final class InitialResponseHandlerTests: XCTestCase {
         )
 
         XCTAssertEqual(scriptedService.historyRequests.count, 3)
-        XCTAssertEqual(scriptedService.historyRequests.map(\.stage), [.initial_response, .tool_loop, .tool_loop])
+        XCTAssertEqual(scriptedService.historyRequests.map(\.stage), [.initial_response, .initial_response, .tool_loop])
         XCTAssertEqual(response.toolCalls?.first?.name, "read_file")
     }
 }

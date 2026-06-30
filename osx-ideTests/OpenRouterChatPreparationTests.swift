@@ -8,6 +8,7 @@ final class OpenRouterChatPreparationTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
+        UserDefaults.standard.set("max", forKey: "AI.ReasoningIntensity")
         defaultsSuiteName = "OpenRouterChatPreparationTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: defaultsSuiteName)!
         defaults.removePersistentDomain(forName: defaultsSuiteName)
@@ -73,7 +74,7 @@ final class OpenRouterChatPreparationTests: XCTestCase {
         XCTAssertEqual(preparation.model, "openrouter/test-model")
         XCTAssertEqual(preparation.toolChoice, "auto")
         XCTAssertEqual(preparation.nativeReasoning?.enabled, true)
-        XCTAssertEqual(preparation.nativeReasoning?.effort, nil)
+        XCTAssertEqual(preparation.nativeReasoning?.effort, "high")
         XCTAssertEqual(preparation.nativeReasoning?.exclude, true)
         XCTAssertEqual(preparation.finalMessages.count, 5)
         XCTAssertEqual(preparation.finalMessages[0].role, "system")

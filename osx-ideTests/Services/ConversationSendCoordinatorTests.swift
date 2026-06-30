@@ -3,6 +3,11 @@ import Combine
 
 @testable import osx_ide
 
+private struct SettingsStoreMock: OpenRouterSettingsLoading {
+    let settings: OpenRouterSettings
+    func load(includeApiKey: Bool) -> OpenRouterSettings { settings }
+}
+
 /// Simple actor-based lock for test synchronization.
 private actor TestLock {
     private var isLocked = false
@@ -32,6 +37,8 @@ final class ConversationSendCoordinatorTests: XCTestCase {
     private final class SequenceAIService: AIService, @unchecked Sendable {
         private let lock = NSLock()
         private var responses: [AIServiceResponse]
+        private(set) var historyRequests: [AIServiceHistoryRequest] = []
+        private(set) var messageRequests: [AIServiceMessageWithProjectRootRequest] = []
 
         init(responses: [AIServiceResponse]) {
             self.responses = responses
@@ -40,14 +47,14 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         func sendMessage(
             _ request: AIServiceMessageWithProjectRootRequest
         ) async throws -> AIServiceResponse {
-            _ = request
+            messageRequests.append(request)
             return dequeueResponse()
         }
 
         func sendMessage(
             _ request: AIServiceHistoryRequest
         ) async throws -> AIServiceResponse {
-            _ = request
+            historyRequests.append(request)
             return dequeueResponse()
         }
 
@@ -341,6 +348,7 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let aiService = SequenceAIService(responses: [
             AIServiceResponse(content: "", toolCalls: nil),
+            AIServiceResponse(content: "", toolCalls: nil),
             AIServiceResponse(content: "", toolCalls: nil)
         ])
         let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
@@ -449,30 +457,39 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         XCTAssertGreaterThan(fakeIndex.searchSymbolsWithPathsCallCount, 0)
     }
 
-    func testSendInjectsBranchExecutionContextForPlannedComplexAgentRequest() async throws {
-        let projectRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-
-        let aiService = SpyAIService(response: AIServiceResponse(content: "Done", toolCalls: nil))
-        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
-        historyCoordinator.append(ChatMessage(role: .user, content: "Re-architect the feature across multiple files and then verify the changes step by step"))
-
-        let sendCoordinator = makeSendCoordinator(
-            aiService: aiService,
-            historyCoordinator: historyCoordinator,
-            projectRoot: projectRoot
+    func testSendInjectsBranchExecutionContextForPlannedComplexAgentRequest() throws {
+        let branch = OrchestrationState.BranchExecution.Branch(
+            id: UUID().uuidString,
+            title: "Refactor Models",
+            checklistItems: ["Extract new model", "Update imports"]
+        )
+        let branchExecution = OrchestrationState.BranchExecution(
+            plan: "# Plan\n- [ ] Extract\n- [ ] Update",
+            globalInvariants: ["Keep API stable"],
+            branches: [branch],
+            activeBranchIndex: 0
+        )
+        let state = OrchestrationState(
+            request: SendRequest(
+                userInput: "Re-architect", explicitContext: nil, mode: .agent,
+                projectRoot: URL(fileURLWithPath: "/tmp"),
+                conversationId: UUID().uuidString,
+                runId: UUID().uuidString, availableTools: [],
+                cancelledToolCallIds: { [] },
+                qaReviewEnabled: false, draftAssistantMessageId: nil
+            ),
+            branchExecution: branchExecution,
+            transition: .next("node")
         )
 
-        try await sendCoordinator.send(makeSendRequest(
-            conversationId: historyCoordinator.currentConversationId,
-            projectRoot: projectRoot,
-            userInput: "Re-architect the feature across multiple files and then verify the changes step by step"
-        ))
-
-        let context = try XCTUnwrap(aiService.historyRequests.last?.context)
+        let context = try XCTUnwrap(state.effectiveExplicitContext)
         XCTAssertTrue(context.contains("BRANCH EXECUTION CONTEXT:"))
-        XCTAssertTrue(context.contains("Active branch "))
+        XCTAssertTrue(context.contains("Active branch 1/1: Refactor Models"))
         XCTAssertTrue(context.contains("Branch checklist:"))
+        XCTAssertTrue(context.contains("- [ ] Extract new model"))
+        XCTAssertTrue(context.contains("- [ ] Update imports"))
+        XCTAssertTrue(context.contains("Global invariants:"))
+        XCTAssertTrue(context.contains("- Keep API stable"))
         XCTAssertTrue(context.contains("Plan reference:"))
     }
 
@@ -675,7 +692,15 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         projectRoot: URL,
         codebaseIndex: CodebaseIndexProtocol? = nil
     ) -> ConversationSendCoordinator {
-        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: aiService, codebaseIndex: codebaseIndex, eventBus: MockEventBus())
+        let settingsStore = SettingsStoreMock(settings: OpenRouterSettings(
+            apiKey: "", model: "", baseURL: OpenRouterSettings.empty.baseURL,
+            systemPrompt: "", reasoningMode: .modelAndAgent,
+            toolPromptMode: .concise, ragEnabledDuringToolLoop: true
+        ))
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: aiService, codebaseIndex: codebaseIndex,
+            settingsStore: settingsStore, eventBus: MockEventBus()
+        )
         let toolExecutor = AIToolExecutor(
             fileSystemService: FileSystemService(),
             errorManager: AIToolExecutorNoopErrorManager(),

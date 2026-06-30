@@ -18,7 +18,7 @@ final class IndexStatusBarViewModelTests: XCTestCase {
         index.currentEmbeddingModelIdentifier = "bert_nomic-embed-text-v1.5"
 
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-        XCTAssertEqual(viewModel.embeddingModelIdentifier, "nomic")
+        XCTAssertEqual(viewModel.embeddingModelIdentifier, "bge-s")
     }
 
     func testRemoteAIUsageDisplaysBalanceWhenProvided() {

@@ -117,6 +117,10 @@ extension TextViewRepresentable {
                 "'": "'"
             ]
 
+            if character == "\n" || character == "\r" {
+                return handleContextualNewline(in: textView)
+            }
+
             if let close = openToClose[character] {
                 return handleAutoPair(open: character, close: close, in: textView, affectedCharRange: affectedCharRange)
             }
@@ -220,6 +224,13 @@ extension TextViewRepresentable {
             let cursor = sel.location
             let safeCursor = max(0, min(cursor, nsString.length))
 
+            let codeEditorTextView = textView as? CodeEditorTextView
+            let pendingSuggestion = codeEditorTextView?.inlineSuggestionText
+            if pendingSuggestion != nil {
+                codeEditorTextView?.clearInlineSuggestion()
+                invalidateInlineCompletion()
+            }
+
             let indentUnit = IndentationStyle.current().indentUnit(tabWidth: AppConstants.Editor.tabWidth)
             let currentLineRange = nsString.lineRange(for: NSRange(location: safeCursor, length: 0))
             let currentLine = nsString.substring(with: currentLineRange)
@@ -237,19 +248,22 @@ extension TextViewRepresentable {
                 textView.insertText(insertion, replacementRange: NSRange(location: safeCursor, length: 0))
                 let newCursor = safeCursor + 1 + (innerIndent as NSString).length
                 textView.setSelectedRange(NSRange(location: newCursor, length: 0))
+                if let suggestion = pendingSuggestion {
+                    textView.insertText(suggestion, replacementRange: textView.selectedRange)
+                }
                 isProgrammaticUpdate = false
                 mutationSubject.send(.textDidChange(textView.string, textView.selectedRange))
                 return false
             }
 
             var targetIndent = baseIndent
-            if trimmedPrefix.hasSuffix("{") {
+            if trimmedPrefix.hasSuffix("{") || trimmedPrefix.hasSuffix(":") {
                 targetIndent = baseIndent + indentUnit
             } else if nextNonWhitespaceCharacter(in: nsString, from: safeCursor) == "}" {
                 targetIndent = dropOneIndent(from: baseIndent, indentUnit: indentUnit)
             }
 
-            let insertion = "\n" + targetIndent
+            let insertion = "\n" + targetIndent + (pendingSuggestion ?? "")
 
             isProgrammaticUpdate = true
             textView.insertText(insertion, replacementRange: NSRange(location: safeCursor, length: 0))
