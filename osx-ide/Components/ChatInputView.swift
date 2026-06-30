@@ -38,11 +38,15 @@ struct ChatInputView: View {
                 .textFieldStyle(.plain)
                 .focused($isInputFocused)
                 .lineLimit(1...6)
+                .fixedSize(horizontal: false, vertical: true)
                 .onSubmit(sendIfPossible)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .stroke(
@@ -52,19 +56,34 @@ struct ChatInputView: View {
                 )
                 .accessibilityIdentifier(AccessibilityID.aiChatInputTextView)
 
-            Button(action: sendIfPossible) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(canSend ? Color.accentColor : Color(NSColor.separatorColor).opacity(0.4))
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                Button(action: sendIfPossible) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 26))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(
+                            canSend ? Color.white : Color(NSColor.placeholderTextColor).opacity(0.5),
+                            canSend ? Color.accentColor : Color.clear
+                        )
+                        .background {
+                            if canSend {
+                                Circle()
+                                    .fill(Color.accentColor)
+                                    .glassEffect(.regular, in: Circle())
+                            }
+                        }
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(localized("chat_input.send"))
+                .accessibilityIdentifier(AccessibilityID.aiChatSendButton)
+                .disabled(!canSend)
+                .animation(.easeInOut(duration: 0.15), value: canSend)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(localized("chat_input.send"))
-            .accessibilityIdentifier(AccessibilityID.aiChatSendButton)
-            .disabled(!canSend)
-            .animation(.easeInOut(duration: 0.15), value: canSend)
         }
         .accessibilityElement(children: .contain)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 10)
         .padding(.top, 8)
         .padding(.bottom, 10)
     }

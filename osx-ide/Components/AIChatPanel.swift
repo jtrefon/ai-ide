@@ -13,6 +13,7 @@ struct AIChatPanel: View {
     @State private var selectedModelId: String = ""
     @State private var isModelPopover: Bool = false
     @State private var currentSearchModels: [OpenRouterModel] = []
+    @State private var hoveredTabId: String?
 
     private func selectModel(_ model: OpenRouterModel) -> () -> Void {
         { [self] in
@@ -65,29 +66,55 @@ struct AIChatPanel: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 2) {
                         ForEach(displayedTabs) { tab in
-                            HStack(spacing: 4) {
-                                Text(tab.title)
-                                    .font(.body)
-                                    .lineLimit(1)
-                                if displayedTabs.count > 1 {
-                                    Button {
-                                        conversationManager.closeConversation(id: tab.id)
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.caption2.weight(.medium))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Close conversation")
-                                }
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(tab.id == conversationManager.currentConversationId ? Color.accentColor.opacity(0.15) : Color.clear)
-                            .cornerRadius(4)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
+                            let isActive = tab.id == conversationManager.currentConversationId
+                            let isHovered = hoveredTabId == tab.id
+                            Button {
                                 conversationManager.switchConversation(to: tab.id)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(tab.title)
+                                        .lineLimit(1)
+                                        .font(.body)
+                                        .foregroundColor(isActive ? .primary : .secondary)
+                                    if displayedTabs.count > 1 {
+                                        Button {
+                                            conversationManager.closeConversation(id: tab.id)
+                                        } label: {
+                                            Image(systemName: "xmark")
+                                                .font(.caption2.weight(.semibold))
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .opacity(isHovered ? 1 : 0)
+                                        .frame(width: 16, height: 16)
+                                        .help("Close conversation")
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background {
+                                    if isActive {
+                                        RoundedRectangle(cornerRadius: 5)
+                                            .fill(Color(nsColor: .controlBackgroundColor))
+                                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 5))
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 5)
+                                            .fill(isHovered
+                                                ? Color(nsColor: .controlBackgroundColor).opacity(0.15)
+                                                : Color.clear)
+                                            .strokeBorder(
+                                                Color(nsColor: .separatorColor).opacity(isHovered ? 0.35 : 0.2),
+                                                lineWidth: 1
+                                            )
+                                    }
+                                }
+                                .animation(.easeInOut(duration: 0.15), value: isHovered)
+                                .animation(.easeInOut(duration: 0.15), value: isActive)
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { hovering in
+                                if hovering { hoveredTabId = tab.id }
+                                else if hoveredTabId == tab.id { hoveredTabId = nil }
                             }
                             .accessibilityIdentifier("ConversationTab_\(tab.id)")
                         }
@@ -108,7 +135,7 @@ struct AIChatPanel: View {
                 .accessibilityIdentifier(AccessibilityID.aiChatNewConversationButton)
                 .padding(.trailing, 6)
             }
-            .frame(height: 28)
+            .frame(height: 32)
             .padding(.horizontal, 4)
             .overlay(
                 Rectangle()
