@@ -1,5 +1,9 @@
 import Foundation
 
+extension Notification.Name {
+    static let inlineCompletionStatusDidChange = Notification.Name("InlineCompletionStatusDidChange")
+}
+
 @MainActor
 final class InlineCompletionEngine {
     typealias SuggestionHandler = @MainActor (InlineSuggestionPresentation?) -> Void
@@ -189,6 +193,7 @@ final class InlineCompletionEngine {
                         "maxSuggestionLength": request.maxSuggestionLength
                     ])
                 )
+                NotificationCenter.default.post(name: .inlineCompletionStatusDidChange, object: InlineCompletionStatus.generating)
                 guard let result = try await self.inferenceService.infer(for: request, settings: settings) else {
                     await AppLogger.shared.debug(
                         category: .ai,
@@ -199,6 +204,7 @@ final class InlineCompletionEngine {
                         ])
                     )
                     self.publish(nil, for: snapshot.paneID)
+                    NotificationCenter.default.post(name: .inlineCompletionStatusDidChange, object: InlineCompletionStatus.noSuggestion)
                     return
                 }
 
@@ -232,6 +238,7 @@ final class InlineCompletionEngine {
                         ])
                     )
                     self.publish(nil, for: snapshot.paneID)
+                    NotificationCenter.default.post(name: .inlineCompletionStatusDidChange, object: InlineCompletionStatus.noSuggestion)
                     return
                 }
 
@@ -272,6 +279,7 @@ final class InlineCompletionEngine {
                     await self.telemetryService.recordShown(presentation)
                 }
                 self.publish(presentation, for: snapshot.paneID)
+                NotificationCenter.default.post(name: .inlineCompletionStatusDidChange, object: presentation != nil ? InlineCompletionStatus.idle : InlineCompletionStatus.noSuggestion)
             } catch {
                 await AppLogger.shared.error(
                     category: .ai,

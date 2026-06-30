@@ -5,8 +5,7 @@ public actor AIToolTraceLogger {
 
     private let sessionId: String
     private let encoder: JSONEncoder
-    
-    // Project-local log file
+
     private var projectLogFileURL: URL?
 
     public init(sessionId: String = UUID().uuidString, logDirectory: URL? = nil) {
@@ -15,15 +14,12 @@ public actor AIToolTraceLogger {
         let enc = JSONEncoder()
         enc.outputFormatting = []
         self.encoder = enc
-        
-        // Note: We now write ONLY to project root (no Application Support)
-        // This ensures proper project isolation for debugging
+
         if let logDirectory {
             self.projectLogFileURL = logDirectory.appendingPathComponent("ai-trace.ndjson")
         }
     }
-    
-    /// Set the project root for project-isolated logging
+
     public func setProjectRoot(_ projectRoot: URL) {
         let ideDir = projectRoot.appendingPathComponent(".ide", isDirectory: true)
         let logsDir = ideDir.appendingPathComponent("logs", isDirectory: true)
@@ -32,11 +28,8 @@ public actor AIToolTraceLogger {
 
     public func log(type: String, data: [String: Any] = [:], file: String = #fileID, line: Int = #line) {
         do {
-            guard let logFileURL = projectLogFileURL else {
-                // Silently skip logging if no project root set (app-wide logging not available)
-                return
-            }
-            
+            guard let logFileURL = projectLogFileURL else { return }
+
             try ensureDirectoryExists(for: logFileURL)
 
             let payload: [String: Any] = [
@@ -62,7 +55,6 @@ public actor AIToolTraceLogger {
                 try data.write(to: logFileURL, options: [.atomic])
             }
         } catch {
-            // Intentionally swallow logging errors to avoid impacting app behavior
         }
     }
 

@@ -29,7 +29,10 @@ final class OpenRouterSettingsViewModel: ObservableObject {
         didSet { persist() }
     }
     @Published var modelQuery: String {
-        didSet { updateModelQuery() }
+        didSet {
+            updateModelQuery()
+            persist()
+        }
     }
     @Published var selectedModel: String {
         didSet { persist() }
@@ -198,7 +201,6 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             }
             filteredModels = Array(filteredModels.prefix(60))
         }
-        persist()
     }
 
     private func persist() {

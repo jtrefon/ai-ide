@@ -11,6 +11,7 @@ extension TextViewRepresentable {
         var currentFilePath: String?
         weak var attachedTextView: NSTextView?
         let signalBridge: EditorSignalBridge?
+        var lastKnownBufferText: String = ""
 
         init(_ parent: TextViewRepresentable) {
             self.parent = parent
@@ -228,6 +229,11 @@ extension TextViewRepresentable {
             self.parent.text = textView.string
             self.parent.selectedRange = textView.selectedRange
             updateSelectionContext(from: textView)
+            lastKnownBufferText = textView.string
+            // Programmatic text changes (contextual newline, auto-pair) bypass
+            // the normal NSTextView notification path, so we must explicitly
+            // schedule a completion here.
+            scheduleAutomaticInlineCompletionIfNeeded(for: textView)
         }
 
         private func nextNonWhitespaceCharacter(in nsString: NSString, from index: Int) -> String? {

@@ -36,7 +36,7 @@ public struct IndexConfiguration: Codable, Sendable {
         excludePatterns: [
             "*.generated.*",
             ".git/*",
-            ".ide/*",
+            ".ide",
 
             "node_modules",
             "bower_components",

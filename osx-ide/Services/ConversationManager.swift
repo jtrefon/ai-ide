@@ -94,10 +94,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var draftAssistantMessageId: UUID?
     private var draftAssistantText: String = ""
     private var draftReasoningText: String = ""
-    private var pendingStreamingBuffer: String = ""
-    private var pendingReasoningBuffer: String = ""
     private var streamingRenderTask: Task<Void, Never>?
-    private let streamingRenderIntervalNanoseconds: UInt64 = 150_000_000
     private var lastRenderedDraftContent: String = ""
     private var lastRenderedDraftReasoning: String = ""
     private let outputBuffer = StreamingOutputBuffer()
@@ -108,7 +105,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     // Coalesced live preview support
     private var pendingPreviewBuffer: String = ""
     private var previewPublishTask: Task<Void, Never>?
-    private let previewCoalesceIntervalNanoseconds: UInt64 = 200_000_000
+    private let previewCoalesceIntervalNanoseconds: UInt64 = 30_000_000
 
     // MARK: - Computed Properties
 
@@ -300,6 +297,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             return "Authentication"
         case .transport:
             return "Connection"
+        case .insufficientBalance:
+            return "Insufficient balance"
         case .unknown:
             return "Provider issue"
         }
@@ -313,8 +312,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         guard !event.chunk.isEmpty else { return }
 
         appendToLiveModelPreview(event.chunk)
-        pendingStreamingBuffer.append(event.chunk)
-        startStreamingRenderLoopIfNeeded(draftId: draftId)
+        renderStreamingChunk(event.chunk, draftId: draftId)
     }
 
     private func handleLocalModelStreamingReasoningChunk(_ event: LocalModelStreamingReasoningChunkEvent) {
@@ -322,98 +320,42 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         guard let draftId = draftAssistantMessageId else { return }
         guard !event.chunk.isEmpty else { return }
 
-        pendingReasoningBuffer.append(event.chunk)
-        startStreamingRenderLoopIfNeeded(draftId: draftId)
+        renderStreamingReasoning(event.chunk, draftId: draftId)
     }
 
-    private func startStreamingRenderLoopIfNeeded(draftId: UUID) {
-        guard streamingRenderTask == nil else { return }
-        streamingRenderTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer { self.streamingRenderTask = nil }
-            while self.activeStreamingRunId != nil {
-                guard !Task.isCancelled else { break }
-
-                if self.pendingStreamingBuffer.isEmpty && self.pendingReasoningBuffer.isEmpty {
-                    do { try await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds) } catch { break }
-                    continue
-                }
-
-                let delta = self.pendingStreamingBuffer
-                let reasoningDelta = self.pendingReasoningBuffer
-                self.pendingStreamingBuffer = ""
-                self.pendingReasoningBuffer = ""
-
-                guard !delta.isEmpty || !reasoningDelta.isEmpty else {
-                    do { try await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds) } catch { break }
-                    continue
-                }
-                guard self.historyCoordinator.getDraftMessage(id: draftId) != nil else { break }
-
-                self.draftAssistantText.append(delta)
-                self.draftReasoningText.append(reasoningDelta)
-
-                self.outputBuffer.appendContent(delta)
-                self.outputBuffer.appendReasoning(reasoningDelta)
-
-                let renderContent = self.outputBuffer.hasContent ? self.outputBuffer.content : ""
-                let renderReasoning: String? = self.outputBuffer.hasReasoning ? self.outputBuffer.reasoning : nil
-
-                let contentChanged = renderContent != self.lastRenderedDraftContent
-                let reasoningChanged = (renderReasoning ?? "") != self.lastRenderedDraftReasoning
-                guard contentChanged || reasoningChanged else {
-                    do { try await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds) } catch { break }
-                    continue
-                }
-                self.lastRenderedDraftContent = renderContent
-                self.lastRenderedDraftReasoning = renderReasoning ?? ""
-
-                let draftTimestamp = self.historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date()
-
-                self.historyCoordinator.upsertDraftMessage(
-                    ChatMessage(
-                        id: draftId,
-                        role: .assistant,
-                        content: renderContent,
-                        timestamp: draftTimestamp,
-                        context: ChatMessageContentContext(
-                            reasoning: renderReasoning
-                        ),
-                        isDraft: true
-                    )
-                )
-
-                do { try await Task.sleep(nanoseconds: self.streamingRenderIntervalNanoseconds) } catch { break }
-            }
-        }
-    }
-
-    private func flushPendingStreamingBuffer() {
-        guard let draftId = draftAssistantMessageId, !pendingStreamingBuffer.isEmpty else { return }
-        guard historyCoordinator.getDraftMessage(id: draftId) != nil else {
-            pendingStreamingBuffer = ""
-            pendingReasoningBuffer = ""
-            return
-        }
-        outputBuffer.appendContent(pendingStreamingBuffer)
-        outputBuffer.appendReasoning(pendingReasoningBuffer)
-        draftAssistantText.append(pendingStreamingBuffer)
-        draftReasoningText.append(pendingReasoningBuffer)
-        pendingStreamingBuffer = ""
-        pendingReasoningBuffer = ""
-
+    private func renderStreamingChunk(_ chunk: String, draftId: UUID) {
+        draftAssistantText.append(chunk)
+        outputBuffer.appendContent(chunk)
         let renderContent = outputBuffer.hasContent ? outputBuffer.content : ""
+        guard renderContent != lastRenderedDraftContent else { return }
+        lastRenderedDraftContent = renderContent
         let renderReasoning: String? = outputBuffer.hasReasoning ? outputBuffer.reasoning : nil
-        let draftTimestamp = historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date()
-        historyCoordinator.upsertDraftMessage(
+        historyCoordinator.upsertDraftMessageImmediately(
             ChatMessage(
                 id: draftId,
                 role: .assistant,
                 content: renderContent,
-                timestamp: draftTimestamp,
-                context: ChatMessageContentContext(
-                    reasoning: renderReasoning
-                ),
+                timestamp: historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date(),
+                context: ChatMessageContentContext(reasoning: renderReasoning),
+                isDraft: true
+            )
+        )
+    }
+
+    private func renderStreamingReasoning(_ chunk: String, draftId: UUID) {
+        draftReasoningText.append(chunk)
+        outputBuffer.appendReasoning(chunk)
+        let renderReasoning: String? = outputBuffer.hasReasoning ? outputBuffer.reasoning : nil
+        guard renderReasoning != lastRenderedDraftReasoning else { return }
+        lastRenderedDraftReasoning = renderReasoning ?? ""
+        let renderContent = outputBuffer.hasContent ? outputBuffer.content : ""
+        historyCoordinator.upsertDraftMessageImmediately(
+            ChatMessage(
+                id: draftId,
+                role: .assistant,
+                content: renderContent,
+                timestamp: historyCoordinator.getDraftMessage(id: draftId)?.timestamp ?? Date(),
+                context: ChatMessageContentContext(reasoning: renderReasoning),
                 isDraft: true
             )
         )
@@ -710,8 +652,6 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         draftAssistantMessageId = nil
         draftAssistantText = ""
         draftReasoningText = ""
-        pendingStreamingBuffer = ""
-        pendingReasoningBuffer = ""
         lastRenderedDraftContent = ""
         lastRenderedDraftReasoning = ""
         outputBuffer.clear()
@@ -728,8 +668,6 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     func clearStreamingText() {
         draftAssistantText = ""
         draftReasoningText = ""
-        pendingStreamingBuffer = ""
-        pendingReasoningBuffer = ""
         lastRenderedDraftContent = ""
         lastRenderedDraftReasoning = ""
         outputBuffer.clear()
@@ -793,7 +731,6 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     )
                 )
 
-                self.flushPendingStreamingBuffer()
                 self.historyCoordinator.flushPendingDraftUpdate()
                 self.flushPendingPreview()
                 if let finalAssistantMessage = self.messages.last(where: { $0.role == .assistant && !$0.isDraft }) {

@@ -71,6 +71,81 @@ final class CompletionInferenceServiceTests: XCTestCase {
         XCTAssertEqual(result?.text, "local")
         XCTAssertEqual(result?.source, .local)
     }
+
+    func testCompleteLocallyReturnsNilWhenNoFimModelAvailable() async throws {
+        let defaults = UserDefaults(suiteName: defaultsSuiteName!)!
+        defaults.removePersistentDomain(forName: defaultsSuiteName!)
+        let settingsStore = SettingsStore(userDefaults: defaults)
+        let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
+        await selectionStore.setCompletionModelId("nonexistent-fim-model-id")
+
+        let provider = AIServiceInlineCompletionProvider(
+            remoteServiceProvider: { nil },
+            localServiceProvider: { nil },
+            localModelSelectionStore: selectionStore
+        )
+
+        let result = try await provider.completeLocally(
+            prefix: "func foo() {", suffix: "\n}", maxTokens: 40
+        )
+
+        XCTAssertNil(result, "completeLocally should return nil when FIM model cannot be loaded")
+    }
+
+    func testLocalOnlyRoutingUsesCompleteLocally() async throws {
+        let recorder = PromptRecorder()
+        let inferService = CompletionInferenceService(provider: recorder)
+
+        let request = InlineCompletionRequest(
+            requestId: UUID(),
+            filePath: "/test.swift",
+            language: "swift",
+            prefix: "func foo() {",
+            suffix: "\n}",
+            cursorPosition: 13,
+            scopeSummary: nil,
+            symbols: [],
+            retrievalContext: [],
+            triggerReason: .manual,
+            maxSuggestionLength: 40,
+            allowMultiline: true
+        )
+
+        let settings = InlineCompletionSettings(
+            isEnabled: true,
+            debounceMilliseconds: 0,
+            aggressiveness: 0.3,
+            maxSuggestionLength: 40,
+            multilineEnabled: false,
+            retrievalEnabled: false,
+            routingMode: .localOnly,
+            debugOverlayEnabled: false
+        )
+
+        let result = try await inferService.infer(for: request, settings: settings)
+
+        XCTAssertNil(result, "localOnly should return nil because PromptRecorder.completeLocally returns nil")
+        XCTAssertEqual(recorder.capturedLocallyPrefix, "func foo() {")
+        XCTAssertEqual(recorder.capturedLocallySuffix, "\n}")
+    }
+}
+
+@MainActor
+private final class PromptRecorder: InlineCompletionProviding {
+    var capturedPrompt: String?
+    var capturedLocallyPrefix: String?
+    var capturedLocallySuffix: String?
+
+    func complete(prompt: String, triggerReason: CompletionTriggerReason, routingMode: InlineCompletionRoutingMode) async throws -> (text: String, source: InlineCompletionSource)? {
+        capturedPrompt = prompt
+        return ("result", .remote)
+    }
+
+    func completeLocally(prefix: String, suffix: String, maxTokens: Int) async throws -> (text: String, source: InlineCompletionSource)? {
+        capturedLocallyPrefix = prefix
+        capturedLocallySuffix = suffix
+        return nil
+    }
 }
 
 @MainActor

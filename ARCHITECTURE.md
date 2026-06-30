@@ -514,3 +514,64 @@ To add a language *not* supported by CodeEditLanguages, you would need to:
 3. **~50+ force unwraps** — Phase 5.5 target
 4. **SPM test target broken** — Pre-existing `EventSource` dependency on swift-nio/CNIOExtrasZlib
 5. **Gemma 4 E4B in-tree `modelType` shim** — `LocalModelFileStore` rewrites `gemma4`→`gemma4_text` in a runtime compatibility directory. Fragile if upstream mlx-swift-lm adds native `gemma4_text` support (the shim would become unnecessary but harmless).
+
+---
+
+## Project Root Registry
+
+### Purpose
+
+`ProjectRootRegistry` (`Services/ProjectRootRegistry.swift`) is the app-wide single source of truth for the active project root directory. It eliminates fragmentation where ~30+ consumers independently stored or resolved the project path, each potentially getting stale or inconsistent values.
+
+### Ownership
+
+Only **one call site** may write to the registry:
+
+- `WorkspaceLifecycleCoordinator.workspaceRootDidChange(to:)` — called when the user opens a folder, creates a project, or the directory is restored from `UserDefaults` on launch.
+
+This ensures that the project root cannot be mutated from arbitrary places, guaranteeing consistency.
+
+### Fan-out pattern
+
+All consumers read from `ProjectRootRegistry.shared`:
+
+| Consumer | How it reads |
+|----------|-------------|
+| **Terminal** (`NativeTerminalView`) | `@ObservedObject private var projectRootRegistry` — SwiftUI reactively observes changes; `SwiftTermView.updateNSView` sends `cd` to the running shell when the directory changes |
+| **File tree** (`FileExplorerView`) | `context.workspace.currentDirectory` (indirectly, fed from `WorkspaceLifecycleCoordinator` → same change event) |
+| **Sandboxing** (`PathValidator`) | Receives `projectRoot` at construction from `ConversationManager.projectRoot` (set via `updateProjectRoot` in `WorkspaceLifecycleCoordinator`) |
+| **Codebase index** (`ProjectCoordinator`) | `configureProject(root:)` called from `WorkspaceLifecycleCoordinator` |
+| **AI tools** (`ConversationToolProvider`) | `projectRootProvider` closure → `ConversationManager.projectRoot` (updated via `updateProjectRoot`) |
+| **Sessions, logs, chat** | `updateProjectRoot` fan-out in `ConversationManager` |
+
+### Thread safety
+
+`ProjectRootRegistry` is `@MainActor` with `@Published private(set) var current`. The `@Published` property provides a Combine publisher (`$current`) that all `@MainActor` consumers can subscribe to safely.
+
+### Terminal directory change handling
+
+When the project root changes while a terminal shell is running, `SwiftTermView` sends a `cd "<new-path>"` command to the shell's stdin. This is non-disruptive — the shell remains running and its session state (history, exports, etc.) is preserved. The path is escaped for double quotes, backticks, and `$` to prevent shell injection.
+
+### Adding a new consumer
+
+```swift
+import Combine
+
+@MainActor
+final class MyConsumer {
+    private var cancellables = Set<AnyCancellable>()
+
+    func startObserving() {
+        // Read current value
+        let root = ProjectRootRegistry.shared.current
+
+        // Subscribe to changes
+        ProjectRootRegistry.shared.$current
+            .compactMap { $0 }
+            .sink { newRoot in
+                // React to change
+            }
+            .store(in: &cancellables)
+    }
+}
+```

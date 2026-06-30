@@ -17,6 +17,8 @@ final class WorkspaceLifecycleCoordinator {
     }
 
     func workspaceRootDidChange(to newRoot: URL) {
+        ProjectRootRegistry.shared.set(newRoot)
+
         conversationManager.updateProjectRoot(newRoot)
         configureCodebaseIndex(newRoot)
 

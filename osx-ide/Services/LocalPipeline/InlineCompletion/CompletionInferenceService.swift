@@ -13,6 +13,12 @@ protocol InlineCompletionProviding {
         triggerReason: CompletionTriggerReason,
         routingMode: InlineCompletionRoutingMode
     ) async throws -> (text: String, source: InlineCompletionSource)?
+
+    func completeLocally(
+        prefix: String,
+        suffix: String,
+        maxTokens: Int
+    ) async throws -> (text: String, source: InlineCompletionSource)?
 }
 
 @MainActor
@@ -22,6 +28,7 @@ final class AIServiceInlineCompletionProvider: InlineCompletionProviding {
     private let localServiceProvider: (@Sendable () async -> AIService?)?
     private let offlineModeChecker: OfflineModeChecking
     private let localModelSelectionStore: LocalModelSelectionStore?
+    private var fimService: FIMInferenceService?
 
     init(
         aiServiceProvider: @escaping () -> AIService?,
@@ -72,6 +79,7 @@ final class AIServiceInlineCompletionProvider: InlineCompletionProviding {
 
         if let localServiceProvider, let remoteServiceProvider {
             if offlineMode {
+                guard hasLocalModel else { return nil }
                 return try await completeWith(service: await localServiceProvider(), source: .local, prompt: prompt)
             }
 
@@ -147,12 +155,71 @@ final class AIServiceInlineCompletionProvider: InlineCompletionProviding {
         source: InlineCompletionSource,
         prompt: String
     ) async throws -> (text: String, source: InlineCompletionSource)? {
-        guard let service else {
-            return nil
-        }
+        guard let service else { return nil }
 
         let text = try await service.generateCode(prompt)
         return (text, source)
+    }
+
+    func completeLocally(
+        prefix: String,
+        suffix: String,
+        maxTokens: Int
+    ) async throws -> (text: String, source: InlineCompletionSource)? {
+        let modelId: String
+        if let localModelSelectionStore {
+            let stored = await localModelSelectionStore.completionModelId()
+            modelId = stored.isEmpty ? LocalModelCatalog.fastFimModel.id : stored
+        } else {
+            modelId = LocalModelCatalog.fastFimModel.id
+        }
+
+        guard let model = LocalModelCatalog.model(id: modelId) else {
+            await AppLogger.shared.warning(
+                category: .ai,
+                message: "inline_completion.fim_model_not_in_catalog",
+                context: AppLogger.LogCallContext(metadata: ["modelId": modelId])
+            )
+            return nil
+        }
+
+        guard LocalModelFileStore.isModelInstalled(model) else {
+            await AppLogger.shared.warning(
+                category: .ai,
+                message: "inline_completion.fim_model_not_installed",
+                context: AppLogger.LogCallContext(metadata: [
+                    "modelId": modelId,
+                    "displayName": model.displayName
+                ])
+            )
+            return nil
+        }
+
+        do {
+            let service = try await resolveFIMService(modelId: modelId)
+            let text = try await service.generate(prefix: prefix, suffix: suffix, maxTokens: maxTokens)
+            guard !text.isEmpty else { return nil }
+            return (text, .local)
+        } catch {
+            await AppLogger.shared.warning(
+                category: .ai,
+                message: "inline_completion.fim_generation_error",
+                context: AppLogger.LogCallContext(metadata: [
+                    "modelId": modelId,
+                    "error": String(describing: error)
+                ])
+            )
+            return nil
+        }
+    }
+
+    private func resolveFIMService(modelId: String) async throws -> FIMInferenceService {
+        if let existing = fimService, existing.modelId == modelId {
+            return existing
+        }
+        let service = try await FIMInferenceService(modelId: modelId)
+        fimService = service
+        return service
     }
 }
 
@@ -177,22 +244,104 @@ final class CompletionInferenceService: CompletionInferring {
         settings: InlineCompletionSettings
     ) async throws -> InlineCompletionResult? {
         let startedAt = Date()
-        let prompt = makePrompt(for: request)
-        guard let response = try await provider.complete(
-            prompt: prompt,
-            triggerReason: request.triggerReason,
-            routingMode: settings.routingMode
-        ) else {
-            return nil
-        }
+
+        let source: InlineCompletionSource
+        let text: String
+
+        let result: (text: String, source: InlineCompletionSource)? = try await routeInference(
+            for: request, settings: settings
+        )
+
+        guard let result else { return nil }
+        text = result.text; source = result.source
 
         return InlineCompletionResult(
             requestId: request.requestId,
-            suggestionText: response.text,
+            suggestionText: text,
             confidenceScore: 0.5,
-            source: response.source,
+            source: source,
             latencyMs: Date().timeIntervalSince(startedAt) * 1_000
         )
+    }
+
+    private func routeInference(
+        for request: InlineCompletionRequest,
+        settings: InlineCompletionSettings
+    ) async throws -> (text: String, source: InlineCompletionSource)? {
+        switch settings.routingMode {
+        case .localOnly:
+            return try await attemptLocal(request: request)
+
+        case .remoteOnly:
+            return try await attemptRemote(request: request)
+
+        case .hybridPreferLocal:
+            if let local = try? await attemptLocal(request: request) {
+                return local
+            }
+            await AppLogger.shared.debug(
+                category: .ai,
+                message: "inline_completion.local_failed_falling_back_remote",
+                context: AppLogger.LogCallContext(metadata: [
+                    "requestId": request.requestId.uuidString
+                ])
+            )
+            return try await attemptRemote(request: request)
+
+        case .hybridPreferRemote:
+            if let remote = try? await attemptRemote(request: request) {
+                return remote
+            }
+            await AppLogger.shared.debug(
+                category: .ai,
+                message: "inline_completion.remote_failed_falling_back_local",
+                context: AppLogger.LogCallContext(metadata: [
+                    "requestId": request.requestId.uuidString
+                ])
+            )
+            return try await attemptLocal(request: request)
+        }
+    }
+
+    private func attemptLocal(request: InlineCompletionRequest) async throws -> (text: String, source: InlineCompletionSource)? {
+        do {
+            guard let result = try await provider.completeLocally(
+                prefix: request.prefix, suffix: request.suffix, maxTokens: request.maxSuggestionLength
+            ) else { return nil }
+            return result
+        } catch {
+            await AppLogger.shared.warning(
+                category: .ai,
+                message: "inline_completion.local_inference_error",
+                context: AppLogger.LogCallContext(metadata: [
+                    "requestId": request.requestId.uuidString,
+                    "error": String(describing: error),
+                    "language": request.language
+                ])
+            )
+            return nil
+        }
+    }
+
+    private func attemptRemote(request: InlineCompletionRequest) async throws -> (text: String, source: InlineCompletionSource)? {
+        do {
+            let prompt = makePrompt(for: request)
+            guard let result = try await provider.complete(prompt: prompt, triggerReason: request.triggerReason, routingMode: .remoteOnly) else {
+                return nil
+            }
+            return result
+        } catch {
+            await AppLogger.shared.warning(
+                category: .ai,
+                message: "inline_completion.remote_inference_error",
+                context: AppLogger.LogCallContext(metadata: [
+                    "requestId": request.requestId.uuidString,
+                    "error": String(describing: error),
+                    "language": request.language
+                ])
+            )
+            return nil
+        }
     }
 
     private func makePrompt(for request: InlineCompletionRequest) -> String {

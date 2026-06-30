@@ -77,7 +77,13 @@ struct InlineCompletionSettings: Equatable, Sendable {
         multilineEnabled: false,
         retrievalEnabled: false,
         routingMode: .hybridPreferLocal,
-        debugOverlayEnabled: false
+        debugOverlayEnabled: {
+#if DEBUG
+            true
+#else
+            false
+#endif
+        }()
     )
 }
 

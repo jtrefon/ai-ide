@@ -20,6 +20,11 @@ final class IndexStatusBarViewModel: ObservableObject {
     @Published private(set) var remoteAISpendText: String = ""
     @Published private(set) var remoteAIBalanceText: String = ""
 
+    @Published private(set) var isDownloadingFIM: Bool = false
+    @Published private(set) var fimDownloadFraction: Double = 0
+    @Published private(set) var isFIMAvailable: Bool = false
+    @Published private(set) var fimCompletionStatus: InlineCompletionStatus = .idle
+
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
     private let eventBus: EventBusProtocol
     private let refreshRemoteAIAccountBalance: @Sendable (_ runId: String?) async -> Void
@@ -45,9 +50,14 @@ final class IndexStatusBarViewModel: ObservableObject {
         refreshStats()
         refreshEmbeddingModel()
         scheduleInitialRemoteBalanceRefresh()
+        refreshFIMAvailability()
     }
 
     var statusText: String {
+        if isDownloadingFIM {
+            return "Downloading completions model \(Int(fimDownloadFraction * 100))%"
+        }
+
         // RAG retrieval has highest priority
         if isRetrieving {
             return "RAG: \(retrievalStatus)"
@@ -73,6 +83,15 @@ final class IndexStatusBarViewModel: ObservableObject {
         }
 
         return "Index: unavailable"
+    }
+
+    var fimStatusText: String {
+        guard isFIMAvailable else { return "Complete: -" }
+        switch fimCompletionStatus {
+        case .generating: return "Complete: WIP"
+        case .noSuggestion: return "Complete: NA"
+        case .idle: return "Complete: OK"
+        }
     }
 
     var metricsText: String {
@@ -210,6 +229,35 @@ final class IndexStatusBarViewModel: ObservableObject {
             }
         }
         .store(in: &cancellables)
+
+        eventBus.subscribe(to: ModelDownloadProgressEvent.self) { [weak self] event in
+            guard let self else { return }
+            self.isDownloadingFIM = true
+            self.fimDownloadFraction = event.fractionCompleted
+        }
+        .store(in: &cancellables)
+
+        eventBus.subscribe(to: ModelDownloadCompletedEvent.self) { [weak self] _ in
+            guard let self else { return }
+            self.isDownloadingFIM = false
+            self.fimDownloadFraction = 0
+            self.isFIMAvailable = true
+        }
+        .store(in: &cancellables)
+
+        NotificationCenter.default.addObserver(
+            forName: .inlineCompletionStatusDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let status = note.object as? InlineCompletionStatus else { return }
+            self?.fimCompletionStatus = status
+        }
+    }
+
+    private func refreshFIMAvailability() {
+        let model = LocalModelCatalog.fastFimModel
+        isFIMAvailable = LocalModelFileStore.isModelInstalled(model)
     }
 
     private func scheduleInitialRemoteBalanceRefresh() {

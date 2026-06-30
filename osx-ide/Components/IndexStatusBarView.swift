@@ -108,9 +108,17 @@ struct IndexStatusBarView: View {
                     .controlSize(.small)
             }
 
-            Text(viewModel.statusText)
-                .font(.caption)
-                .lineLimit(1)
+            if viewModel.isDownloadingFIM {
+                ProgressView(value: viewModel.fimDownloadFraction)
+                    .progressViewStyle(.linear)
+                    .frame(width: 80)
+                Text("Completion model \(Int(viewModel.fimDownloadFraction * 100))%")
+                    .font(.caption)
+            } else {
+                Text(viewModel.statusText)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
 
             Spacer(minLength: 8)
 
@@ -152,6 +160,7 @@ struct IndexStatusBarView: View {
             }
 
             HStack(spacing: 6) {
+                statusLabel(viewModel.fimStatusText)
                 statusLabel(viewModel.openRouterContextUsageText)
                 statusLabel(viewModel.localModelContextUsageText)
                 statusLabel(viewModel.remoteAICostText)

@@ -12,15 +12,18 @@ public actor IndexerActor {
     private let database: DatabaseStore
     private var embeddingGenerator: any MemoryEmbeddingGenerating
     private let config: IndexConfiguration
+    private let projectRoot: URL?
 
     public init(
         database: DatabaseStore,
         embeddingGenerator: any MemoryEmbeddingGenerating,
-        config: IndexConfiguration = .default
+        config: IndexConfiguration = .default,
+        projectRoot: URL? = nil
     ) {
         self.database = database
         self.embeddingGenerator = embeddingGenerator
         self.config = config
+        self.projectRoot = projectRoot
     }
 
     public func updateEmbeddingGenerator(_ generator: any MemoryEmbeddingGenerating) {
@@ -300,19 +303,25 @@ public actor IndexerActor {
 
     private func shouldExclude(_ url: URL) -> Bool {
         let path = url.standardizedFileURL.path.replacingOccurrences(of: "\\", with: "/")
-        let relativePath: String
 
-        // Try to get a relative path if possible for better matching
-        // In a real scenario, we'd pass the project root here.
-        // For now, we'll use the last component or the full path if not possible.
-        relativePath = path
+        let relativePath: String
+        if let projectRoot {
+            let rootPath = projectRoot.standardizedFileURL.path.replacingOccurrences(of: "\\", with: "/")
+            if path.hasPrefix(rootPath + "/") {
+                relativePath = String(path.dropFirst(rootPath.count + 1))
+            } else if path == rootPath {
+                relativePath = ""
+            } else {
+                relativePath = path
+            }
+        } else {
+            relativePath = path
+        }
 
         for pattern in config.excludePatterns {
             if GlobMatcher.match(path: relativePath, pattern: pattern) {
                 return true
             }
-
-            // Also check components for simple directory names
             let components = relativePath.split(separator: "/").map(String.init)
             if components.contains(pattern) {
                 return true

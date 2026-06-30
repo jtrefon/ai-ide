@@ -100,15 +100,17 @@ struct LogsPanelView: View {
                 .appendingPathComponent("app.ndjson")
 
         case .aiTrace:
-            let base =
-                FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-                .first
-                ?? FileManager.default.temporaryDirectory
-            let logsDir = base.appendingPathComponent("osx-ide/Logs", isDirectory: true)
-            if let url = mostRecentNDJSON(in: logsDir, namePrefix: "ai-trace-") {
-                return url
+            if let projectRoot {
+                let logsDir = projectRoot
+                    .appendingPathComponent(".ide", isDirectory: true)
+                    .appendingPathComponent("logs", isDirectory: true)
+                let traceFile = logsDir.appendingPathComponent("ai-trace.ndjson")
+                if FileManager.default.fileExists(atPath: traceFile.path) {
+                    return traceFile
+                }
+                return logsDir.appendingPathComponent("empty.ndjson")
             }
-            return logsDir.appendingPathComponent("empty.ndjson")
+            return FileManager.default.temporaryDirectory.appendingPathComponent("missing.log")
 
         case .conversation:
             let base =

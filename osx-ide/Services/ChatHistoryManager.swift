@@ -19,7 +19,7 @@ public class ChatHistoryManager: ObservableObject {
     // Coalesced draft update support
     private var pendingDraftUpdate: ChatMessage?
     private var draftPublishTask: Task<Void, Never>?
-    private let draftCoalesceIntervalNanoseconds: UInt64 = 150_000_000
+    private let draftCoalesceIntervalNanoseconds: UInt64 = 30_000_000
 
     public init() {
         ensureDefaultGreetingMessageIfNeeded()
@@ -87,6 +87,19 @@ public class ChatHistoryManager: ObservableObject {
         scheduleDraftPublish()
     }
 
+    /// Updates the messages array immediately without coalescing.
+    @MainActor
+    public func upsertDraftMessageImmediately(_ message: ChatMessage) {
+        pendingDraftUpdate = nil
+        draftPublishTask?.cancel()
+        draftPublishTask = nil
+        if let index = messages.firstIndex(where: { $0.id == message.id }) {
+            messages[index] = message
+        } else {
+            messages.append(message)
+        }
+    }
+
     /// Immediately applies any pending draft update and publishes to SwiftUI.
     public func flushPendingDraftUpdate() {
         draftPublishTask?.cancel()
@@ -95,12 +108,13 @@ public class ChatHistoryManager: ObservableObject {
     }
 
     private func scheduleDraftPublish() {
-        draftPublishTask?.cancel()
+        guard draftPublishTask == nil else { return }
         draftPublishTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do { try await Task.sleep(nanoseconds: self.draftCoalesceIntervalNanoseconds) } catch { return }
             guard !Task.isCancelled else { return }
             self.applyPendingDraftUpdate()
+            self.draftPublishTask = nil
         }
     }
 

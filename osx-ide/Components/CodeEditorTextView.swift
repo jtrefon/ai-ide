@@ -6,6 +6,7 @@ final class CodeEditorTextView: NSTextView {
     private lazy var foldingDelegate = FoldingLayoutManagerDelegate(manager: foldingManager)
     private let ghostTextView = CodeEditorTextView.makeGhostTextView()
     private var ghostPresentation: InlineSuggestionPresentation?
+    private var scrollObs: NSKeyValueObservation?
 
     var hasInlineSuggestion: Bool {
         ghostPresentation != nil
@@ -17,8 +18,22 @@ final class CodeEditorTextView: NSTextView {
 
     override func viewWillMove(toSuperview newSuperview: NSView?) {
         super.viewWillMove(toSuperview: newSuperview)
-        if ghostTextView.superview == nil {
-            addSubview(ghostTextView)
+        if newSuperview != nil {
+            if ghostTextView.superview == nil {
+                addSubview(ghostTextView)
+            }
+            observeScrollView()
+        } else {
+            scrollObs = nil
+        }
+    }
+
+    private func observeScrollView() {
+        guard let scrollView = enclosingScrollView else { return }
+        scrollObs = scrollView.contentView.observe(\.bounds, options: [.new]) { [weak self] _, _ in
+            DispatchQueue.main.async { [weak self] in
+                self?.updateGhostTextFrame()
+            }
         }
     }
 
@@ -33,12 +48,12 @@ final class CodeEditorTextView: NSTextView {
 
     func updateGhostSuggestion(_ presentation: InlineSuggestionPresentation) {
         ghostPresentation = presentation
-        let attributes = ghostTextAttributes()
-        ghostTextView.textStorage?.setAttributedString(
-            NSAttributedString(string: String(presentation.suggestionText.prefix(600)), attributes: attributes)
-        )
-        ghostTextView.toolTip = presentation.source.rawValue + " • " + String(Int(presentation.latencyMs)) + "ms"
         ghostTextView.isHidden = false
+        let text = String(presentation.suggestionText.prefix(600))
+        let attrs = ghostTextAttributes()
+        ghostTextView.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: attrs))
+        ghostTextView.toolTip = presentation.source.rawValue + " • " + String(Int(presentation.latencyMs)) + "ms"
+        ghostTextView.font = font
         updateGhostTextFrame()
     }
 
@@ -62,24 +77,28 @@ final class CodeEditorTextView: NSTextView {
 
     private func updateGhostTextFrame() {
         guard ghostPresentation != nil, !ghostTextView.isHidden else { return }
-        guard let window else { return }
+        guard let layoutManager, let textContainer else { return }
 
-        let screenRect = firstRect(forCharacterRange: selectedRange, actualRange: nil)
-        let windowRect = window.convertFromScreen(screenRect)
-        let localRect = convert(windowRect, from: nil)
-        let width = max(bounds.width - localRect.origin.x - 8, 120)
+        layoutManager.ensureLayout(for: textContainer)
+
+        let cursor = selectedRange.location
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: NSRange(location: cursor, length: 0), actualCharacterRange: nil)
+        var cursorRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        let origin = textContainerOrigin
+        cursorRect = cursorRect.offsetBy(dx: origin.x, dy: origin.y)
+
+        let width = max(bounds.width - cursorRect.minX - 8, 120)
         ghostTextView.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
         ghostTextView.frame = NSRect(
-            x: localRect.origin.x,
-            y: localRect.origin.y + 1,
+            x: cursorRect.minX,
+            y: cursorRect.minY + 1,
             width: width,
             height: 1
         )
-        if let layoutManager = ghostTextView.layoutManager,
-           let textContainer = ghostTextView.textContainer {
-            layoutManager.ensureLayout(for: textContainer)
-            let usedRect = layoutManager.usedRect(for: textContainer)
-            ghostTextView.frame.size.height = max(usedRect.height + 2, font?.pointSize ?? 12)
+        if let lm = ghostTextView.layoutManager, let tc = ghostTextView.textContainer {
+            lm.ensureLayout(for: tc)
+            let used = lm.usedRect(for: tc)
+            ghostTextView.frame.size.height = max(used.height + 2, self.font?.pointSize ?? 12)
         }
     }
 

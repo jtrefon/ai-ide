@@ -31,6 +31,11 @@ actor ProjectRootFileWatcherActor {
 
     private var lastKnownModDates: [String: Date] = [:]
 
+    private static func isIDEConfigPath(_ path: String) -> Bool {
+        let normalized = (path as NSString).standardizingPath
+        return normalized.contains("/.ide/") || normalized.hasSuffix("/.ide")
+    }
+
     init(
         rootURL: URL,
         eventBus: EventBusProtocol,
@@ -162,9 +167,9 @@ actor ProjectRootFileWatcherActor {
     }
 
     private func flushChanges() {
-        let created = pendingCreated
-        let modified = pendingModified
-        let deleted = pendingDeleted
+        let created = pendingCreated.filter { !Self.isIDEConfigPath($0) }
+        let modified = pendingModified.filter { !Self.isIDEConfigPath($0) }
+        let deleted = pendingDeleted.filter { !Self.isIDEConfigPath($0) }
         pendingCreated = []
         pendingModified = []
         pendingDeleted = []

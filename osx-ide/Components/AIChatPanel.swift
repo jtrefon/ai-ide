@@ -9,12 +9,52 @@ struct AIChatPanel: View {
     @State private var isOfflineMode: Bool = false
     @State private var modelDisplayName: String = "Cloud"
     @State private var reasoningIntensity: ReasoningIntensity = .default
+    @StateObject private var modelSearch = ModelSearchViewModel()
+    @State private var selectedModelId: String = ""
+    @State private var isModelPopover: Bool = false
+    @State private var currentSearchModels: [OpenRouterModel] = []
+
+    private func selectModel(_ model: OpenRouterModel) -> () -> Void {
+        { [self] in
+            selectedModelId = model.id
+            modelSearch.recordSelection(model.id)
+            UserDefaults.standard.set(model.id, forKey: "OpenRouterModel")
+            UserDefaults.standard.set(model.name ?? model.id, forKey: "OpenRouterModelDisplayName")
+            UserDefaults.standard.set(false, forKey: "AI.OfflineModeEnabled")
+            NotificationCenter.default.post(name: .localModelOfflineModeDidChange, object: nil)
+            modelDisplayName = model.name ?? model.id
+            isModelPopover = false
+            modelSearch.searchQuery = ""
+        }
+    }
+
+    @ViewBuilder
+    private func modelRowLabel(_ model: OpenRouterModel) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.name ?? model.id)
+                    .font(.body)
+                Text(model.id)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if !isOfflineMode && selectedModelId == model.id {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.tint)
+            }
+        }
+        .contentShape(Rectangle())
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }
 
     var body: some View {
+        let searchModels = currentSearchModels
         let displayedTabs = conversationManager.conversationTabs.isEmpty
             ? [ConversationTabItem(id: conversationManager.currentConversationId, title: "Chat 1")]
             : conversationManager.conversationTabs
@@ -126,75 +166,103 @@ struct AIChatPanel: View {
                 .pickerStyle(.menu)
                 .frame(width: 100)
 
-                Menu {
-                    Section("Cloud") {
-                        ForEach(RemoteAIProvider.allCases, id: \.self) { provider in
-                            Button {
-                                Task {
-                                    let store = AIProviderSelectionStore()
-                                    await store.setSelectedRemoteProvider(provider)
-                                    UserDefaults.standard.set(false, forKey: "AI.OfflineModeEnabled")
-                                    NotificationCenter.default.post(name: .localModelOfflineModeDidChange, object: nil)
-                                }
-                            } label: {
-                                HStack {
-                                    Text(provider.displayName)
-                                    if !isOfflineMode && modelDisplayName == provider.displayName {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Section("Local") {
-                        Button {
-                            Task {
-                                let store = LocalModelSelectionStore()
-                                await store.setSelectedModelId(quickSelectModel.id)
-                                await store.setOfflineModeEnabled(true)
-                            }
-                        } label: {
-                            HStack {
-                                Text(quickSelectModel.displayName)
-                                if isOfflineMode {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-
-                    Divider()
-
-                    Section("Reasoning") {
-                        ForEach(ReasoningIntensity.allCases, id: \.self) { intensity in
-                            Button {
-                                UserDefaults.standard.set(intensity.rawValue, forKey: "AI.ReasoningIntensity")
-                                reasoningIntensity = intensity
-                            } label: {
-                                HStack {
-                                    Text(intensityLabel(intensity))
-                                    if reasoningIntensity == intensity {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    }
+                Button {
+                    isModelPopover.toggle()
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: isOfflineMode ? "network.slash" : "cloud.fill")
                         Text("\(modelDisplayName) [\(intensityShortLabel(reasoningIntensity))]")
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
                     }
                     .font(.caption2)
+                    .padding(.horizontal, 6)
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
+                .buttonStyle(.borderless)
+                .help(modelDisplayName)
+                .popover(isPresented: $isModelPopover, arrowEdge: .bottom) {
+                    VStack(spacing: 0) {
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(.secondary)
+                            TextField("Search models...", text: $modelSearch.searchQuery)
+                                .textFieldStyle(.plain)
+                                .font(.body)
+                            if !modelSearch.searchQuery.isEmpty {
+                                Button { modelSearch.searchQuery = "" } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(10)
+
+                        Divider()
+
+                        ScrollView {
+                            ScrollViewReader { _ in
+                                LazyVStack(spacing: 0) {
+                                    ForEach(0..<searchModels.count, id: \.self) { index in
+                                        let model = searchModels[index]
+                                        Button(action: selectModel(model), label: { modelRowLabel(model) })
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+
+                        Divider()
+
+                        HStack {
+                            Button("Local Model") {
+                                Task {
+                                    let store = LocalModelSelectionStore()
+                                    await store.setSelectedModelId(quickSelectModel.id)
+                                    await store.setOfflineModeEnabled(true)
+                                }
+                                isModelPopover = false
+                                modelSearch.searchQuery = ""
+                            }
+                            .buttonStyle(.link)
+
+                            Spacer()
+
+                            Menu("Reasoning: \(intensityShortLabel(reasoningIntensity))") {
+                                ForEach(ReasoningIntensity.allCases, id: \.self) { intensity in
+                                    Button {
+                                        UserDefaults.standard.set(intensity.rawValue, forKey: "AI.ReasoningIntensity")
+                                        reasoningIntensity = intensity
+                                    } label: {
+                                        HStack {
+                                            Text(intensityLabel(intensity))
+                                            if reasoningIntensity == intensity {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            .menuStyle(.borderlessButton)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                    }
+                    .frame(width: 320, height: 400)
+                }
             }
+        }
         }
         .onAppear {
             refreshModelState()
+            Task { await modelSearch.loadModels() }
+        }
+        .onChange(of: modelSearch.searchQuery) { _, _ in
+            currentSearchModels = modelSearch.displayModels
+        }
+        .onChange(of: modelSearch.displayModels.count) { _, _ in
+            currentSearchModels = modelSearch.displayModels
         }
         .onReceive(NotificationCenter.default.publisher(for: .localModelOfflineModeDidChange)) { _ in
             refreshModelState()
@@ -202,6 +270,7 @@ struct AIChatPanel: View {
         .onReceive(NotificationCenter.default.publisher(for: .localModelSelectionDidChange)) { _ in
             refreshModelState()
         }
+
     }
 
     private func refreshModelState() {
@@ -212,8 +281,13 @@ struct AIChatPanel: View {
             let modelId = defaults.string(forKey: "LocalModel.SelectedId") ?? ""
             modelDisplayName = LocalModelCatalog.model(id: modelId)?.displayName ?? modelId
         } else {
-            let raw = defaults.string(forKey: "AI.SelectedRemoteProvider") ?? ""
-            modelDisplayName = RemoteAIProvider(rawValue: raw)?.displayName ?? "Cloud"
+            let modelName = defaults.string(forKey: "OpenRouterModelDisplayName")
+            if let modelName, !modelName.isEmpty {
+                modelDisplayName = modelName
+            } else {
+                let raw = defaults.string(forKey: "AI.SelectedRemoteProvider") ?? ""
+                modelDisplayName = RemoteAIProvider(rawValue: raw)?.displayName ?? "Cloud"
+            }
         }
     }
 
@@ -261,11 +335,15 @@ struct AIChatPanel: View {
     private func providerIssueBanner(_ issue: ConversationProviderIssueState) -> some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let countdownText = providerIssueCountdownText(issue, now: context.date)
+            let isInsufficientBalance = issue.statusCode == 402
+            let accentColor: Color = isInsufficientBalance ? .red : .orange
+            let iconName = isInsufficientBalance ? "exclamationmark.octagon.fill" :
+                (issue.cooldownUntil == nil ? "exclamationmark.triangle.fill" : "clock.badge.exclamationmark")
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: issue.cooldownUntil == nil ? "exclamationmark.triangle.fill" : "clock.badge.exclamationmark")
-                        .foregroundStyle(.orange)
+                    Image(systemName: iconName)
+                        .foregroundStyle(accentColor)
                     Text(providerIssueHeadline(issue))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
@@ -281,14 +359,24 @@ struct AIChatPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if isInsufficientBalance {
+                    HStack(spacing: 4) {
+                        Image(systemName: "link")
+                            .font(.caption2)
+                        Text("OpenRouter.ai/settings/credits")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.blue)
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.orange.opacity(0.12))
+            .background(accentColor.opacity(0.12))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+                    .stroke(accentColor.opacity(0.25), lineWidth: 1)
             )
             .padding(.horizontal, 10)
             .padding(.top, 8)

@@ -159,11 +159,14 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
         )
 
         let body = try JSONEncoder().encode(requestBody)
-        await logRequestBody(requestId: preparation.requestId, bytes: body.count)
+        let requestId = preparation.requestId
+        await logRequestBody(requestId: requestId, bytes: body.count)
+        await logRequestBodyContent(requestId: requestId, body: body)
 
         // Collect streaming chunks using a thread-safe wrapper
         final class ChunkCollector: @unchecked Sendable {
             var chunks: [String] = []
+            var chunkCount: Int = 0
             var reasoningChunks: [String] = []
             var usage: OpenRouterChatUsage?
             
@@ -272,10 +275,32 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                 body: body
             ) { [weak self] chunkJson in
                 guard let self = self else { return }
+                let idx = collector.chunkCount
+                collector.chunkCount += 1
 
-                // Parse the chunk
-                if let chunkData = chunkJson.data(using: .utf8),
-                   let chunk = try? JSONDecoder().decode(OpenRouterChatResponseChunk.self, from: chunkData) {
+                // Log each raw chunk
+                Task { await self.logStreamChunk(
+                    requestId: requestId,
+                    chunkJson: chunkJson,
+                    index: idx,
+                    parseSuccess: false,
+                    finishReason: nil
+                ) }
+
+                // Parse the chunk — split by newline to handle multiple data: lines in one event
+                let lines = chunkJson.components(separatedBy: "\n")
+                var anyParsed = false
+                var lastReason: String?
+                for line in lines {
+                    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.isEmpty { continue }
+                    guard let chunkData = trimmed.data(using: .utf8),
+                          let chunk = try? JSONDecoder().decode(OpenRouterChatResponseChunk.self, from: chunkData)
+                    else { continue }
+                    anyParsed = true
+                    if chunk.choices.first?.finishReason != nil {
+                        lastReason = chunk.choices.first?.finishReason
+                    }
                     if let usage = chunk.usage {
                         collector.setUsage(usage)
                     }
@@ -291,7 +316,6 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                         }
                         if let content = delta.content {
                             collector.appendChunk(content)
-                            // Publish streaming chunk event
                             Task { @MainActor in
                                 self.eventBus.publish(LocalModelStreamingChunkEvent(
                                     runId: runId,
@@ -304,6 +328,14 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                         }
                     }
                 }
+                let overallSuccess = anyParsed || lines.isEmpty
+                Task { await self.logStreamChunk(
+                    requestId: requestId,
+                    chunkJson: chunkJson,
+                    index: idx,
+                    parseSuccess: overallSuccess,
+                    finishReason: lastReason
+                ) }
             }
             
             // Cache reasoning_content for DeepSeek V4 round-trip requirement
@@ -813,6 +845,8 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
             switch code {
             case 401, 403:
                 return (.authentication, code)
+            case 402:
+                return (.insufficientBalance, code)
             case 421, 429:
                 return (.rateLimited, code)
             case 500...599:

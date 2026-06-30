@@ -2,18 +2,23 @@ import SwiftUI
 import Combine
 import Terminal
 
+/// SwiftUI wrapper around SwiftTerm that starts in the project root reported
+/// by ``ProjectRootRegistry``.  The directory is set at process spawn time
+/// (no visible `cd` command is injected).
 struct NativeTerminalView: View {
     @Binding var currentDirectory: URL?
-    let projectRoot: URL?
+    @ObservedObject private var projectRootRegistry: ProjectRootRegistry
     @ObservedObject var ui: UIStateManager
     private let eventBus: EventBusProtocol
     @State private var clearPublisher = PassthroughSubject<Void, Never>()
 
-    init(currentDirectory: Binding<URL?>, projectRoot: URL? = nil, ui: UIStateManager, eventBus: EventBusProtocol) {
+    private var projectRoot: URL? { projectRootRegistry.current }
+
+    init(currentDirectory: Binding<URL?>, ui: UIStateManager, eventBus: EventBusProtocol) {
         self._currentDirectory = currentDirectory
-        self.projectRoot = projectRoot
         self.ui = ui
         self.eventBus = eventBus
+        self.projectRootRegistry = .shared
     }
 
     var body: some View {

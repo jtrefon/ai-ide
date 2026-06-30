@@ -51,6 +51,27 @@ extension OpenRouterAIService {
         ])
     }
 
+    internal func logRequestBodyContent(requestId: String, body: Data) async {
+        guard let raw = String(data: body, encoding: .utf8) else { return }
+        let preview = raw.prefix(2000)
+        await AIToolTraceLogger.shared.log(type: "openrouter.request_body_content", data: [
+            "requestId": requestId,
+            "bodyBytes": body.count,
+            "preview": String(preview)
+        ])
+    }
+
+    internal func logStreamChunk(requestId: String, chunkJson: String, index: Int, parseSuccess: Bool, finishReason: String?) async {
+        let preview = String(chunkJson.prefix(500))
+        await AIToolTraceLogger.shared.log(type: "openrouter.stream_chunk", data: [
+            "requestId": requestId,
+            "chunkIndex": index,
+            "parseSuccess": parseSuccess,
+            "finishReason": finishReason as Any,
+            "preview": preview
+        ])
+    }
+
     internal func logRequestError(requestId: String, status: Int, bodySnippet: String) async {
         await AppLogger.shared.error(
             category: .ai,

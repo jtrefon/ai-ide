@@ -13,6 +13,7 @@ extension TextViewRepresentable.Coordinator {
 
         self.parent.text = newText
         self.parent.selectedRange = newRange
+        lastKnownBufferText = newText
 
         updateSelectionContext(from: textView)
 
@@ -25,6 +26,17 @@ extension TextViewRepresentable.Coordinator {
         guard let textView = notification.object as? NSTextView else { return }
         self.parent.selectedRange = textView.selectedRange
         updateSelectionContext(from: textView)
+
+        let currentText = textView.string
+        guard currentText == lastKnownBufferText else {
+            // Text just changed — the pending debounce from textDidChange
+            // already has the latest snapshot. Keep it alive; only clear
+            // the visual ghost so it re-positions at the new cursor.
+            (textView as? CodeEditorTextView)?.clearInlineSuggestion()
+            return
+        }
+
+        // Pure cursor move — clear ghost and cancel pending request.
         (textView as? CodeEditorTextView)?.clearInlineSuggestion()
         invalidateInlineCompletion()
     }

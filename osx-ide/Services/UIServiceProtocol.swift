@@ -26,6 +26,7 @@ protocol UIServiceProtocol {
     func setSidebarWidth(_ width: Double)
     func setTerminalHeight(_ height: Double)
     func setChatPanelWidth(_ width: Double)
+    func setBottomPanelSelectedName(_ name: String)
 
     // Terminal settings
     func setTerminalFontSize(_ size: Double)

@@ -3,289 +3,354 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>osx-ide | Native AI IDE for Apple Developers</title>
+  <title>osx-ide | Native AI IDE for macOS</title>
   <meta
     name="description"
-    content="osx-ide is a native macOS IDE for developers who want Apple Silicon acceleration, local inference, local RAG, and a smaller, faster alternative to Electron-based AI coding tools."
+    content="osx-ide is a native macOS AI IDE with on-device completion, local codebase intelligence, and cloud-scale agent workflows when you choose them."
   >
-  <meta name="theme-color" content="#030712">
-  <meta property="og:title" content="osx-ide | Native AI IDE for Apple Developers">
+  <meta name="theme-color" content="#101417">
+  <meta property="og:title" content="osx-ide | Native AI IDE for macOS">
   <meta
     property="og:description"
-    content="A hardware-accelerated, Apple-native IDE with local inference, local RAG, and zero subscription pressure."
+    content="A Swift-native IDE for developers who want local speed, private context, and serious agentic coding without giving up control."
   >
   <meta property="og:type" content="website">
+  <meta property="og:image" content="https://jtrefon.github.io/ai-ide/images/og-image.png">
+  <meta property="og:url" content="https://jtrefon.github.io/ai-ide/">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
     rel="stylesheet"
   >
+  <link rel="preload" as="image" href="./images/hero-product.webp" type="image/webp">
+  <link rel="icon" type="image/svg+xml" href="./images/favicon.svg">
   <link rel="stylesheet" href="./styles.css">
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "osx-ide",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "macOS",
+      "description": "Native macOS AI IDE with local inference, inline completion, codebase retrieval, and cloud model orchestration.",
+      "softwareRequirements": "macOS on Apple Silicon",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "codeRepository": "https://github.com/jtrefon/ai-ide"
+    }
+  </script>
 </head>
 <body>
-  <div class="page-shell">
-    <header class="topbar">
-      <a class="brand" href="#top" aria-label="osx-ide home">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-text">osx-ide</span>
-      </a>
-      <nav class="topnav" aria-label="Primary">
-        <a href="#why">Why</a>
-        <a href="#capabilities">Capabilities</a>
-        <a href="#models">Models</a>
-        <a href="#compare">Compare</a>
-        <a href="#downloads">Download</a>
-      </nav>
-    </header>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="osx-ide home">
+      <img src="./images/app-mark.png" alt="" width="32" height="32">
+      <span>osx-ide</span>
+    </a>
+    <nav class="topnav" aria-label="Primary navigation">
+      <a href="#why">Why it matters</a>
+      <a href="#capabilities">Capabilities</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="#downloads">Download</a>
+    </nav>
+    <button class="menu-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+    <div class="mobile-menu" id="mobile-menu">
+      <a href="#why" class="mobile-link">Why it matters</a>
+      <a href="#capabilities" class="mobile-link">Capabilities</a>
+      <a href="#roadmap" class="mobile-link">Roadmap</a>
+      <a href="#downloads" class="mobile-link">Download</a>
+    </div>
+  </header>
 
-    <main id="top">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">The Native AI Evolution</p>
-          <h1>Apple Silicon deserves better than Electron.</h1>
-          <p class="hero-lede">
-            osx-ide is built in SwiftUI for developers who demand extreme performance. 
-            Native speed, direct hardware access, and AI that runs on <strong>your</strong> terms.
-          </p>
-          <div class="hero-actions">
-            <a class="button button-primary" href="#downloads">Download Latest</a>
-            <a class="button button-secondary" href="https://github.com/jtrefon/ai-ide" target="_blank" rel="noreferrer">GitHub Repo</a>
-          </div>
-          <ul class="signal-list" aria-label="Key product signals">
-            <li>SwiftUI & AppKit: 100% Native macOS architecture</li>
-            <li>MLX-Powered: Real-time local inference with hardware acceleration</li>
-            <li>Turbo Quant Interface: 4-bit KV Cache compression (75% RAM savings)</li>
-            <li>Zero dependencies on cloud APIs for core features</li>
-          </ul>
-        </div>
-
-        <div class="hero-panel glass-card">
-          <img src="./images/hero.png" alt="Futuristic IDE Mockup with 4-bit Quantization" style="width: 100%; border-radius: 16px; margin-bottom: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
-          <div class="terminal-card">
-            <div class="terminal-header">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <div class="terminal-body">
-              <div><span class="prompt">os:</span> macOS Sonoma+ (Native)</div>
-              <div><span class="prompt">arch:</span> Apple Silicon (Metal/ANE)</div>
-              <div><span class="prompt">kv_cache:</span> Turbo Quant 4-bit Enabled</div>
-              <div><span class="prompt">status:</span> Local Inference Ready</div>
-              <div><span class="prompt">build:</span> Production Node Active</div>
-            </div>
-          </div>
-
-          <div class="metric-grid">
-            <article>
-              <strong>Turbo Quant</strong>
-              <span>Compress KV cache by 75% for massive context windows.</span>
-            </article>
-            <article>
-              <strong>Ultra Low Latency</strong>
-              <span>Zero Electron bridge. Direct Metal-to-Display rendering.</span>
-            </article>
-            <article>
-              <strong>Privacy First</strong>
-              <span>Your code never leaves your machine unless you choose.</span>
-            </article>
-            <article>
-              <strong>NPU Optimized</strong>
-              <span>Leverages the Apple Neural Engine for background tasks.</span>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section id="why" class="section glass-card story-card">
-        <div class="section-heading">
-          <p class="eyebrow">The Mission</p>
-          <h2>Stop the Bloat.</h2>
-        </div>
-        <div class="split-grid">
-          <article>
-            <h3>Modern AI, Native Speed</h3>
-            <p>
-              Most AI tools today are web browsers wearing a suit. They consume gigabytes of RAM before you even type a character. osx-ide uses the power of your Mac Pro, Studio, or MacBook to its full potential.
-            </p>
-          </article>
-          <article>
-            <h3>Full Ownership</h3>
-            <p>
-              By focusing on local-first workflows like local RAG and MLX-powered generation, we give you back control over your most sensitive IP: your source code.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <section id="capabilities" class="section">
-        <div class="section-heading">
-          <p class="eyebrow">Capabilities</p>
-          <h2>Professional Grade Tooling.</h2>
-        </div>
-        <div class="feature-grid">
-          <article class="feature-card glass-card">
-            <span class="feature-state">Available now</span>
-            <h3>Turbo Quant Compression</h3>
-            <p>
-              Our proprietary implementation of 4-bit KV cache quantization. Run larger models with longer histories without exhausting your Unified Memory.
-            </p>
-          </article>
-          <article class="feature-card glass-card">
-            <span class="feature-state">Available now</span>
-            <h3>Native MLX Inference</h3>
-            <p>
-              Optimized for Apple Silicon. Support for the latest architectures including Gemma 4, Qwen 3.5, and Llama 3 with sub-millisecond dispatch.
-            </p>
-          </article>
-          <article class="feature-card glass-card">
-            <span class="feature-state">Beta</span>
-            <h3>Inline Code Completion</h3>
-            <p>
-              Low-latency FIM (Fill-In-the-Middle) support. Experience ghost-text suggestions that keep up with your typing speed.
-            </p>
-          </article>
-          <article class="feature-card glass-card">
-            <span class="feature-state">Available now</span>
-            <h3>Alibaba & Kilo Cloud</h3>
-            <p>
-              Extended support for remote giants. Connect seamlessly to Alibaba Cloud and Kilo Code for massive scale when local isn't enough.
-            </p>
-          </article>
-          <article class="feature-card glass-card">
-            <span class="feature-state">Available now</span>
-            <h3>Embedded RAG Indexer</h3>
-            <p>
-              A background indexing service that creates a vector map of your project. Lightning fast retrieval for context-aware chat.
-            </p>
-          </article>
-          <article class="feature-card glass-card">
-            <span class="feature-state">Available now</span>
-            <h3>Advanced Telemetry</h3>
-            <p>
-              Detailed logs for every token generated. Monitor tokens/sec, KV cache state, and NPU usage directly in the diagnostic panel.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <section id="models" class="section glass-card story-card">
-        <div class="section-heading">
-          <div class="eyebrow">Model Support</div>
-          <h2>A Catalog of Excellence.</h2>
-          <p>We support a wide range of state-of-the-art models out of the box, optimized for MLX.</p>
-        </div>
-        <div class="metric-grid">
-          <article>
-            <strong>Gemma 4 Family</strong>
-            <span>Efficient, high-reasoning models from Google, tuned for 4-bit.</span>
-          </article>
-          <article>
-            <strong>Qwen 3.5</strong>
-            <span>Top-tier performance from Alibaba, excellent for coding tasks.</span>
-          </article>
-          <article>
-            <strong>Llama 3</strong>
-            <span>The industry standard, running natively on your NPU.</span>
-          </article>
-          <article>
-            <strong>Granite 4.0</strong>
-            <span>IBM's micro-models, perfect for low-power high-speed tasks.</span>
-          </article>
-        </div>
-      </section>
-
-      <section id="compare" class="section">
-        <div class="section-heading">
-          <p class="eyebrow">Comparison</p>
-          <h2>Native vs. Wrapper.</h2>
-        </div>
-        <div class="comparison-card glass-card">
-          <div class="comparison-row comparison-head">
-            <div>Category</div>
-            <div>Hybrid/Electron IDE</div>
-            <div>osx-ide</div>
-          </div>
-          <div class="comparison-row">
-            <div>Memory Management</div>
-            <div>Chrome Sandbox (High Usage)</div>
-            <div>Native Heap (Optimized)</div>
-          </div>
-          <div class="comparison-row">
-            <div>Inference</div>
-            <div>Cloud-Only or Slow Python-Bridge</div>
-            <div>Native Metal / MLX (Fastest)</div>
-          </div>
-          <div class="comparison-row">
-            <div>Startup Time</div>
-            <div>Cold start ~3-5 seconds</div>
-            <div>Near-instant (< 1s)</div>
-          </div>
-          <div class="comparison-row">
-            <div>Privacy</div>
-            <div>Telemetry & Cloud Uploads</div>
-            <div>Local-First, Total Control</div>
-          </div>
-        </div>
-      </section>
-
-      <section id="downloads" class="section downloads-section glass-card">
-        <div class="section-heading">
-          <p class="eyebrow">GET STARTED</p>
-          <h2>Experience the Power.</h2>
-          <p class="section-note">
-            Download the latest release directly from GitHub.
-          </p>
-        </div>
-
-        <div class="download-layout">
-          <div class="download-content">
-            <div class="download-status">
-              <span class="pulse"></span>
-              <span id="release-status">SYNCING WITH GITHUB...</span>
-            </div>
-            <h3 id="latest-version">Detecting Latest Release...</h3>
-            <p id="latest-summary">Connecting to repository for build metadata.</p>
-            <div class="release-meta">
-              <div>
-                <dt>Published</dt>
-                <dd id="latest-date">-</dd>
-              </div>
-              <div>
-                <dt>Tag</dt>
-                <dd id="latest-tag">-</dd>
-              </div>
-              <div>
-                <dt>Package</dt>
-                <dd id="latest-assets">-</dd>
-              </div>
-            </div>
-            <div class="download-actions" id="latest-actions">
-              <a class="button button-primary button-disabled" href="#downloads" aria-disabled="true">CHECKING RELEASES</a>
-            </div>
-          </div>
-
-          <aside class="download-feed">
-            <div class="feed-header">
-              <h3>Changelog</h3>
-              <button id="refresh-releases" class="refresh-button" type="button">Refetch</button>
-            </div>
-            <div id="release-list" class="release-list" aria-live="polite">
-              <p class="release-placeholder">Fetching history...</p>
-            </div>
-          </aside>
-        </div>
-      </section>
-
-      <footer class="section glass-card founder-card">
-        <p>
-          Built for the future of macOS by <strong>Jack Trefon</strong>.
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <picture class="hero-art" aria-hidden="true">
+        <source srcset="./images/hero-product.webp" type="image/webp">
+        <img src="./images/hero-product.png" alt="">
+      </picture>
+      <div class="hero-overlay"></div>
+      <div class="hero-content">
+        <h1 id="hero-title">osx-ide</h1>
+        <p class="hero-tagline">Native macOS &middot; Local-first AI &middot; Cloud power on demand</p>
+        <p class="hero-lede">
+          A Swift-native AI IDE built for developers who want their editor to feel instant,
+          keep private code local by default, and still call in frontier models for serious
+          multi-file work.
         </p>
-        <a href="https://github.com/jtrefon" target="_blank" rel="noreferrer">Open Source on GitHub</a>
-      </footer>
-    </main>
-  </div>
+        <div class="hero-actions" aria-label="Primary actions">
+          <a class="button button-primary" href="#downloads">Download latest</a>
+          <a class="button button-secondary" href="https://github.com/jtrefon/ai-ide" target="_blank" rel="noreferrer">View source</a>
+        </div>
+        <dl class="hero-signals" aria-label="Product signals">
+          <div>
+            <dt>Local flow</dt>
+            <dd>FIM autocomplete and quick AI tasks can run on-device.</dd>
+          </div>
+          <div>
+            <dt>Agent flow</dt>
+            <dd>Use cloud models for planning, edits, tool loops, and review.</dd>
+          </div>
+          <div>
+            <dt>Context flow</dt>
+            <dd>Index files, symbols, chunks, and embeddings for grounded answers.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section id="why" class="section intro-section">
+      <div class="section-kicker">Why It Matters</div>
+      <div class="intro-grid">
+        <div>
+          <h2>The best AI coding workflow is not one pipeline. It is the right pipeline for the job.</h2>
+        </div>
+        <div class="intro-copy">
+          <p>
+            Typing needs latency so low you stop noticing it. Multi-file refactors need a stronger
+            model, tools, retrieval, and review loops. osx-ide separates those paths instead of
+            forcing every interaction through the same cloud chat box.
+          </p>
+          <p>
+            The result is practical: write on a plane, keep sensitive work local, reach for remote
+            models when the task deserves it, and keep the entire workflow inside one native Mac app.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section proof-strip" aria-label="Core product advantages">
+      <article>
+        <span>01</span>
+        <h3>Native by design</h3>
+        <p>Built with SwiftUI and AppKit instead of wrapping a browser. Lower overhead matters when your IDE is also running local models and indexing your repo.</p>
+      </article>
+      <article>
+        <span>02</span>
+        <h3>Local where latency matters</h3>
+        <p>Inline completion, fast file-level help, embeddings, and retrieval can stay close to the editor state and off the network.</p>
+      </article>
+      <article>
+        <span>03</span>
+        <h3>Cloud where reasoning matters</h3>
+        <p>OpenRouter, Alibaba Cloud, Kilo Code, and DeepSeek integrations give the agent room to plan, execute, inspect, and recover.</p>
+      </article>
+    </section>
+
+    <section id="capabilities" class="section capability-section">
+      <div class="section-heading">
+        <div class="section-kicker">Capabilities</div>
+        <h2>Built around real developer leverage.</h2>
+        <p>
+          The product value is not "AI in an editor." It is an architecture that keeps fast work fast,
+          powerful work powerful, and private work under your control.
+        </p>
+      </div>
+
+      <div class="capability-grid">
+        <article class="capability-card">
+          <span class="status status-live">Shipping</span>
+          <h3>On-device FIM autocomplete</h3>
+          <p>
+            Completion is its own low-latency subsystem, tuned for compact prompts, cancellation,
+            and local model routing instead of repurposed chat requests.
+          </p>
+        </article>
+        <article class="capability-card">
+          <span class="status status-live">Shipping</span>
+          <h3>Native local inference</h3>
+          <p>
+            MLX-backed local models support offline chat, local quick actions, and settings for
+            context length and 4-bit KV cache behavior.
+          </p>
+        </article>
+        <article class="capability-card">
+          <span class="status status-live">Shipping</span>
+          <h3>Codebase intelligence</h3>
+          <p>
+            A local index tracks files, symbols, chunks, full-text search, memory entries, and
+            HNSW-backed embedding retrieval so the assistant can answer from project context.
+          </p>
+        </article>
+        <article class="capability-card">
+          <span class="status status-live">Shipping</span>
+          <h3>Provider choice</h3>
+          <p>
+            Route heavy work through the model provider that fits the task, including OpenRouter,
+            Alibaba Cloud, Kilo Code, DeepSeek, and local models.
+          </p>
+        </article>
+        <article class="capability-card">
+          <span class="status status-beta">Beta</span>
+          <h3>Agentic tool execution</h3>
+          <p>
+            The cloud pipeline can plan work, run tool loops, apply changes, inspect output, and
+            recover from stalled or low-quality responses.
+          </p>
+        </article>
+        <article class="capability-card">
+          <span class="status status-beta">Beta</span>
+          <h3>Local embeddings on Apple hardware</h3>
+          <p>
+            CoreML embedding models and fallback generators keep semantic search available while
+            preserving startup speed and responsiveness.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section workflow-section">
+      <div class="workflow-copy">
+        <div class="section-kicker">Workflow</div>
+        <h2>Stay in momentum from keystroke to shipped change.</h2>
+        <p>
+          osx-ide is designed for the full arc of modern software work: local suggestions while you type,
+          grounded answers from your repo, then cloud-scale agent execution when you want the IDE to take
+          the wheel on a larger change.
+        </p>
+      </div>
+      <ol class="workflow-list">
+        <li>
+          <strong>Write</strong>
+          <span>Local FIM suggestions keep autocomplete responsive and private.</span>
+        </li>
+        <li>
+          <strong>Ask</strong>
+          <span>Use file, selection, symbol, and index context instead of vague prompts.</span>
+        </li>
+        <li>
+          <strong>Delegate</strong>
+          <span>Let remote models handle planning, edits, commands, and review loops.</span>
+        </li>
+        <li>
+          <strong>Keep control</strong>
+          <span>Choose when code stays local and when cloud reasoning is worth it.</span>
+        </li>
+      </ol>
+    </section>
+
+    <section class="section compare-section" aria-labelledby="compare-title">
+      <div class="section-heading compact">
+        <div class="section-kicker">Positioning</div>
+        <h2 id="compare-title">A Mac-first answer to cloud-only AI editors.</h2>
+      </div>
+      <div class="comparison-table" role="table" aria-label="Comparison with cloud-only editors">
+        <div role="row" class="comparison-row comparison-head">
+          <div role="columnheader">Need</div>
+          <div role="columnheader">Cloud-only workflow</div>
+          <div role="columnheader">osx-ide</div>
+        </div>
+        <div role="row" class="comparison-row">
+          <div role="cell">Autocomplete latency</div>
+          <div role="cell">Network-bound by default</div>
+          <div role="cell">Local-first completion path</div>
+        </div>
+        <div role="row" class="comparison-row">
+          <div role="cell">Private or offline work</div>
+          <div role="cell">Limited without a connection</div>
+          <div role="cell">Local models and local index remain useful</div>
+        </div>
+        <div role="row" class="comparison-row">
+          <div role="cell">Large agentic tasks</div>
+          <div role="cell">Strong, but often one-size-fits-all</div>
+          <div role="cell">Dedicated cloud pipeline with retrieval and tool loops</div>
+        </div>
+        <div role="row" class="comparison-row">
+          <div role="cell">Hardware fit</div>
+          <div role="cell">Usually browser-based</div>
+          <div role="cell">Native macOS app using Apple Silicon intentionally</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="roadmap" class="section roadmap-section">
+      <div class="section-heading">
+        <div class="section-kicker">Roadmap</div>
+        <h2>Ambitious, but grounded in the architecture already shipping.</h2>
+        <p>
+          The direction is clear: more local intelligence, stronger project memory, better remote work,
+          and deeper performance work where it actually improves the developer loop.
+        </p>
+      </div>
+      <div class="roadmap-grid">
+        <article>
+          <span>In progress</span>
+          <h3>SSH and SFTP sessions</h3>
+          <p>Full remote work from the IDE, including agent actions through the same secure server session.</p>
+        </article>
+        <article>
+          <span>In progress</span>
+          <h3>Project memory</h3>
+          <p>Inspectable rules and memories that make the assistant adapt to each repository without hiding context.</p>
+        </article>
+        <article>
+          <span>Research</span>
+          <h3>Graph index and cache compression</h3>
+          <p>Advanced retrieval graphs and lossless KV cache compression experiments aimed at larger, faster local context.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="downloads" class="section downloads-section">
+      <div class="download-main">
+        <div class="section-kicker">Download</div>
+        <h2>Install the latest open-source build.</h2>
+        <p>
+          Start free, inspect the source, and run the IDE on your Mac. Release metadata is pulled
+          directly from GitHub so the page stays current without a build step.
+        </p>
+        <p class="req-note">Requires macOS on Apple Silicon</p>
+        <div class="download-status">
+          <span class="pulse" aria-hidden="true"></span>
+          <span id="release-status">Syncing with GitHub Releases</span>
+        </div>
+        <h3 id="latest-version">Detecting latest release...</h3>
+        <p id="latest-summary">Connecting to repository for build metadata.</p>
+        <dl class="release-meta">
+          <div>
+            <dt>Published</dt>
+            <dd id="latest-date">-</dd>
+          </div>
+          <div>
+            <dt>Tag</dt>
+            <dd id="latest-tag">-</dd>
+          </div>
+          <div>
+            <dt>Package</dt>
+            <dd id="latest-assets">-</dd>
+          </div>
+        </dl>
+        <div class="download-actions" id="latest-actions">
+          <a class="button button-primary button-disabled" href="#downloads" aria-disabled="true">Checking releases</a>
+        </div>
+      </div>
+
+      <aside class="download-feed" aria-labelledby="release-history-title">
+        <div class="feed-header">
+          <h3 id="release-history-title">Release history</h3>
+          <button id="refresh-releases" class="refresh-button" type="button">Refresh</button>
+        </div>
+        <div id="release-list" class="release-list" aria-live="polite">
+          <p class="release-placeholder">Fetching history...</p>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div>
+      <strong>osx-ide</strong>
+      <span>Native AI development for macOS.</span>
+    </div>
+    <a href="https://github.com/jtrefon" target="_blank" rel="noreferrer">Built by Jack Trefon</a>
+  </footer>
 
   <script src="./app.js" defer></script>
 </body>

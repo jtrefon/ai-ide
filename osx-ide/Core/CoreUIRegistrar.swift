@@ -31,7 +31,6 @@ struct CoreUIRegistrar<Context: IDEContext & ObservableObject> {
                     get: { context.workspace.currentDirectory },
                     set: { _ in }
                 ),
-                projectRoot: context.workspace.currentDirectory,
                 ui: context.ui,
                 eventBus: context.eventBus
             )

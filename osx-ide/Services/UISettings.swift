@@ -22,6 +22,7 @@ struct UISettings {
     let sidebarWidth: Double
     let terminalHeight: Double
     let chatPanelWidth: Double
+    let bottomPanelSelectedName: String
 
     // Terminal settings
     let terminalFontSize: Double

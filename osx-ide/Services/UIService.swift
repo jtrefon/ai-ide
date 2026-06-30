@@ -128,6 +128,10 @@ final class UIService: UIServiceProtocol {
         eventBus.publish(ChatPanelWidthChangedEvent(width: width))
     }
 
+    func setBottomPanelSelectedName(_ name: String) {
+        settingsStore.set(name, forKey: "bottomPanelSelectedName")
+    }
+
     // MARK: - Terminal Settings
 
     /// Update terminal font size
@@ -190,6 +194,8 @@ final class UIService: UIServiceProtocol {
         let terminalBackgroundColor = settingsStore.string(forKey: "terminalBackgroundColor") ?? "#000000"
         let terminalShell = settingsStore.string(forKey: "terminalShell") ?? "/bin/zsh"
 
+        let bottomPanel = settingsStore.string(forKey: "bottomPanelSelectedName") ?? AppConstants.Overlay.internalTerminalPanelName
+
         return UISettings(
             selectedTheme: storedTheme,
             fontSize: fontSize,
@@ -212,6 +218,7 @@ final class UIService: UIServiceProtocol {
             sidebarWidth: sidebarWidth,
             terminalHeight: terminalHeight,
             chatPanelWidth: chatPanelWidth,
+            bottomPanelSelectedName: bottomPanel,
             terminalFontSize: terminalFontSizeValue,
             terminalFontFamily: terminalFontFamily,
             terminalForegroundColor: terminalForegroundColor,
@@ -243,6 +250,7 @@ final class UIService: UIServiceProtocol {
         setSidebarWidth(settings.sidebarWidth)
         setTerminalHeight(settings.terminalHeight)
         setChatPanelWidth(settings.chatPanelWidth)
+        setBottomPanelSelectedName(settings.bottomPanelSelectedName)
 
         // Save terminal settings
         setTerminalFontSize(settings.terminalFontSize)

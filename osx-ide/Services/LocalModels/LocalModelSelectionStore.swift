@@ -8,6 +8,7 @@ extension Notification.Name {
 actor LocalModelSelectionStore {
     private let settingsStore: SettingsStore
     private let selectedModelKey = "LocalModel.SelectedId"
+    private let completionModelKey = "LocalModel.CompletionModelId"
     private let offlineModeEnabledKey = "AI.OfflineModeEnabled"
     private let kvCache4BitEnabledKey = "LocalModel.KVCache4BitEnabled"
     private let contextLengthKey = "LocalModel.ContextLength"
@@ -30,6 +31,16 @@ actor LocalModelSelectionStore {
             object: nil,
             userInfo: ["modelId": trimmedModelId]
         )
+    }
+
+    func completionModelId() -> String {
+        guard let val = settingsStore.string(forKey: completionModelKey) else { return LocalModelCatalog.fastFimModel.id }
+        let trimmed = val.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? LocalModelCatalog.fastFimModel.id : trimmed
+    }
+
+    func setCompletionModelId(_ modelId: String) {
+        settingsStore.set(modelId.trimmingCharacters(in: .whitespacesAndNewlines), forKey: completionModelKey)
     }
 
     func isOfflineModeEnabled() -> Bool {

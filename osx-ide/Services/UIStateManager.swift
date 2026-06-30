@@ -369,6 +369,7 @@ class UIStateManager: ObservableObject {
         sidebarWidth = settings.sidebarWidth
         terminalHeight = settings.terminalHeight
         chatPanelWidth = settings.chatPanelWidth
+        bottomPanelSelectedName = settings.bottomPanelSelectedName
 
         // Load terminal settings
         terminalFontSize = settings.terminalFontSize

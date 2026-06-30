@@ -97,7 +97,8 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         self.indexer = IndexerActor(
             database: database,
             embeddingGenerator: memoryEmbeddingGenerator,
-            config: resolvedConfig.configuration
+            config: resolvedConfig.configuration,
+            projectRoot: projectRoot
         )
         self.memoryManager = MemoryManager(
             database: database,
@@ -233,7 +234,8 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         self.indexer = IndexerActor(
             database: database,
             embeddingGenerator: embeddingGenerator,
-            config: config.configuration
+            config: config.configuration,
+            projectRoot: projectRoot
         )
         Swift.print(
             "[DIAG] CodebaseIndex.init IndexerActor created in \(String(format: "%.2f", Date().timeIntervalSince(indexerStart) * 1000))ms"

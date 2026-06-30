@@ -156,6 +156,7 @@
 				6D2E6F842C2F4A7F00A1B2C8 /* MLX */,
 				9A9A00022C2F4A7F00A1B001 /* SyntaxHighlighting */,
 				9A9A00042C2F4A7F00A1B004 /* Terminal */,
+				9B9B00022C3F5A8F00A1B0C2 /* Markdown */,
 			);
 			productName = "osx-ide";
 			productReference = 04C2CE092E5C8E9D007A5EF7 /* osx-ide.app */;
@@ -271,6 +272,7 @@
 				6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */,
 				9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "SyntaxHighlighting" */,
 				9A9A00032C2F4A7F00A1B003 /* XCLocalSwiftPackageReference "Terminal" */,
+				9B9B00012C3F5A8F00A1B0C1 /* XCRemoteSwiftPackageReference "swift-markdown" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 04C2CE0A2E5C8E9D007A5EF7 /* Products */;
@@ -741,6 +743,14 @@
 				minimumVersion = 0.31.3;
 			};
 		};
+		9B9B00012C3F5A8F00A1B0C1 /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swiftlang/swift-markdown.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.8.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -768,6 +778,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 9A9A00032C2F4A7F00A1B003 /* XCLocalSwiftPackageReference "Terminal" */;
 			productName = Terminal;
+		};
+		9B9B00022C3F5A8F00A1B0C2 /* Markdown */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9B9B00012C3F5A8F00A1B0C1 /* XCRemoteSwiftPackageReference "swift-markdown" */;
+			productName = Markdown;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

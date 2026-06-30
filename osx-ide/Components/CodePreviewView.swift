@@ -1,10 +1,3 @@
-//
-//  CodePreviewView.swift
-//  osx-ide
-//
-//  Created by AI Assistant on 25/08/2025.
-//
-
 import SwiftUI
 
 struct CodePreviewView: View {
@@ -31,39 +24,9 @@ struct CodePreviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            header
 
-                if let language = language {
-                    Text("•")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(language)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .background(Color(nsColor: .controlBackgroundColor))
-                        .cornerRadius(4)
-                }
-
-                Spacer()
-
-                Button(action: copyCode) {
-                    HStack {
-                        Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
-                        Text(isCopied ? "Copied!" : "Copy")
-                    }
-                    .font(.caption)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.blue)
-            }
-
-            Text(code)
-                .font(resolveFont(size: fontSize, family: fontFamily))
+            highlightedText
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(nsColor: .textBackgroundColor))
@@ -72,11 +35,105 @@ struct CodePreviewView: View {
         .padding(.top, 4)
     }
 
+    private var header: some View {
+        HStack {
+            SwiftUI.Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let language = language {
+                SwiftUI.Text("\u{2022}")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                SwiftUI.Text(language)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    .cornerRadius(4)
+            }
+
+            Spacer()
+
+            Button(action: copyCode) {
+                HStack {
+                    Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
+                    SwiftUI.Text(isCopied ? "Copied!" : "Copy")
+                }
+                .font(.caption)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.blue)
+        }
+    }
+
+    @ViewBuilder
+    private var highlightedText: some View {
+        if let attributed = highlightedAttributedString {
+            SwiftUI.Text(attributed)
+        } else {
+            SwiftUI.Text(code)
+                .font(resolveFont(size: fontSize, family: fontFamily))
+        }
+    }
+
+    private var highlightedAttributedString: AttributedString? {
+        guard let language = language, let codeLanguage = codeLanguage(from: language) else {
+            return nil
+        }
+        guard let module = LanguageModuleManager.shared.getHighlightModule(for: codeLanguage) else {
+            return nil
+        }
+        let nsFont = resolveNSFont(size: fontSize, family: fontFamily)
+        let nsAttributed = module.highlight(code, font: nsFont)
+        return AttributedString(nsAttributed)
+    }
+
+    private func codeLanguage(from alias: String) -> CodeLanguage? {
+        let lowercased = alias.lowercased()
+        let aliasMap: [String: CodeLanguage] = [
+            "js": .javascript,
+            "ts": .typescript,
+            "jsx": .tsx,
+            "tsx": .tsx,
+            "py": .python,
+            "yaml": .yaml,
+            "yml": .yaml,
+            "md": .markdown,
+            "json": .json,
+            "txt": .unknown,
+            "sh": .unknown,
+            "bash": .unknown,
+            "zsh": .unknown,
+            "shell": .unknown,
+            "console": .unknown,
+            "text": .unknown,
+            "swift": .swift,
+            "javascript": .javascript,
+            "typescript": .typescript,
+            "python": .python,
+            "html": .html,
+            "css": .css,
+        ]
+        if let mapped = aliasMap[lowercased] {
+            return mapped
+        }
+        return CodeLanguage(rawValue: lowercased)
+    }
+
     private func resolveFont(size: Double, family: String) -> Font {
         if let nsFont = NSFont(name: family, size: CGFloat(size)) {
             return Font(nsFont)
         }
         return .system(size: CGFloat(size), weight: .regular, design: .monospaced)
+    }
+
+    private func resolveNSFont(size: Double, family: String) -> NSFont {
+        if let nsFont = NSFont(name: family, size: CGFloat(size)) {
+            return nsFont
+        }
+        return .monospacedSystemFont(ofSize: CGFloat(size), weight: .regular)
     }
 
     private func copyCode() {

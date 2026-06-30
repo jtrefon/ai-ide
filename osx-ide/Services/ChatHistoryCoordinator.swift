@@ -44,6 +44,10 @@ final class ChatHistoryCoordinator {
         historyManager.upsertDraftMessage(message)
     }
 
+    func upsertDraftMessageImmediately(_ message: ChatMessage) {
+        historyManager.upsertDraftMessageImmediately(message)
+    }
+
     func flushPendingDraftUpdate() {
         historyManager.flushPendingDraftUpdate()
     }

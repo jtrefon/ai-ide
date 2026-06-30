@@ -230,6 +230,86 @@ class DependencyContainer: ObservableObject {
             metadata: [
                 "totalDurationMs": String(format: "%.2f", heavyDuration)
             ])
+
+        // Check if FIM completion model is installed; prompt user to download if not
+        if !launchContext.isTesting {
+            await checkFIMCompletionModel(eventBus: await MainActor.run { _eventBus })
+        }
+    }
+
+    /// Checks whether the FIM completion model is installed and prompts the user
+    /// to download it if missing. Runs after heavy services are ready.
+    nonisolated private func checkFIMCompletionModel(eventBus: EventBusProtocol) async {
+        let model = LocalModelCatalog.fastFimModel
+
+        guard !LocalModelFileStore.isModelInstalled(model) else {
+            Swift.print("[FIM] Completion model already installed: \(model.displayName)")
+            return
+        }
+
+        Swift.print("[FIM] Completion model not installed: \(model.displayName)")
+
+        // Show modal dialog on main actor
+        let shouldDownload = await MainActor.run { () -> Bool in
+            let alert = NSAlert()
+            alert.messageText = "No Completion Model Found"
+            alert.informativeText = "Inline code completion requires the \(model.displayName) model. Download it now? (~750 MB)"
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "Download")
+            alert.addButton(withTitle: "Not Now")
+            return alert.runModal() == .alertFirstButtonReturn
+        }
+
+        guard shouldDownload else {
+            Swift.print("[FIM] User declined download, will prompt again on next launch")
+            return
+        }
+
+        let downloader = LocalModelDownloader()
+
+        do {
+            try await downloader.download(model: model) { progress in
+                let fraction = progress.fractionCompleted
+                eventBus.publish(ModelDownloadProgressEvent(
+                    fractionCompleted: fraction,
+                    currentFileName: progress.currentFileName
+                ))
+                if fraction >= 1.0 {
+                    eventBus.publish(ModelDownloadCompletedEvent(
+                        modelId: model.id,
+                        displayName: model.displayName
+                    ))
+                }
+            }
+
+            // Final completion event in case the last progress callback didn't fire at 1.0
+            eventBus.publish(ModelDownloadCompletedEvent(
+                modelId: model.id,
+                displayName: model.displayName
+            ))
+
+            // Show completion alert
+            await MainActor.run {
+                let alert = NSAlert()
+                alert.messageText = "Completion Now Available"
+                alert.informativeText = "The \(model.displayName) model has been downloaded. Inline code completion is ready to use."
+                alert.alertStyle = .informational
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
+
+            Swift.print("[FIM] Download complete for \(model.displayName)")
+        } catch {
+            Swift.print("[FIM] Download failed: \(error.localizedDescription)")
+            await MainActor.run {
+                let alert = NSAlert()
+                alert.messageText = "Download Failed"
+                alert.informativeText = "Could not download the completion model: \(error.localizedDescription). You can retry from Settings > Local Models."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
+        }
     }
 
     // MARK: - Public Accessors

@@ -317,6 +317,9 @@ struct ContentView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .onChange(of: uiState.bottomPanelSelectedName) { _, newName in
+                Task { await appState.uiService.setBottomPanelSelectedName(newName) }
+            }
             .labelsHidden()
             .frame(maxWidth: 360)
 

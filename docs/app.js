@@ -139,3 +139,22 @@ async function loadReleases() {
 
 refreshButton.addEventListener("click", loadReleases);
 loadReleases();
+
+// Mobile menu toggle
+const menuToggle = document.querySelector(".menu-toggle");
+const mobileMenu = document.getElementById("mobile-menu");
+
+menuToggle.addEventListener("click", () => {
+  const expanded = menuToggle.getAttribute("aria-expanded") === "true";
+  menuToggle.setAttribute("aria-expanded", !expanded);
+  mobileMenu.classList.toggle("open");
+  document.body.classList.toggle("menu-open");
+});
+
+document.querySelectorAll(".mobile-link").forEach((link) => {
+  link.addEventListener("click", () => {
+    menuToggle.setAttribute("aria-expanded", "false");
+    mobileMenu.classList.remove("open");
+    document.body.classList.remove("menu-open");
+  });
+});

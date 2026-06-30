@@ -155,6 +155,12 @@ final class AIInteractionCoordinator {
                     || errStr.contains("rate_limit")
             }
 
+            let isInsufficientBalanceError: (Error) -> Bool = { error in
+                let errStr = String(describing: error).lowercased()
+                return errStr.contains("402") || errStr.contains("insufficient balance")
+                    || errStr.contains("more credits")
+            }
+
             let shouldUseStreaming = shouldUseStreamingForRequest(
                 runId: request.runId,
                 stage: request.stage,
@@ -191,6 +197,9 @@ final class AIInteractionCoordinator {
                 } catch {
                     if isCancellationError(error) || Task.isCancelled {
                         return .failure(.aiServiceError("Request cancelled"))
+                    }
+                    if isInsufficientBalanceError(error) {
+                        return .failure(Self.mapToAppError(error, operation: "sendMessageStreaming"))
                     }
                     lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
                     if attempt < maxAttempts {
@@ -248,6 +257,9 @@ final class AIInteractionCoordinator {
                 case .failure(let error):
                     if isCancellationError(error) || Task.isCancelled {
                         return .failure(.aiServiceError("Request cancelled"))
+                    }
+                    if isInsufficientBalanceError(error) {
+                        return .failure(error)
                     }
                     lastError = error
                     if attempt < maxAttempts {
