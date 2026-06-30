@@ -1,6 +1,7 @@
 import XCTest
 @testable import osx_ide
 
+@MainActor
 final class ChatMessageVisibilityPolicyTests: XCTestCase {
     func testSyntheticDoneNextAssistantProgressMessageIsHidden() {
         let message = ChatMessage(
