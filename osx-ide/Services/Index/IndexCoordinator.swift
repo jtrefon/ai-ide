@@ -56,7 +56,7 @@ public actor IndexCoordinator {
         }
 
         Task { @MainActor [weak self] in
-            await self?.setupSubscriptions()
+            self?.setupSubscriptions()
         }
     }
 
@@ -135,7 +135,7 @@ public actor IndexCoordinator {
 
         // Only publish indexing events if there's actual work to do
         if filesNeedingWork > 0 {
-            await eventBus.publish(IndexingStartedEvent())
+            eventBus.publish(IndexingStartedEvent())
         }
 
         let processed = await processIndexFiles(files, total: total, localGeneration: localGeneration)
@@ -149,8 +149,8 @@ public actor IndexCoordinator {
         )
         // Only publish completion events if we published start events
         if filesNeedingWork > 0 || processed > 0 {
-            await eventBus.publish(IndexingCompletedEvent(indexedCount: processed, duration: duration))
-            await eventBus.publish(ProjectReindexCompletedEvent(indexedCount: processed, duration: duration))
+            eventBus.publish(IndexingCompletedEvent(indexedCount: processed, duration: duration))
+            eventBus.publish(ProjectReindexCompletedEvent(indexedCount: processed, duration: duration))
         }
     }
 
@@ -180,7 +180,7 @@ public actor IndexCoordinator {
     }
 
     private func publishProgress(processed: Int, total: Int, file: URL) async {
-        await eventBus.publish(
+        eventBus.publish(
             IndexingProgressEvent(
                 processedCount: processed,
                 totalCount: total,

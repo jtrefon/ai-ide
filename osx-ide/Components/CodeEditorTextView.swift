@@ -30,6 +30,7 @@ final class CodeEditorTextView: NSTextView {
 
     private func observeScrollView() {
         guard let scrollView = enclosingScrollView else { return }
+        scrollObs?.invalidate()
         scrollObs = scrollView.contentView.observe(\.bounds, options: [.new]) { [weak self] _, _ in
             DispatchQueue.main.async { [weak self] in
                 self?.updateGhostTextFrame()
@@ -169,7 +170,7 @@ final class CodeEditorTextView: NSTextView {
         let ns = string as NSString
 
         let existingRanges = selectedRanges
-            .compactMap { ($0 as? NSValue)?.rangeValue }
+            .compactMap { $0.rangeValue }
             .sorted(by: { $0.location < $1.location })
 
         let primary = existingRanges.last ?? selectedRange
@@ -212,7 +213,7 @@ final class CodeEditorTextView: NSTextView {
 
     private func addCursorVertically(direction: MultiCursorVerticalDirection) {
         let existingRanges = selectedRanges
-            .compactMap { ($0 as? NSValue)?.rangeValue }
+            .compactMap { $0.rangeValue }
             .sorted(by: { $0.location < $1.location })
 
         let base = existingRanges.isEmpty ? [selectedRange] : existingRanges

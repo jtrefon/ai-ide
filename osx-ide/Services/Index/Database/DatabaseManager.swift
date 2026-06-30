@@ -326,7 +326,7 @@ public class DatabaseManager {
 
     /// Execute work on the database queue asynchronously.
     /// Since DatabaseStore is an actor, it already provides isolation, so we use async to avoid blocking.
-    internal func asyncOnQueue<T: Sendable>(_ work: @escaping () throws -> T) async throws -> T {
+    internal func asyncOnQueue<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             queue.async {
                 do {

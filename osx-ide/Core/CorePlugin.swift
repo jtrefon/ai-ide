@@ -14,7 +14,7 @@ import AppKit
 final class CorePlugin {
     static func initialize<Context: IDEContext & ObservableObject>(registry: UIRegistry, context: Context) {
         CoreUIRegistrar(registry: registry, context: context).registerAll()
-        CoreCommandRegistrar(commandRegistry: context.commandRegistry, context: context).registerAll()
+        CoreCommandRegistrar(commandRegistry: context.commandRegistry, context: context, languageModuleManager: LanguageModuleManager.shared).registerAll()
         print("[CorePlugin] Initialized core UI components and commands")
     }
 }

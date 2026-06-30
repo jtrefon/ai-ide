@@ -15,34 +15,10 @@ final class UILayoutNormalizerTests: XCTestCase {
         XCTAssertLessThanOrEqual(normalized.maxY, visible.maxY)
     }
 
-    func testNormalizeSidebarWidth_UsesBounds() {
-        let value = UILayoutNormalizer.normalizeSidebarWidth(999, windowWidth: 1000)
-        XCTAssertLessThanOrEqual(value, 350)
-        XCTAssertGreaterThanOrEqual(value, AppConstants.Layout.minSidebarWidth)
-    }
-
-    func testNormalizeChatWidth_UsesBounds() {
-        let value = UILayoutNormalizer.normalizeChatPanelWidth(10, windowWidth: 900)
-        XCTAssertGreaterThanOrEqual(value, AppConstants.Layout.minChatPanelWidth)
-    }
-
     func testNormalizeTerminalHeight_UsesBounds() {
         let value = UILayoutNormalizer.normalizeTerminalHeight(1000, windowHeight: 700)
         XCTAssertLessThanOrEqual(value, 385.1)
         XCTAssertGreaterThanOrEqual(value, AppConstants.Layout.minTerminalHeight)
-    }
-
-    func testRebalanceHorizontalPanels_PreservesEditorMinimum() {
-        let result = UILayoutNormalizer.rebalanceHorizontalPanels(
-            sidebarWidth: 350,
-            chatWidth: 450,
-            isSidebarVisible: true,
-            isChatVisible: true,
-            windowWidth: 1000,
-            minimumEditorWidth: 400
-        )
-
-        XCTAssertLessThanOrEqual(result.sidebar + result.chat + 400, 1000)
     }
 
     func testNormalizedMinWindowSize_AdaptsToSmallScreens() {

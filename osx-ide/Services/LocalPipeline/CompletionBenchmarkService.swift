@@ -30,10 +30,10 @@ final class CompletionBenchmarkService {
         let samples = CompletionBenchmarkSamples.all
 
         for sample in samples {
-            for i in 0..<iterations {
+            for _ in 0..<iterations {
                 let snapshot = makeSnapshot(for: sample)
                 let start = CFAbsoluteTimeGetCurrent()
-                _ = await engine.requestCompletion(for: snapshot)
+                _ = engine.requestCompletion(for: snapshot)
                 let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
                 results.append(BenchmarkResult(
                     label: sample.label,

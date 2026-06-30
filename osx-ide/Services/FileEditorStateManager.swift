@@ -7,7 +7,6 @@
 
 import SwiftUI
 import Combine
-import UniformTypeIdentifiers
 
 @MainActor
 final class FileEditorStateManager: ObservableObject {
@@ -29,8 +28,8 @@ final class FileEditorStateManager: ObservableObject {
     let secondaryPane: EditorPaneStateManager
 
     init(
-        fileEditorService: FileEditorServiceProtocol,
-        fileDialogService: FileDialogServiceProtocol,
+        fileEditorService: any FileEditorServiceProtocol,
+        fileDialogService: any FileDialogServiceProtocol,
         fileSystemService: FileSystemService
     ) {
         self.primaryPane = EditorPaneStateManager(
@@ -229,6 +228,6 @@ final class FileEditorStateManager: ObservableObject {
     }
 
     static func languageForFileExtension(_ fileExtension: String) -> String {
-        EditorPaneStateManager.languageForFileExtension(fileExtension)
+        DefaultEditorLanguageDetector().languageForFileExtension(fileExtension)
     }
 }

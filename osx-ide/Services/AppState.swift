@@ -47,15 +47,15 @@ class AppState: ObservableObject, IDEContext {
 
     // MARK: - Services
 
-    private let errorManager: ErrorManagerProtocol
-    let uiService: UIServiceProtocol
-    let workspaceService: WorkspaceServiceProtocol
-    let fileEditorService: FileEditorServiceProtocol
+    private let errorManager: any ErrorManagerProtocol
+    let uiService: any UIServiceProtocol
+    let workspaceService: any WorkspaceServiceProtocol
+    let fileEditorService: any FileEditorServiceProtocol
     let conversationManager: ConversationManager
-    let fileDialogService: FileDialogServiceProtocol
+    let fileDialogService: any FileDialogServiceProtocol
     let fileSystemService: FileSystemService
 
-    let eventBus: EventBusProtocol
+    let eventBus: any EventBusProtocol
     let commandRegistry: CommandRegistry
     let uiRegistry: UIRegistry
     let diagnosticsStore: DiagnosticsStore
@@ -144,20 +144,20 @@ class AppState: ObservableObject, IDEContext {
     // MARK: - Initialization
 
     init(
-        errorManager: ErrorManagerProtocol,
-        uiService: UIServiceProtocol,
-        workspaceService: WorkspaceServiceProtocol,
-        fileEditorService: FileEditorServiceProtocol,
+        errorManager: any ErrorManagerProtocol,
+        uiService: any UIServiceProtocol,
+        workspaceService: any WorkspaceServiceProtocol,
+        fileEditorService: any FileEditorServiceProtocol,
         conversationManager: ConversationManager,
-        fileDialogService: FileDialogServiceProtocol,
+        fileDialogService: any FileDialogServiceProtocol,
         fileSystemService: FileSystemService,
-        eventBus: EventBusProtocol,
+        eventBus: any EventBusProtocol,
         commandRegistry: CommandRegistry,
         uiRegistry: UIRegistry,
         diagnosticsStore: DiagnosticsStore,
         inlineCompletionEngine: InlineCompletionEngine,
         windowProvider: WindowProvider,
-        codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
+        codebaseIndexProvider: @escaping () -> (any CodebaseIndexProtocol)?,
         configureCodebaseIndex: @escaping (URL) -> Void,
         setCodebaseIndexEnabled: @escaping (Bool) -> Void,
         reindexProjectNow: @escaping () -> Void,
@@ -247,7 +247,7 @@ class AppState: ObservableObject, IDEContext {
         }
     }
 
-    var codebaseIndex: CodebaseIndexProtocol? {
+    var codebaseIndex: (any CodebaseIndexProtocol)? {
         codebaseIndexProvider()
     }
 

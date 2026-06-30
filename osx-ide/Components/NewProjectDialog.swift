@@ -99,7 +99,7 @@ struct NewProjectDialog: View {
             // Set initial focus to project name field
             Task {
                 try? await Task.sleep(nanoseconds: 100_000_000)
-                await MainActor.run { () in
+                await MainActor.run {
                     NSApp.keyWindow?.makeFirstResponder(nil)
                 }
             }

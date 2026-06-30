@@ -248,7 +248,7 @@ private struct ModelSelectionSection: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 260)
                         .onSubmit(onCommit)
-                        .onChange(of: modelQuery) { _ in
+                        .onChange(of: modelQuery) {
                             onSearchChange()
                         }
 

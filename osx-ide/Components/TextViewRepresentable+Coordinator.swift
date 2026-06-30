@@ -1,7 +1,14 @@
 import SwiftUI
 import AppKit
+import Combine
 
 extension TextViewRepresentable {
+
+    enum TextMutationEvent {
+        case textDidChange(String, NSRange)
+        case selectionDidChange(String, NSRange, isProgrammatic: Bool)
+    }
+
     @MainActor
     class Coordinator: NSObject, NSTextViewDelegate {
         let parent: TextViewRepresentable
@@ -12,6 +19,9 @@ extension TextViewRepresentable {
         weak var attachedTextView: NSTextView?
         let signalBridge: EditorSignalBridge?
         var lastKnownBufferText: String = ""
+
+        let mutationSubject = PassthroughSubject<TextMutationEvent, Never>()
+        private var cancellables = Set<AnyCancellable>()
 
         init(_ parent: TextViewRepresentable) {
             self.parent = parent
@@ -27,6 +37,42 @@ extension TextViewRepresentable {
         func attach(textView: NSTextView) {
             self.attachedTextView = textView
             configureInlineCompletionHandlers()
+            setupMutationSubscription()
+        }
+
+        private func setupMutationSubscription() {
+            mutationSubject
+                .sink { [weak self] event in
+                    self?.handleMutationEvent(event)
+                }
+                .store(in: &cancellables)
+        }
+
+        @MainActor
+        private func handleMutationEvent(_ event: TextMutationEvent) {
+            guard let textView = attachedTextView else { return }
+
+            switch event {
+            case .textDidChange(let text, let range):
+                parent.text = text
+                parent.selectedRange = range
+                lastKnownBufferText = text
+                updateSelectionContext(from: textView)
+                scheduleAutomaticInlineCompletionIfNeeded(for: textView)
+
+            case .selectionDidChange(let text, let range, let isProgrammatic):
+                parent.selectedRange = range
+                updateSelectionContext(from: textView)
+
+                guard !isProgrammatic else { return }
+
+                if text == lastKnownBufferText {
+                    (textView as? CodeEditorTextView)?.clearInlineSuggestion()
+                    invalidateInlineCompletion()
+                } else {
+                    (textView as? CodeEditorTextView)?.clearInlineSuggestion()
+                }
+            }
         }
 
         deinit {
@@ -68,10 +114,6 @@ extension TextViewRepresentable {
                 "\"": "\"",
                 "'": "'"
             ]
-
-            if character == "\n" || character == "\r" {
-                return handleContextualNewline(in: textView)
-            }
 
             if let close = openToClose[character] {
                 return handleAutoPair(open: character, close: close, in: textView, affectedCharRange: affectedCharRange)
@@ -128,15 +170,15 @@ extension TextViewRepresentable {
             affectedCharRange: NSRange
         ) -> Bool {
             let selected = textView.selectedRange
-            if selected.length > 0, let textStorage = textView.textStorage {
+            if selected.length > 0 {
+                let selectedText = (textView.string as NSString).substring(with: selected)
+                let replacement = open + selectedText + close
+
                 isProgrammaticUpdate = true
                 defer { isProgrammaticUpdate = false }
 
-                let selectedText = (textView.string as NSString).substring(with: selected)
-                let replacement = open + selectedText + close
-                textStorage.replaceCharacters(in: selected, with: replacement)
+                textView.insertText(replacement, replacementRange: selected)
                 textView.setSelectedRange(NSRange(location: selected.location + 1 + selected.length, length: 0))
-                didModifyText(in: textView)
                 return false
             }
 
@@ -144,14 +186,11 @@ extension TextViewRepresentable {
                 return true
             }
 
-            guard let textStorage = textView.textStorage else { return true }
             isProgrammaticUpdate = true
             defer { isProgrammaticUpdate = false }
 
-            let insertionRange = NSRange(location: affectedCharRange.location, length: 0)
-            textStorage.replaceCharacters(in: insertionRange, with: open + close)
-            textView.setSelectedRange(NSRange(location: insertionRange.location + 1, length: 0))
-            didModifyText(in: textView)
+            textView.insertText(open + close, replacementRange: affectedCharRange)
+            textView.setSelectedRange(NSRange(location: affectedCharRange.location + 1, length: 0))
             return false
         }
 
@@ -164,7 +203,6 @@ extension TextViewRepresentable {
                 isProgrammaticSelectionUpdate = true
                 defer { isProgrammaticSelectionUpdate = false }
                 textView.setSelectedRange(NSRange(location: sel.location + 1, length: 0))
-                didModifyText(in: textView)
                 return false
             }
 
@@ -175,8 +213,6 @@ extension TextViewRepresentable {
         private func handleContextualNewline(in textView: NSTextView) -> Bool {
             let sel = textView.selectedRange
             if sel.length != 0 { return true }
-
-            guard let textStorage = textView.textStorage else { return true }
 
             let nsString = textView.string as NSString
             let cursor = sel.location
@@ -198,10 +234,9 @@ extension TextViewRepresentable {
                 isProgrammaticUpdate = true
                 defer { isProgrammaticUpdate = false }
 
-                textStorage.replaceCharacters(in: NSRange(location: safeCursor, length: 0), with: insertion)
+                textView.insertText(insertion, replacementRange: NSRange(location: safeCursor, length: 0))
                 let newCursor = safeCursor + 1 + (innerIndent as NSString).length
                 textView.setSelectedRange(NSRange(location: newCursor, length: 0))
-                didModifyText(in: textView)
                 return false
             }
 
@@ -217,23 +252,10 @@ extension TextViewRepresentable {
             isProgrammaticUpdate = true
             defer { isProgrammaticUpdate = false }
 
-            textStorage.replaceCharacters(in: NSRange(location: safeCursor, length: 0), with: insertion)
+            textView.insertText(insertion, replacementRange: NSRange(location: safeCursor, length: 0))
             let newCursor = safeCursor + 1 + (targetIndent as NSString).length
             textView.setSelectedRange(NSRange(location: newCursor, length: 0))
-            didModifyText(in: textView)
             return false
-        }
-
-        @MainActor
-        private func didModifyText(in textView: NSTextView) {
-            self.parent.text = textView.string
-            self.parent.selectedRange = textView.selectedRange
-            updateSelectionContext(from: textView)
-            lastKnownBufferText = textView.string
-            // Programmatic text changes (contextual newline, auto-pair) bypass
-            // the normal NSTextView notification path, so we must explicitly
-            // schedule a completion here.
-            scheduleAutomaticInlineCompletionIfNeeded(for: textView)
         }
 
         private func nextNonWhitespaceCharacter(in nsString: NSString, from index: Int) -> String? {

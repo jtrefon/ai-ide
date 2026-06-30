@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AppKit
 
 // CodeSelectionContext moved to Services/CodeSelectionContext.swift
 

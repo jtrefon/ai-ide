@@ -11,11 +11,11 @@ import SwiftUI
 /// Persists global UI settings to UserDefaults.
 @MainActor
 final class UIService: UIServiceProtocol {
-    private let errorManager: ErrorManagerProtocol
-    private let eventBus: EventBusProtocol
+    private let errorManager: any ErrorManagerProtocol
+    private let eventBus: any EventBusProtocol
     private let settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
 
-    init(errorManager: ErrorManagerProtocol, eventBus: EventBusProtocol) {
+    init(errorManager: any ErrorManagerProtocol, eventBus: any EventBusProtocol) {
         self.errorManager = errorManager
         self.eventBus = eventBus
     }
@@ -115,7 +115,6 @@ final class UIService: UIServiceProtocol {
 
     /// Update sidebar width
     func setSidebarWidth(_ width: Double) {
-        eventBus.publish(SidebarWidthChangedEvent(width: width))
     }
 
     /// Update terminal height
@@ -125,7 +124,6 @@ final class UIService: UIServiceProtocol {
 
     /// Update chat panel width
     func setChatPanelWidth(_ width: Double) {
-        eventBus.publish(ChatPanelWidthChangedEvent(width: width))
     }
 
     func setBottomPanelSelectedName(_ name: String) {

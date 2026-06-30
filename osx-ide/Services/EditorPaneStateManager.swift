@@ -1,6 +1,5 @@
 import SwiftUI
 import Combine
-import UniformTypeIdentifiers
 
 /// Manages file editor state and operations
 @MainActor
@@ -14,8 +13,8 @@ final class EditorPaneStateManager: ObservableObject {
     @Published var selectedRange: NSRange?
     @Published var isLoadingFile: Bool = false
 
-    let fileEditorService: FileEditorServiceProtocol
-    let fileDialogService: FileDialogServiceProtocol
+    let fileEditorService: any FileEditorServiceProtocol
+    let fileDialogService: any FileDialogServiceProtocol
     let fileSystemService: FileSystemService
 
     let languageDetector: EditorLanguageDetecting
@@ -23,8 +22,8 @@ final class EditorPaneStateManager: ObservableObject {
     let tabManager: EditorTabManager
 
     init(
-        fileEditorService: FileEditorServiceProtocol,
-        fileDialogService: FileDialogServiceProtocol,
+        fileEditorService: any FileEditorServiceProtocol,
+        fileDialogService: any FileDialogServiceProtocol,
         fileSystemService: FileSystemService
     ) {
         self.fileEditorService = fileEditorService

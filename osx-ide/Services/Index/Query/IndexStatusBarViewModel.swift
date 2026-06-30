@@ -251,7 +251,9 @@ final class IndexStatusBarViewModel: ObservableObject {
             queue: .main
         ) { [weak self] note in
             guard let status = note.object as? InlineCompletionStatus else { return }
-            self?.fimCompletionStatus = status
+            Task { @MainActor [self] in
+                self?.fimCompletionStatus = status
+            }
         }
     }
 

@@ -15,7 +15,7 @@ final class ProjectSessionCoordinator {
     private let workspace: WorkspaceStateManager
     private let ui: UIStateManager
     private let fileEditor: FileEditorStateManager
-    private let conversationManager: ConversationManagerProtocol
+    private let conversationManager: any ConversationManagerProtocol
 
     private let getFileTreeExpandedRelativePaths: () -> Set<String>
     private let setFileTreeExpandedRelativePaths: (Set<String>) -> Void
@@ -35,7 +35,7 @@ final class ProjectSessionCoordinator {
         workspace: WorkspaceStateManager,
         ui: UIStateManager,
         fileEditor: FileEditorStateManager,
-        conversationManager: ConversationManagerProtocol,
+        conversationManager: any ConversationManagerProtocol,
         getFileTreeExpandedRelativePaths: @escaping () -> Set<String>,
         setFileTreeExpandedRelativePaths: @escaping (Set<String>) -> Void,
         getShowHiddenFilesInFileTree: @escaping () -> Bool,
@@ -189,31 +189,13 @@ final class ProjectSessionCoordinator {
         let referenceFrame = window?.frame
             ?? normalizedWindowRect
             ?? NSRect(x: 0, y: 0, width: visibleFrame.width, height: visibleFrame.height)
-        var normalizedSidebarWidth = UILayoutNormalizer.normalizeSidebarWidth(
-            uiConfig.sidebarWidth,
-            windowWidth: referenceFrame.width
-        )
-        var normalizedChatPanelWidth = UILayoutNormalizer.normalizeChatPanelWidth(
-            uiConfig.chatPanelWidth,
-            windowWidth: referenceFrame.width
-        )
         let normalizedTerminalHeight = UILayoutNormalizer.normalizeTerminalHeight(
             uiConfig.terminalHeight,
             windowHeight: referenceFrame.height
         )
-        let balanced = UILayoutNormalizer.rebalanceHorizontalPanels(
-            sidebarWidth: normalizedSidebarWidth,
-            chatWidth: normalizedChatPanelWidth,
-            isSidebarVisible: uiConfig.isSidebarVisible,
-            isChatVisible: uiConfig.isAIChatVisible,
-            windowWidth: referenceFrame.width,
-            minimumEditorWidth: 400
-        )
-        normalizedSidebarWidth = balanced.sidebar
-        normalizedChatPanelWidth = balanced.chat
-        ui.sidebarWidth = normalizedSidebarWidth
+        ui.sidebarWidth = uiConfig.sidebarWidth
         ui.terminalHeight = normalizedTerminalHeight
-        ui.chatPanelWidth = normalizedChatPanelWidth
+        ui.chatPanelWidth = uiConfig.chatPanelWidth
 
         if let theme = AppTheme(rawValue: editorConfig.selectedThemeRawValue) {
             ui.selectedTheme = theme

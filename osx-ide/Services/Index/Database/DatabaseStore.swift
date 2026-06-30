@@ -52,7 +52,7 @@ public actor DatabaseStore {
     
     /// Async factory method for non-blocking initialization
     public static func create(path: String) async throws -> DatabaseStore {
-        try await DatabaseStore(path: path)
+        try DatabaseStore(path: path)
     }
 
     public func shutdown() {

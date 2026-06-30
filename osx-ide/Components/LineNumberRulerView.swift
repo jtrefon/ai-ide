@@ -146,17 +146,22 @@ final class ModernLineNumberRulerView: NSRulerView {
 
     private func drawLineNumber(_ lineNumber: Int, at lineRect: NSRect, drawContext: DrawLineNumberContext) {
         let label = "\(lineNumber)" as NSString
-        let labelSize = label.size(withAttributes: drawContext.attrs)
-        let labelY = lineRect.minY + (lineRect.height - labelSize.height) / 2
-        let labelX = ruleThickness - 6 - labelSize.width
+        let isCurrentLine = drawContext.charIndex == drawContext.context.textView.selectedRange.location
 
-        if drawContext.charIndex == drawContext.context.textView.selectedRange.location {
+        var attrs = drawContext.attrs
+        if isCurrentLine {
+            attrs[.foregroundColor] = NSColor.secondaryLabelColor.blended(withFraction: 0.15, of: .labelColor) ?? NSColor.labelColor
+
             let highlightRect = NSRect(x: 0, y: lineRect.minY, width: ruleThickness, height: lineRect.height)
             selectionColor.setFill()
             highlightRect.fill()
         }
 
-        label.draw(at: NSPoint(x: labelX, y: labelY), withAttributes: drawContext.attrs)
+        let labelSize = label.size(withAttributes: attrs)
+        let labelY = lineRect.minY + (lineRect.height - labelSize.height) / 2
+        let labelX = ruleThickness - 6 - labelSize.width
+
+        label.draw(at: NSPoint(x: labelX, y: labelY), withAttributes: attrs)
     }
 
 }

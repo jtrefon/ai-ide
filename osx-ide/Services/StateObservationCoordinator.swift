@@ -8,7 +8,7 @@ final class StateObservationCoordinator {
     private let fileEditor: FileEditorStateManager
     private let workspace: WorkspaceStateManager
     private let ui: UIStateManager
-    private let conversationManager: ConversationManagerProtocol
+    private let conversationManager: any ConversationManagerProtocol
 
     private let onWorkspaceRootChange: (URL) -> Void
     private let onPersistenceRelevantChange: () -> Void
@@ -17,7 +17,7 @@ final class StateObservationCoordinator {
         fileEditor: FileEditorStateManager,
         workspace: WorkspaceStateManager,
         ui: UIStateManager,
-        conversationManager: ConversationManagerProtocol,
+        conversationManager: any ConversationManagerProtocol,
         onWorkspaceRootChange: @escaping (URL) -> Void,
         onPersistenceRelevantChange: @escaping () -> Void
     ) {

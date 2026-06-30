@@ -31,7 +31,7 @@ final class FileTreeSearchCoordinator {
             guard !Task.isCancelled else { return }
 
             searchGeneration += 1
-            let currentGeneration = searchGeneration
+            _ = searchGeneration
 
             await MainActor.run {
                 dataSource.setSearchQuery(value)

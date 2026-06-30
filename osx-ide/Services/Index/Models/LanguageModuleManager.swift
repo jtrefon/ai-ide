@@ -12,7 +12,6 @@ import Combine
 /// Manages registration and activation of language modules.
 @MainActor
 public final class LanguageModuleManager: ObservableObject {
-    @available(*, deprecated, message: "Use dependency injection via DependencyContainer instead")
     public static let shared = LanguageModuleManager(
         modules: [
             SwiftModule(),

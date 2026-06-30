@@ -16,9 +16,9 @@ fileprivate func earlyDiag(_ msg: String) {
     if let data = line.data(using: .utf8) {
         if fm.fileExists(atPath: tmpLog.path) {
             if let handle = try? FileHandle(forWritingTo: tmpLog) {
-                try? handle.seekToEnd()
-                try? handle.write(contentsOf: data)
-                try? handle.close()
+                _ = try? handle.seekToEnd()
+                _ = try? handle.write(contentsOf: data)
+                _ = try? handle.close()
             }
         } else {
             try? data.write(to: tmpLog)

@@ -97,8 +97,7 @@ struct ContentView: View {
     // MARK: - Layout: Workspace
 
     private var workspaceLayout: some View {
-        let _ = trackViewRender("ContentView.workspaceLayout")
-        return GeometryReader { proxy in
+        GeometryReader { proxy in
             HStack(spacing: 0) {
                 if uiState.isSidebarVisible, let pluginView = registry.views(for: .sidebarLeft).first {
                     pluginView.makeView()
@@ -106,7 +105,7 @@ struct ContentView: View {
                         .frame(maxHeight: .infinity)
                         .accessibilityIdentifier(AccessibilityID.leftSidebarPanel)
 
-                    horizontalDivider(accessibilityID: AccessibilityID.sidebarResizeHandle) {
+                    PanelDivider(orientation: .vertical) {
                         if sidebarDragStartWidth == nil {
                             sidebarDragStartWidth = uiState.sidebarWidth
                         }
@@ -116,16 +115,17 @@ struct ContentView: View {
                             proposedChatWidth: nil,
                             windowWidth: proxy.size.width
                         )
-                    } onEnded: { _ in
+                    } onEnded: {
                         sidebarDragStartWidth = nil
                     }
+                    .accessibilityIdentifier(AccessibilityID.sidebarResizeHandle)
                 }
 
                 HStack(spacing: 0) {
                     editorAndTerminal
 
                     if uiState.isAIChatVisible, let pluginView = registry.views(for: .panelRight).first {
-                        horizontalDivider(accessibilityID: AccessibilityID.chatResizeHandle) {
+                        PanelDivider(orientation: .vertical) {
                             if chatDragStartWidth == nil {
                                 chatDragStartWidth = uiState.chatPanelWidth
                             }
@@ -135,9 +135,10 @@ struct ContentView: View {
                                 proposedChatWidth: proposed,
                                 windowWidth: proxy.size.width
                             )
-                        } onEnded: { _ in
+                        } onEnded: {
                             chatDragStartWidth = nil
                         }
+                        .accessibilityIdentifier(AccessibilityID.chatResizeHandle)
 
                         pluginView.makeView()
                             .frame(width: uiState.chatPanelWidth)
@@ -162,30 +163,6 @@ struct ContentView: View {
                 )
             }
         }
-    }
-
-    private func horizontalDivider(
-        accessibilityID: String,
-        onChanged: @escaping (DragGesture.Value) -> Void,
-        onEnded: @escaping (DragGesture.Value) -> Void
-    ) -> some View {
-        Rectangle()
-            .fill(Color(NSColor.separatorColor).opacity(0.95))
-            .frame(width: 8)
-            .contentShape(Rectangle())
-            .overlay(
-                ResizeCursorView(cursor: .resizeLeftRight)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            )
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged(onChanged)
-                    .onEnded(onEnded)
-            )
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilityID)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityIdentifier(accessibilityID)
     }
 
     private func applyHorizontalPanelWidths(
@@ -318,7 +295,7 @@ struct ContentView: View {
             }
             .pickerStyle(.segmented)
             .onChange(of: uiState.bottomPanelSelectedName) { _, newName in
-                Task { await appState.uiService.setBottomPanelSelectedName(newName) }
+                Task { appState.uiService.setBottomPanelSelectedName(newName) }
             }
             .labelsHidden()
             .frame(maxWidth: 360)
@@ -408,8 +385,7 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
     let terminal: () -> Terminal
 
     @State private var dragStartTerminalHeight: Double?
-
-    private let dividerHeight: CGFloat = 6
+    @State private var isDividerHovered = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -417,7 +393,7 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
             let minEditorHeight = Double(AppConstants.Layout.minTerminalHeight)
             let maxAllowedTerminal = max(
                 AppConstants.Layout.minTerminalHeight,
-                min(AppConstants.Layout.maxTerminalHeight, containerHeight - minEditorHeight - Double(dividerHeight))
+                min(AppConstants.Layout.maxTerminalHeight, containerHeight - minEditorHeight - 2)
             )
 
             VStack(spacing: 0) {
@@ -426,16 +402,19 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
                     .frame(maxHeight: .infinity)
 
                 if isTerminalVisible {
-                    Rectangle()
-                        .fill(Color(NSColor.separatorColor))
-                        .frame(height: dividerHeight)
+                    Color.clear
+                        .frame(height: 10)
                         .contentShape(Rectangle())
-                        .overlay(
-                            ResizeCursorView()
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        )
+                        .onHover { hovering in
+                            isDividerHovered = hovering
+                            if hovering {
+                                NSCursor.resizeUpDown.push()
+                            } else {
+                                NSCursor.pop()
+                            }
+                        }
                         .gesture(
-                            DragGesture(minimumDistance: 0)
+                            DragGesture(minimumDistance: 3)
                                 .onChanged { value in
                                     if dragStartTerminalHeight == nil {
                                         dragStartTerminalHeight = terminalHeight
@@ -453,6 +432,14 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
                                     dragStartTerminalHeight = nil
                                 }
                         )
+                        .overlay(alignment: .center) {
+                            Rectangle()
+                                .fill(isDividerHovered
+                                    ? Color(nsColor: .separatorColor)
+                                    : Color(nsColor: .separatorColor).opacity(0.3))
+                                .frame(height: 2)
+                                .animation(.easeInOut(duration: 0.15), value: isDividerHovered)
+                        }
 
                     terminal()
                         .frame(maxWidth: .infinity)
@@ -463,23 +450,69 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
     }
 }
 
+// MARK: - Private: PanelDivider
+
+private struct PanelDivider: View {
+    let orientation: Orientation
+    let onChanged: (DragGesture.Value) -> Void
+    let onEnded: () -> Void
+
+    @State private var isHovered = false
+
+    enum Orientation {
+        case vertical
+        case horizontal
+    }
+
+    var body: some View {
+        Color.clear
+            .frame(width: orientation == .vertical ? 8 : nil)
+            .frame(height: orientation == .horizontal ? 8 : nil)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                isHovered = hovering
+                if hovering {
+                    (orientation == .vertical ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 3)
+                    .onChanged(onChanged)
+                    .onEnded { _ in onEnded() }
+            )
+            .overlay(alignment: .center) {
+                Rectangle()
+                    .fill(isHovered
+                        ? Color(nsColor: .separatorColor)
+                        : Color(nsColor: .separatorColor).opacity(0.25))
+                    .frame(width: orientation == .vertical ? 2 : nil)
+                    .frame(height: orientation == .horizontal ? 2 : nil)
+            }
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
+    }
+}
+
 // MARK: - Private: WindowSetupView
 
 private struct WindowSetupView: View {
     @ObservedObject var appState: AppState
+    @State private var window: NSWindow?
 
     var body: some View {
         Color.clear
             .frame(width: 0, height: 0)
             .background(WindowResolver { window in
+                self.window = window
                 appState.windowProvider.setWindow(window)
                 appState.attachWindow(window)
-                window.titleVisibility = .hidden
                 window.isOpaque = true
                 window.backgroundColor = NSColor.windowBackgroundColor
                 window.hasShadow = true
                 window.styleMask.insert(.resizable)
                 window.styleMask.insert(.unifiedTitleAndToolbar)
+                window.title = appState.workspace.currentDirectory?.lastPathComponent ?? "osx-ide"
 
                 guard let screen = window.screen ?? NSScreen.main else { return }
                 let visibleFrame = screen.visibleFrame
@@ -494,6 +527,9 @@ private struct WindowSetupView: View {
                     window.setFrame(normalized, display: true)
                 }
             })
+            .onReceive(appState.workspace.$currentDirectory) { newDirectory in
+                window?.title = newDirectory?.lastPathComponent ?? "osx-ide"
+            }
     }
 }
 

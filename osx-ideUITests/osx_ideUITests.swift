@@ -62,8 +62,6 @@ enum UITestAccessibilityID {
     static let statusBar = "StatusBar"
     static let leftSidebarPanel = "LeftSidebarPanel"
     static let rightChatPanel = "RightChatPanel"
-    static let sidebarResizeHandle = "SidebarResizeHandle"
-    static let chatResizeHandle = "ChatResizeHandle"
 }
 
 @MainActor

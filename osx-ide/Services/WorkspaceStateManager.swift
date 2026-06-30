@@ -15,10 +15,10 @@ class WorkspaceStateManager: ObservableObject {
     @Published var openFiles: [String: URL] = [:]
     @Published var recentlyOpenedFiles: [URL] = []
 
-    private let workspaceService: WorkspaceServiceProtocol
-    private let fileDialogService: FileDialogServiceProtocol
+    private let workspaceService: any WorkspaceServiceProtocol
+    private let fileDialogService: any FileDialogServiceProtocol
 
-    init(workspaceService: WorkspaceServiceProtocol, fileDialogService: FileDialogServiceProtocol) {
+    init(workspaceService: any WorkspaceServiceProtocol, fileDialogService: any FileDialogServiceProtocol) {
         self.workspaceService = workspaceService
         self.fileDialogService = fileDialogService
         self.currentDirectory = workspaceService.currentDirectory

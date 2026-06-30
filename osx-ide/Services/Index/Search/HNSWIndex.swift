@@ -177,7 +177,7 @@ final class HNSWIndex: @unchecked Sendable {
         }
     }
 
-    private func searchLayer(entryId: String, query: [Float], layer: Int, ef: Int) -> [(id: String, distance: Float)] {
+    private func searchLayer(entryId: String, query: [Float], layer: Int, ef: Int) -> [(distance: Float, id: String)] {
         let normalizedQuery = normalize(query)
         guard !normalizedQuery.isEmpty else { return [] }
 
@@ -213,14 +213,14 @@ final class HNSWIndex: @unchecked Sendable {
             }
         }
 
-        var sorted = [(id: String, distance: Float)]()
+        var sorted = [(distance: Float, id: String)]()
         while let r = results.pop() {
             sorted.append(r)
         }
         return sorted.reversed()
     }
 
-    private func selectNeighbors(from candidates: [(id: String, distance: Float)], M: Int) -> [String] {
+    private func selectNeighbors(from candidates: [(distance: Float, id: String)], M: Int) -> [String] {
         return candidates.prefix(M).map { $0.id }
     }
 

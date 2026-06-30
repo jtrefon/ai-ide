@@ -8,6 +8,7 @@
 import Foundation
 
 /// Coordinates message filtering logic for display
+@MainActor
 struct MessageFilterCoordinator {
 
     // MARK: - Public Methods

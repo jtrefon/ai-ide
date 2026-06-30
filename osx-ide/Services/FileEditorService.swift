@@ -23,11 +23,11 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
     @Published var isDirty = false
 
     private var isLoadingFile = false
-    private let errorManager: ErrorManagerProtocol
+    private let errorManager: any ErrorManagerProtocol
     private let fileSystemService: FileSystemService
-    private let eventBus: EventBusProtocol
+    private let eventBus: any EventBusProtocol
 
-    init(errorManager: ErrorManagerProtocol, fileSystemService: FileSystemService, eventBus: EventBusProtocol) {
+    init(errorManager: any ErrorManagerProtocol, fileSystemService: FileSystemService, eventBus: any EventBusProtocol) {
         self.errorManager = errorManager
         self.fileSystemService = fileSystemService
         self.eventBus = eventBus
@@ -102,18 +102,7 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
 
     /// Get language identifier for file extension
     static func languageForFileExtension(_ extension: String) -> String {
-        let map: [String: String] = [
-            "swift": "swift",
-            "js": "javascript",
-            "jsx": "javascript",
-            "ts": "typescript",
-            "tsx": "tsx",
-            "py": "python",
-            "html": "html",
-            "css": "css",
-            "json": "json"
-        ]
-        return map[`extension`.lowercased()] ?? "text"
+        DefaultEditorLanguageDetector().languageForFileExtension(`extension`)
     }
 
     /// Check if file can be saved

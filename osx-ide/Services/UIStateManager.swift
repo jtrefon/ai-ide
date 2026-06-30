@@ -142,16 +142,8 @@ class UIStateManager: ObservableObject {
     }
 
     private func setupEventSubscriptions() {
-        eventBus.subscribe(to: SidebarWidthChangedEvent.self) { [weak self] event in
-            self?.sidebarWidth = event.width
-        }.store(in: &cancellables)
-
         eventBus.subscribe(to: TerminalHeightChangedEvent.self) { [weak self] event in
             self?.terminalHeight = event.height
-        }.store(in: &cancellables)
-
-        eventBus.subscribe(to: ChatPanelWidthChangedEvent.self) { [weak self] event in
-            self?.chatPanelWidth = event.width
         }.store(in: &cancellables)
     }
 

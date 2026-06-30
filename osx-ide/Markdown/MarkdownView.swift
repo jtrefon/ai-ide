@@ -101,8 +101,8 @@ private struct InlineRenderer: View {
     }
 
     private func renderChildren(_ markup: Markup) -> SwiftUI.Text {
-        markup.children.reduce(SwiftUI.Text("")) { result, child in
-            result + renderInline(child)
+        markup.children.map(renderInline).reduce(into: SwiftUI.Text("")) { result, text in
+            result = SwiftUI.Text("\(result)\(text)")
         }
     }
 

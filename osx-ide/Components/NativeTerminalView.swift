@@ -31,7 +31,7 @@ struct NativeTerminalView: View {
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
-            eventBus.subscribe(to: TerminalClearRequestedEvent.self) { _ in
+            _ = eventBus.subscribe(to: TerminalClearRequestedEvent.self) { _ in
                 clearPublisher.send()
             }
         }

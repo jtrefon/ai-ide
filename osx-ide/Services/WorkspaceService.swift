@@ -10,14 +10,14 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
         }
     }
 
-    private let errorManager: ErrorManagerProtocol
-    private let eventBus: EventBusProtocol
+    private let errorManager: any ErrorManagerProtocol
+    private let eventBus: any EventBusProtocol
     private let settingsStore: SettingsStore
     private let fileOperationsService: FileOperationsService
 
     init(
-        errorManager: ErrorManagerProtocol,
-        eventBus: EventBusProtocol,
+        errorManager: any ErrorManagerProtocol,
+        eventBus: any EventBusProtocol,
         fileSystemService: FileSystemService
     ) {
         self.errorManager = errorManager

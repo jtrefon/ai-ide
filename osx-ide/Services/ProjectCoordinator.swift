@@ -12,15 +12,15 @@ import Foundation
 @MainActor
 class ProjectCoordinator: ObservableObject {
     private let aiService: AIService
-    private let errorManager: ErrorManagerProtocol
-    private let eventBus: EventBusProtocol
-    private let conversationManager: ConversationManagerProtocol
+    private let errorManager: any ErrorManagerProtocol
+    private let eventBus: any EventBusProtocol
+    private let conversationManager: any ConversationManagerProtocol
     private let settingsStore: SettingsStore
     private let backgroundWorkGovernor: BackgroundWorkGovernor
     private(set) var currentProjectRoot: URL?
     private var rootWatcher: ProjectRootFileWatcher?
 
-    @Published private(set) var codebaseIndex: CodebaseIndexProtocol?
+    @Published private(set) var codebaseIndex: (any CodebaseIndexProtocol)?
     @Published private(set) var isInitializing: Bool = false
     @Published private(set) var initializationError: Error?
 
@@ -29,9 +29,9 @@ class ProjectCoordinator: ObservableObject {
 
     init(
         aiService: AIService,
-        errorManager: ErrorManagerProtocol,
-        eventBus: EventBusProtocol,
-        conversationManager: ConversationManagerProtocol
+        errorManager: any ErrorManagerProtocol,
+        eventBus: any EventBusProtocol,
+        conversationManager: any ConversationManagerProtocol
     ) {
         self.aiService = aiService
         self.errorManager = errorManager
@@ -84,9 +84,8 @@ class ProjectCoordinator: ObservableObject {
         // Capture Sendable values for the detached task
         let eventBus = self.eventBus
         let aiService = self.aiService
-        let settingsStore = self.settingsStore
         let ss = self.settingsStore
-        let backgroundWorkGovernor = self.backgroundWorkGovernor
+        _ = self.backgroundWorkGovernor
 
         // CRITICAL: Use Task.detached with [weak self] but WITHOUT immediate guard.
         // This keeps the closure non-isolated while allowing weak access to self for MainActor hops.
@@ -261,7 +260,7 @@ class ProjectCoordinator: ObservableObject {
         let eventBus = self.eventBus
         let aiService = self.aiService
         let settingsStore = self.settingsStore
-        let backgroundWorkGovernor = self.backgroundWorkGovernor
+        _ = self.backgroundWorkGovernor
 
         // CRITICAL: Use Task.detached to escape @MainActor context
         initializationTask = Task.detached(priority: .userInitiated) { [weak self] in

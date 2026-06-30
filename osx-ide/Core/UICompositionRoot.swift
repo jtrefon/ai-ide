@@ -9,8 +9,8 @@ enum UICompositionRoot {
         guard let data = line.data(using: .utf8) else { return }
         let fm = FileManager.default
         if fm.fileExists(atPath: url.path), let handle = try? FileHandle(forWritingTo: url) {
-            try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
+            _ = try? handle.seekToEnd()
+            _ = try? handle.write(contentsOf: data)
             try? handle.close()
         } else {
             try? data.write(to: url)

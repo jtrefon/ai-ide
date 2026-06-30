@@ -216,7 +216,7 @@ final class ToolLoopHandler {
                     userInput: userInput,
                     projectRoot: projectRoot
                ),
-               uniqueToolCalls.allSatisfy { isMutationToolName($0.name) },
+               uniqueToolCalls.allSatisfy({ isMutationToolName($0.name) }),
                !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }) {
                 await AIToolTraceLogger.shared.log(type: "chat.tool_loop_post_mutation_write_stall", data: [
                     "runId": runId,

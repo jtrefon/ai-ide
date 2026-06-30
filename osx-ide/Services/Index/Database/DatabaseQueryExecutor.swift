@@ -12,8 +12,6 @@ final class DatabaseQueryExecutor {
 
     func listResourcePaths(matching query: String?, limit: Int, offset: Int) throws -> [String] {
         let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasQuery = !(trimmed?.isEmpty ?? true)
-
         let sql: String
         let parameters: [Any]
         if let queryText = trimmed, !queryText.isEmpty {

@@ -1,8 +1,12 @@
 import SwiftUI
 
 struct LanguageModulesTab: View {
-    @ObservedObject var moduleManager = LanguageModuleManager.shared
+    @ObservedObject var moduleManager: LanguageModuleManager
     @State private var searchText = ""
+
+    init(moduleManager: LanguageModuleManager = LanguageModuleManager.shared) {
+        _moduleManager = ObservedObject(wrappedValue: moduleManager)
+    }
 
     var filteredLanguages: [CodeLanguage] {
         if searchText.isEmpty {

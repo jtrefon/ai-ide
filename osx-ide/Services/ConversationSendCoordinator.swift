@@ -151,7 +151,7 @@ final class ConversationSendCoordinator {
         let maxSameCall = 3
         var promptedForExecution = false
 
-        for iteration in 0..<maxIterations {
+        for _ in 0..<maxIterations {
             let messages = historyCoordinator.messages.filter { !$0.isDraft }
             let result = await aiInteractionCoordinator.sendMessageWithRetry(
                 AIInteractionCoordinator.SendMessageWithRetryRequest(
@@ -179,7 +179,7 @@ final class ConversationSendCoordinator {
                 toolCalls = parsed.toolCalls
             }
 
-            await clearStreamingBuffer?()
+            clearStreamingBuffer?()
 
             guard !toolCalls.isEmpty else {
                 if !promptedForExecution, looksLikePlanWithoutAction(rawContent) {

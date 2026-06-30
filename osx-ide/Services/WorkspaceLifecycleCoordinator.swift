@@ -2,12 +2,12 @@ import Foundation
 
 @MainActor
 final class WorkspaceLifecycleCoordinator {
-    private let conversationManager: ConversationManagerProtocol
+    private let conversationManager: any ConversationManagerProtocol
     private let configureCodebaseIndex: (URL) -> Void
     private let loadProjectSession: (URL) async -> Void
 
     init(
-        conversationManager: ConversationManagerProtocol,
+        conversationManager: any ConversationManagerProtocol,
         configureCodebaseIndex: @escaping (URL) -> Void,
         loadProjectSession: @escaping (URL) async -> Void
     ) {

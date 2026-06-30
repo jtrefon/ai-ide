@@ -23,15 +23,15 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     struct ServiceDependencies {
         let aiService: AIService
-        let errorManager: ErrorManagerProtocol
+        let errorManager: any ErrorManagerProtocol
         let fileSystemService: FileSystemService
         let fileEditorService: (any FileEditorServiceProtocol)?
-        let activityCoordinator: AgentActivityCoordinating?
+        let activityCoordinator: (any AgentActivityCoordinating)?
     }
 
     struct EnvironmentDependencies {
-        let workspaceService: WorkspaceServiceProtocol
-        let eventBus: EventBusProtocol
+        let workspaceService: any WorkspaceServiceProtocol
+        let eventBus: any EventBusProtocol
         let projectRoot: URL?
         let codebaseIndex: CodebaseIndexProtocol?
     }
@@ -67,12 +67,12 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private var aiService: AIService
     private let aiInteractionCoordinator: AIInteractionCoordinator
     private let sendCoordinator: ConversationSendCoordinator
-    private let errorManager: ErrorManagerProtocol
+    private let errorManager: any ErrorManagerProtocol
     private let fileSystemService: FileSystemService
     private weak var fileEditorService: (any FileEditorServiceProtocol)?
-    private let workspaceService: WorkspaceServiceProtocol
-    private let eventBus: EventBusProtocol
-    private var codebaseIndex: CodebaseIndexProtocol?
+    private let workspaceService: any WorkspaceServiceProtocol
+    private let eventBus: any EventBusProtocol
+    private var codebaseIndex: (any CodebaseIndexProtocol)?
     private var projectRoot: URL
     private let conversationLogger: ConversationLogger
     private let settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
@@ -842,7 +842,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     func closeConversation(id: String) {
         cancelActiveSendTask()
         saveCurrentSessionSnapshot()
-        sessionManager.close(
+        _ = sessionManager.close(
             id: id,
             input: &currentInput,
             livePreview: &liveModelOutputPreview,

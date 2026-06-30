@@ -14,64 +14,15 @@ struct EditorPaneView: View {
     let fontSize: Double
     let fontFamily: String
 
-    private func localized(_ key: String) -> String {
-        NSLocalizedString(key, comment: "")
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    if pane.tabs.isEmpty {
-                        Text(localized("editor.untitled"))
-                            .font(.headline)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                    } else {
-                        ForEach(pane.tabs) { tab in
-                            let isActive = tab.id == pane.activeTabID
-                            Button(
-                                action: {
-                                    onFocus()
-                                    pane.activateTab(id: tab.id)
-                                },
-                                label: {
-                                    HStack(spacing: 6) {
-                                        Text(
-                                            URL(fileURLWithPath: tab.filePath).lastPathComponent
-                                                + (tab.isDirty ? " •" : "")
-                                        )
-                                        .lineLimit(1)
-
-                                        Button(
-                                            action: {
-                                                onFocus()
-                                                pane.closeTab(id: tab.id)
-                                            },
-                                            label: {
-                                                Image(systemName: "xmark")
-                                                    .font(.caption2.weight(.semibold))
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                        )
-                                        .buttonStyle(.plain)
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(isActive ? Color(nsColor: .controlBackgroundColor) : Color.clear)
-                                    .cornerRadius(6)
-                                }
-                            )
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-            }
-            .frame(height: 34)
-            .background(.windowBackground)
+            EditorTabBar(
+                tabs: pane.tabs,
+                activeTabID: pane.activeTabID,
+                onActivate: { pane.activateTab(id: $0) },
+                onClose: { pane.closeTab(id: $0) },
+                onFocus: onFocus
+            )
 
             HStack(spacing: 0) {
                 CodeEditorView(
