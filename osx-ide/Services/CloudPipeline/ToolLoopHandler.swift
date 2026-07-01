@@ -34,7 +34,7 @@ final class ToolLoopHandler {
         usesLocalModel: Bool = false,
         recursionDepth: Int = 0
     ) async throws -> ToolLoopResult {
-        guard mode == .agent else {
+        guard mode == .agent || mode == .coder else {
             return ToolLoopResult(response: response, lastToolCalls: [], lastToolResults: [])
         }
 
@@ -73,7 +73,7 @@ final class ToolLoopHandler {
             ToolLoopConstants.maxNonAgentIterations
         }
 
-        if mode == .agent,
+        if (mode == .agent || mode == .coder),
            currentResponse.toolCalls?.isEmpty ?? true,
            !availableTools.isEmpty,
            shouldForceInitialExecutionFollowup(
@@ -109,7 +109,7 @@ final class ToolLoopHandler {
                 .get()
         }
 
-        if mode == .agent,
+        if (mode == .agent || mode == .coder),
            currentResponse.toolCalls?.isEmpty ?? true,
            !availableTools.isEmpty,
            let content = currentResponse.content {
