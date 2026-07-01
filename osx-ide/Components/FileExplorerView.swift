@@ -65,12 +65,16 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                     }
                 },
                 onCreateFile: { directory, name in
-                    context.workspaceService.createFile(named: name, in: directory)
-                    refreshToken += 1
+                    Task {
+                        await context.workspaceService.createFile(named: name, in: directory)
+                        refreshToken += 1
+                    }
                 },
                 onCreateFolder: { directory, name in
-                    context.workspaceService.createFolder(named: name, in: directory)
-                    refreshToken += 1
+                    Task {
+                        await context.workspaceService.createFolder(named: name, in: directory)
+                        refreshToken += 1
+                    }
                 },
                 onDeleteItem: { url in
                     Task {
@@ -170,10 +174,16 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 searchQuery = ""
             }
         }
-        // Cmd+F: toggle search bar
+        // Cmd+F: toggle search bar | Esc: hide search bar
         .background(
             Button("") { isSearchVisible.toggle() }
                 .keyboardShortcut("f", modifiers: .command)
+                .frame(width: 0, height: 0)
+                .opacity(0)
+        )
+        .background(
+            Button("") { isSearchVisible = false }
+                .keyboardShortcut(.escape, modifiers: [])
                 .frame(width: 0, height: 0)
                 .opacity(0)
         )
@@ -188,18 +198,22 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
     }
 
     private func createNewFile() {
-        defer { isShowingNewFileSheet = false }
         let trimmedName = newFileName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
-        context.workspace.createFile(named: trimmedName)
-        refreshToken += 1
+        guard !trimmedName.isEmpty else { isShowingNewFileSheet = false; return }
+        isShowingNewFileSheet = false
+        Task {
+            await context.workspace.createFile(named: trimmedName)
+            refreshToken += 1
+        }
     }
 
     private func createNewFolder() {
-        defer { isShowingNewFolderSheet = false }
         let trimmedName = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
-        context.workspace.createFolder(named: trimmedName)
-        refreshToken += 1
+        guard !trimmedName.isEmpty else { isShowingNewFolderSheet = false; return }
+        isShowingNewFolderSheet = false
+        Task {
+            await context.workspace.createFolder(named: trimmedName)
+            refreshToken += 1
+        }
     }
 }

@@ -79,10 +79,10 @@ private final class ToolExecutionMockErrorManager: ObservableObject, ErrorManage
 private final class MockWorkspaceService: ObservableObject, WorkspaceServiceProtocol {
     @Published var currentDirectory: URL?
 
-    func createFile(named name: String, in directory: URL) {}
-    func createFolder(named name: String, in directory: URL) {}
-    func deleteItem(at url: URL) {}
-    func renameItem(at url: URL, to newName: String) -> URL? { nil }
+    func createFile(named name: String, in directory: URL) async {}
+    func createFolder(named name: String, in directory: URL) async {}
+    func deleteItem(at url: URL) async {}
+    func renameItem(at url: URL, to newName: String) async -> URL? { nil }
     func navigateToParent() {}
     func navigateTo(subdirectory: String) {}
     func isValidPath(_ path: String) -> Bool { true }

@@ -291,12 +291,12 @@ class AppState: ObservableObject, IDEContext {
         }
     }
 
-    func createFile(name: String) {
-        workspace.createFile(named: name)
+    func createFile(name: String) async {
+        await workspace.createFile(named: name)
     }
 
-    func createFolder(name: String) {
-        workspace.createFolder(named: name)
+    func createFolder(name: String) async {
+        await workspace.createFolder(named: name)
     }
 
     func navigateToParent() {

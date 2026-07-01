@@ -56,10 +56,10 @@ extension OpenRouterAIService {
 
     internal func validateSettings(apiKey: String, model: String) throws {
         guard !apiKey.isEmpty else {
-            throw AppError.aiServiceError("OpenRouter API key is missing.")
+            throw AppError.aiServiceError("\(providerName) API key is missing.")
         }
         guard !model.isEmpty else {
-            throw AppError.aiServiceError("OpenRouter model is not set.")
+            throw AppError.aiServiceError("\(providerName) model is not set.")
         }
     }
 

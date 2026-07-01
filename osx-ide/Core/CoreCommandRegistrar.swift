@@ -338,7 +338,7 @@ struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
             guard let root = context.workspace.currentDirectory?.standardizedFileURL else { return }
             do {
                 let url = try context.workspaceService.makePathValidator(projectRoot: root).validateAndResolve(path)
-                context.workspaceService.deleteItem(at: url)
+                await context.workspaceService.deleteItem(at: url)
 
                 context.fileEditor.closeTab(filePath: url.path)
                 context.workspace.removeOpenFile(url)
@@ -361,7 +361,7 @@ struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
                     return
                 }
 
-                guard let newURL = context.workspaceService.renameItem(at: url, to: newName) else { return }
+                guard let newURL = await context.workspaceService.renameItem(at: url, to: newName) else { return }
 
                 context.fileEditor.renameTab(oldPath: url.path, newPath: newURL.path)
 

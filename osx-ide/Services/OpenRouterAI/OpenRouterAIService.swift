@@ -74,7 +74,7 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
     private let eventBus: EventBusProtocol
     private var contextLengthByModelId: [String: Int] = [:]
     private var pricingByModelId: [String: OpenRouterModel.Pricing] = [:]
-    private let providerName: String
+    internal let providerName: String
     private let supportsStreamingWithTools: Bool
     internal let supportsNativeReasoning: Bool
     

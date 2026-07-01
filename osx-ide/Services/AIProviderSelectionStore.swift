@@ -38,5 +38,6 @@ actor AIProviderSelectionStore {
 
     func setSelectedRemoteProvider(_ provider: RemoteAIProvider) {
         settingsStore.set(provider.rawValue, forKey: selectedRemoteProviderKey)
+        NotificationCenter.default.post(name: .remoteProviderDidChange, object: nil)
     }
 }

@@ -65,17 +65,17 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
         case creationFailed(String, underlying: Error)
     }
 
-    func deleteItem(at url: URL) {
+    func deleteItem(at url: URL) async {
         do {
-            try fileOperationsService.deleteItem(at: url)
+            try await fileOperationsService.deleteItem(at: url)
         } catch {
             handleError(mapToAppError(error, operation: "delete"))
         }
     }
 
-    func renameItem(at url: URL, to newName: String) -> URL? {
+    func renameItem(at url: URL, to newName: String) async -> URL? {
         do {
-            return try fileOperationsService.renameItem(at: url, to: newName)
+            return try await fileOperationsService.renameItem(at: url, to: newName)
         } catch {
             handleError(mapToAppError(error, operation: "rename"))
             return nil
@@ -83,18 +83,18 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
     }
 
     /// Create a new file in the specified directory
-    func createFile(named name: String, in directory: URL) {
+    func createFile(named name: String, in directory: URL) async {
         do {
-            _ = try fileOperationsService.createFile(named: name, in: directory)
+            _ = try await fileOperationsService.createFile(named: name, in: directory)
         } catch {
             handleError(mapToAppError(error, operation: "create file"))
         }
     }
 
     /// Create a new folder in the specified directory
-    func createFolder(named name: String, in directory: URL) {
+    func createFolder(named name: String, in directory: URL) async {
         do {
-            try fileOperationsService.createFolder(named: name, in: directory)
+            try await fileOperationsService.createFolder(named: name, in: directory)
         } catch {
             handleError(mapToAppError(error, operation: "create folder"))
         }
@@ -126,7 +126,6 @@ final class WorkspaceService: ObservableObject, WorkspaceServiceProtocol {
 
     /// Check if path is valid and accessible
     func isValidPath(_ path: String) -> Bool {
-        _ = URL(fileURLWithPath: path)
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
     }

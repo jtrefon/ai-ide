@@ -82,7 +82,7 @@ class WorkspaceStateManager: ObservableObject {
     // MARK: - File Management
 
     /// Create a new file in the current directory with validation
-    func createFile(named name: String) {
+    func createFile(named name: String) async {
         guard validateFileName(name) else {
             workspaceService.handleError(.invalidFilePath("Invalid file name: \(name)"))
             return
@@ -93,11 +93,11 @@ class WorkspaceStateManager: ObservableObject {
             return
         }
 
-        workspaceService.createFile(named: name, in: directory)
+        await workspaceService.createFile(named: name, in: directory)
     }
 
     /// Create a new folder in the current directory with validation
-    func createFolder(named name: String) {
+    func createFolder(named name: String) async {
         guard validateFileName(name) else {
             workspaceService.handleError(.invalidFilePath("Invalid folder name: \(name)"))
             return
@@ -108,7 +108,7 @@ class WorkspaceStateManager: ObservableObject {
             return
         }
 
-        workspaceService.createFolder(named: name, in: directory)
+        await workspaceService.createFolder(named: name, in: directory)
     }
 
     /// Create a new project directory at the specified path.

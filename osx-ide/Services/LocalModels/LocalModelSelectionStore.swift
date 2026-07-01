@@ -3,6 +3,7 @@ import Foundation
 extension Notification.Name {
     static let localModelOfflineModeDidChange = Notification.Name("LocalModelOfflineModeDidChange")
     static let localModelSelectionDidChange = Notification.Name("LocalModelSelectionDidChange")
+    static let remoteProviderDidChange = Notification.Name("RemoteProviderDidChange")
 }
 
 actor LocalModelSelectionStore {

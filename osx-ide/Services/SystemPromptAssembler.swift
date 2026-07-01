@@ -36,7 +36,7 @@ struct SystemPromptAssembler {
 
         if let mode = input.mode {
             sections.append(try PromptRepository.shared.prompt(
-                key: mode == .agent ? "System/mode-agent" : "System/mode-chat",
+                key: mode == .agent ? "System/mode-agent" : mode == .coder ? "System/mode-coder" : "System/mode-chat",
                 projectRoot: input.projectRoot
             ))
         }

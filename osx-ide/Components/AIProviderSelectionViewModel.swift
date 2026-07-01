@@ -12,13 +12,12 @@ final class AIProviderSelectionViewModel: ObservableObject {
 
     init(selectionStore: AIProviderSelectionStore = AIProviderSelectionStore()) {
         self.selectionStore = selectionStore
-        self.selectedProvider = .openRouter
-        Task {
-            let provider = await selectionStore.selectedRemoteProvider()
-            await MainActor.run {
-                self.selectedProvider = provider
-            }
-        }
+        // Store a reference to read from synchronously — the actor's
+        // selectedRemoteProvider() is actually a sync method, but
+        // actor isolation requires `await`. We use the raw UserDefaults
+        // directly to avoid the hard-coded .openRouter default.
+        let raw = UserDefaults.standard.string(forKey: "AI.SelectedRemoteProvider")
+        self.selectedProvider = raw.flatMap(RemoteAIProvider.init(rawValue:)) ?? .openRouter
     }
 
     private func persistSelection() {

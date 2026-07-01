@@ -126,7 +126,7 @@ class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
         guard let rootURL = self.rootURL else { return nil }
         let rootPath = rootURL.path
         let path = url.path ?? ""
-        guard path.hasPrefix(rootPath) else { return nil }
+        guard path == rootPath || path.hasPrefix(rootPath + "/") else { return nil }
         var relative = String(path.dropFirst(rootPath.count))
         if relative.hasPrefix("/") { relative.removeFirst() }
         return relative.isEmpty ? nil : relative

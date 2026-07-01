@@ -17,9 +17,13 @@ public final class TreeSitterHighlightService {
     private init() {}
 
     public func attachHighlighter(to textView: NSTextView, languageIdentifier: String) {
+        print("[TreeSitterHighlightService] attachHighlighter language=\(languageIdentifier)")
         detachHighlighter(from: textView)
 
-        guard let langConfig = languageConfiguration(for: languageIdentifier) else { return }
+        guard let langConfig = languageConfiguration(for: languageIdentifier) else {
+            print("[TreeSitterHighlightService] No langConfig for '\(languageIdentifier)'")
+            return
+        }
 
         let config = TextViewHighlighter.Configuration(
             languageConfiguration: langConfig,
@@ -193,11 +197,7 @@ public final class TreeSitterHighlightService {
 
     // MARK: - Debug
 
-    #if DEBUG_HIGHLIGHTING
     private static let logUnknownTokens = true
-    #else
-    private static let logUnknownTokens = false
-    #endif
 
     // MARK: - Color Scheme (VS Code Dark+ inspired)
 
@@ -366,9 +366,7 @@ public final class TreeSitterHighlightService {
             attrs[.foregroundColor] = nsColor(0xC5, 0x86, 0xC0)
 
         default:
-            if logUnknownTokens {
-                print("[token] \(token.name) range=\(token.range)")
-            }
+            print("[token] UNKNOWN: '\(token.name)' range=\(token.range) length=\(token.range.length)")
             attrs[.foregroundColor] = nsColor(0xDC, 0xDC, 0xDC)
         }
 

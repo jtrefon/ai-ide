@@ -55,7 +55,7 @@ final class RealServiceToolLoopTests: XCTestCase {
             prompt: """
                 Read test.txt and create output.txt containing exactly HELLO WORLD.
                 Use at most one read and one write operation, then finish.
-                """
+                """,
         )
 
         let files = listAllFiles(under: result.projectRoot)
@@ -84,7 +84,7 @@ final class RealServiceToolLoopTests: XCTestCase {
             prompt: """
                 List files in this directory exactly once and then finish.
                 Do not repeat any tool call arguments.
-                """
+                """,
         )
         print("\nTelemetry summary: \(result.telemetry.healthReport)")
         harnessTrue(result.telemetry.deduplicatedToolCalls >= 0, "Should track deduplicated tool calls")
@@ -104,7 +104,7 @@ final class RealServiceToolLoopTests: XCTestCase {
             prompt: """
                 Read source.txt and create processed.txt containing exactly STABLE INPUT.
                 Avoid retries, duplicate calls, and fallback paths.
-                """
+                """,
         )
 
         let files = listAllFiles(under: result.projectRoot)
@@ -124,7 +124,7 @@ final class RealServiceToolLoopTests: XCTestCase {
             prompt: """
                 Create must-fail-first.txt with content Recovered via fallback.
                 Execute exactly one write operation and finish.
-                """
+                """,
         )
 
         let lastAssistantContent = result.manager.messages.last(where: { $0.role == .assistant })?.content ?? ""
@@ -170,7 +170,7 @@ final class RealServiceToolLoopTests: XCTestCase {
         let manager: ConversationManager
     }
     
-    private func makeProductionRuntime(projectRoot: URL) async throws -> ProductionRuntime {
+    private func makeProductionRuntime(projectRoot: URL, mode: AIMode = .agent) async throws -> ProductionRuntime {
         // Use the real DependencyContainer with production-parity online routing.
         let container = DependencyContainer(launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false, testProfilePath: nil, disableHeavyInit: false, productionParityHarness: false))
         container.settingsStore.set(false, forKey: AppConstantsStorage.agentQAReviewEnabledKey)
@@ -217,7 +217,8 @@ final class RealServiceToolLoopTests: XCTestCase {
     private func runScenarioUntilStable(
         name: String,
         prepare: ((URL) throws -> Void)?,
-        prompt: String
+        prompt: String,
+        mode: AIMode = .agent
     ) async throws -> ScenarioResult {
         var lastResult: ScenarioResult?
 
@@ -226,9 +227,9 @@ final class RealServiceToolLoopTests: XCTestCase {
             try prepare?(projectRoot)
 
             ToolExecutionTelemetry.shared.reset()
-            let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
+            let runtime = try await makeProductionRuntime(projectRoot: projectRoot, mode: mode)
             let manager = runtime.manager
-            manager.currentMode = .agent
+            manager.currentMode = mode
 
             let timedOut = try await sendProductionMessage(prompt, manager: manager, timeoutSeconds: scenarioTimeoutSeconds)
             let telemetry = ToolExecutionTelemetry.shared.summary
@@ -407,7 +408,7 @@ final class RealServiceToolLoopTests: XCTestCase {
             prompt: """
                 Read input.txt and create output.txt containing exactly HELLO WORLD FROM DEEPSEEK (uppercase).
                 Use at most one read and one write operation, then finish.
-                """
+                """,
         )
         
         let files = listAllFiles(under: result.projectRoot)
@@ -428,5 +429,67 @@ final class RealServiceToolLoopTests: XCTestCase {
                 "output.txt should contain uppercase content"
             )
         }
+    }
+
+    // MARK: - Coder Mode Tests
+
+    func testCoderModeWithRealService() async throws {
+        try requireOnlineHarnessExecution()
+        print("\n=== Test: Coder Mode with Real OpenRouter Service ===")
+        let result = try await runScenarioUntilStable(
+            name: "coder_mode_read_then_patch",
+            prepare: { root in
+                let srcDir = root.appendingPathComponent("src")
+                try FileManager.default.createDirectory(at: srcDir, withIntermediateDirectories: true)
+                let component = srcDir.appendingPathComponent("Counter.tsx")
+                try """
+                import { useState } from 'react'
+
+                export function Counter() {
+                  const [count, setCount] = useState(0)
+
+                  return (
+                    <div>
+                      <p>Count: {count}</p>
+                      <button onClick={() => setCount(count + 1)}>Increment</button>
+                    </div>
+                  )
+                }
+                """.write(to: component, atomically: true, encoding: .utf8)
+            },
+            prompt: """
+                Read src/Counter.tsx. Add a "Decrement" button that decreases the count.
+                Use patch_file (NOT replace_in_file). After editing, read the file back to verify.
+                """,
+            mode: .coder
+        )
+
+        let files = listAllFiles(under: result.projectRoot)
+        print("[HARNESS][INFO] coder_mode files=\(files)")
+
+        // Verify Counter.tsx exists and has the Decrement button
+        let counterPath = result.projectRoot.appendingPathComponent("src/Counter.tsx")
+        if FileManager.default.fileExists(atPath: counterPath.path) {
+            let content = try String(contentsOf: counterPath, encoding: .utf8)
+            print("[HARNESS][INFO] Counter.tsx content:\n\(content)")
+            harnessTrue(content.contains("Decrement"),
+                       "Counter.tsx should contain a Decrement button")
+            harnessTrue(content.contains("count - 1") || content.contains("count > 0"),
+                       "Counter.tsx should decrement or prevent negative count")
+        } else {
+            harnessNote("Counter.tsx was not found — agent may have used a different approach")
+        }
+
+        // Verify no replace_in_file tool was used
+        let usedReplace = result.manager.messages.filter {
+            $0.isToolExecution && $0.toolName == "replace_in_file"
+        }
+        harnessTrue(usedReplace.isEmpty,
+                   "Coder mode should NOT use replace_in_file. Used: \(usedReplace.count) time(s)")
+
+        // Report telemetry
+        print("[HARNESS][TELEMETRY] coder_mode gate=\(result.gate.gatePassed) "
+              + "repeated=\(result.gate.repeatedToolCallSignatures) "
+              + "failed=\(result.gate.failedToolExecutions)")
     }
 }

@@ -96,6 +96,7 @@ private struct TabBarButton: View {
                         )
                 }
             }
+            .overlay(MiddleClickView(action: onClose))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -103,5 +104,27 @@ private struct TabBarButton: View {
         }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .animation(.easeInOut(duration: 0.15), value: isActive)
+    }
+}
+
+private struct MiddleClickView: NSViewRepresentable {
+    let action: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = MiddleClickNSView()
+        view.action = action
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? MiddleClickNSView)?.action = action
+    }
+}
+
+private class MiddleClickNSView: NSView {
+    var action: (() -> Void)?
+
+    override func otherMouseDown(with event: NSEvent) {
+        action?()
     }
 }

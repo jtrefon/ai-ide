@@ -60,10 +60,10 @@ final class ModelSearchViewModel: ObservableObject {
         loadRecentIds()
     }
 
-    func loadModels() async {
+    func loadModels(baseURL: String = "https://openrouter.ai/api/v1") async {
         do {
             let context = OpenRouterAPIClient.RequestContext(
-                baseURL: "https://openrouter.ai/api/v1",
+                baseURL: baseURL,
                 appName: "osx-ide",
                 referer: ""
             )

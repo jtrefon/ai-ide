@@ -130,6 +130,9 @@ class DependencyContainer: ObservableObject {
         )
         StartupLogger.log("Project coordinator done", elapsedMs: elapsedSince(_initStart))
 
+        // Wire the new Phase 1 tooling stack for Coder mode
+        _conversationManager.toolingStack = makeToolingStack()
+
         StartupLogger.log("DependencyContainer.init END total", elapsedMs: elapsedSince(_initStart))
 
         // DO NOT set isInitialized here. Wait for heavy services background task to reach a stable "Medium" point.

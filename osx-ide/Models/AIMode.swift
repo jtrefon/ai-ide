@@ -1,14 +1,8 @@
-//
-//  AIMode.swift
-//  osx-ide
-//
-//  Created by AI Assistant on 21/12/2025.
-//
-
 import Foundation
 
 public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case chat = "Chat"
+    case coder = "Coder"
     case agent = "Agent"
 
     public var id: String { rawValue }
@@ -16,9 +10,11 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
     public var description: String {
         switch self {
         case .chat:
-            return "Read-only mode. AI can view files and search but cannot modify anything."
+            return "Read-only conversation. AI can answer questions but cannot modify anything."
+        case .coder:
+            return "Focused coding with tools. AI can read, write, search, and edit files to complete specific tasks."
         case .agent:
-            return "Full autonomy. AI can read, write, edit, and delete files to complete tasks."
+            return "Full autonomy. AI can plan, execute multi-step tasks, and use advanced tooling autonomously."
         }
     }
 
@@ -26,19 +22,27 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .chat:
             return "bubble.left.and.bubble.right"
+        case .coder:
+            return "hammer"
         case .agent:
             return "gearshape.2"
         }
     }
 
-    // Determine which tools are available in this mode
+    /// Whether this mode uses the new Phase 1 architecture (CoderOrchestrator)
+    /// vs the old ToolLoopHandler architecture.
+    var usesNewArchitecture: Bool {
+        self == .coder
+    }
+
     public func allowedTools(from allTools: [AITool]) -> [AITool] {
         switch self {
         case .chat:
-            // Chat mode - NO tools (read-only interface)
             return []
+        case .coder:
+            // Coder mode filters out replace_in_file — use patch_file instead
+            return allTools.filter { $0.name != "replace_in_file" }
         case .agent:
-            // Agent mode - ALL tools
             return allTools
         }
     }

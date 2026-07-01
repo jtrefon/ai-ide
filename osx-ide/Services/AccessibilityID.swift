@@ -13,6 +13,7 @@ enum AccessibilityID {
     static let aiChatProviderIssueBanner = "AIChatProviderIssueBanner"
 
     static let fileExplorerOutline = "FileExplorerOutline"
+    static let fileExplorerScrollView = "FileExplorerScrollView"
     static let statusBar = "StatusBar"
     static let leftSidebarPanel = "LeftSidebarPanel"
     static let rightChatPanel = "RightChatPanel"

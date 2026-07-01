@@ -1,7 +1,6 @@
 import Foundation
 
-@MainActor
-final class FileOperationsService {
+private actor FileIOActor {
     private let fileSystemService: FileSystemService
     private let eventBus: EventBusProtocol
 
@@ -23,15 +22,7 @@ final class FileOperationsService {
         }
     }
 
-    func createFile(named name: String, in directory: URL) throws -> URL {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedName.isEmpty {
-            throw AppError.invalidFilePath("New name is empty")
-        }
-        if trimmedName.contains("/") || trimmedName.contains("..") {
-            throw AppError.invalidFilePath("Invalid name: \(trimmedName)")
-        }
-
+    func createFile(named trimmedName: String, in directory: URL) throws -> URL {
         let newFileURL = directory.standardizedFileURL
             .appendingPathComponent(trimmedName)
             .standardizedFileURL
@@ -45,15 +36,7 @@ final class FileOperationsService {
         return newFileURL
     }
 
-    func createFolder(named name: String, in directory: URL) throws {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedName.isEmpty {
-            throw AppError.invalidFilePath("New name is empty")
-        }
-        if trimmedName.contains("/") || trimmedName.contains("..") {
-            throw AppError.invalidFilePath("Invalid name: \(trimmedName)")
-        }
-
+    func createFolder(named trimmedName: String, in directory: URL) throws {
         let newFolderURL = directory.standardizedFileURL
             .appendingPathComponent(trimmedName)
             .standardizedFileURL
@@ -65,7 +48,7 @@ final class FileOperationsService {
         try FileManager.default.createDirectory(at: newFolderURL, withIntermediateDirectories: false, attributes: nil)
     }
 
-    func deleteItem(at url: URL) throws {
+    func deleteItem(at url: URL) async throws {
         let standardized = url.standardizedFileURL
         let fileManager = FileManager.default
 
@@ -86,35 +69,24 @@ final class FileOperationsService {
             }
         }
 
-        var resultingURL: NSURL?
         do {
-            try fileManager.trashItem(at: standardized, resultingItemURL: &resultingURL)
+            try fileManager.trashItem(at: standardized, resultingItemURL: nil)
         } catch {
-            Task {
-                await CrashReporter.shared.capture(
-                    error,
-                    context: CrashReportContext(operation: "FileOperationsService.deleteItem"),
-                    metadata: ["path": standardized.path],
-                    file: #fileID,
-                    function: #function,
-                    line: #line
-                )
-            }
+            await CrashReporter.shared.capture(
+                error,
+                context: CrashReportContext(operation: "FileIOActor.deleteItem"),
+                metadata: ["path": standardized.path],
+                file: #fileID,
+                function: #function,
+                line: #line
+            )
             try fileManager.removeItem(at: standardized)
         }
 
         eventBus.publish(FileDeletedEvent(url: standardized))
     }
 
-    func renameItem(at url: URL, to newName: String) throws -> URL {
-        let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedName.isEmpty {
-            throw AppError.invalidFilePath("New name is empty")
-        }
-        if trimmedName.contains("/") || trimmedName.contains("..") {
-            throw AppError.invalidFilePath("Invalid name: \(trimmedName)")
-        }
-
+    func renameItem(at url: URL, to trimmedName: String) throws -> URL {
         let standardized = url.standardizedFileURL
         let fileManager = FileManager.default
 
@@ -131,5 +103,48 @@ final class FileOperationsService {
         let standardizedDestination = destination.standardizedFileURL
         eventBus.publish(FileRenamedEvent(oldUrl: standardized, newUrl: standardizedDestination))
         return standardizedDestination
+    }
+}
+
+@MainActor
+final class FileOperationsService {
+    private let ioActor: FileIOActor
+
+    init(fileSystemService: FileSystemService, eventBus: EventBusProtocol) {
+        self.ioActor = FileIOActor(fileSystemService: fileSystemService, eventBus: eventBus)
+    }
+
+    private func validateFileName(_ name: String) throws -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            throw AppError.invalidFilePath("Name is empty")
+        }
+        if trimmed.contains("/") || trimmed.contains("..") {
+            throw AppError.invalidFilePath("Invalid name: \(trimmed)")
+        }
+        return trimmed
+    }
+
+    func writeFile(content: String, to url: URL) async throws {
+        try await ioActor.writeFile(content: content, to: url)
+    }
+
+    func createFile(named name: String, in directory: URL) async throws -> URL {
+        let trimmedName = try validateFileName(name)
+        return try await ioActor.createFile(named: trimmedName, in: directory)
+    }
+
+    func createFolder(named name: String, in directory: URL) async throws {
+        let trimmedName = try validateFileName(name)
+        try await ioActor.createFolder(named: trimmedName, in: directory)
+    }
+
+    func deleteItem(at url: URL) async throws {
+        try await ioActor.deleteItem(at: url)
+    }
+
+    func renameItem(at url: URL, to newName: String) async throws -> URL {
+        let trimmedName = try validateFileName(newName)
+        return try await ioActor.renameItem(at: url, to: trimmedName)
     }
 }

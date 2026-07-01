@@ -10,9 +10,8 @@ import Foundation
 /// Handles search functionality for the file tree
 @MainActor
 final class FileTreeSearchCoordinator {
-    private weak var dataSource: FileTreeDataSource?
+    private let dataSource: FileTreeDataSource
     private var pendingSearchTask: Task<Void, Never>?
-    private var searchGeneration: Int = 0
 
     init(dataSource: FileTreeDataSource) {
         self.dataSource = dataSource
@@ -20,8 +19,6 @@ final class FileTreeSearchCoordinator {
 
     /// Sets the search query and debounces the search
     func setSearchQuery(_ value: String) {
-        guard let dataSource = dataSource else { return }
-
         // Cancel previous search
         pendingSearchTask?.cancel()
 
@@ -29,9 +26,6 @@ final class FileTreeSearchCoordinator {
         pendingSearchTask = Task {
             try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s debounce
             guard !Task.isCancelled else { return }
-
-            searchGeneration += 1
-            _ = searchGeneration
 
             await MainActor.run {
                 dataSource.setSearchQuery(value)
@@ -43,10 +37,5 @@ final class FileTreeSearchCoordinator {
     func cancelSearch() {
         pendingSearchTask?.cancel()
         pendingSearchTask = nil
-    }
-
-    /// Gets the current search generation
-    var currentSearchGeneration: Int {
-        return searchGeneration
     }
 }

@@ -187,46 +187,11 @@ final class FileTreeIsolationTests: XCTestCase {
         dataSource.setRootURL(tempDirectory)
         dataSource.setSearchQuery("")
 
-        coordinator.update(
-            rootURL: tempDirectory,
-            parameters: ModernFileTreeCoordinator.UpdateParameters(
-                searchQuery: "",
-                showHiddenFiles: false,
-                refreshToken: 0,
-                fontSize: 13,
-                fontFamily: "SF Mono"
-            )
-        )
-        coordinator.update(
-            rootURL: tempDirectory,
-            parameters: ModernFileTreeCoordinator.UpdateParameters(
-                searchQuery: "f",
-                showHiddenFiles: false,
-                refreshToken: 0,
-                fontSize: 13,
-                fontFamily: "SF Mono"
-            )
-        )
-        coordinator.update(
-            rootURL: tempDirectory,
-            parameters: ModernFileTreeCoordinator.UpdateParameters(
-                searchQuery: "fi",
-                showHiddenFiles: false,
-                refreshToken: 0,
-                fontSize: 13,
-                fontFamily: "SF Mono"
-            )
-        )
-        coordinator.update(
-            rootURL: tempDirectory,
-            parameters: ModernFileTreeCoordinator.UpdateParameters(
-                searchQuery: "file_1",
-                showHiddenFiles: false,
-                refreshToken: 0,
-                fontSize: 13,
-                fontFamily: "SF Mono"
-            )
-        )
+        coordinator.updateRootURL(tempDirectory)
+        coordinator.updateSearchQuery("")
+        coordinator.updateSearchQuery("f")
+        coordinator.updateSearchQuery("fi")
+        coordinator.updateSearchQuery("file_1")
 
         let outlineView = NSOutlineView()
         var childCount = 0

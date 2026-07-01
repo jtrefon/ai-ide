@@ -58,6 +58,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published private(set) var providerIssue: ConversationProviderIssueState?
     @Published private(set) var messages: [ChatMessage] = []
 
+    /// The new Phase 1 tooling stack. Set during initialization.
+    /// Used by Coder mode to route through CoderOrchestrator instead of ToolLoopHandler.
+    var toolingStack: ToolingStack?
+
     // MARK: - Dependencies
 
     private let historyManager: ChatHistoryManager
@@ -706,7 +710,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             self.setLiveModelStatusPreview("Run started: awaiting streamed output and tool calls…")
             self.historyCoordinator.append(draftMessage)
 
-            let tools = (self.currentMode == .chat) ? [] : self.availableTools
+            let tools = self.currentMode.allowedTools(from: self.availableTools)
 
             do {
                 conversationLogger.logAIRequestStart(
@@ -714,22 +718,46 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     historyCount: self.messages.count
                 )
 
-                try await self.sendCoordinator.send(
-                    SendRequest(
-                        userInput: userContext.text,
-                        mediaAttachments: userContext.mediaAttachments,
-                        explicitContext: explicitContext,
-                        mode: self.currentMode,
-                        projectRoot: self.projectRoot,
-                        conversationId: self.conversationId,
-                        runId: runId,
-                        availableTools: tools,
-                        cancelledToolCallIds: { [cancelledIds = self.cancelledToolCallIds] in cancelledIds },
-                        qaReviewEnabled: self.currentMode == .agent && self.settingsStore.bool(forKey: AppConstantsStorage.agentQAReviewEnabledKey, default: false),
-                        draftAssistantMessageId: self.draftAssistantMessageId,
-                        usesLocalModel: self.aiRouter.usesLocalModel
+                if self.currentMode == .coder {
+                    // Coder mode uses the PROVEN ToolLoopHandler (same as Agent mode)
+                    // but with tools filtered to exclude replace_in_file.
+                    // The AIMode.allowedTools(from:) handles this filtering.
+                    self.setLiveModelStatusPreview("Coder mode: using proven Agent tool chain with Coder toolset…")
+                    try await self.sendCoordinator.send(
+                        SendRequest(
+                            userInput: userContext.text,
+                            mediaAttachments: userContext.mediaAttachments,
+                            explicitContext: explicitContext,
+                            mode: self.currentMode,
+                            projectRoot: self.projectRoot,
+                            conversationId: self.conversationId,
+                            runId: runId,
+                            availableTools: tools,
+                            cancelledToolCallIds: { [cancelledIds = self.cancelledToolCallIds] in cancelledIds },
+                            qaReviewEnabled: false,
+                            draftAssistantMessageId: self.draftAssistantMessageId,
+                            usesLocalModel: self.aiRouter.usesLocalModel
+                        )
                     )
-                )
+                } else {
+                    // Legacy Agent/Chat mode — uses existing ToolLoopHandler
+                    try await self.sendCoordinator.send(
+                        SendRequest(
+                            userInput: userContext.text,
+                            mediaAttachments: userContext.mediaAttachments,
+                            explicitContext: explicitContext,
+                            mode: self.currentMode,
+                            projectRoot: self.projectRoot,
+                            conversationId: self.conversationId,
+                            runId: runId,
+                            availableTools: tools,
+                            cancelledToolCallIds: { [cancelledIds = self.cancelledToolCallIds] in cancelledIds },
+                            qaReviewEnabled: self.currentMode == .agent && self.settingsStore.bool(forKey: AppConstantsStorage.agentQAReviewEnabledKey, default: false),
+                            draftAssistantMessageId: self.draftAssistantMessageId,
+                            usesLocalModel: self.aiRouter.usesLocalModel
+                        )
+                    )
+                }
 
                 self.historyCoordinator.flushPendingDraftUpdate()
                 self.flushPendingPreview()

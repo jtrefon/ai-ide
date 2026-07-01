@@ -9,9 +9,9 @@ final class ConversationFoldingHandler {
         usesLocalModel: Bool = false
     ) async throws {
         let thresholds: ConversationFoldingThresholds
-        if usesLocalModel && mode == .agent {
+        if usesLocalModel && (mode == .agent || mode == .coder) {
             thresholds = .localAgent
-        } else if mode == .agent {
+        } else if mode == .agent || mode == .coder {
             thresholds = .agent
         } else {
             thresholds = .chat

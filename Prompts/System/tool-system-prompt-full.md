@@ -1,27 +1,53 @@
 # Tool Selection & Execution Guidance
 
-You have access to core IDE tools for reading, writing, editing, and executing terminal commands. Use these tools autonomously to fulfill the user's request.
-
-## Discovery and Search
-The context provided in your prompt includes an automated RAG (Retrieval Augmented Generation) block based on the user's latest message and current project state. 
-- **Use the RAG block** for discovery, finding symbols, and understanding project structure.
-- If the RAG block is insufficient, use `list_dir` to explore the filesystem.
+You have tools available to complete coding tasks. Each tool returns structured feedback.
 
 ## Tool Calling Rules
 - **Emit real structured tool calls** whenever an action is required.
 - **Do not describe** intended tool usage in prose; just call the tool.
-- **Read before you write**: Always use `read_file` to understand the current implementation before proposing changes.
-- **Targeted edits**: Prefer `replace_in_file` (patching) for precise changes in existing files.
-- **Command execution**: Use `run_command` for builds, tests, or other CLI operations. Ensure commands are bounded and will terminate.
+- **Read before you write**: Always read a file before editing it. This is enforced.
+- **Targeted edits**: Prefer `patch_file` (line-range based) for precise changes. More reliable than exact text matching.
+- **Fallback**: If `patch_file` is unavailable, use `replace_in_file` for exact text replacements.
+- **Command execution**: Use `run_command` for builds, tests, or CLI operations.
+
+## Research Workflow
+- **Search first**: Use `search_project` to find existing code before duplicating it.
+- **Web research**: `web_search` → get URLs → `web_browse` to read full pages.
+- **List directory**: Use `list_files` to explore the filesystem structure.
+
+## Tool Feedback Format
+
+Every tool returns a structured response. Always read the `content` and `error` fields:
+
+```
+status: success | error | partial
+message: Short summary of what happened
+
+# Present for query tools (read_file, search, web_browse):
+content:
+  <file contents, search results, page text, diff output>
+
+# Present for errors:
+error_code: FILE_NOT_FOUND | INVALID_LINE_RANGE | MUTATION_WITHOUT_PRIOR_READ | ...
+recoverable: true | false
+  try: Suggested recovery action
+  tool: recovery_tool_to_use
+```
+
+### Understanding Tool Results
+- **`status: success` with `content:`**: Read the content — it contains file contents, search results, or diff output.
+- **`status: error` with `error_code:`**: Read the error code and `alternatives`. Follow the suggested recovery.
+- **`recoverable: true`**: Retry with a different approach (e.g., read the file first, use a different path).
+- **`recoverable: false`**: Report the error to the user — cannot proceed.
+
+### Verification Pattern
+After writing or patching a file:
+1. Read the file back to confirm the changes
+2. Run the project to verify it compiles
+3. If errors occur, fix them using the error feedback
 
 ## Web Research
 - Use `web_search` for quick information discovery (returns snippets with titles, URLs, and brief excerpts).
 - Use `web_browse` to read full web pages when you need detailed content, documentation, or tutorials.
 - Workflow: `web_search` -> get URLs from results -> `web_browse` with action=open and url -> get full page content.
 - Always use `web_browse` when the user asks you to "check the documentation", "read the website", or "get details from [URL]".
-
-## Tool Contract
-- **Authoritative State**: Treat tool outputs as the only source of truth for the project state.
-- **Success**: Proceed with the next step in your plan.
-- **Failure**: Analyze the error, adapt your strategy, and attempt recovery.
-- **Verification**: After writing or patching a file, it is often good practice to run a command or read the file back to verify the change.

@@ -1,6 +1,20 @@
 import SwiftUI
 import Foundation
 
+private func settingsStore(for provider: RemoteAIProvider) -> ProviderOpenRouterSettingsStore {
+    switch provider {
+    case .openRouter: return OpenRouterSettingsStore()
+    case .alibabaCloud: return AlibabaSettingsStore()
+    case .kiloCode: return KiloCodeSettingsStore()
+    case .deepSeek: return DeepSeekSettingsStore()
+    }
+}
+
+private func currentProvider() -> RemoteAIProvider {
+    let raw = UserDefaults.standard.string(forKey: "AI.SelectedRemoteProvider") ?? ""
+    return RemoteAIProvider(rawValue: raw) ?? .openRouter
+}
+
 /// An AI chat panel that uses the user's code selection as context for AI queries and displays responses.
 struct AIChatPanel: View {
     @ObservedObject var selectionContext: CodeSelectionContext
@@ -19,8 +33,12 @@ struct AIChatPanel: View {
         { [self] in
             selectedModelId = model.id
             modelSearch.recordSelection(model.id)
-            UserDefaults.standard.set(model.id, forKey: "OpenRouterModel")
-            UserDefaults.standard.set(model.name ?? model.id, forKey: "OpenRouterModelDisplayName")
+
+            let store = settingsStore(for: currentProvider())
+            var settings = store.load(includeApiKey: false)
+            settings.model = model.id
+            store.save(settings)
+
             UserDefaults.standard.set(false, forKey: "AI.OfflineModeEnabled")
             NotificationCenter.default.post(name: .localModelOfflineModeDidChange, object: nil)
             modelDisplayName = model.name ?? model.id
@@ -283,7 +301,10 @@ struct AIChatPanel: View {
         }
         .onAppear {
             refreshModelState()
-            Task { await modelSearch.loadModels() }
+            Task {
+                let baseURL = settingsStore(for: currentProvider()).load(includeApiKey: false).baseURL
+                await modelSearch.loadModels(baseURL: baseURL)
+            }
         }
         .onChange(of: modelSearch.searchQuery) { _, _ in
             currentSearchModels = modelSearch.displayModels
@@ -297,6 +318,13 @@ struct AIChatPanel: View {
         .onReceive(NotificationCenter.default.publisher(for: .localModelSelectionDidChange)) { _ in
             refreshModelState()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .remoteProviderDidChange)) { _ in
+            refreshModelState()
+            Task {
+                let baseURL = settingsStore(for: currentProvider()).load(includeApiKey: false).baseURL
+                await modelSearch.loadModels(baseURL: baseURL)
+            }
+        }
 
     }
 
@@ -308,12 +336,13 @@ struct AIChatPanel: View {
             let modelId = defaults.string(forKey: "LocalModel.SelectedId") ?? ""
             modelDisplayName = LocalModelCatalog.model(id: modelId)?.displayName ?? modelId
         } else {
-            let modelName = defaults.string(forKey: "OpenRouterModelDisplayName")
-            if let modelName, !modelName.isEmpty {
-                modelDisplayName = modelName
+            let provider = currentProvider()
+            let store = settingsStore(for: provider)
+            let settings = store.load(includeApiKey: false)
+            if !settings.model.isEmpty {
+                modelDisplayName = settings.model
             } else {
-                let raw = defaults.string(forKey: "AI.SelectedRemoteProvider") ?? ""
-                modelDisplayName = RemoteAIProvider(rawValue: raw)?.displayName ?? "Cloud"
+                modelDisplayName = provider.displayName
             }
         }
     }

@@ -19,6 +19,7 @@ enum FileToolWriteApplier {
         }
     }
 
+    @MainActor
     static func applyWrite(_ request: ApplyWriteRequest) async throws {
         try await validateWriteSafety(request)
 
@@ -27,13 +28,11 @@ enum FileToolWriteApplier {
             "bytes": request.content.utf8.count
         ])
 
-        try await MainActor.run {
-            let fileOperationsService = FileOperationsService(
-                fileSystemService: request.fileSystemService,
-                eventBus: request.eventBus
-            )
-            try fileOperationsService.writeFile(content: request.content, to: request.url)
-        }
+        let fileOperationsService = FileOperationsService(
+            fileSystemService: request.fileSystemService,
+            eventBus: request.eventBus
+        )
+        try await fileOperationsService.writeFile(content: request.content, to: request.url)
     }
 
     private static func validateWriteSafety(_ request: ApplyWriteRequest) async throws {

@@ -23,7 +23,7 @@ final class FileTreeAppearanceCoordinator {
     func applyAppearanceToVisibleRows() {
         guard let outlineView = outlineView else { return }
 
-        let rowHeight = fontSize + 4
+        let rowHeight = fontSize + 6
         outlineView.rowHeight = rowHeight
 
         // Only iterate over visible rows to avoid CPU spikes in large projects

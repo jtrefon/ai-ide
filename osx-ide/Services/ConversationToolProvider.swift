@@ -37,6 +37,7 @@ final class ConversationToolProvider {
         tools.append(ListFilesTool(pathValidator: pathValidator))
         tools.append(WriteFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus))
         tools.append(ReplaceInFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus))
+        tools.append(PatchFileToolAdapter())
         tools.append(DeleteFileTool(pathValidator: pathValidator, eventBus: eventBus))
         
         // RAG & Index Tools

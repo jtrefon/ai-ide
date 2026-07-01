@@ -52,7 +52,7 @@ struct ModernFileTreeView: NSViewRepresentable {
         outlineView.doubleAction = #selector(ModernFileTreeCoordinator.onDoubleClick(_:))
 
         let scrollView = NSScrollView(frame: .zero)
-        scrollView.setAccessibilityIdentifier(AccessibilityID.fileExplorerOutline)
+        scrollView.setAccessibilityIdentifier(AccessibilityID.fileExplorerScrollView)
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder
@@ -78,16 +78,11 @@ struct ModernFileTreeView: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {
         let coordinator = context.coordinator
 
-        coordinator.update(
-            rootURL: rootURL,
-            parameters: ModernFileTreeCoordinator.UpdateParameters(
-                searchQuery: searchQuery,
-                showHiddenFiles: showHiddenFiles,
-                refreshToken: refreshToken,
-                fontSize: fontSize,
-                fontFamily: fontFamily
-            )
-        )
+        coordinator.updateRootURL(rootURL)
+        coordinator.updateSearchQuery(searchQuery)
+        coordinator.updateShowHiddenFiles(showHiddenFiles)
+        coordinator.updateFont(fontSize: fontSize, fontFamily: fontFamily)
+        coordinator.refreshTree(token: refreshToken)
     }
 
     func makeCoordinator() -> ModernFileTreeCoordinator {

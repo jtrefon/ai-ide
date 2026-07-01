@@ -28,7 +28,7 @@ enum ToolLoopConstants {
         switch mode {
         case .agent:
             return maxAgentIterations
-        case .chat, .none:
+        case .chat, .coder, .none:
             return maxNonAgentIterations
         }
     }

@@ -132,7 +132,7 @@ struct WorkspaceAndChatTests {
         }
         _ = cancellable
 
-        let newURL = workspaceService.renameItem(at: file, to: "b.txt")
+        let newURL = await workspaceService.renameItem(at: file, to: "b.txt")
         #expect(newURL != nil, "Expected rename to return new URL")
 
         #expect(!FileManager.default.fileExists(atPath: file.path), "Expected old path to be gone")
@@ -175,7 +175,7 @@ struct WorkspaceAndChatTests {
         }
         _ = cancellable
 
-        workspaceService.deleteItem(at: file)
+        await workspaceService.deleteItem(at: file)
 
         #expect(
             !FileManager.default.fileExists(atPath: file.path),
