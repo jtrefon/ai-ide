@@ -2609,9 +2609,11 @@ final class ToolLoopHandler {
         case .needsWork:
             deliveryStatusLabel = "needs_work"
         case .none:
-            deliveryStatusLabel = "missing"
+            deliveryStatusLabel = "done"  // No delivery info = assume done. The Kilo Code / non-OpenRouter models
+                                          // don't emit structured Delivery: sections. Treat absent delivery
+                                          // as complete unless other signals force a followup.
         }
-        let shouldRecoverExecution = deliveryStatus != .done
+        let shouldRecoverExecution = deliveryStatus == .needsWork  // Only recover on explicit needs_work
             || ChatPromptBuilder.shouldForceExecutionFollowup(
                 userInput: userInput,
                 content: currentContent,

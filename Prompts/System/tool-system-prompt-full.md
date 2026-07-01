@@ -6,8 +6,8 @@ You have tools available to complete coding tasks. Each tool returns structured 
 - **Emit real structured tool calls** whenever an action is required.
 - **Do not describe** intended tool usage in prose; just call the tool.
 - **Read before you write**: Always read a file before editing it. This is enforced.
-- **Targeted edits**: Prefer `patch_file` (line-range based) for precise changes. More reliable than exact text matching.
-- **Fallback**: If `patch_file` is unavailable, use `replace_in_file` for exact text replacements.
+- **Targeted edits**: Use `patch_file` (line-range based) for precise surgical changes. **Do NOT use write_file for edits** — write_file overwrites the entire file and bloats context. patch_file is faster, slimmer, and more reliable.
+- **Fallback**: Only use `write_file` for creating new files. For existing files, always use `patch_file`.
 - **Command execution**: Use `run_command` for builds, tests, or CLI operations.
 
 ## Research Workflow
