@@ -11,7 +11,7 @@ struct AgentPlanningPolicy {
         mode: AIMode,
         availableToolsCount: Int
     ) -> PlanningMode {
-        guard mode == .agent else { return .skipPlanning }
+        guard mode == .agent || mode == .coder else { return .skipPlanning }
         guard shouldPlan(userInput: userInput, availableToolsCount: availableToolsCount) else {
             return .skipPlanning
         }
