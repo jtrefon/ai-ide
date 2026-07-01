@@ -22,6 +22,8 @@
 12. [Files to Create / Modify / Delete](#12-files-to-create--modify--delete)
 13. [Execution Model](#13-execution-model--concurrency-isolation-resource-governance-recovery)
 14. [Tool Migration Plan](#14-tool-migration-plan--port-rewrite-or-build)
+15. [Tool Code Review](#15-tool-code-review--actual-assessment)
+16. [Design Decisions from Review](#16-design-decisions-from-review-sessions)
 
 ---
 
@@ -1480,3 +1482,283 @@ Early-exit: if lower tiers have enough high-quality results, skip higher (slower
 - `mmap` for files > 1MB (zero-copy)
 - Always returns line-numbered content with byte count
 - Swarm-safe: 100 concurrent line-range reads ≈ 1ms total CPU
+
+---
+
+## 15. Tool Code Review — Actual Assessment
+
+Each tool was read and assessed on architecture, performance, and swarm compatibility.
+
+### 15.1 Web Tools
+
+| Tool | Lines | Architecture | Performance | Swarm | Verdict |
+|------|-------|-------------|-------------|-------|---------|
+| `GoogleWebSearchTool` | 39 | Thin wrapper, delegates to `GoogleWebSearchEngine.shared`. Returns raw String. | Fast. Bounded (max 20 results). | ⚠️ Depends on engine | **PORT** — just needs `ToolDefinition` + `ToolFeedback` wrapper. ~15 min work. |
+| `GoogleWebSearchEngine` | 221 | **`@MainActor` singleton**. Single shared WKWebView session. CAPTCHA detection. JS extraction. | 5-25s per search (network bound). Bounded. | ❌ **@MainActor blocks main thread for seconds**. WKWebView requires UI process. | **REWRITE** — wrap in `SpawnedToolExecutor`. The engine logic (parsing, CAPTCHA detection) is good. The execution model is wrong. |
+| `WebBrowseTool` | 133 | Session management via `WebSessionStore.shared`. `@MainActor` on private methods. **Errors swallowed with `try?`**. | 5-30s per navigation. `max_chars` caps output. | ❌ **@MainActor + `try?` swallows errors + WKWebView requires UI process**. Not safe for parallel. | **REWRITE** — fix error handling, make spawned process. Session management logic is fine. |
+| `WebKitSession` | 470 | **Uses `DispatchQueue.main.sync`** — blocking main thread from background threads. Creates hidden NSWindow + 1×1 WKWebView. Fragile. | Good timeout handling, SPA detection. | ❌ **`DispatchQueue.main.sync` = deadlock risk. NSWindow = fragile.** | **REWRITE** — move to XPC service. WKWebView fundamentally requires UI process. Cannot run in-process. |
+
+**Web tools verdict**: All three web tools have the same fundamental problem: WKWebView requires a UI process (NSWindow + main thread). They cannot run in-process with the WorkerPool. **All three must become spawned processes (XPC services)**. The parsing/extraction logic inside them is solid — that's portable. The execution model is the problem.
+
+**Swarm impact**: Only 1-2 concurrent WKWebView instances are feasible (each uses ~200-500MB RAM). The `ResourceGovernor.networkSemaphore` should limit web tools to max 2 concurrent.
+
+### 15.2 Search Tools
+
+| Tool | Lines | Architecture | Performance | Swarm | Verdict |
+|------|-------|-------------|-------------|-------|---------|
+| `SearchProjectTool` | 258 | **Already implements tiered search**: vector → symbol → FTS5 → grep → filename. Returns emoji-formatted String. | Good. Index queries are fast (~5-50ms). Grep fallback uses `String(contentsOf:)` (slow). | ✅ **Bounded at every level**. `max_results` caps. Index queries are O(log n). Grep could be a problem (file scan). | **PORT + ENHANCE** — already does what the tiered search design (14.3) describes! Just needs: (1) `ToolDefinition` wrapper, (2) structured `ToolFeedback`, (3) grep bounded to files <5MB, (4) no emojis in output format. |
+| `LocalFindTool` | 184 | Alternative search tool. Runs symbol + FTS5 + path concurrently. | Good index usage. | ✅ Bounded. | **DEPRECATE** — superseded by SearchProjectTool. |
+| 6 index tools (search_text, search_symbols, find_files, list_files, read_file, list_memories, add_memory) | 39-53 | Simple wrappers around CodebaseIndexProtocol. Return raw String. | Excellent — all index-backed, all bounded. | ✅ **Perfect for swarm**. Index queries are fast, bounded, no I/O. | **PORT** — just `ToolDefinition` + `ToolFeedback` wrappers. Each is ~40 lines of straightforward code. |
+
+**Search tools verdict**: These are the strongest tools in the codebase. `SearchProjectTool` already does tiered search — we don't need to build it from scratch. The index tools are tiny (39-53 lines) and well-structured. Porting them is trivial.
+
+### 15.3 File Tools
+
+| Tool | Lines | Architecture | Performance | Swarm | Verdict |
+|------|-------|-------------|-------------|-------|---------|
+| `ReadFileTool` | 98 | Returns `String(contentsOf:)` — **full file into memory**. Then optionally extracts line range from the already-loaded String. | ⚠️ Full file load even for single-line reads. | ⚠️ 100 agents × 10KB file = fine. 100 agents × 10MB file = disaster. | **REWRITE** — Data-based line scanning, pread for byte range, mmap for large files (section 14.4). |
+| `WriteFileTool` | 108 | Standard write + propose mode. Uses `FileToolWriteApplier` + `FileToolProposalStager`. | Fine. Single file I/O. | ✅ Per-file locking via ToolScheduler handles this. | **REWRITE** — remove propose mode (not needed for Coder), merge write applier, add read-before-write check. |
+| `ReplaceInFileTool` | 125 | Text-based find-and-replace. Loads file, finds string, replaces, writes. | O(n) string search. Fine for small files. | ⚠️ Same as ReadFileTool — full file load. | **REWRITE** — use the same Data-based approach as ReadFileTool. |
+| `ListFilesTool` | 77 | FileManager enumerator with exclusion support. | Fine. | ✅ I/O bounded by directory size. | **PORT** — clean, simple. |
+| `DeleteFileTool` | 56 | Simple file delete. | Instant. | ✅ Fine. | **REWRITE** — just needs feedback format. |
+| `FindFileTool` | 76 | FileManager enumerator, matches filename. | Fine for small projects. | ⚠️ O(n) file scan per call. | **PORT** — simple, works. Could be enhanced to use index for larger projects. |
+| `GetProjectStructureTool` | 89 | Recursive directory listing. | Fine. | ✅ Bounded by project size. | **PORT** — simple, works. |
+
+### 15.4 Terminal Tools
+
+| Tool | Lines | Architecture | Performance | Swarm | Verdict |
+|------|-------|-------------|-------------|-------|---------|
+| `TerminalTools` | 644 | **Largest tool file**. Contains `RunCommandTool` + session management + output buffering. Multiple internal types. | Depends on command. Has output caps. | ⚠️ Each terminal session consumes a process. Session state is in-memory. | **REWRITE** — split into focused files. The spawned process approach is correct (terminals MUST be spawned). Needs feedback format + session cleanup. |
+
+### 15.5 Summary: What to Port vs Rewrite
+
+| Strategy | Count | Tools | Total Lines | Effort |
+|----------|-------|-------|-------------|--------|
+| **PORT** (just add wrapper) | 16 | `list_files`, `find_file`, `get_project_structure`, `search_project`, `google_web_search`, `web_browse`, `google_web_search_engine`, `web_kit_session`, all 6 index tools, `web_session_store` | ~1,200 lines | ~2 days — most are thin wrappers returning String. Web tools need MainActorWorker integration but no logic changes. |
+| **REWRITE** (fix architecture) | 5 | `read_file`, `write_file`, `replace_in_file`, `delete_file`, `grep`, `terminal_tools` | ~1,200 lines | ~3 days — file tools are straightforward Data-based rewrites. Terminal tools need spawned process. |
+| **BUILD NEW** | 1 | `patch_file` | ~150 lines | ~1 day — from spec (section 22). |
+| **DEPRECATE/DROP** | 4 | `local_find`, `file_tool_proposal_stager`, `file_tool_param_schema`, `tool_invocation_context` | ~320 lines | Cleanup. |
+
+**Total porting effort**: ~6 days for one developer. Can be parallelized (port tools independently). Web tools are P0 PORT — they work today, just need wrappers.
+
+---
+
+## 16. Design Decisions from Review Sessions
+
+### 16.1 Web Tools: PORT (Not Rewrite) with MainActor Integration
+
+**The existing tools work**. The existing `GoogleWebSearchEngine` and `WebBrowseTool` successfully bypass bot detection using WKWebView with spoofed user agent, persistent sessions, and JS rendering. They are P0 features for both Chat and Coder modes.
+
+**The real problem**: They are `@MainActor`-bound because WKWebView requires a UI process. This conflicts with the WorkerPool (which runs on background actors). The fix is **not** to rewrite the tools — it's to integrate them into the architecture correctly.
+
+**Integration strategy**:
+
+```
+┌────────────────────────────────────────────────────┐
+│                    WorkerPool                       │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐   │
+│  │ Worker 1  │ │ Worker 2 │ │ MainActorWorker   │   │
+│  │ (bg)      │ │ (bg)     │ │ (main thread)     │   │
+│  │ read_file │ │ grep     │ │ web_search       │   │
+│  │ write_file│ │ search   │ │ web_browse       │   │
+│  └──────────┘ └──────────┘ └──────────────────┘   │
+│                                     │               │
+│                           max 1-2 concurrent        │
+└────────────────────────────────────────────────────┘
+```
+
+**MainActorWorker**: A special worker in the pool that runs on the main thread. Only web tools are dispatched to it. Max 1-2 concurrent (WKWebView instances are heavy, ~200-500MB RAM each).
+
+```swift
+actor WorkerPool {
+    private let backgroundWorkers: [Worker]     // for file tools
+    private let mainActorWorker: MainActorWorker // for web tools
+    
+    func dispatch(request: ToolExecutionRequest, executor: ToolExecutor) async -> ToolFeedback {
+        if request.definition.sideEffects.contains(.webSearch) || 
+           request.definition.sideEffects.contains(.webBrowse) {
+            // Route to MainActor worker (max 1-2 concurrent)
+            return await mainActorWorker.execute(request: request, executor: executor)
+        } else {
+            // Route to background worker pool
+            return await dispatchToBackgroundWorker(request: request, executor: executor)
+        }
+    }
+}
+
+@MainActor
+final class MainActorWorker {
+    private let semaphore = AsyncSemaphore(value: 2)  // max 2 concurrent web calls
+    
+    func execute(request: ToolExecutionRequest, executor: ToolExecutor) async -> ToolFeedback {
+        await semaphore.wait()
+        defer { Task { await semaphore.signal() } }
+        // Web tools run on MainActor. They block the main thread briefly
+        // for WKWebView operations, but the semaphore prevents >2 concurrent.
+        return try await executor.execute(request: request)
+    }
+}
+```
+
+**What this means for the architecture**:
+- Web tools are **PORTED** (not rewritten). They get `ToolDefinition` wrappers + `ToolFeedback` output. The WKWebView logic stays untouched.
+- For Coder mode (sequential single turn): the MainActorWorker handles 1 web call at a time. This is fine — Coder mode doesn't parallelize tools anyway.
+- For Agent mode (future): the MainActorWorker with semaphore=2 handles limited parallel web access. If Agent mode needs 100s of concurrent web calls, that's a future research problem (custom headless browser, XPC service farm, etc.).
+
+**Reader mode research item**: The existing `WebKitSession` extracts page text after JS rendering. An enhancement would be to use Safari's built-in reader mode (via `WKWebView` JavaScript execution of the Readability algorithm) to strip navigation, ads, and sidebars before returning content. This is:
+- JS-aware (SPA pages work)
+- Cleaner output (just the article content)
+- Low effort (open-source Readability.js can be injected)
+- **Not blocking**: the current text extraction works. Reader mode is an optimization for Phase 3.
+
+### 16.3 Fast Path Search — In-Memory Trie
+
+**Problem**: SQLite FTS5 is fast (~5ms) but we want sub-millisecond filename search for Phase 1. Building a custom binary indexer with fixed-size records is possible but complex.
+
+**Solution**: In-memory prefix trie built from FSEvents. No custom binary format, no persistence complexity.
+
+```swift
+/// In-memory prefix trie of all file paths in the project.
+/// Built on startup (~100ms for 10K files), updated via FSEvents.
+/// O(log n) lookup, O(1) memory (~2.5MB for 10K files).
+actor FilePathIndex {
+    private var trie: TrieNode = TrieNode()
+    private var fileCount: Int = 0
+    private var lastBuilt: Date?
+    
+    // ── Build ──
+    
+    func build(projectRoot: URL) async {
+        let start = Date()
+        for await url in FileWalker(url: projectRoot) {
+            let relativePath = relativePath(from: url, root: projectRoot)
+            insert(path: relativePath)
+        }
+        lastBuilt = Date()
+        print("[PATH-INDEX] Built index for \(fileCount) files in \(Int(-start.timeIntervalSinceNow * 1000))ms")
+    }
+    
+    private func insert(path: String) {
+        var node = &trie
+        for character in path.lowercased() {
+            node = node.children[character, default: TrieNode()]
+        }
+        node.isEndOfPath = true
+        fileCount += 1
+    }
+    
+    // ── Search ──
+    
+    func search(prefix: String, maxResults: Int = 20) -> [String] {
+        var node = trie
+        for character in prefix.lowercased() {
+            guard let next = node.children[character] else { return [] }
+            node = next
+        }
+        return collectPaths(from: node, prefix: prefix, maxResults: maxResults)
+    }
+    
+    func search(substring: String, maxResults: Int = 20) -> [String] {
+        // For substring search, we need to traverse all nodes
+        // This is O(n) on file count but still fast (~1ms for 10K files)
+        var results: [String] = []
+        searchRecursive(node: trie, path: "", substring: substring.lowercased(), results: &results, maxResults: maxResults)
+        return results
+    }
+    
+    // ── Updates via FSEvents ──
+    
+    func onFileCreated(path: String) { insert(path: path) }
+    func onFileDeleted(path: String) { /* mark for rebuild */ }
+    func onFileRenamed(oldPath: String, newPath: String) {
+        // Remove old, insert new
+    }
+}
+
+struct TrieNode {
+    var children: [Character: TrieNode] = [:]
+    var isEndOfPath: Bool = false
+}
+```
+
+**Performance comparison**:
+
+| Approach | Build (10K files) | Exact lookup | Prefix search | Substring search | Memory | Complexity |
+|----------|-------------------|-------------|---------------|-----------------|--------|------------|
+| SQLite FTS5 (current) | ~500ms | ~1ms | ~5ms | ~5ms | Configurable | None (done) |
+| FileManager enumerator (current) | N/A | ~50ms | ~50ms | ~50ms | 0 | None (done) |
+| **In-memory trie (proposed)** | **~100ms** | **~0.001ms** | **~0.1ms** | **~1ms** | **~2.5MB** | **Low** |
+| Custom binary indexer | ~100ms | ~0.001ms | ~0.01ms | ~5ms | ~2.5MB | **High** |
+
+**Verdict**: In-memory trie is the sweet spot. ~100ms build time, sub-millisecond searches, zero persistence complexity, FSEvents for incremental updates. A custom binary indexer would be ~10x faster for prefix search (0.01ms vs 0.1ms) but 0.1ms is already "instant" — the difference is imperceptible. Not worth the complexity.
+
+**Integration with tiered search** (from section 14.3):
+
+```
+Tier 1: FilePathIndex (in-memory trie, <1ms)
+  └── Replaces FileManager enumerator for filename search
+  └── Returns exact path matches + prefix matches
+
+  The existing SearchProjectTool already does filename search
+  as its last tier. We replace the FileManager enumerator there
+  with the in-memory trie. Everything else stays the same.
+```
+
+**Phase 1 implementation**: The `FilePathIndex` is the first thing we build in Phase 1 (after `ToolDefinition` and `ToolRegistry`). It's independent of all other tools and immediately useful for search.
+
+### 16.5 Web Tools Timeline (P0, Always Available)
+
+Web tools work today and remain available in all modes. The question is how they integrate into the new architecture.
+
+| Phase | Status | Integration |
+|-------|--------|-------------|
+| P1 | **PORT** — ToolDefinition + ToolFeedback wrappers | `web_search` and `web_browse` available in Coder mode from day 1. Sequential (1 at a time, via MainActorWorker in pool). |
+| P2 | **Enhance** — Reader mode + cache | Research: inject Readability.js after page load for cleaner content extraction. Cache results with 1-hour TTL. |
+| P3+ | **Scale** — Parallel browser farm for Agent mode | Multiple WKWebView instances in XPC services. Only if profiling shows need. |
+
+### 16.6 Overall Direction
+
+```
+PHASE 1 — Build Foundation + Core Tools (now)
+  ├── Service/Tooling/ directory with all new types
+  ├── ToolDefinition, ToolRegistry, ToolFeedback, ToolExecutor chain
+  ├── WorkerPool, ResourceGovernor (in-process)
+  ├── FilePathIndex (in-memory trie)
+  ├── SequentialScheduler, CoderOrchestrator
+  ├── ToolFormatAdapter (OpenRouter)
+  │
+  ├── Ported tools (15):
+  │   search_project, list_files, find_file, get_project_structure,
+  │   all 6 index tools, web_session_store,
+  │   web_search (GoogleWebSearchTool), web_browse,
+  │   GoogleWebSearchEngine, WebKitSession
+  │
+  ├── Rewritten tools (core 4):
+  │   read_file (Data-based, mmap for large files)
+  │   write_file (no propose mode, add read-before-write)
+  │   tool_file_access_ledger (turn-aware v2)
+  │
+  └── Dropped: propose stager, param schema, invocation context
+
+PHASE 2 — Coder Complete (next)
+  ├── PatchFileTool (mmap-based)
+  ├── grep (DispatchIO streaming)
+  ├── replace_in_file, delete_file (feedback format)
+  ├── terminal_tools (spawned process)
+  ├── URLSession-based web search (tier 1-2)
+  ├── FilePathIndex integration into SearchProjectTool
+  ├── GemmaToolAdapter (for local model)
+  ├── ToolLoopGuard, TelemetryDecorator
+  │
+  └── Deprecate: local_find
+
+PHASE 3 — Agent Prep (future)
+  ├── WKWebView-based web browse (spawned XPC)
+  ├── DAGScheduler (parallel tool execution)
+  ├── BackgroundJobManager, SubAgentChannel
+  ├── GitCheckpointService
+  │
+  └── Drop: old AITool protocol, old executor, ConversationToolProvider
+```
+
+**Key principle**: Each phase is self-contained and shippable. Phase 1 gives a working Coder mode with read/write/search. Phase 2 fills gaps. Phase 3 enables Agent mode.

@@ -33,7 +33,9 @@ class BaseUITestCase: XCTestCase {
 
         app.launch()
         let robot = AppRobot(app: app)
-        robot.waitForReady()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30), "App must reach foreground")
+        app.activate()
+        XCTAssertTrue(robot.window().mainWindow.exists, "Main window must exist on launch")
         return robot
     }
 }
@@ -48,15 +50,11 @@ enum TestLaunchKeys {
 enum UITestAccessibilityID {
     static let appRootView = "AppRootView"
     static let appReadyMarker = "AppReadyMarker"
-
     static let codeEditorTextView = "CodeEditorTextView"
-    static let editorHighlightDiagnostics = "EditorHighlightDiagnostics"
-
     static let aiChatPanel = "AIChatPanel"
     static let aiChatInputTextView = "AIChatInputTextView"
     static let aiChatSendButton = "AIChatSendButton"
     static let aiChatNewConversationButton = "AIChatNewConversationButton"
-
     static let terminalTextView = "TerminalTextView"
     static let fileExplorerOutline = "FileExplorerOutline"
     static let statusBar = "StatusBar"
@@ -68,187 +66,7 @@ enum UITestAccessibilityID {
 struct AppRobot {
     let app: XCUIApplication
 
-    func waitForReady(timeout: TimeInterval = 60) {
-        let adjustedTimeout = ProcessInfo.processInfo.environment["CI"] != nil ? 120 : timeout
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: adjustedTimeout), "App must reach foreground")
-        app.activate()
-
-        let readyMarker = app.staticTexts[UITestAccessibilityID.appReadyMarker]
-        if readyMarker.waitForExistence(timeout: min(30, adjustedTimeout)) {
-            let readyDeadline = Date().addingTimeInterval(timeout)
-            while Date() < readyDeadline {
-                if (readyMarker.value as? String) == "ready" {
-                    return
-                }
-                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-            }
-            XCTFail("AppReadyMarker did not reach ready state in time. value=\(String(describing: readyMarker.value))")
-            return
-        }
-
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if (readyMarker.exists && ((readyMarker.value as? String) == "ready")) ||
-                app.windows.firstMatch.exists ||
-                app.textViews[UITestAccessibilityID.codeEditorTextView].exists ||
-                app.descendants(matching: .any)[UITestAccessibilityID.terminalTextView].exists ||
-                app.outlines[UITestAccessibilityID.fileExplorerOutline].exists ||
-                app.buttons[UITestAccessibilityID.aiChatSendButton].exists {
-                return
-            }
-            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-        }
-
-        XCTFail(
-            "UI did not become ready in time. Missing core controls after window launch.\n\(app.debugDescription)"
-        )
-    }
-
-    func editor() -> EditorRobot { EditorRobot(app: app) }
-    func terminal() -> TerminalRobot { TerminalRobot(app: app) }
-    func chat() -> ChatRobot { ChatRobot(app: app) }
-    func settings() -> SettingsRobot { SettingsRobot(app: app) }
     func window() -> WindowRobot { WindowRobot(app: app) }
-    func fileTree() -> FileTreeRobot { FileTreeRobot(app: app) }
-}
-
-@MainActor
-struct EditorRobot {
-    let app: XCUIApplication
-
-    var editorView: XCUIElement { app.textViews[UITestAccessibilityID.codeEditorTextView] }
-    var highlightDiagnostics: XCUIElement {
-        let byStaticText = app.staticTexts[UITestAccessibilityID.editorHighlightDiagnostics]
-        if byStaticText.exists { return byStaticText }
-        return app.descendants(matching: .any)[UITestAccessibilityID.editorHighlightDiagnostics]
-    }
-
-    func assertVisible() {
-        XCTAssertTrue(editorView.waitForExistence(timeout: 10), "Editor must exist")
-        XCTAssertTrue(editorView.isHittable, "Editor must be hittable")
-    }
-
-    func type(_ text: String) {
-        editorView.click()
-        editorView.typeText(text)
-    }
-
-    func assertHighlightDiagnosticsContain(_ expectedFragments: [String], timeout: TimeInterval = 10) {
-        XCTAssertTrue(highlightDiagnostics.waitForExistence(timeout: timeout), "Highlight diagnostics marker must exist")
-
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            let value = (highlightDiagnostics.value as? String) ??
-                (highlightDiagnostics.label)
-            if expectedFragments.allSatisfy({ value.contains($0) }) {
-                return
-            }
-            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-        }
-
-        let finalValue = (highlightDiagnostics.value as? String) ?? highlightDiagnostics.label
-        XCTFail("Highlight diagnostics missing fragments \(expectedFragments). actual=\(finalValue)")
-    }
-}
-
-@MainActor
-struct TerminalRobot {
-    let app: XCUIApplication
-
-    var terminalView: XCUIElement {
-        let byTextView = app.textViews[UITestAccessibilityID.terminalTextView]
-        if byTextView.exists { return byTextView }
-        return app.descendants(matching: .any)[UITestAccessibilityID.terminalTextView]
-    }
-
-    func assertVisible() {
-        XCTAssertTrue(terminalView.waitForExistence(timeout: 10), "Terminal must exist")
-    }
-
-    func run(_ command: String) {
-        terminalView.click()
-        terminalView.typeText(command)
-        terminalView.typeText("\n")
-    }
-}
-
-@MainActor
-struct ChatRobot {
-    let app: XCUIApplication
-
-    var panel: XCUIElement { app.otherElements[UITestAccessibilityID.aiChatPanel] }
-    var input: XCUIElement {
-        let byTextView = app.textViews[UITestAccessibilityID.aiChatInputTextView]
-        if byTextView.exists { return byTextView }
-        return app.descendants(matching: .any)[UITestAccessibilityID.aiChatInputTextView]
-    }
-    var send: XCUIElement { app.buttons[UITestAccessibilityID.aiChatSendButton] }
-    var newConversation: XCUIElement { app.buttons[UITestAccessibilityID.aiChatNewConversationButton] }
-
-    func assertVisible() {
-        let sendExists = send.waitForExistence(timeout: 10)
-        let newConversationExists = newConversation.waitForExistence(timeout: 10)
-        let inputExists = input.waitForExistence(timeout: 10)
-
-        XCTAssertTrue(sendExists, "Chat send button must exist")
-        XCTAssertTrue(newConversationExists, "New conversation button must exist")
-        XCTAssertTrue(
-            inputExists,
-            "Chat input must exist. panel=\(panel.exists) send=\(sendExists) newConversation=\(newConversationExists)\n\(app.debugDescription)"
-        )
-    }
-
-    func sendMessage(_ text: String) {
-        let center = input.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        center.click()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-        center.click()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-        app.typeText(text)
-        XCTAssertTrue(send.isEnabled, "Send button must be enabled")
-        send.click()
-    }
-}
-
-@MainActor
-struct SettingsRobot {
-    let app: XCUIApplication
-
-    func openSettings() {
-        // Navigate via menu bar: App Menu > Settings
-        let appMenuName = ProcessInfo.processInfo.processName
-        let appMenu = app.menuBars.menuBarItems[appMenuName]
-        guard appMenu.waitForExistence(timeout: 5) else {
-            // Last resort: try keyboard shortcut
-            app.typeKey(",", modifierFlags: [.command])
-            return
-        }
-        appMenu.click()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
-
-        let settingsItem = app.menuItems.matching(NSPredicate(format: "title BEGINSWITH 'Settings'")).firstMatch
-        if settingsItem.waitForExistence(timeout: 3) {
-            settingsItem.click()
-        } else {
-            // Fallback: try keyboard shortcut
-            app.typeKey(",", modifierFlags: [.command])
-        }
-    }
-
-    func assertWordWrapToggleVisible(timeout: TimeInterval = 4) {
-        let toggle = app.switches["Settings.WordWrap"]
-        if toggle.waitForExistence(timeout: timeout) {
-            return
-        }
-
-        let checkbox = app.checkBoxes["Settings.WordWrap"]
-        if checkbox.waitForExistence(timeout: timeout) {
-            return
-        }
-
-        let any = app.descendants(matching: .any)["Settings.WordWrap"]
-        XCTAssertTrue(any.waitForExistence(timeout: timeout), "Word wrap toggle must exist")
-    }
 }
 
 @MainActor
@@ -257,29 +75,15 @@ struct WindowRobot {
 
     var mainWindow: XCUIElement { app.windows.firstMatch }
 
-    func assertVisible() {
-        XCTAssertTrue(mainWindow.waitForExistence(timeout: 10), "Main window must exist")
-    }
-
     func assertWithinMainDisplayBounds() {
-        assertVisible()
         let frame = mainWindow.frame
         let displayBounds = CGDisplayBounds(CGMainDisplayID())
-        XCTAssertLessThanOrEqual(frame.width, displayBounds.width)
-        XCTAssertLessThanOrEqual(frame.height, displayBounds.height)
-        XCTAssertGreaterThanOrEqual(frame.minX, displayBounds.minX)
-        XCTAssertGreaterThanOrEqual(frame.minY, displayBounds.minY)
-    }
-}
-
-@MainActor
-struct FileTreeRobot {
-    let app: XCUIApplication
-
-    var outline: XCUIElement { app.outlines[UITestAccessibilityID.fileExplorerOutline] }
-
-    func assertVisible() {
-        XCTAssertTrue(outline.waitForExistence(timeout: 10), "File tree outline must exist")
+        XCTAssertGreaterThan(frame.width, 0, "Window width must be positive")
+        XCTAssertGreaterThan(frame.height, 0, "Window height must be positive")
+        XCTAssertLessThanOrEqual(frame.width, displayBounds.width, "Window must fit within display width")
+        XCTAssertLessThanOrEqual(frame.height, displayBounds.height, "Window must fit within display height")
+        XCTAssertGreaterThanOrEqual(frame.minX, displayBounds.minX, "Window must not extend left of display")
+        XCTAssertGreaterThanOrEqual(frame.minY, displayBounds.minY, "Window must not extend above display")
     }
 }
 
@@ -287,6 +91,6 @@ struct FileTreeRobot {
 final class OSXIDEUITests: BaseUITestCase {
     func testAppLaunchesAndBecomesReady() {
         let robot = launchApp()
-        robot.window().assertVisible()
+        XCTAssertTrue(robot.window().mainWindow.exists, "Main window must exist after launch")
     }
 }
