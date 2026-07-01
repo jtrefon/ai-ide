@@ -17,6 +17,7 @@ final class SuggestionRankerTests: XCTestCase {
             retrievalContext: [],
             triggerReason: .automatic,
             maxSuggestionLength: 32,
+            maxTokens: 11,
             allowMultiline: false
         )
         let result = InlineCompletionResult(
@@ -44,6 +45,7 @@ final class SuggestionRankerTests: XCTestCase {
             retrievalContext: [],
             triggerReason: .automatic,
             maxSuggestionLength: 40,
+            maxTokens: 14,
             allowMultiline: false
         )
         let result = InlineCompletionResult(
@@ -72,6 +74,7 @@ final class SuggestionRankerTests: XCTestCase {
             retrievalContext: [],
             triggerReason: .automatic,
             maxSuggestionLength: 80,
+            maxTokens: 28,
             allowMultiline: false
         )
         let result = InlineCompletionResult(
@@ -99,6 +102,7 @@ final class SuggestionRankerTests: XCTestCase {
             retrievalContext: [],
             triggerReason: .manual,
             maxSuggestionLength: 80,
+            maxTokens: 28,
             allowMultiline: true
         )
         let result = InlineCompletionResult(

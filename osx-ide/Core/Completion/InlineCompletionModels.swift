@@ -30,6 +30,7 @@ struct InlineCompletionRequest: Sendable {
     let retrievalContext: [String]
     let triggerReason: CompletionTriggerReason
     let maxSuggestionLength: Int
+    let maxTokens: Int
     let allowMultiline: Bool
 }
 
@@ -71,10 +72,10 @@ struct InlineCompletionSettings: Equatable, Sendable {
             AppRuntimeEnvironment.launchContext.isTesting
 #endif
         }(),
-        debounceMilliseconds: 160,
-        aggressiveness: 0.35,
-        maxSuggestionLength: 40,
-        multilineEnabled: false,
+        debounceMilliseconds: 100,
+        aggressiveness: 0.6,
+        maxSuggestionLength: 120,
+        multilineEnabled: true,
         retrievalEnabled: false,
         routingMode: .hybridPreferLocal,
         debugOverlayEnabled: {

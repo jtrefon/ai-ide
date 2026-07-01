@@ -43,8 +43,7 @@ actor FIMInferenceService {
         var eosToken: String? { upstream.eosToken }
         var unknownToken: String? { upstream.unknownToken }
         func applyChatTemplate(messages: [[String: any Sendable]], tools: [[String: any Sendable]]?, additionalContext: [String: any Sendable]?) throws -> [Int] {
-            let combined = messages.compactMap { $0["content"] as? String }.joined(separator: "\n")
-            return encode(text: combined, addSpecialTokens: false)
+            throw AppError.aiServiceError("Chat templates are not supported for FIM models. Use direct encoding.")
         }
     }
 
@@ -65,12 +64,39 @@ actor FIMInferenceService {
         Memory.clearCache()
     }
 
+    func prewarm() async throws {
+        _ = try await ensureLoaded()
+    }
+
     func generate(prefix: String, suffix: String, maxTokens: Int = 64) async throws -> String {
+        try Task.checkCancellation()
         var output = ""
         for try await chunk in generateStream(prefix: prefix, suffix: suffix, maxTokens: maxTokens) {
             output.append(chunk)
         }
         return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func truncateInput(prefix: inout String, suffix: inout String, contextLength: Int, maxTokens: Int) {
+        let reservedTokens = 20
+        let maxInputTokens = contextLength - maxTokens - reservedTokens
+        guard maxInputTokens > 0 else { return }
+
+        let safeCharsPerToken = 2
+        let maxChars = maxInputTokens * safeCharsPerToken
+
+        let totalChars = prefix.count + suffix.count
+        guard totalChars > maxChars else { return }
+
+        let maxSuffixChars = maxChars / 3
+        let maxPrefixChars = maxChars - maxSuffixChars
+
+        if suffix.count > maxSuffixChars {
+            suffix = String(suffix.prefix(maxSuffixChars))
+        }
+        if prefix.count > maxChars - suffix.count {
+            prefix = String(prefix.suffix(maxChars - suffix.count))
+        }
     }
 
     func generateStream(
@@ -88,14 +114,18 @@ actor FIMInferenceService {
                     }
                     let fimTokens = model.fimTokens
 
+                    let contextLength = model.supportsFIM ? 4096 : 2048
+                    var effectivePrefix = prefix
+                    var effectiveSuffix = suffix
+                    truncateInput(prefix: &effectivePrefix, suffix: &effectiveSuffix, contextLength: contextLength, maxTokens: maxTokens)
+
                     let prompt: String
                     if let fimTokens {
-                        prompt = "\(fimTokens.prefix)\(prefix)\(fimTokens.suffix)\(suffix)\(fimTokens.middle)"
+                        prompt = "\(fimTokens.prefix)\(effectivePrefix)\(fimTokens.suffix)\(effectiveSuffix)\(fimTokens.middle)"
                     } else {
-                        prompt = prefix
+                        prompt = effectivePrefix
                     }
 
-                    let contextLength = model.supportsFIM ? 4096 : 2048
                     let parameters = GenerateParameters(
                         maxTokens: min(maxTokens, 512),
                         maxKVSize: contextLength,
@@ -123,9 +153,7 @@ actor FIMInferenceService {
                     continuation.finish(throwing: error)
                 }
             }
-            generationTask = Task {
-                await task.value
-            }
+            generationTask = task
             continuation.onTermination = { [weak self] _ in
                 Task { [weak self] in
                     await self?.generationTask?.cancel()

@@ -13,7 +13,7 @@ struct CompletionContextAssembler {
 
     private let limits: Limits
 
-    init(limits: Limits = .fast) {
+    init(limits: Limits = .standard) {
         self.limits = limits
     }
 

@@ -19,6 +19,22 @@ protocol InlineCompletionProviding {
         suffix: String,
         maxTokens: Int
     ) async throws -> (text: String, source: InlineCompletionSource)?
+
+    func completeLocallyStreaming(
+        prefix: String,
+        suffix: String,
+        maxTokens: Int
+    ) async throws -> AsyncThrowingStream<String, Error>?
+}
+
+extension InlineCompletionProviding {
+    func completeLocallyStreaming(
+        prefix: String,
+        suffix: String,
+        maxTokens: Int
+    ) async throws -> AsyncThrowingStream<String, Error>? {
+        nil
+    }
 }
 
 @MainActor
@@ -161,11 +177,34 @@ final class AIServiceInlineCompletionProvider: InlineCompletionProviding {
         return (text, source)
     }
 
+    func completeLocallyStreaming(
+        prefix: String,
+        suffix: String,
+        maxTokens: Int
+    ) async throws -> AsyncThrowingStream<String, Error>? {
+        let modelId: String
+        if let localModelSelectionStore {
+            let stored = await localModelSelectionStore.completionModelId()
+            modelId = stored.isEmpty ? LocalModelCatalog.fastFimModel.id : stored
+        } else {
+            modelId = LocalModelCatalog.fastFimModel.id
+        }
+
+        guard let model = LocalModelCatalog.model(id: modelId),
+              LocalModelFileStore.isModelInstalled(model) else {
+            return nil
+        }
+
+        let service = try await resolveFIMService(modelId: modelId)
+        return service.generateStream(prefix: prefix, suffix: suffix, maxTokens: maxTokens)
+    }
+
     func completeLocally(
         prefix: String,
         suffix: String,
         maxTokens: Int
     ) async throws -> (text: String, source: InlineCompletionSource)? {
+        try Task.checkCancellation()
         let modelId: String
         if let localModelSelectionStore {
             let stored = await localModelSelectionStore.completionModelId()
@@ -229,6 +268,20 @@ protocol CompletionInferring {
         for request: InlineCompletionRequest,
         settings: InlineCompletionSettings
     ) async throws -> InlineCompletionResult?
+
+    func inferStreaming(
+        for request: InlineCompletionRequest,
+        settings: InlineCompletionSettings
+    ) async throws -> AsyncThrowingStream<String, Error>?
+}
+
+extension CompletionInferring {
+    func inferStreaming(
+        for request: InlineCompletionRequest,
+        settings: InlineCompletionSettings
+    ) async throws -> AsyncThrowingStream<String, Error>? {
+        nil
+    }
 }
 
 @MainActor
@@ -262,6 +315,20 @@ final class CompletionInferenceService: CompletionInferring {
             source: source,
             latencyMs: Date().timeIntervalSince(startedAt) * 1_000
         )
+    }
+
+    func inferStreaming(
+        for request: InlineCompletionRequest,
+        settings: InlineCompletionSettings
+    ) async throws -> AsyncThrowingStream<String, Error>? {
+        switch settings.routingMode {
+        case .localOnly, .hybridPreferLocal:
+            return try await provider.completeLocallyStreaming(
+                prefix: request.prefix, suffix: request.suffix, maxTokens: request.maxTokens
+            )
+        case .remoteOnly, .hybridPreferRemote:
+            return nil
+        }
     }
 
     private func routeInference(

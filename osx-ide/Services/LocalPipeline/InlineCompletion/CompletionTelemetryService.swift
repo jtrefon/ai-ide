@@ -33,7 +33,7 @@ actor CompletionTelemetryService {
     }
 
     func shouldReduceWorkload() -> Bool {
-        recentSlowCompletions() >= 2
+        recentSlowCompletions(thresholdMs: 500) >= 4
     }
 
     private func recordLatency(_ latency: Double) {

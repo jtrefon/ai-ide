@@ -61,10 +61,6 @@ struct SuggestionRanker {
             if text.contains("\n") { return nil }
         }
 
-        if text.lowercased().hasPrefix("here") || text.lowercased().hasPrefix("the ") {
-            return nil
-        }
-
         return text
     }
 
@@ -72,7 +68,14 @@ struct SuggestionRanker {
         let candidate = suggestion.trimmingCharacters(in: .whitespaces)
         let remaining = suffix.trimmingCharacters(in: .whitespaces)
         guard !candidate.isEmpty, !remaining.isEmpty else { return false }
-        return remaining.hasPrefix(candidate)
+        guard candidate.count >= 3 else { return false }
+        guard remaining.hasPrefix(candidate) else { return false }
+        let nextIndex = remaining.index(remaining.startIndex, offsetBy: candidate.count)
+        if nextIndex < remaining.endIndex {
+            let nextChar = remaining[nextIndex]
+            return !nextChar.isLetter && nextChar != "_"
+        }
+        return true
     }
 
     private func respectsIndentation(_ suggestion: String, prefix: String) -> Bool {

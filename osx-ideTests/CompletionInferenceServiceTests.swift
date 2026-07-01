@@ -18,22 +18,22 @@ final class CompletionInferenceServiceTests: XCTestCase {
         super.tearDown()
     }
 
-    func testAutomaticLocalOnlyReturnsNilWhenOfflineModeIsDisabled() async throws {
+    func testRemoteOnlyReturnsNilWhenOfflineModeIsEnabled() async throws {
         let provider = AIServiceInlineCompletionProvider(
-            aiServiceProvider: { TestAIService() },
-            offlineModeChecker: TestOfflineModeChecker(isOfflineModeEnabled: false)
+            aiServiceProvider: { TestAIService(result: "completion") },
+            offlineModeChecker: TestOfflineModeChecker(isOfflineModeEnabled: true)
         )
 
         let result = try await provider.complete(
             prompt: "return a value",
-            triggerReason: .automatic,
-            routingMode: .localOnly
+            triggerReason: .manual,
+            routingMode: .remoteOnly
         )
 
         XCTAssertNil(result)
     }
 
-    func testManualRemoteOnlyUsesProviderOutput() async throws {
+    func testRemoteOnlyUsesProviderOutputWhenOnline() async throws {
         let provider = AIServiceInlineCompletionProvider(
             aiServiceProvider: { TestAIService(result: "completion") },
             offlineModeChecker: TestOfflineModeChecker(isOfflineModeEnabled: false)
@@ -49,27 +49,21 @@ final class CompletionInferenceServiceTests: XCTestCase {
         XCTAssertEqual(result?.source, .remote)
     }
 
-    func testHybridPreferLocalUsesLocalServiceWhenModelSelected() async throws {
-        let defaults = UserDefaults(suiteName: defaultsSuiteName!)!
-        defaults.removePersistentDomain(forName: defaultsSuiteName!)
-        let settingsStore = SettingsStore(userDefaults: defaults)
-        let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
-        await selectionStore.setSelectedModelId("local-model")
-
+    func testProviderReturnsNilForHybridModes() async throws {
         let provider = AIServiceInlineCompletionProvider(
-            remoteServiceProvider: { TestAIService(result: "remote") },
-            localServiceProvider: { TestAIService(result: "local") },
-            localModelSelectionStore: selectionStore
+            aiServiceProvider: { TestAIService(result: "completion") },
+            offlineModeChecker: TestOfflineModeChecker(isOfflineModeEnabled: false)
         )
 
-        let result = try await provider.complete(
-            prompt: "return a value",
-            triggerReason: .automatic,
-            routingMode: .hybridPreferLocal
+        let localResult = try await provider.complete(
+            prompt: "return a value", triggerReason: .manual, routingMode: .hybridPreferLocal
+        )
+        let remoteResult = try await provider.complete(
+            prompt: "return a value", triggerReason: .manual, routingMode: .hybridPreferRemote
         )
 
-        XCTAssertEqual(result?.text, "local")
-        XCTAssertEqual(result?.source, .local)
+        XCTAssertNil(localResult)
+        XCTAssertNil(remoteResult)
     }
 
     func testCompleteLocallyReturnsNilWhenNoFimModelAvailable() async throws {
@@ -108,6 +102,7 @@ final class CompletionInferenceServiceTests: XCTestCase {
             retrievalContext: [],
             triggerReason: .manual,
             maxSuggestionLength: 40,
+            maxTokens: 14,
             allowMultiline: true
         )
 
@@ -142,6 +137,12 @@ private final class PromptRecorder: InlineCompletionProviding {
     }
 
     func completeLocally(prefix: String, suffix: String, maxTokens: Int) async throws -> (text: String, source: InlineCompletionSource)? {
+        capturedLocallyPrefix = prefix
+        capturedLocallySuffix = suffix
+        return nil
+    }
+
+    func completeLocallyStreaming(prefix: String, suffix: String, maxTokens: Int) async throws -> AsyncThrowingStream<String, Error>? {
         capturedLocallyPrefix = prefix
         capturedLocallySuffix = suffix
         return nil

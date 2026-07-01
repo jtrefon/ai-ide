@@ -65,7 +65,7 @@ final class CompletionRetrievalLayer: CompletionRetrieving {
         let symbolKey = symbols.prefix(4).joined(separator: "|")
         return [
             snapshot.filePath ?? "<untitled>",
-            String(snapshot.cursorPosition / 20),
+            String(snapshot.cursorPosition),
             symbolKey,
             reduceWorkload ? "reduced" : "full"
         ].joined(separator: "::")

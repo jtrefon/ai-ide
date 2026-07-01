@@ -24,8 +24,8 @@ final class InlineCompletionEngine {
     private var lastAcceptedSuggestions: [FileEditorStateManager.PaneID: String] = [:]
     private var lastAcceptedAt: [FileEditorStateManager.PaneID: Date] = [:]
 
-    private let automaticAcceptanceCooldownMs: Double = 1_200
-    private let automaticLatencyBudgetMs: Double = 2_500
+    private let automaticAcceptanceCooldownMs: Double = 300
+    private let automaticLatencyBudgetMs: Double = 5_000
 
     init(
         settingsStore: InlineCompletionSettingsStore,
@@ -165,6 +165,8 @@ final class InlineCompletionEngine {
                 ])
             )
 
+            let maxSuggestionLength = settings.maxSuggestionLength
+            let maxTokens = max(8, Int(Double(maxSuggestionLength) * 0.35))
             let request = InlineCompletionRequest(
                 requestId: requestID,
                 filePath: snapshot.filePath,
@@ -176,8 +178,9 @@ final class InlineCompletionEngine {
                 symbols: context.symbols,
                 retrievalContext: retrievalContext,
                 triggerReason: snapshot.triggerReason,
-                maxSuggestionLength: settings.maxSuggestionLength,
-                allowMultiline: snapshot.triggerReason == .manual && settings.multilineEnabled
+                maxSuggestionLength: maxSuggestionLength,
+                maxTokens: maxTokens,
+                allowMultiline: settings.multilineEnabled
             )
 
             do {
@@ -194,7 +197,42 @@ final class InlineCompletionEngine {
                     ])
                 )
                 NotificationCenter.default.post(name: .inlineCompletionStatusDidChange, object: InlineCompletionStatus.generating)
-                guard let result = try await self.inferenceService.infer(for: request, settings: settings) else {
+
+                let result: InlineCompletionResult?
+
+                if let stream = try await self.inferenceService.inferStreaming(for: request, settings: settings) {
+                    var accumulated = ""
+                    result = try await {
+                        for try await chunk in stream {
+                            if Task.isCancelled { return nil as InlineCompletionResult? }
+                            accumulated.append(chunk)
+                            if accumulated.count < request.maxSuggestionLength {
+                                let partial = InlineCompletionResult(
+                                    requestId: requestID,
+                                    suggestionText: accumulated,
+                                    confidenceScore: 0.5,
+                                    source: .local,
+                                    latencyMs: 0
+                                )
+                                if let candidate = self.ranker.rank(partial, for: request, aggressiveness: settings.aggressiveness) {
+                                    self.publish(candidate, for: snapshot.paneID)
+                                }
+                            }
+                        }
+                        guard !accumulated.isEmpty else { return nil as InlineCompletionResult? }
+                        return InlineCompletionResult(
+                            requestId: requestID,
+                            suggestionText: accumulated,
+                            confidenceScore: 0.5,
+                            source: .local,
+                            latencyMs: 0
+                        )
+                    }()
+                } else {
+                    result = try await self.inferenceService.infer(for: request, settings: settings)
+                }
+
+                guard let result else {
                     await AppLogger.shared.debug(
                         category: .ai,
                         message: "inline_completion.inference_empty",
