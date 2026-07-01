@@ -496,4 +496,122 @@ final class RealServiceToolLoopTests: XCTestCase {
               + "repeated=\(result.gate.repeatedToolCallSignatures) "
               + "failed=\(result.gate.failedToolExecutions)")
     }
+
+    // MARK: - Complex scenario: Build React app, refactor to TypeScript, add tests
+
+    func testComplexReactToTypeScriptScenario() async throws {
+        try requireOnlineHarnessExecution()
+        print("\n=== Test: Complex React → TypeScript → Tests ===")
+        let result = try await runScenarioUntilStable(
+            name: "react_typescript_testing",
+            prepare: { root in
+                // Scaffold a React todo app
+                try FileManager.default.createDirectory(at: root.appendingPathComponent("src"), withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(at: root.appendingPathComponent("src/components"), withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(at: root.appendingPathComponent("public"), withIntermediateDirectories: true)
+
+                try """
+                {
+                  "name": "todo-app",
+                  "private": true,
+                  "version": "1.0.0",
+                  "type": "module",
+                  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
+                  "dependencies": { "react": "^18.3.1", "react-dom": "^18.3.1" },
+                  "devDependencies": {
+                    "@vitejs/plugin-react": "^4.3.0",
+                    "typescript": "^5.7.0",
+                    "vite": "^6.0.0"
+                  }
+                }
+                """.write(to: root.appendingPathComponent("package.json"), atomically: true, encoding: .utf8)
+
+                try """
+                <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" />
+                <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+                <title>Todo App</title></head>
+                <body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body></html>
+                """.write(to: root.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+
+                try """
+                import React from 'react'
+                import ReactDOM from 'react-dom/client'
+                import App from './App.jsx'
+                ReactDOM.createRoot(document.getElementById('root')).render(
+                  <React.StrictMode><App /></React.StrictMode>
+                )
+                """.write(to: root.appendingPathComponent("src/main.jsx"), atomically: true, encoding: .utf8)
+
+                try """
+                import { useState } from 'react'
+                export default function App() {
+                  const [todos, setTodos] = useState([])
+                  const addTodo = (text) => setTodos([...todos, { id: Date.now(), text, completed: false }])
+                  const toggleTodo = (id) => setTodos(todos.map(t => t.id === id ? { ...t, completed: !t.completed } : t))
+                  const removeTodo = (id) => setTodos(todos.filter(t => t.id !== id))
+                  return (
+                    <div><h1>Todo App</h1>
+                      <input id="todo-input" placeholder="Add todo" />
+                      <button id="add-btn" onClick={() => { const i = document.getElementById('todo-input'); addTodo(i.value); i.value = '' }}>Add</button>
+                      <ul>{todos.map(todo => (
+                        <li key={todo.id} style={{ textDecoration: todo.completed ? 'line-through' : 'none' }}>
+                          {todo.text}
+                          <button onClick={() => toggleTodo(todo.id)}>Toggle</button>
+                          <button onClick={() => removeTodo(todo.id)}>Delete</button>
+                        </li>
+                      ))}</ul>
+                    </div>
+                  )
+                }
+                """.write(to: root.appendingPathComponent("src/App.jsx"), atomically: true, encoding: .utf8)
+
+                try """
+                export function Greeting({ name }) { return <p>Hello, {name}!</p> }
+                """.write(to: root.appendingPathComponent("src/components/Greeting.jsx"), atomically: true, encoding: .utf8)
+
+                try """
+                import { defineConfig } from 'vite'
+                import react from '@vitejs/plugin-react'
+                export default defineConfig({ plugins: [react()] })
+                """.write(to: root.appendingPathComponent("vite.config.js"), atomically: true, encoding: .utf8)
+            },
+            prompt: """
+                We have a React todo app in JavaScript (JSX). I need you to do three things:
+
+                1. Search the web for the best TypeScript unit testing framework for React components in 2026.
+                   Use web_search to find articles, then web_browse to read at least one of them.
+                2. Refactor all .jsx files to .tsx with proper TypeScript types. Create any config files needed
+                   (tsconfig.json, vite-env.d.ts). Use patch_file for all edits — never replace_in_file or write_file.
+                3. After refactoring, create a test file for the App component using the framework you found.
+                   Read files first before editing them.
+
+                Do NOT use replace_in_file or write_file — only patch_file for edits.
+                """,
+            mode: .coder
+        )
+
+        let files = listAllFiles(under: result.projectRoot)
+        print("[HARNESS][INFO] complex_scenario files=\(files)")
+
+        // Verify TypeScript files exist
+        let tsxFiles = files.filter { $0.hasSuffix(".tsx") || $0.hasSuffix(".ts") }
+        harnessTrue(tsxFiles.count > 0,
+                           "TypeScript files should exist after refactoring. Found: \(tsxFiles)")
+
+        // Verify test files exist  
+        let testFiles = files.filter { $0.contains("test") || $0.contains("spec") || $0.contains("__tests__") }
+        harnessTrue(testFiles.count > 0,
+                           "Test files should exist. Found: \(testFiles)")
+
+        // Verify web research was done
+        let webTools = result.manager.messages.filter {
+            $0.isToolExecution && ($0.toolName == "web_search" || $0.toolName == "web_browse")
+        }
+        harnessTrue(webTools.count > 0,
+                           "Agent should use web tools for research. Used: \(webTools.count)")
+
+        print("[HARNESS][TELEMETRY] complex_scenario gate=\(result.gate.gatePassed) "
+              + "repeated=\(result.gate.repeatedToolCallSignatures) "
+              + "failed=\(result.gate.failedToolExecutions)")
+    }
 }
