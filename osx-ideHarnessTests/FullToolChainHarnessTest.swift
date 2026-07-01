@@ -1,14 +1,17 @@
 import XCTest
 @testable import osx_ide
 
-/// Tests the full tool chain by calling OpenRouter directly with streaming.
-/// The harness NEVER implements tool logic — it only sets up fixtures,
-/// sends requests, and reads telemetry.
+/// Full tool chain test via the REAL production ConversationManager path.
 ///
-/// This bypasses the `isRunningUnitTests` check that disables streaming
-/// in AIInteractionCoordinator. Direct OpenRouter streaming = real tool calls.
+/// Uses the actual app DI container, real model router, and ToolLoopHandler.
+/// The harness NEVER implements tool logic — only sends prompts and reads telemetry.
+///
+/// Provider is set to Kilo Code (not OpenRouter) because Kilo Code returns tool calls.
 @MainActor
 final class FullToolChainHarnessTest: XCTestCase {
+    var tmpDir: URL!
+    var container: DependencyContainer!
+    var manager: ConversationManager!
 
     override func setUp() async throws {
         try await super.setUp()
@@ -16,95 +19,150 @@ final class FullToolChainHarnessTest: XCTestCase {
         let config = TestConfiguration(allowExternalAPIs: true, minAPIRequestInterval: 1.0,
             serialExternalAPITests: true, externalAPITimeout: 300.0, useMockServices: false)
         await TestConfigurationProvider.shared.setConfiguration(config)
-        let sel = LocalModelSelectionStore()
-        await sel.setOfflineModeEnabled(false)
-        // Set Kilo Code as the active provider (not OpenRouter)
-        let providerStore = AIProviderSelectionStore()
-        await providerStore.setSelectedRemoteProvider(.kiloCode)
+
+        tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("ftc-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+
+        container = DependencyContainer(
+            launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false,
+                testProfilePath: nil, disableHeavyInit: false, productionParityHarness: false))
+        container.settingsStore.set(false, forKey: AppConstantsStorage.agentQAReviewEnabledKey)
+        container.workspaceService.currentDirectory = tmpDir
+        container.projectCoordinator.configureProject(root: tmpDir)
+
+        guard let cm = container.conversationManager as? ConversationManager else {
+            XCTFail("Not ConversationManager"); return
+        }
+        manager = cm
+
+        // Route to Kilo Code
+        let provStore = AIProviderSelectionStore()
+        await provStore.setSelectedRemoteProvider(.kiloCode)
+        try await Task.sleep(nanoseconds: 500_000_000)
     }
 
     override func tearDown() async throws {
+        try? FileManager.default.removeItem(at: tmpDir)
         await TestConfigurationProvider.shared.resetToDefault()
         await OnlineHarnessExecutionGate.shared.release()
         try await super.tearDown()
     }
 
-    // MARK: - Test: Direct OpenRouter streaming tool call
+    func testReadFileTool() async throws {
+        try "Hello World".write(to: tmpDir.appendingPathComponent("readme.txt"), atomically: true, encoding: .utf8)
+        manager.currentMode = .coder
+        print("[HARNESS] Test: read_file + list_files")
+        let timedOut = try await send("List the files and read readme.txt")
+        XCTAssertFalse(timedOut, "Should complete without timeout")
+        print("[HARNESS] Messages (\(manager.messages.count)):")
+        for (i, msg) in manager.messages.enumerated() {
+            let role = msg.role
+            let tool = msg.toolName ?? ""
+            let content = msg.content.prefix(200)
+            let isTool = msg.isToolExecution
+            print("[HARNESS]   [\(i)] \(role) tool=\(tool) isTool=\(isTool) \(content)")
+        }
+        let tools = extractToolCalls(from: manager.messages)
+        print("[HARNESS] Tools used: \(tools)")
+        XCTAssertTrue(tools.contains("read_file") || tools.contains("view_file") || tools.contains("list_files") || tools.contains("list_dir"),
+            "Should call read_file or list_files. Called: \(tools)")
+    }
 
-    func testStreamingToolCallsWork() async throws {
-        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("stream-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: tmpDir) }
+    func testWriteFileTool() async throws {
+        manager.currentMode = .coder
+        print("[HARNESS] Test: write_file")
+        let timedOut = try await send("Create a file called hello.js with content: console.log('hello')")
+        XCTAssertFalse(timedOut, "Should complete without timeout")
+        let tools = extractToolCalls(from: manager.messages)
+        print("[HARNESS] Tools used: \(tools)")
+        if FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("hello.js").path) {
+            print("[HARNESS] ✅ hello.js was created")
+        }
+    }
 
-        // Create a test file
-        try "Hello World".write(to: tmpDir.appendingPathComponent("test.txt"), atomically: true, encoding: .utf8)
+    func testPatchFileTool() async throws {
+        try "Line1\nLine2\nLine3".write(to: tmpDir.appendingPathComponent("greeting.txt"), atomically: true, encoding: .utf8)
+        manager.currentMode = .coder
+        print("[HARNESS] Test: patch_file")
+        let timedOut = try await send("Read greeting.txt then change Line2 to CHANGED")
+        XCTAssertFalse(timedOut, "Should complete without timeout")
+        let tools = extractToolCalls(from: manager.messages)
+        print("[HARNESS] Tools used: \(tools)")
+    }
 
-        // Get the real OpenRouter service from the app's DI container
-        let container = DependencyContainer(
-            launchContext: AppLaunchContext(mode: .unitTest, isTesting: true, isUITesting: false,
-                testProfilePath: nil, disableHeavyInit: false, productionParityHarness: false))
+    func testWebSearchTool() async throws {
+        manager.currentMode = .coder
+        print("[HARNESS] Test: web_search")
+        let timedOut = try await send("Search the web for 'Swift concurrency best practices 2026' and summarize")
+        XCTAssertFalse(timedOut, "Should complete without timeout")
+        let tools = extractToolCalls(from: manager.messages)
+        print("[HARNESS] Tools used: \(tools)")
+    }
 
-        // The container's aiService is the ModelRoutingAIService.
-        // Get the actual OpenRouter service from it.
-        let modelRouter = container.aiService as? ModelRoutingAIService
-        XCTAssertNotNil(modelRouter, "Should get model router")
+    func testSearchProjectTool() async throws {
+        try "function add(a,b) { return a + b }".write(to: tmpDir.appendingPathComponent("math.js"), atomically: true, encoding: .utf8)
+        container.projectCoordinator.configureProject(root: tmpDir)
+        manager.currentMode = .coder
+        print("[HARNESS] Test: search_project")
+        let timedOut = try await send("Search the project for files containing 'function'")
+        XCTAssertFalse(timedOut, "Should complete without timeout")
+        let tools = extractToolCalls(from: manager.messages)
+        print("[HARNESS] Tools used: \(tools)")
+    }
 
-        // Build tools
-        let fileSystem = FileSystemService()
-        let pathValidator = PathValidator(projectRoot: tmpDir)
-        let readTool = ReadFileTool(fileSystemService: fileSystem, pathValidator: pathValidator)
-        let listTool = ListFilesTool(pathValidator: pathValidator)
+    func testMultiToolReadPatchVerify() async throws {
+        try "Line1\nLine2\nLine3".write(to: tmpDir.appendingPathComponent("test.txt"), atomically: true, encoding: .utf8)
+        manager.currentMode = .coder
+        print("[HARNESS] Test: read → patch → verify cycle")
+        let timedOut = try await send("Read test.txt, change Line2 to CHANGED, then verify by reading the file again")
+        XCTAssertFalse(timedOut, "Should complete without timeout")
+        let tools = extractToolCalls(from: manager.messages)
+        print("[HARNESS] Tools used: \(tools)")
+    }
 
-        // Build request
-        let userMsg = ChatMessage(role: .user,
-            content: "List files in the project directory and read test.txt.")
-        let request = AIServiceHistoryRequest(
-            messages: [userMsg],
-            context: nil,
-            tools: [readTool, listTool],
-            mode: .coder,
-            projectRoot: tmpDir,
-            runId: UUID().uuidString,
-            stage: .initial_response,
-            conversationId: UUID().uuidString
-        )
+    // MARK: - Helpers
 
-        print("[HARNESS] Sending streaming request with 2 tools...")
-
-        // Call streaming DIRECTLY on the model router (bypasses AIInteractionCoordinator)
-        // This tests: OpenRouter receives tools → model calls them → response has tool_calls
-        let response = try await modelRouter!.sendMessageStreaming(request, runId: UUID().uuidString)
-
-        print("[HARNESS] Response content: \(response.content?.prefix(300) ?? "(nil)")")
-        print("[HARNESS] Tool calls: \(response.toolCalls?.count ?? 0)")
-
-        if let calls = response.toolCalls {
-            for c in calls {
-                print("[HARNESS]   Tool: \(c.name) args=\(c.arguments)")
+    @discardableResult
+    private func send(_ text: String, timeout: TimeInterval = 180) async throws -> Bool {
+        manager.currentInput = text
+        manager.sendMessage()
+        var lastProgressAt = Date()
+        var lastMessageCount = manager.messages.count
+        while true {
+            if !manager.isSending { return false }
+            let currentCount = manager.messages.count
+            if currentCount != lastMessageCount {
+                lastMessageCount = currentCount; lastProgressAt = Date()
             }
-        } else {
-            // Try text recovery
-            if let content = response.content {
-                print("[HARNESS] Attempting text recovery on response...")
-                let recovered = OpenRouterAIService.extractFallbackToolCalls(from: content)
-                if let rc = recovered {
-                    print("[HARNESS]   Recovered \(rc.count) tool calls from text")
-                    for c in rc {
-                        print("[HARNESS]     Tool: \(c.name) args=\(c.arguments)")
-                    }
-                }
+            if Date().timeIntervalSince(lastProgressAt) >= timeout { break }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        if manager.isSending {
+            manager.stopGeneration()
+            _ = try await waitForFinish(manager, timeoutSeconds: 5)
+            return true
+        }
+        return false
+    }
+
+    @discardableResult
+    private func waitForFinish(_ manager: ConversationManager, timeoutSeconds: TimeInterval = 5) async throws -> Bool {
+        var lastProgressAt = Date()
+        while true {
+            if !manager.isSending { return false }
+            if Date().timeIntervalSince(lastProgressAt) >= timeoutSeconds { break }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return manager.isSending
+    }
+
+    private func extractToolCalls(from messages: [ChatMessage]) -> [String] {
+        var tools: [String] = []
+        for msg in messages where msg.isToolExecution {
+            if let name = msg.toolName, !tools.contains(name) {
+                tools.append(name)
             }
         }
-
-        // The model should return tool calls (structured or recovered)
-        if let calls = response.toolCalls, !calls.isEmpty {
-            print("[HARNESS] ✅ Model returned \(calls.count) structured tool calls")
-        } else if let content = response.content,
-                  let recovered = OpenRouterAIService.extractFallbackToolCalls(from: content),
-                  !recovered.isEmpty {
-            print("[HARNESS] ✅ Text recovery found \(recovered.count) tool calls")
-        } else {
-            print("[HARNESS] ⚠️ No tool calls returned. Content: \(response.content?.prefix(200) ?? "nil")")
-        }
+        return tools
     }
 }

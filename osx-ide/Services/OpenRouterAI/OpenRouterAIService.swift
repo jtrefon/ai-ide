@@ -223,8 +223,11 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                 let toolCalls = toolCallsDrafts.sorted(by: { $0.key < $1.key }).compactMap { (_, draft) -> AIToolCall? in
                     var argsDict = Self.parseToolArguments(from: draft.arguments) ?? [:]
                     if argsDict.isEmpty, !draft.arguments.isEmpty {
-                        // If JSON is malformed but we have text, store raw so tools can try to handle or fail gracefully
-                        argsDict = ["_raw_args_chunk": draft.arguments]
+                        let trimmed = draft.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed != "{}" {
+                            // If JSON is malformed but we have text, store raw so tools can try to handle or fail gracefully
+                            argsDict = ["_raw_args_chunk": draft.arguments]
+                        }
                     }
                     return AIToolCall(id: draft.id, name: draft.name, arguments: argsDict)
                 }
@@ -1143,9 +1146,28 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
             "run_shell_command": "run_command",
             "create_file": "write_file",
             "write": "write_file",
+            "write_file_v2": "write_file",
             "edit_file": "replace_in_file",
+            "replace_in_file_v2": "replace_in_file",
             "view_file": "read_file",
-            "read": "read_file"
+            "read": "read_file",
+            "read_file_v2": "read_file",
+            "search_files": "search_project",
+            "grep_search": "search_project",
+            "find_in_files": "search_project",
+            "web_fetch": "web_browse",
+            "fetch_url": "web_browse",
+            "http_get": "web_browse",
+            "internet_search": "web_search",
+            "google": "web_search",
+            "search_web": "web_search",
+            "apply_diff": "patch_file",
+            "patch": "patch_file",
+            "edit": "patch_file",
+            "run_shell": "run_command",
+            "bash": "run_command",
+            "terminal": "run_command",
+            "execute_command": "run_command"
         ]
 
         return aliases[normalized] ?? normalized
