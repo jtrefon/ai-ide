@@ -181,6 +181,10 @@ final class RealServiceToolLoopTests: XCTestCase {
         let isOfflineModeEnabled = await selectionStore.isOfflineModeEnabled()
         harnessFalse(isOfflineModeEnabled, "Production-parity harness must not run in Offline Mode")
         
+        // Route to Kilo Code (proven to return tool calls, unlike OpenRouter free tier)
+        let provStore = AIProviderSelectionStore(settingsStore: container.settingsStore)
+        await provStore.setSelectedRemoteProvider(.kiloCode)
+        
         guard let manager = container.conversationManager as? ConversationManager else {
             throw NSError(
                 domain: "RealServiceToolLoopTests", code: 1,
