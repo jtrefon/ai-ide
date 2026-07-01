@@ -34,7 +34,8 @@ private let toolLoopExecutionToolNames: Set<String> = [
         "replace_in_file",
         "run_command",
         "web_search",
-        "web_browse"
+        "web_browse",
+        "patch_file"
     ]
 
     func allowedTools(
