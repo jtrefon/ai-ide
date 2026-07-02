@@ -1,72 +1,144 @@
-# Mode System Architecture
+# Mode System: Three-Tier Autonomy Model
 
-## Overview
+## Core Principle
 
-The application has three modes. They differ ONLY in **autonomy level** — how much responsibility the AI takes — NOT in tool capability. All modes have access to the same tools. The difference is behavioral.
+The three modes (Chat, Coder, Agent) differ ONLY in **autonomy level** — how much responsibility the AI takes. They do NOT differ in tool capability. All modes use the same tool execution engine, the same model, the same feedback format.
 
-## Tier 1: Chat (1.5x-2x multiplier)
+The difference is behavioral: **how** the AI approaches work, not **what** it can do.
 
-**Role:** Expert pair programmer who reads over your shoulder, gives advice, finds bugs, suggests improvements.
+---
 
-**Behavior:**
-- AI has context of the entire project (files, codebase index, RAG)
-- AI can search code, browse the web, read files, and answer questions
-- AI CANNOT write files, edit files, delete files, or run commands
-- YOU do the coding — AI provides perspective, finds references, suggests approaches
-- No planning, no execution tracking — conversational only
+## The Multiplier Model
 
-**When to use:** Code review, getting unstuck, understanding complex code, exploring unfamiliar libraries, asking "how should I approach this?"
+| Tier | Mode | Multiplier | Role | Who Drives | Session Length |
+|------|------|-----------|------|-----------|----------------|
+| 1 | Chat | 1.5x-2x | Expert advisor | You | Minutes |
+| 2 | Coder | 3x-5x | Pair programmer | You (direction) | Minutes-Hours |
+| 3 | Agent | 10x+ | Engineering lead | AI | Hours-Days |
 
-## Tier 2: Coder (3x-5x multiplier)
+---
 
-**Role:** Junior-to-mid engineer who you direct. You say WHAT, AI figures out HOW.
+## Tier 1: Chat
 
-**Behavior:**
-- AI has FULL tool access (read, write, edit, search, run commands, browse web)
-- AI creates a PLAN with checkboxes before starting
-- AI DECOMPOSES tasks, executes step-by-step, tracks progress
-- AI follows direction: "refactor persistence into repository pattern" → plan → execute → verify
-- AI reads files before editing, prefers patch_file over full rewrites
-- AI runs builds/tests to verify changes
-- AI completes multi-step tasks without dropping context
+### Purpose
+A knowledgeable peer who has full project context and can answer questions, find code, and provide perspective — but never touches your code.
 
-**When to use:** Refactoring, implementing features, fixing bugs, writing tests, adding documentation — any task where you want the AI to do the work under your direction.
+### Scope
+- Answer questions about the codebase
+- Search code, find references, explain implementations
+- Browse the web for documentation or solutions
+- Provide code reviews and suggestions
+- Help you understand complex code
 
-## Tier 3: Agent (10x+ multiplier)
+### Responsibilities
+- Maintain full project context (files, index, RAG)
+- Answer accurately with references to specific code
+- Suggest approaches without implementing them
+- Explain tradeoffs and alternatives
 
-**Role:** Engineering lead who architects and coordinates an entire project.
+### Restrictions
+Chat mode explicitly blocks these tools because its purpose is read-only assistance:
+- `write_file`, `write_files`, `create_file`, `delete_file`
+- `patch_file`, `replace_in_file`
+- `run_command`
 
-**Behavior:**
-- AI has FULL tool access (same as Coder — identical toolset)
-- AI creates TOP-LEVEL STRATEGY: architecture, UI design, tech stack, infrastructure
-- AI SPAWNS SUB-AGENTS with dedicated prompts (e.g., "plan database schema", "design API routes", "write tests")
-- AI delegates work across domains and tracks all progress
-- AI runs long sessions (overnight, multi-hour) for complex projects
-- AI does research, compares approaches, makes architectural decisions
+Every other tool is available: `read_file`, `list_files`, `find_file`, `grep`, `search_project`, `web_search`, `web_browse`, `get_project_structure`, all index/RAG tools.
 
-**When to use:** Building entire applications from scratch, large-scale refactoring, research projects, legacy migrations, any multi-day project.
+### Flow
+1. User asks a question
+2. AI searches/reads/researches
+3. AI responds with analysis
+4. No planning, no execution, no file mutations
 
-## Key Principle
+---
 
-**Tools are IDENTICAL across Coder and Agent.** Both have access to:
-- read_file, write_file, patch_file, delete_file
-- list_files, find_file, grep, search_project
-- run_command, web_search, web_browse
-- get_project_structure
+## Tier 2: Coder
 
-The only difference is HOW the AI behaves:
-- **Coder**: You drive. AI follows your direction step by step.
-- **Agent**: AI drives. AI decides what to build and how.
+### Purpose
+A pair programming partner who takes direction and implements. You say **what** to do, the AI figures out **how** to do it, plans the approach, executes step by step, and verifies the result.
 
-## Chat is the Exception
+### Scope
+- Implement features, refactor code, fix bugs
+- Write tests, add documentation, configure tooling
+- Run builds and tests to verify changes
+- Multi-step tasks with dependencies
+- Research and implement using web resources
 
-Chat mode explicitly blocks mutation tools (write_file, patch_file, delete_file, run_command) because its purpose is read-only assistance. Everything else (search, browse, read) is available.
+### Responsibilities
+1. **Plan**: Before starting work, create a structured plan with checklist items
+2. **Decompose**: Break tasks into discrete, verifiable steps
+3. **Execute**: Work through steps in order, reading before writing
+4. **Track**: Mark steps complete as they finish
+5. **Verify**: Read files back, run tests, confirm correctness
+6. **Complete**: Summarize what was done, what wasn't, and why
+
+### Tool Access
+**FULL** — identical to Agent mode. All tools are available:
+- Read: `read_file`, `list_files`, `find_file`, `grep`, `search_project`, `get_project_structure`
+- Write: `write_file` (new files), `patch_file` (edits), `delete_file`
+- Execute: `run_command`
+- Web: `web_search`, `web_browse`
+- Index: all RAG and index tools
+
+### Flow
+1. User gives direction: "Refactor persistence into repository pattern"
+2. AI plans: `[ ] Analyze current persistence layer` → `[ ] Design repository interface` → `[ ] Implement repositories` → `[ ] Update consumers` → `[ ] Run tests`
+3. AI executes: reads files, creates interfaces, implements repositories, updates callers
+4. AI verifies: runs build, checks for errors
+5. AI reports: "Done. Created 3 repository files, updated 5 consumer files. Build passes."
+
+### Key Constraint
+Coder does NOT make architectural decisions without asking. If a choice impacts the project direction, the AI should present options and ask. Coder follows direction — it does not set direction.
+
+---
+
+## Tier 3: Agent
+
+### Purpose
+An engineering lead who can architect and execute entire projects. The AI handles top-level strategy, breaks work into domains, spawns sub-agents with specialized prompts, and tracks delivery end-to-end.
+
+### Scope
+- Build entire applications from scratch
+- Large-scale refactoring across multiple subsystems
+- Research projects with multiple investigation threads
+- Legacy migration with phased delivery
+- Multi-day development sessions
+
+### Responsibilities
+1. **Strategize**: Create top-level architecture plan covering all domains
+2. **Delegate**: Spawn sub-agents with dedicated prompts for each domain
+3. **Orchestrate**: Coordinate sub-agents, resolve conflicts, merge outputs
+4. **Track**: Monitor progress across all workstreams
+5. **Deliver**: Ensure complete, working delivery
+
+### Tool Access
+**FULL** — identical to Coder mode. Same tools, same execution engine.
+
+### Additional Capabilities (Future)
+- Sub-agent spawning with isolated contexts
+- Bidirectional communication between orchestrator and sub-agents
+- DAG-based task scheduling with dependency resolution
+- Background task execution with progress reporting
+
+### Flow
+1. User requests: "Build a CRM for a small construction company"
+2. AI creates top-level plan: architecture, data model, UI, API, testing, deployment
+3. AI spawns sub-agents: one for DB schema, one for API design, one for UI components
+4. Sub-agents work in parallel, reporting progress
+5. AI orchestrator tracks all delivery, resolves conflicts, reports final status
+
+---
 
 ## Implementation Notes
 
-- Mode is set before the conversation starts and cannot change mid-conversation
-- Chat routes through the proven ToolLoopHandler (same execution engine as Agent)
-- Coder routes through the proven ToolLoopHandler (same as Agent — NOT a separate executor)
-- Agent adds sub-agent spawning and delegation on top of the same tool loop
-- Planning (strategic + tactical nodes) runs for BOTH Coder and Agent when the input looks complex
-- Tool feedback format (ToolFeedback envelope) is identical across all modes
+### Engine
+All three modes route through the **same ToolLoopHandler** execution engine. There is no separate executor for any mode. The engine adapts behavior based on the mode setting in the request.
+
+### Planning
+Both Coder and Agent run through StrategicPlanningNode and TacticalPlanningNode for complex inputs. Chat skips planning entirely.
+
+### Enforcement
+Plan adherence is tracked by PlanChecklistTracker and enforced by the DispatcherNode. The loop cannot exit while incomplete checklist items remain (unless the model explicitly marks them as blocked).
+
+### Architecture Reference
+See [Planning & Enforcement](planning-enforcement.md) for details on the planning tool and loop enforcer.
