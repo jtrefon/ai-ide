@@ -31,7 +31,7 @@ struct ModernFileTreeView: NSViewRepresentable {
         containerView.translatesAutoresizingMaskIntoConstraints = false
 
         let visualEffectView = NSVisualEffectView()
-        visualEffectView.material = .underWindowBackground
+        visualEffectView.material = .sidebar
         visualEffectView.blendingMode = .withinWindow
         visualEffectView.state = .active
         visualEffectView.translatesAutoresizingMaskIntoConstraints = false
@@ -70,9 +70,9 @@ struct ModernFileTreeView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder
         scrollView.documentView = outlineView
-        scrollView.drawsBackground = true
-        scrollView.backgroundColor = .clear
         scrollView.autohidesScrollers = true
+        scrollView.backgroundColor = .clear
+        scrollView.drawsBackground = false
 
         context.coordinator.attach(outlineView: outlineView)
 

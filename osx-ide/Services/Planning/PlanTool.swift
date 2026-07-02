@@ -1,35 +1,39 @@
 import Foundation
 
-/// The planning tool — once the model opts in, it is confined to the planning sub-loop
-/// until all tasks are complete or it explicitly breaks out.
+/// Planning tool with explicit `init` for opt-in, then `finishTask` always ends a phase.
 ///
-/// Actions:
-/// - finishTask: complete current task, receive next task context
-/// - raiseQuestion: ask the user for clarification mid-plan
-/// - breakOutCantContinue: abort the plan with a reason
+/// Flow:
+///   1. `init` — agent opts in → research phase (all tools available)
+///   2. `finishTask` — research done, agent provides plan in summary → plan development
+///   3. `finishTask` — plan ready → execution (task by task)
+///   4. `finishTask` — task done → next task (repeated until all done)
+///
+/// Circuit breakers (any phase):
+///   - `raiseQuestion` — ask user for clarification
+///   - `breakOutCantContinue` — abort the plan
 struct PlanTool: AITool {
     let name = "plan"
-    let description = "Structured task planner. First call enters planning mode — research the problem using all tools, explore the codebase, understand scope. Second call locks your plan and starts execution. Then call finishTask after each task to advance."
+    let description = "Opt into structured planning. Call init to start — research using all tools. Then finishTask ends each phase and advances to the next."
     var parameters: [String: Any] {
         [
             "type": "object",
             "properties": [
                 "action": [
                     "type": "string",
-                    "enum": ["finishTask", "raiseQuestion", "breakOutCantContinue"],
-                    "description": "finishTask: complete current task and advance. raiseQuestion: ask user for clarification. breakOutCantContinue: abort the plan."
+                    "enum": ["init", "finishTask", "raiseQuestion", "breakOutCantContinue"],
+                    "description": "init: opt into planning (no summary needed). finishTask: end current phase and advance. raiseQuestion: ask user. breakOutCantContinue: abort."
                 ],
                 "summary": [
                     "type": "string",
-                    "description": "Required for finishTask and breakOutCantContinue. What was done, or why you can't continue."
+                    "description": "Required for finishTask and breakOutCantContinue. During research: your proposed plan. During execution: what was done."
                 ],
                 "question": [
                     "type": "string",
-                    "description": "Required for raiseQuestion. The question to ask the user."
+                    "description": "Required for raiseQuestion."
                 ],
                 "blocker_reason": [
                     "type": "string",
-                    "description": "Required for breakOutCantContinue. What is needed to unblock."
+                    "description": "Required for breakOutCantContinue."
                 ]
             ],
             "required": ["action"]
@@ -44,130 +48,134 @@ struct PlanTool: AITool {
         let blockerReason = raw["blocker_reason"] as? String
         let conversationId = raw["_conversation_id"] as? String ?? ""
 
-        guard ["finishTask", "raiseQuestion", "breakOutCantContinue"].contains(action) else {
-            return """
-            status: error
-            message: "action must be 'finishTask', 'raiseQuestion', or 'breakOutCantContinue'."
-            error:
-              code: INVALID_ACTION
-              recoverable: true
-            """
+        guard ["init", "finishTask", "raiseQuestion", "breakOutCantContinue"].contains(action) else {
+            return error("action must be 'init', 'finishTask', 'raiseQuestion', or 'breakOutCantContinue'.", code: "INVALID_ACTION")
         }
 
-        // raiseQuestion — no plan needed, just relay the question
+        // ── raiseQuestion ──
         if action == "raiseQuestion" {
-            guard !question.isEmpty else {
-                return """
-                status: error
-                message: "question is required."
-                error:
-                  code: MISSING_QUESTION
-                  recoverable: true
-                """
-            }
+            guard !question.isEmpty else { return error("question is required.", code: "MISSING_QUESTION") }
             return """
             status: question
             message: "\(question.sanitized())"
             content:
               action: "raiseQuestion"
-              question: "\(question.sanitized())"
             """
         }
 
-        // finishTask and breakOutCantContinue need a summary
-        guard !summary.isEmpty else {
+        // ── init ──
+        if action == "init" {
+            let plan = TaskPlan(
+                id: UUID().uuidString,
+                goal: "Task planning session",
+                value: "As requested by the user",
+                domain: .implementation,
+                mode: .coder,
+                items: [],
+                createdAt: Date(),
+                completedAt: nil,
+                currentIndex: 0
+            )
+            if !conversationId.isEmpty {
+                await ConversationPlanStore.shared.setPlan(conversationId: conversationId, plan: plan)
+            }
             return """
-            status: error
-            message: "summary is required for finishTask and breakOutCantContinue."
-            error:
-              code: MISSING_SUMMARY
-              recoverable: true
+            status: success
+            message: "Planning mode. Research the problem using all available tools — read files, search the codebase, browse the web, run commands. Understand the current state. When you have a clear plan, call finishTask with your proposed task breakdown."
+            content:
+              action: "init"
+              phase: "researching"
             """
         }
 
-        if action == "breakOutCantContinue" && (blockerReason?.isEmpty ?? true) {
+        // ── breakOutCantContinue ──
+        if action == "breakOutCantContinue" {
+            guard !summary.isEmpty else { return error("summary is required.", code: "MISSING_SUMMARY") }
+            guard !(blockerReason?.isEmpty ?? true) else { return error("blocker_reason is required.", code: "MISSING_BLOCKER_REASON") }
+            if !conversationId.isEmpty, var plan = await ConversationPlanStore.shared.getPlan(conversationId: conversationId) {
+                plan.abandonAll()
+                if let lastIdx = plan.items.indices.last {
+                    plan.items[lastIdx].blockedReason = blockerReason
+                }
+                await ConversationPlanStore.shared.setPlan(conversationId: conversationId, plan: plan)
+            }
             return """
-            status: error
-            message: "blocker_reason is required for breakOutCantContinue."
-            error:
-              code: MISSING_BLOCKER_REASON
-              recoverable: true
+            status: blocked
+            message: "Plan aborted. \(summary.sanitized())"
+            content:
+              action: "breakOutCantContinue"
+              reason: "\(blockerReason?.sanitized() ?? "")"
             """
         }
 
-        // If no conversation context, we can't persist — provide a session-local plan
+        // ── finishTask ──
+        guard !summary.isEmpty else { return error("summary is required for finishTask.", code: "MISSING_SUMMARY") }
+
+        // No conversation context — inform the agent
         guard !conversationId.isEmpty else {
             return """
             status: success
-            message: "Plan tool initialised. Work on the current task and call finishTask when done."
+            message: "Call plan(action: \\"init\\") first to start planning."
             content:
-              action: "\(action)"
-              note: "You've opted into structured planning. Complete each task and call finishTask to advance."
+              action: "finishTask"
+              phase: "unknown"
             """
         }
 
         let store = ConversationPlanStore.shared
 
-        // Fetch or initialise the plan
-        if var plan = await store.getPlan(conversationId: conversationId) {
-            // Check if we're transitioning from planning to execution
-            if plan.items.isEmpty && action == "finishTask" {
-                // Second call: agent has finished researching and is proposing the plan
-                let taskItem = PlanItem(id: "task-1",
-                    description: summary,
-                    purpose: "As planned during research phase",
-                    context: [],
-                    doneCriteria: "Work is complete and verified",
-                    status: .active,
-                    summary: nil,
-                    blockedReason: nil)
-                plan.items = [taskItem]
-                plan.currentIndex = 0
-                await store.setPlan(conversationId: conversationId, plan: plan)
-                return """
-                status: success
-                message: "Plan locked. You've opted into structured execution. Work on the task and call finishTask when done to advance."
-                content:
-                  action: "finishTask"
-                  task: "\(summary)"
-                  progress: "0/1"
-                """
-            }
+        // Fetch current plan
+        guard var plan = await store.getPlan(conversationId: conversationId) else {
+            return """
+            status: success
+            message: "No plan found. Call plan(action: \\"init\\") first to start planning."
+            content:
+              action: "finishTask"
+              phase: "unknown"
+            """
+        }
 
-            // Existing plan with items — advance or break
-            guard let activeIndex = plan.items.firstIndex(where: { $0.status == .active }) else {
-                return """
-                status: error
-                message: "No active task found."
-                error:
-                  code: NO_ACTIVE_TASK
-                  recoverable: false
-                """
-            }
+        // Determine phase from plan state
+        let isResearchPhase = plan.items.isEmpty
+        let isExecutionPhase = plan.items.contains(where: { $0.status == .active })
 
-            if action == "breakOutCantContinue" {
-                plan.items[activeIndex].status = .blocked
-                plan.items[activeIndex].summary = summary
-                plan.items[activeIndex].blockedReason = blockerReason ?? "No reason provided"
-                // Abandon remaining
-                for i in (activeIndex + 1)..<plan.items.count {
-                    plan.items[i].status = .blocked
-                    plan.items[i].blockedReason = "Abandoned — prior task blocked"
+        if isResearchPhase {
+            // finishTask during research = agent provides the plan in summary
+            // Parse summary into plan items (one task per line or as provided)
+            let lines = summary.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            let items: [PlanItem]
+            if lines.count > 1 {
+                items = lines.enumerated().map { (i, line) in
+                    let clean = line.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: #"^\d+[\.\)]\s*"#, with: "", options: .regularExpression)
+                    return PlanItem(id: "task-\(i + 1)", description: clean, purpose: "Step in the plan", context: [], doneCriteria: "Complete and verified", status: i == 0 ? .active : .pending, summary: nil, blockedReason: nil)
                 }
-                plan.completedAt = Date()
-                await store.setPlan(conversationId: conversationId, plan: plan)
-                let total = plan.items.count
-                return """
-                status: blocked
-                message: "Plan aborted. \(activeIndex + 1)/\(total) tasks completed before block."
-                content:
-                  action: "breakOutCantContinue"
-                  reason: "\(blockerReason?.sanitized() ?? "")"
-                  progress: "\(activeIndex + 1)/\(total)"
-                """
+            } else {
+                items = [PlanItem(id: "task-1", description: summary, purpose: "As planned", context: [], doneCriteria: "Complete and verified", status: .active, summary: nil, blockedReason: nil)]
+            }
+            plan.items = items
+            plan.currentIndex = 0
+            await store.setPlan(conversationId: conversationId, plan: plan)
+
+            let first = items[0]
+            return """
+            status: success
+            message: "Plan locked. \(items.count) tasks defined. Starting execution."
+            content:
+              action: "finishTask"
+              phase: "executing"
+              task: "\(first.description)"
+              purpose: "\(first.purpose)"
+              done_criteria: "\(first.doneCriteria)"
+              progress: "0/\(items.count)"
+            """
+        }
+
+        if isExecutionPhase {
+            // finishTask during execution = complete current task, advance to next
+            guard let activeIndex = plan.items.firstIndex(where: { $0.status == .active }) else {
+                return error("No active task found.", code: "NO_ACTIVE_TASK")
             }
 
-            // finishTask — mark complete, advance
             plan.items[activeIndex].status = .completed
             plan.items[activeIndex].summary = summary
 
@@ -181,55 +189,53 @@ struct PlanTool: AITool {
             }
             await store.setPlan(conversationId: conversationId, plan: plan)
 
-            let completedCount = plan.items.filter { $0.status == .completed || $0.status == .blocked }.count
-            let totalCount = plan.items.count
+            let completed = plan.items.filter { $0.status == .completed || $0.status == .blocked }.count
+            let total = plan.items.count
 
             guard let nextActive, nextActive < plan.items.count else {
                 return """
                 status: success
-                message: "All \(totalCount) tasks complete. Provide a final summary of what was achieved."
+                message: "All \(total) tasks complete. Provide a final summary."
                 content:
                   action: "finishTask"
                   all_done: true
-                  progress: "\(completedCount)/\(totalCount)"
+                  progress: "\(completed)/\(total)"
                 """
             }
 
             let next = plan.items[nextActive]
             return """
             status: success
-            message: "Well done. Task \(completedCount)/\(totalCount) complete. Now working on task \(completedCount + 1)."
+            message: "Well done. Task \(completed)/\(total) complete. Now working on task \(completed + 1)."
             content:
               action: "finishTask"
+              phase: "executing"
               task: "\(next.description)"
               purpose: "\(next.purpose)"
               context: \(next.context.map { "\"\($0)\"" }.joined(separator: ", "))
               done_criteria: "\(next.doneCriteria)"
-              progress: "\(completedCount)/\(totalCount)"
-            """
-        } else {
-            // No plan exists — enter planning mode.
-            // Agent researches using all tools, then calls finishTask to transition to execution.
-            let planningPlan = TaskPlan(
-                id: UUID().uuidString,
-                goal: summary,
-                value: "Complete the requested work",
-                domain: .implementation,
-                mode: .coder,
-                items: [],
-                createdAt: Date(),
-                completedAt: nil,
-                currentIndex: 0
-            )
-            await store.setPlan(conversationId: conversationId, plan: planningPlan)
-            return """
-            status: success
-            message: "Planning mode. Research the problem using all available tools — read files, search the codebase, browse the web, run commands. Understand the current state and explore what's needed. When you have a clear plan, call finishTask again with your proposed task breakdown."
-            content:
-              action: "finishTask"
-              phase: "planning"
+              progress: "\(completed)/\(total)"
             """
         }
+
+        // All done — nothing active and nothing pending
+        return """
+        status: success
+        message: "All tasks complete. Provide a final summary."
+        content:
+          action: "finishTask"
+          all_done: true
+        """
+    }
+
+    private func error(_ message: String, code: String) -> String {
+        return """
+        status: error
+        message: "\(message)"
+        error:
+          code: \(code)
+          recoverable: true
+        """
     }
 }
 
