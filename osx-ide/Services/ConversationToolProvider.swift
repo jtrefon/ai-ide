@@ -64,8 +64,8 @@ final class ConversationToolProvider {
         tools.append(RunCommandTool(projectRoot: projectRoot, pathValidator: pathValidator))
 
         // Planning & Task Management
-        tools.append(TaskReportTool())
-        tools.append(TaskSignoffTool())
+        tools.append(PlanTool())
+        
 
         return tools
     }

@@ -33,7 +33,7 @@ final class InlineCompletionDebugStore: ObservableObject {
             confidenceScore: presentation.confidenceScore,
             latencyMs: presentation.latencyMs,
             suggestionPreview: String(preview),
-            isMultiline: presentation.isMultiline
+            isMultiline: presentation.suggestionText.contains("\n")
         )
     }
 

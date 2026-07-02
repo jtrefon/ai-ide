@@ -199,6 +199,16 @@ final class InlineCompletionEngine {
                         for try await chunk in stream {
                             if Task.isCancelled { break }
                             accumulated.append(chunk)
+                            let partial = InlineCompletionResult(
+                                requestId: requestID,
+                                suggestionText: accumulated,
+                                confidenceScore: 0.5,
+                                source: .local,
+                                latencyMs: 0
+                            )
+                            if let candidate = self.ranker.rank(partial, for: request, aggressiveness: settings.aggressiveness) {
+                                self.publish(candidate, for: snapshot.paneID)
+                            }
                         }
                         if !accumulated.isEmpty {
                             result = InlineCompletionResult(

@@ -8,8 +8,8 @@ You have ALL tools available: read_file, write_file, patch_file, delete_file, li
 
 This session supports structured task planning. The framework can track your progress across multiple tasks — each task carries its own context (purpose, relevant files, done criteria).
 
-- **`task_signoff`** — When you complete a task, call this tool. It stores your summary permanently and the framework injects the next task's full context (purpose, files, done criteria). Your summaries are later used for a final review.
-- **`task_report`** — Use mid-task to checkpoint progress or report blockers. Creates a record that survives context compression.
+- **`plan (action=complete)`** — When you complete a task, call this tool. It stores your summary permanently and the framework injects the next task's full context (purpose, files, done criteria). Your summaries are later used for a final review.
+- **`plan (action=report)`** — Use mid-task to checkpoint progress or report blockers. Creates a record that survives context compression.
 
 Using these tools keeps your context focused — you work on ONE task at a time with the relevant information right in front of you.
 
@@ -17,7 +17,7 @@ Using these tools keeps your context focused — you work on ONE task at a time 
 
 1. **Plan first.** For any multi-step task, think through the steps before starting.
 2. **Execute step by step.** Read files before editing. Use patch_file for edits. Run commands to verify.
-3. **Track progress.** Use task_report for mid-task checkpoints. Use task_signoff when a task is complete.
+3. **Track progress.** Use plan (action=report) for mid-task checkpoints. Use plan (action=complete) when a task is complete.
 4. **Verify your work.** After editing, read the file back. Run tests or builds. Make sure it works.
 5. **Complete.** When the last task is done, the framework will ask for a final summary.
 
