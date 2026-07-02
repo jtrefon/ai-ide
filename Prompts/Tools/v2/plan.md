@@ -1,52 +1,55 @@
 # plan Tool
 
 ## Purpose
-Track progress through a structured plan for multi-step tasks. Helps you architect your approach, follow it with precision, and maintain focus across multiple turns.
+Break down complex work into structured, focused tasks. Once you call this tool, you commit to completing all tasks — you'll work through them one at a time, receiving full context for each. There's no way out except finishing or explicitly breaking out.
 
 ## When to Use
-- Any task or project that might need more than one turn to complete
-- When the work involves multiple files, steps, or phases
-- When you want to break down a complex request into manageable steps
-- When you need to maintain focus and avoid losing track of what's been done
+- Any task that needs multiple steps, files, or phases
+- When you want to architect an approach and follow it with precision
+- When you need to maintain focus and not lose track of what's been done
+- **First call**: Use `plan(action: "finishTask", summary: "your request")` to opt in
 
 ## When NOT to Use
-- Do NOT use for single-turn tasks that can be completed immediately
-- Do NOT use when you're just answering a question or having a conversation
+- Do NOT use for single-turn tasks you can complete immediately
+- Do NOT use when just answering a question or having a conversation
 
 ## Parameters
-- **action** (required, string): `"report"` | `"complete"` | `"blocked"`
-  - `report`: Checkpoint progress mid-task. Task continues.
-  - `complete`: Finish the current task and advance to the next.
-  - `blocked`: Task cannot proceed. Provide blocker_reason.
-- **summary** (required, string): What happened — progress update, what was done, or why blocked. Be specific about files, decisions, and results.
-- **blocker_reason** (optional, string): Required when action=blocked. What is needed to unblock.
+- **action** (required, string): `"finishTask"` | `"raiseQuestion"` | `"breakOutCantContinue"`
+  - `finishTask`: Complete the current task and advance to the next. The framework returns the next task's full context (description, purpose, files, done criteria).
+  - `raiseQuestion`: Ask the user for clarification mid-plan. The framework pauses and waits for their response.
+  - `breakOutCantContinue`: Abort the plan. All remaining tasks are marked blocked. Provide a clear reason.
+- **summary** (optional, string): Required for finishTask and breakOutCantContinue. What was done, or why you can't continue.
+- **question** (optional, string): Required for raiseQuestion. The question for the user.
+- **blocker_reason** (optional, string): Required for breakOutCantContinue. What is needed to unblock.
 
 ## Usage Examples
-- Simple report: `{ "action": "report", "summary": "Read all 3 persistence files. Found CoreData used directly in view models." }`
-- Complete task: `{ "action": "complete", "summary": "Created TodoRepository protocol. Build passes. Ready for implementation." }`
-- Blocked: `{ "action": "blocked", "summary": "Cannot implement — missing CoreData entity.", "blocker_reason": "TodoEntity.xcdatamodeld doesn't exist yet." }`
+- Opt in: `{ "action": "finishTask", "summary": "Refactor persistence into repository pattern" }`
+- Complete task: `{ "action": "finishTask", "summary": "Created TodoRepository protocol. Build passes." }`
+- Ask question: `{ "action": "raiseQuestion", "question": "Should the repository use async/await or Combine?" }`
+- Break out: `{ "action": "breakOutCantContinue", "summary": "Cannot implement — missing CoreData model.", "blocker_reason": "TodoEntity.xcdatamodeld doesn't exist. Need to create the CoreData schema first." }`
 
 ## Output Structure
 Returns a ToolFeedback envelope:
-- **action=report**: `status: success`, message confirms progress recorded, task continues.
-- **action=complete**: `status: success`, includes next_task description, purpose, and done_criteria. If all done, includes all_done: true.
-- **action=blocked**: `status: blocked`, includes progress and blocker recorded confirmation.
+- **finishTask (not last)**: `status: success`, includes `task`, `purpose`, `context`, `done_criteria` for the next task. A message like "Well done. Now working on task 2 of 5."
+- **finishTask (last)**: `status: success`, includes `all_done: true`. Message asks for final summary.
+- **raiseQuestion**: `status: question`, includes the question. Framework pauses for user input.
+- **breakOutCantContinue**: `status: blocked`, includes reason and progress. Plan is terminated.
 
 ## Success Indicators
-- report: status "success" — checkpoint saved, keep working
-- complete: next_task is provided — you have fresh context for the next step
-- complete with all_done: true — ready for final summary
-- blocked: status "blocked" — blocker recorded, framework can help
+- finishTask: next task context is provided — you have everything you need to work on it
+- finishTask with all_done: all tasks complete — provide a final summary
+- raiseQuestion: status "question" — user will respond
+- breakOutCantContinue: status "blocked" — plan aborted
 
 ## Error Handling
-- INVALID_ACTION: action must be "report", "complete", or "blocked"
-- MISSING_SUMMARY: summary is required for all actions
-- MISSING_BLOCKER_REASON: blocker_reason is required when action=blocked
-- NO_ACTIVE_TASK: no active task found (call complete when one is active)
+- INVALID_ACTION: action must be "finishTask", "raiseQuestion", or "breakOutCantContinue"
+- MISSING_SUMMARY: summary is required for finishTask and breakOutCantContinue
+- MISSING_QUESTION: question is required for raiseQuestion
+- MISSING_BLOCKER_REASON: blocker_reason is required for breakOutCantContinue
 
 ## Best Practices
-1. Use `report` to checkpoint significant progress — not for every small step
-2. Use `complete` only when you've verified the work (read files back, ran tests)
-3. Use `blocked` when you genuinely cannot proceed — explain exactly what's needed
-4. A blocked task allows the plan to continue — the user can address the blocker
-5. Keep summaries specific about files, functions, and decisions made
+1. **First call**: Call `plan(action: "finishTask", summary: "your goal")` to opt in. The framework creates a structured plan.
+2. **Complete work before calling finishTask**: Verify by reading files back, running builds, checking tests.
+3. **Use raiseQuestion when truly stuck**: Don't guess — ask. The user will respond with clarification.
+4. **Use breakOutCantContinue only as a last resort**: Explain exactly what's needed to unblock.
+5. **Keep summaries specific**: Include file paths, functions, and key decisions made.

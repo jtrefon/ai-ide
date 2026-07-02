@@ -1,29 +1,38 @@
 import Foundation
 
-/// Single tool for the entire task planning lifecycle.
-/// Actions: report (mid-task progress), complete (task done, advance), blocked (cannot proceed).
+/// The planning tool — once the model opts in, it is confined to the planning sub-loop
+/// until all tasks are complete or it explicitly breaks out.
+///
+/// Actions:
+/// - finishTask: complete current task, receive next task context
+/// - raiseQuestion: ask the user for clarification mid-plan
+/// - breakOutCantContinue: abort the plan with a reason
 struct PlanTool: AITool {
     let name = "plan"
-    let description = "Track task progress through a structured plan. Use for multi-step work that needs focused execution."
+    let description = "Structured task planner. Call this once to commit to a plan — you'll work through tasks one at a time, receiving full context for each."
     var parameters: [String: Any] {
         [
             "type": "object",
             "properties": [
                 "action": [
                     "type": "string",
-                    "enum": ["report", "complete", "blocked"],
-                    "description": "report: checkpoint progress mid-task. complete: finish current task and advance. blocked: task cannot proceed."
+                    "enum": ["finishTask", "raiseQuestion", "breakOutCantContinue"],
+                    "description": "finishTask: complete current task and advance. raiseQuestion: ask user for clarification. breakOutCantContinue: abort the plan."
                 ],
                 "summary": [
                     "type": "string",
-                    "description": "Progress update, what was done, or why blocked. Be specific."
+                    "description": "Required for finishTask and breakOutCantContinue. What was done, or why you can't continue."
+                ],
+                "question": [
+                    "type": "string",
+                    "description": "Required for raiseQuestion. The question to ask the user."
                 ],
                 "blocker_reason": [
                     "type": "string",
-                    "description": "Required when action=blocked. What is needed to unblock."
+                    "description": "Required for breakOutCantContinue. What is needed to unblock."
                 ]
             ],
-            "required": ["action", "summary"]
+            "required": ["action"]
         ]
     }
 
@@ -31,138 +40,183 @@ struct PlanTool: AITool {
         let raw = arguments.raw
         let action = raw["action"] as? String ?? ""
         let summary = raw["summary"] as? String ?? ""
+        let question = raw["question"] as? String ?? ""
         let blockerReason = raw["blocker_reason"] as? String
+        let conversationId = raw["_conversation_id"] as? String ?? ""
 
-        guard ["report", "complete", "blocked"].contains(action) else {
+        guard ["finishTask", "raiseQuestion", "breakOutCantContinue"].contains(action) else {
             return """
             status: error
-            message: "action must be 'report', 'complete', or 'blocked'."
+            message: "action must be 'finishTask', 'raiseQuestion', or 'breakOutCantContinue'."
             error:
               code: INVALID_ACTION
               recoverable: true
             """
         }
 
+        // raiseQuestion — no plan needed, just relay the question
+        if action == "raiseQuestion" {
+            guard !question.isEmpty else {
+                return """
+                status: error
+                message: "question is required."
+                error:
+                  code: MISSING_QUESTION
+                  recoverable: true
+                """
+            }
+            return """
+            status: question
+            message: "\(question.sanitized())"
+            content:
+              action: "raiseQuestion"
+              question: "\(question.sanitized())"
+            """
+        }
+
+        // finishTask and breakOutCantContinue need a summary
         guard !summary.isEmpty else {
             return """
             status: error
-            message: "summary is required."
+            message: "summary is required for finishTask and breakOutCantContinue."
             error:
               code: MISSING_SUMMARY
               recoverable: true
             """
         }
 
-        if action == "blocked" && (blockerReason?.isEmpty ?? true) {
+        if action == "breakOutCantContinue" && (blockerReason?.isEmpty ?? true) {
             return """
             status: error
-            message: "blocker_reason is required when action=blocked."
+            message: "blocker_reason is required for breakOutCantContinue."
             error:
               code: MISSING_BLOCKER_REASON
               recoverable: true
             """
         }
 
-        if action == "report" {
-            return """
-            status: success
-            message: "Progress recorded. Task continues."
-            content:
-              action: "report"
-              summary: "\(summary.sanitized())"
-            """
-        }
-
-        // complete or blocked = sign off the current task
-        let conversationId = raw["_conversation_id"] as? String ?? ""
-
+        // If no conversation context, we can't persist — provide a session-local plan
         guard !conversationId.isEmpty else {
             return """
             status: success
-            message: "\(action == "complete" ? "Task signed off. Next task would be injected here." : "Task marked blocked.")"
+            message: "Plan tool initialised. Work on the current task and call finishTask when done."
             content:
               action: "\(action)"
-              note: "Plan tracking is initialized. In production, the plan would advance here."
+              note: "You've opted into structured planning. Complete each task and call finishTask to advance."
             """
         }
 
         let store = ConversationPlanStore.shared
-        guard var plan = await store.getPlan(conversationId: conversationId) else {
-            return """
-            status: success
-            message: "No structured plan found. Your summary has been recorded."
-            content:
-              action: "\(action)"
-              summary: "\(summary.sanitized())"
-            """
-        }
 
-        guard let activeIndex = plan.items.firstIndex(where: { $0.status == .active }) else {
-            return """
-            status: error
-            message: "No active task found to complete."
-            error:
-              code: NO_ACTIVE_TASK
-              recoverable: false
-            """
-        }
+        // Fetch or initialise the plan
+        if var plan = await store.getPlan(conversationId: conversationId) {
+            // Existing plan — advance or break
+            guard let activeIndex = plan.items.firstIndex(where: { $0.status == .active }) else {
+                return """
+                status: error
+                message: "No active task found."
+                error:
+                  code: NO_ACTIVE_TASK
+                  recoverable: false
+                """
+            }
 
-        if action == "blocked" {
-            plan.items[activeIndex].status = .blocked
-            plan.items[activeIndex].summary = summary
-            plan.items[activeIndex].blockedReason = blockerReason ?? "No reason provided"
-        } else {
+            if action == "breakOutCantContinue" {
+                plan.items[activeIndex].status = .blocked
+                plan.items[activeIndex].summary = summary
+                plan.items[activeIndex].blockedReason = blockerReason ?? "No reason provided"
+                // Abandon remaining
+                for i in (activeIndex + 1)..<plan.items.count {
+                    plan.items[i].status = .blocked
+                    plan.items[i].blockedReason = "Abandoned — prior task blocked"
+                }
+                plan.completedAt = Date()
+                await store.setPlan(conversationId: conversationId, plan: plan)
+                let total = plan.items.count
+                return """
+                status: blocked
+                message: "Plan aborted. \(activeIndex + 1)/\(total) tasks completed before block."
+                content:
+                  action: "breakOutCantContinue"
+                  reason: "\(blockerReason?.sanitized() ?? "")"
+                  progress: "\(activeIndex + 1)/\(total)"
+                """
+            }
+
+            // finishTask — mark complete, advance
             plan.items[activeIndex].status = .completed
             plan.items[activeIndex].summary = summary
-        }
 
-        // Advance to next pending
-        let nextActive = plan.items.firstIndex(where: { $0.status == .pending })
-        if let nextActive {
-            plan.currentIndex = nextActive
-            plan.items[nextActive].status = .active
-        } else {
-            plan.currentIndex = plan.items.count
-            plan.completedAt = Date()
-        }
+            let nextActive = plan.items.firstIndex(where: { $0.status == .pending })
+            if let nextActive {
+                plan.currentIndex = nextActive
+                plan.items[nextActive].status = .active
+            } else {
+                plan.currentIndex = plan.items.count
+                plan.completedAt = Date()
+            }
+            await store.setPlan(conversationId: conversationId, plan: plan)
 
-        await store.setPlan(conversationId: conversationId, plan: plan)
+            let completedCount = plan.items.filter { $0.status == .completed || $0.status == .blocked }.count
+            let totalCount = plan.items.count
 
-        let completedCount = plan.items.filter { $0.status == .completed || $0.status == .blocked }.count
-        let totalCount = plan.items.count
+            guard let nextActive, nextActive < plan.items.count else {
+                return """
+                status: success
+                message: "All \(totalCount) tasks complete. Provide a final summary of what was achieved."
+                content:
+                  action: "finishTask"
+                  all_done: true
+                  progress: "\(completedCount)/\(totalCount)"
+                """
+            }
 
-        if action == "blocked" {
-            return """
-            status: blocked
-            message: "Task blocked. Reason recorded. \(completedCount)/\(totalCount) tasks complete."
-            content:
-              action: "blocked"
-              progress: "\(completedCount)/\(totalCount)"
-            """
-        }
-
-        guard let nextActive, nextActive < plan.items.count else {
+            let next = plan.items[nextActive]
             return """
             status: success
-            message: "All \(totalCount) tasks complete. Ready for final review."
+            message: "Well done. Task \(completedCount)/\(totalCount) complete. Now working on task \(completedCount + 1)."
             content:
-              action: "complete"
+              action: "finishTask"
+              task: "\(next.description)"
+              purpose: "\(next.purpose)"
+              context: \(next.context.map { "\"\($0)\"" }.joined(separator: ", "))
+              done_criteria: "\(next.doneCriteria)"
               progress: "\(completedCount)/\(totalCount)"
-              all_done: true
+            """
+        } else {
+            // No plan exists yet — first call creates a simple plan from the user's request
+            // In production, the StrategicPlanningNode generates a proper plan beforehand.
+            // For ad-hoc use, create a single-task plan as fallback.
+            let fallbackPlan = TaskPlan(
+                id: UUID().uuidString,
+                goal: summary,
+                value: "Complete the requested work",
+                domain: .implementation,
+                mode: .coder,
+                items: [
+                    PlanItem(id: "task-1",
+                        description: summary,
+                        purpose: "As requested by the user",
+                        context: [],
+                        doneCriteria: "Work is complete and verified",
+                        status: .active,
+                        summary: nil,
+                        blockedReason: nil)
+                ],
+                createdAt: Date(),
+                completedAt: nil,
+                currentIndex: 0
+            )
+            await store.setPlan(conversationId: conversationId, plan: fallbackPlan)
+            return """
+            status: success
+            message: "Plan created. You've opted into structured execution. Call finishTask when done, raiseQuestion if stuck, or breakOutCantContinue if blocked."
+            content:
+              action: "finishTask"
+              task: "\(summary)"
+              progress: "0/1"
             """
         }
-
-        let next = plan.items[nextActive]
-        return """
-        status: success
-        message: "Task \(completedCount)/\(totalCount) complete. Next task ready."
-        content:
-          action: "complete"
-          next_task: "\(next.description)"
-          purpose: "\(next.purpose)"
-          done_criteria: "\(next.doneCriteria)"
-          progress: "\(completedCount)/\(totalCount)"
-        """
     }
 }
 

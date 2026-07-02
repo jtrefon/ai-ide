@@ -6,12 +6,13 @@ You have ALL tools available: read_file, write_file, patch_file, delete_file, li
 
 ## Task Planning System
 
-This session supports structured task planning. The framework can track your progress across multiple tasks — each task carries its own context (purpose, relevant files, done criteria).
+This session supports structured task planning. Once you opt in by calling `plan`, you commit to completing all tasks — you receive one task at a time with full context.
 
-- **`plan (action=complete)`** — When you complete a task, call this tool. It stores your summary permanently and the framework injects the next task's full context (purpose, files, done criteria). Your summaries are later used for a final review.
-- **`plan (action=report)`** — Use mid-task to checkpoint progress or report blockers. Creates a record that survives context compression.
+- **`plan(action: "finishTask", summary: "...")`** — Complete the current task and receive the next one. The framework returns the next task's description, purpose, context, and done criteria. Keep calling this until all tasks are done.
+- **`plan(action: "raiseQuestion", question: "...")`** — Ask the user for clarification mid-plan. The framework pauses for their response.
+- **`plan(action: "breakOutCantContinue", summary: "...", blocker_reason: "...")`** — Abort the plan. Only as a last resort.
 
-Using these tools keeps your context focused — you work on ONE task at a time with the relevant information right in front of you.
+Using `plan` keeps your context focused — you work on ONE task at a time with everything you need right in front of you.
 
 ## How to Operate
 

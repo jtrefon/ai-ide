@@ -47,7 +47,7 @@ struct ContentView: View {
         return ZStack {
             mainLayout
         }
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(.ultraThinMaterial)
         .environment(\.font, .system(size: CGFloat(uiState.fontSize)))
         .preferredColorScheme(appState.selectedTheme.colorScheme)
         .accessibilityIdentifier(AccessibilityID.appRootView)
@@ -265,7 +265,7 @@ struct ContentView: View {
         if bottomViews.count == 1, let pluginView = bottomViews.first {
             pluginView.makeView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(NSColor.windowBackgroundColor))
+                .background(.ultraThinMaterial)
                 .frame(minHeight: 100)
         } else if bottomViews.count > 1 {
             let selectedName = uiState.bottomPanelSelectedName
@@ -276,7 +276,7 @@ struct ContentView: View {
                 selectedView.makeView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(.ultraThinMaterial)
             .frame(minHeight: 100)
         }
     }
@@ -307,7 +307,8 @@ struct ContentView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .frame(height: AppConstants.Layout.headerHeight)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(radius: 10)
     }
 
     @ViewBuilder
@@ -614,7 +615,7 @@ private struct OverlayHostView: View {
                 }
             )
         }
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(.ultraThinMaterial)
     }
 }
 
