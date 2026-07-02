@@ -54,7 +54,8 @@ final class CodeEditorTextView: NSTextView {
         let ghostLine = firstLine(of: fullText)
         let attrs = ghostTextAttributes()
         ghostTextView.textStorage?.setAttributedString(NSAttributedString(string: ghostLine, attributes: attrs))
-        ghostTextView.toolTip = "\(presentation.source.rawValue) \u{2022} \(Int(presentation.latencyMs))ms"
+        let tip = "\(presentation.source.rawValue) \u{2022} \(Int(presentation.latencyMs))ms"
+        ghostTextView.toolTip = tip
         ghostTextView.font = font
         updateGhostTextFrame()
     }
