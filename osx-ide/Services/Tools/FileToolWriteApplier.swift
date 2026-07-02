@@ -47,7 +47,7 @@ enum FileToolWriteApplier {
 
         if trimmedContent.isEmpty && !existingIsEmpty {
             throw DestructiveWriteGuardError(
-                description: "Refused destructive overwrite of existing non-empty file \(request.relativePath) with empty content. Use replace_in_file for edits or create_file only for new empty files."
+                description: "Refused destructive overwrite of existing non-empty file \(request.relativePath) with empty content. Use patch_file for targeted edits."
             )
         }
 
@@ -63,7 +63,7 @@ enum FileToolWriteApplier {
                 return
             }
             throw DestructiveWriteGuardError(
-                description: "Refused full-file overwrite of existing file \(request.relativePath). Use replace_in_file for targeted edits. Reserve write_file for new files or complete intentional rewrites after reading current contents."
+                description: "Refused full-file overwrite of existing file \(request.relativePath). Use patch_file for targeted edits. Read the file first with read_file, then use patch_file with line numbers from the read output."
             )
         }
     }
