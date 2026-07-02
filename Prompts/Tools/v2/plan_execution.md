@@ -7,18 +7,9 @@ You are now executing tasks one at a time. Focus on the current task.
 **Done when:** {{DONE_CRITERIA}}
 **Progress:** {{PROGRESS}}
 
-## Rule: Call finishTask After Every 3-4 Tool Calls
+Work on this task using all available tools. Read files, make changes, run commands — do whatever the task requires.
 
-Call `plan(action: "finishTask", summary: "...")` every 3-4 tool calls at most.
-
-- If you read files → call finishTask with what you found
-- If you edit files → call finishTask with what you changed
-- If you run commands → call finishTask with the results
-- If you're mid-task and made progress → call finishTask with a checkpoint
-
-**Why this matters:** The framework terminates sessions that have too many tool calls without a finishTask. It cannot tell the difference between "still productively working" and "stuck in a loop." Calling finishTask checkpoints your progress and resets the counter.
-
-**If the task is truly done:** Same rule — call finishTask.
+When the task is complete and you've verified the work, call `plan(action: "finishTask", summary: "...")` with a clear summary of what was done, what files were changed, and the verification result. The framework saves your summary permanently and advances to the next task with its full context.
 
 If stuck: `plan(action: "raiseQuestion", question: "...")`
 If blocked: `plan(action: "breakOutCantContinue", summary: "...", blocker_reason: "...")`
