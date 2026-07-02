@@ -60,6 +60,7 @@ class AppState: ObservableObject, IDEContext {
     let uiRegistry: UIRegistry
     let diagnosticsStore: DiagnosticsStore
     let inlineCompletionEngine: InlineCompletionEngine
+    let snippetCompletionService: SnippetCompletionService
 
     let windowProvider: WindowProvider
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
@@ -156,6 +157,7 @@ class AppState: ObservableObject, IDEContext {
         uiRegistry: UIRegistry,
         diagnosticsStore: DiagnosticsStore,
         inlineCompletionEngine: InlineCompletionEngine,
+        snippetCompletionService: SnippetCompletionService,
         windowProvider: WindowProvider,
         codebaseIndexProvider: @escaping () -> (any CodebaseIndexProtocol)?,
         configureCodebaseIndex: @escaping (URL) -> Void,
@@ -176,6 +178,7 @@ class AppState: ObservableObject, IDEContext {
         self.uiRegistry = uiRegistry
         self.diagnosticsStore = diagnosticsStore
         self.inlineCompletionEngine = inlineCompletionEngine
+        self.snippetCompletionService = snippetCompletionService
 
         self.windowProvider = windowProvider
         self.codebaseIndexProvider = codebaseIndexProvider

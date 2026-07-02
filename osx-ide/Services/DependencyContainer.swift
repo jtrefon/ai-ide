@@ -128,6 +128,11 @@ class DependencyContainer: ObservableObject {
             projectRootProvider: { [weak projectCoordinator] in projectCoordinator?.currentProjectRoot },
             codebaseIndexProvider: { [weak projectCoordinator] in projectCoordinator?.codebaseIndex }
         )
+        _snippetCompletionService = AIServicesFactory.makeSnippetCompletionService(
+            aiServices: aiServices,
+            projectRootProvider: { [weak projectCoordinator] in projectCoordinator?.currentProjectRoot },
+            codebaseIndexProvider: { [weak projectCoordinator] in projectCoordinator?.codebaseIndex }
+        )
         StartupLogger.log("Project coordinator done", elapsedMs: elapsedSince(_initStart))
 
         // Wire the new Phase 1 tooling stack for Coder mode
@@ -429,6 +434,7 @@ class DependencyContainer: ObservableObject {
             uiRegistry: uiRegistry,
             diagnosticsStore: diagnosticsStore,
             inlineCompletionEngine: inlineCompletionEngine,
+            snippetCompletionService: snippetCompletionService,
             windowProvider: windowProvider,
             codebaseIndexProvider: { [weak self] in
                 self?.codebaseIndex
@@ -476,11 +482,17 @@ class DependencyContainer: ObservableObject {
     private var _conversationManager: ConversationManager
     private var _projectCoordinator: ProjectCoordinator
     private let _inlineCompletionEngine: InlineCompletionEngine
+    private let _snippetCompletionService: SnippetCompletionService
     private let _activityCoordinator: any AgentActivityCoordinating
     
     /// Accessor for activity coordinator (for integration with other services)
     var activityCoordinator: any AgentActivityCoordinating {
         return _activityCoordinator
+    }
+    
+    /// Accessor for snippet completion service (Cmd+Shift+I, multiline)
+    var snippetCompletionService: SnippetCompletionService {
+        return _snippetCompletionService
     }
 }
 

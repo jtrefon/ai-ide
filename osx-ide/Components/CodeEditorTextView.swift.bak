@@ -8,10 +8,6 @@ final class CodeEditorTextView: NSTextView {
     private var ghostPresentation: InlineSuggestionPresentation?
     private var scrollObs: NSKeyValueObservation?
 
-    /// Set to `true` while SnippetCompletionService is inserting a preview.
-    /// The coordinator uses this to suppress automatic line-completion triggers.
-    var snippetPreviewInProgress: Bool = false
-
     var hasInlineSuggestion: Bool {
         ghostPresentation != nil
     }
@@ -78,19 +74,9 @@ final class CodeEditorTextView: NSTextView {
         }
 
         clearInlineSuggestion()
-        // Insert only the FIRST line of the suggestion, matching what the ghost text shows.
-        // For single-line completions (type-ahead) this is the entire suggestion.
-        // For multiline suggestions that slip through, only the visible portion is inserted.
-        let firstLine = suggestion.components(separatedBy: .newlines).first ?? suggestion
-        insertText(firstLine, replacementRange: selectedRange)
+        insertText(suggestion, replacementRange: selectedRange)
         return true
     }
-
-    private func firstLine(of text: String) -> String {
-        let line = text.components(separatedBy: .newlines).first ?? text
-        return String(line.prefix(200))
-    }
-
 
 
     private func updateGhostTextFrame() {
@@ -104,6 +90,14 @@ final class CodeEditorTextView: NSTextView {
         var cursorRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
         let origin = textContainerOrigin
         cursorRect = cursorRect.offsetBy(dx: origin.x, dy: origin.y)
+
+        // If the suggestion starts with a newline, position ghost on the NEXT line.
+        let suggestion = ghostPresentation!.suggestionText
+        let startsWithNewline = suggestion.hasPrefix("\n")
+        if startsWithNewline {
+            cursorRect.origin.x = origin.x + textContainer.lineFragmentPadding
+            cursorRect.origin.y += cursorRect.height
+        }
 
         let width = max(bounds.width - cursorRect.minX - 8, 120)
         ghostTextView.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)

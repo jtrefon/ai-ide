@@ -7,9 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		04C3F7242FF6A1AC00DC1622 /* SyntaxHighlighting in Frameworks */ = {isa = PBXBuildFile; productRef = 9A9A00022C2F4A7F00A1B001 /* SyntaxHighlighting */; };
+		04C3F7252FF6A1AC00DC1622 /* Terminal in Frameworks */ = {isa = PBXBuildFile; productRef = 9A9A00042C2F4A7F00A1B004 /* Terminal */; };
+		04C3F7262FF6A1AC00DC1622 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 9B9B00022C3F5A8F00A1B0C2 /* Markdown */; };
 		6D2E6F7F2C2F4A7F00A1B2C3 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */; };
-		6E8A1B012F9A000100ABC123 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6E8A1B002F9A000100ABC123 /* MLXVLM */; };
 		6D2E6F852C2F4A7F00A1B2C9 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 6D2E6F842C2F4A7F00A1B2C8 /* MLX */; };
+		6E8A1B012F9A000100ABC123 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 6E8A1B002F9A000100ABC123 /* MLXVLM */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +74,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				04C3F7262FF6A1AC00DC1622 /* Markdown in Frameworks */,
+				04C3F7252FF6A1AC00DC1622 /* Terminal in Frameworks */,
+				04C3F7242FF6A1AC00DC1622 /* SyntaxHighlighting in Frameworks */,
 				6D2E6F7F2C2F4A7F00A1B2C3 /* MLXLLM in Frameworks */,
 				6E8A1B012F9A000100ABC123 /* MLXVLM in Frameworks */,
 				6D2E6F852C2F4A7F00A1B2C9 /* MLX in Frameworks */,
@@ -268,10 +274,10 @@
 			mainGroup = 04C2CE002E5C8E9D007A5EF7;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */,
+				6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "Vendor/mlx-swift-lm" */,
 				6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */,
-				9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "SyntaxHighlighting" */,
-				9A9A00032C2F4A7F00A1B003 /* XCLocalSwiftPackageReference "Terminal" */,
+				9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "Packages/SyntaxHighlighting" */,
+				9A9A00032C2F4A7F00A1B003 /* XCLocalSwiftPackageReference "Packages/Terminal" */,
 				9B9B00012C3F5A8F00A1B0C1 /* XCRemoteSwiftPackageReference "swift-markdown" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -715,22 +721,17 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */ = {
+		6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "Vendor/mlx-swift-lm" */ = {
 			isa = XCLocalSwiftPackageReference;
-			path = "Vendor/mlx-swift-lm";
 			relativePath = "Vendor/mlx-swift-lm";
 		};
-/* End XCLocalSwiftPackageReference section */
-
-		9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "SyntaxHighlighting" */ = {
+		9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "Packages/SyntaxHighlighting" */ = {
 			isa = XCLocalSwiftPackageReference;
-			path = "Packages/SyntaxHighlighting";
-			relativePath = "Packages/SyntaxHighlighting";
+			relativePath = Packages/SyntaxHighlighting;
 		};
-		9A9A00032C2F4A7F00A1B003 /* XCLocalSwiftPackageReference "Terminal" */ = {
+		9A9A00032C2F4A7F00A1B003 /* XCLocalSwiftPackageReference "Packages/Terminal" */ = {
 			isa = XCLocalSwiftPackageReference;
-			path = "Packages/Terminal";
-			relativePath = "Packages/Terminal";
+			relativePath = Packages/Terminal;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -756,27 +757,27 @@
 /* Begin XCSwiftPackageProductDependency section */
 		6D2E6F7E2C2F4A7F00A1B2C3 /* MLXLLM */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */;
+			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "Vendor/mlx-swift-lm" */;
 			productName = MLXLLM;
-		};
-		6E8A1B002F9A000100ABC123 /* MLXVLM */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "mlx-swift-lm" */;
-			productName = MLXVLM;
 		};
 		6D2E6F842C2F4A7F00A1B2C8 /* MLX */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6D2E6F862C2F4A7F00A1B2CA /* XCRemoteSwiftPackageReference "mlx-swift" */;
 			productName = MLX;
 		};
+		6E8A1B002F9A000100ABC123 /* MLXVLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6D2E6F7D2C2F4A7F00A1B2C3 /* XCLocalSwiftPackageReference "Vendor/mlx-swift-lm" */;
+			productName = MLXVLM;
+		};
 		9A9A00022C2F4A7F00A1B001 /* SyntaxHighlighting */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "SyntaxHighlighting" */;
+			package = 9A9A00012C2F4A7F00A1B001 /* XCLocalSwiftPackageReference "Packages/SyntaxHighlighting" */;
 			productName = SyntaxHighlighting;
 		};
 		9A9A00042C2F4A7F00A1B004 /* Terminal */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 9A9A00032C2F4A7F00A1B003 /* XCLocalSwiftPackageReference "Terminal" */;
+			package = 9A9A00032C2F4A7F00A1B003 /* XCLocalSwiftPackageReference "Packages/Terminal" */;
 			productName = Terminal;
 		};
 		9B9B00022C3F5A8F00A1B0C2 /* Markdown */ = {

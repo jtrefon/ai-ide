@@ -17,6 +17,7 @@ struct CodeEditorView: View {
     @Binding var selectedRange: NSRange?
     @ObservedObject var selectionContext: CodeSelectionContext
     let inlineCompletionEngine: InlineCompletionEngine
+    let snippetCompletionService: SnippetCompletionService
     var inlineCompletionDebugOverlayEnabled: Bool = false
     var showLineNumbers: Bool = true
     var wordWrap: Bool = false
@@ -36,6 +37,7 @@ struct CodeEditorView: View {
                 selectedRange: $selectedRange,
                 selectionContext: selectionContext,
                 inlineCompletionEngine: inlineCompletionEngine,
+                snippetCompletionService: snippetCompletionService,
                 showLineNumbers: showLineNumbers,
                 wordWrap: wordWrap,
                 fontSize: fontSize,

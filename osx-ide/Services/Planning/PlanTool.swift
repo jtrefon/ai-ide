@@ -79,9 +79,10 @@ struct PlanTool: AITool {
             if !conversationId.isEmpty {
                 await ConversationPlanStore.shared.setPlan(conversationId: conversationId, plan: plan)
             }
+            let researchGuidance = loadPhasePrompt(key: "plan_research", defaults: ["phase": "researching"])
             return """
             status: success
-            message: "Planning mode. Research the problem using all available tools — read files, search the codebase, browse the web, run commands. Understand the current state. When you have a clear plan, call finishTask with your proposed task breakdown."
+            message: "\(researchGuidance)"
             content:
               action: "init"
               phase: "researching"
@@ -236,6 +237,20 @@ struct PlanTool: AITool {
           code: \(code)
           recoverable: true
         """
+    }
+
+    /// Load a phase prompt from a markdown file, with optional template replacements.
+    /// Falls back to a default message if the prompt file can't be loaded.
+    private func loadPhasePrompt(key: String, defaults: [String: String], replacements: [String: String] = [:]) -> String {
+        if let promptText = try? PromptRepository.shared.prompt(key: "Tools/v2/\(key)", projectRoot: nil) {
+            var result = promptText
+            for (key, value) in replacements {
+                result = result.replacingOccurrences(of: "{{\(key)}}", with: value)
+            }
+            return result
+        }
+        // Fallback: construct from defaults
+        return defaults.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
     }
 }
 

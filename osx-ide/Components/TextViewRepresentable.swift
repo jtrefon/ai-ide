@@ -11,6 +11,7 @@ struct TextViewRepresentable: NSViewRepresentable {
     @Binding var selectedRange: NSRange?
     @ObservedObject var selectionContext: CodeSelectionContext
     let inlineCompletionEngine: InlineCompletionEngine
+    let snippetCompletionService: SnippetCompletionService
     var showLineNumbers: Bool
     var wordWrap: Bool
     var fontSize: Double

@@ -23,6 +23,15 @@ struct CodeEditorView_Previews: PreviewProvider {
             selectedRange: .constant(nil),
             selectionContext: CodeSelectionContext(),
             inlineCompletionEngine: previewInlineCompletionEngine,
+            snippetCompletionService: SnippetCompletionService(
+                inferenceService: CompletionInferenceService(
+                    provider: AIServiceInlineCompletionProvider(aiServiceProvider: { nil })
+                ),
+                retrievalLayer: CompletionRetrievalLayer(
+                    projectRootProvider: { nil },
+                    codebaseIndexProvider: { nil }
+                )
+            ),
             inlineCompletionDebugOverlayEnabled: true,
             showLineNumbers: true,
             wordWrap: false,

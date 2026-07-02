@@ -57,6 +57,12 @@ actor FIMInferenceService {
         return container
     }
 
+    func unload() {
+        generationTask?.cancel()
+        generationTask = nil
+        modelContainer = nil
+    }
+
     func generate(prefix: String, suffix: String, maxTokens: Int = 64) async throws -> String {
         try Task.checkCancellation()
         var output = ""
@@ -143,10 +149,10 @@ actor FIMInferenceService {
                 }
             }
             generationTask = task
-            continuation.onTermination = { [weak self] _ in
-                Task { [weak self] in
-                    await self?.generationTask?.cancel()
-                }
+            continuation.onTermination = { _ in
+                // Cancel the captured task directly — avoids the race where
+                // generationTask has already been reassigned by a newer call.
+                task.cancel()
             }
         }
     }

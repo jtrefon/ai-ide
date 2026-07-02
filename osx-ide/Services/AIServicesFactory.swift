@@ -130,4 +130,37 @@ enum AIServicesFactory {
             ranker: SuggestionRanker()
         )
     }
+
+    @MainActor
+    static func makeSnippetCompletionService(
+        aiServices: AIServiceBundle,
+        projectRootProvider: @escaping () -> URL?,
+        codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?
+    ) -> SnippetCompletionService {
+        return SnippetCompletionService(
+            inferenceService: CompletionInferenceService(
+                provider: AIServiceInlineCompletionProvider(
+                    remoteServiceProvider: {
+                        switch await aiServices.providerSelectionStore.selectedRemoteProvider() {
+                        case .openRouter:
+                            return aiServices.openRouterService
+                        case .alibabaCloud:
+                            return aiServices.alibabaService
+                        case .kiloCode:
+                            return aiServices.kiloCodeService
+                        case .deepSeek:
+                            return aiServices.deepSeekService
+                        }
+                    },
+                    localServiceProvider: { aiServices.localModelService },
+                    localModelSelectionStore: aiServices.selectionStore
+                )
+            ),
+            retrievalLayer: CompletionRetrievalLayer(
+                projectRootProvider: projectRootProvider,
+                codebaseIndexProvider: codebaseIndexProvider
+            ),
+            ranker: SuggestionRanker()
+        )
+    }
 }

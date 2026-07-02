@@ -180,6 +180,8 @@ final class AIServiceInlineCompletionProvider: InlineCompletionProviding {
         if let existing = fimService, existing.modelId == modelId {
             return existing
         }
+        // Unload the old model before creating a new one to avoid leaking MLX model weights.
+        await fimService?.unload()
         let service = try await FIMInferenceService(modelId: modelId)
         fimService = service
         return service
