@@ -8,8 +8,21 @@ The current approach — inject the entire plan, let the model self-manage — f
 2. **Loss of focus**: The model sees ALL tasks at once and jumps ahead, repeats, or forgets where it is
 3. **No anchor**: After context compression, the model can't reliably recover what was done vs what remains
 4. **No enforcement**: The model can declare "done" at any point — the framework can't verify
+5. **Domain blindness**: The plan structure assumes coding tasks — but the same system must handle architecture, research, refactoring, analysis, and design
 
 **The fix**: Instead of dumping the entire plan into context, the framework manages the plan and feeds **one task at a time**. The model focuses on ONE thing, delivers it, signs off, and the framework injects the next.
+
+### Design Principles
+
+1. **Domain agnostic** — The structure must work for ANY goal: architectural design, code implementation, security audit, performance analysis, research investigation, legacy migration. The framework does not assume "files" or "code." The model fills in the domain-specific details.
+
+2. **Value-driven** — Each task carries not just WHAT to do, but WHY it matters and WHAT VALUE it delivers. This keeps the model grounded in purpose, not just mechanical execution.
+
+3. **Maximum focus** — The model sees ONE task at a time. No context wandering, no premature optimization, no task skipping.
+
+4. **Context survival** — Each task's summary is a permanent record. After compression, the model can fully reorient from the current task context alone.
+
+5. **Final synthesis** — After all tasks complete, the model reviews the full plan with all summaries and produces a cohesive final deliverable.
 
 ---
 
@@ -49,17 +62,25 @@ The current approach — inject the entire plan, let the model self-manage — f
 
 ## Data Structures
 
-### PlanStore (Persisted, survives compression)
+The structures are **domain-agnostic**. They avoid assumptions about "code" or "files." Instead, each task carries:
+- **What** to do (actionable description)
+- **Why** it matters (value, purpose, connects to goal)
+- **Context** (anything the model needs to know — could be files, URLs, concepts, prior decisions)
+- **Done criteria** (how to verify completion, specific to the domain)
+
+### TaskPlan (Persisted, survives compression)
 
 ```swift
 struct TaskPlan: Codable, Sendable {
-    let id: String           // UUID — links plan to conversation
-    let goal: String         // Single sentence: WHAT we're achieving
-    let mode: AIMode         // coder or agent
-    let items: [PlanItem]    // Ordered list of all tasks
+    let id: String              // UUID — links plan to conversation
+    let goal: String            // Single sentence: WHAT we're achieving
+    let value: String           // WHY this matters — what success looks like
+    let domain: String          // The domain of work: "architecture" | "implementation" | "research" | "refactor" | "analysis" | "design"
+    let mode: AIMode            // coder or agent
+    let items: [PlanItem]       // Ordered list of all tasks
     let createdAt: Date
     var completedAt: Date?
-    var currentIndex: Int    // Which item the model is working on
+    var currentIndex: Int       // Which item the model is working on
 }
 ```
 
@@ -68,9 +89,9 @@ struct TaskPlan: Codable, Sendable {
 ```swift
 struct PlanItem: Codable, Sendable {
     let id: String
-    let description: String          // WHAT to do (actionable)
-    let purpose: String              // WHY this exists (context, connects to goal)
-    let files: [String]              // WHERE — relevant file paths
+    let description: String          // WHAT to do (actionable, domain-specific)
+    let purpose: String              // WHY this exists — what value it delivers
+    let context: [String]            // WHERE/WHAT — relevant context (files, URLs, concepts, references)
     let doneCriteria: String         // HOW to verify completion
     var status: ItemStatus           // pending | active | completed | blocked
     var summary: String?             // Model's sign-off summary when done
@@ -85,11 +106,13 @@ enum ItemStatus: String, Codable, Sendable {
 }
 ```
 
-### Example Plan Document
+### Example: Coding Refactor
 
 ```json
 {
   "goal": "Refactor persistence layer into repository pattern",
+  "value": "Clean separation of data access from business logic, making the codebase testable and maintainable",
+  "domain": "refactor",
   "mode": "coder",
   "currentIndex": 0,
   "items": [
@@ -97,24 +120,74 @@ enum ItemStatus: String, Codable, Sendable {
       "id": "task-1",
       "description": "Analyze current persistence code",
       "purpose": "Must understand existing implementation before designing replacement",
-      "files": ["src/data/TodoDataManager.swift", "src/models/Todo.swift"],
+      "context": ["src/data/TodoDataManager.swift", "src/models/Todo.swift"],
       "doneCriteria": "All persistence-related files have been read and understood",
       "status": "active"
     },
     {
       "id": "task-2",
       "description": "Design and implement TodoRepository protocol",
-      "purpose": "Repository interface decouples data access from business logic",
-      "files": ["src/repository/TodoRepository.swift"],
+      "purpose": "Repository interface decouples data access from business logic, enabling testability",
+      "context": ["src/repository/TodoRepository.swift (new file)"],
       "doneCriteria": "Protocol compiles with CRUD method signatures, build passes",
       "status": "pending"
+    }
+  ]
+}
+```
+
+### Example: Research Investigation
+
+```json
+{
+  "goal": "Evaluate Swift 6 concurrency migration complexity for the networking layer",
+  "value": "Clear understanding of migration effort, risks, and migration strategy before committing engineering time",
+  "domain": "research",
+  "mode": "coder",
+  "items": [
+    {
+      "id": "task-1",
+      "description": "Catalog all async patterns currently used in networking layer",
+      "purpose": "Baseline understanding of current state before evaluating migration paths",
+      "context": ["src/networking/*.swift", "Concurrency section of Swift 6 migration guide"],
+      "doneCriteria": "Complete inventory of callback-based, Combine-based, and Task-based patterns",
+      "status": "active"
     },
     {
-      "id": "task-3",
-      "description": "Implement repository with CoreData backend",
-      "purpose": "Concrete implementation that replaces TodoDataManager",
-      "files": ["src/data/TodoDataManager.swift", "src/repository/TodoRepository.swift"],
-      "doneCriteria": "All CRUD operations work, existing tests pass",
+      "id": "task-2",
+      "description": "Research Swift 6 data race safety requirements for network callbacks",
+      "purpose": "Identify which current patterns will break under strict concurrency checking",
+      "context": ["https://developer.apple.com/documentation/swift/concurrency"],
+      "doneCriteria": "Documented list of breaking changes and migration strategies per pattern",
+      "status": "pending"
+    }
+  ]
+}
+```
+
+### Example: Architecture Design
+
+```json
+{
+  "goal": "Design event-driven notification system for multi-tenant SaaS platform",
+  "value": "Scalable, decoupled notification architecture that supports email, push, and in-app channels",
+  "domain": "architecture",
+  "mode": "agent",
+  "items": [
+    {
+      "id": "task-1",
+      "description": "Design event schema and topic taxonomy",
+      "purpose": "Foundation for all event-driven communication — must support multi-tenancy and extensibility",
+      "context": ["Current notification code at src/notifications/", "AWS EventBridge docs", "CloudEvents spec"],
+      "doneCriteria": "Event schema document with topic hierarchy, envelope format, and tenant routing strategy",
+      "status": "active"
+    },
+    {
+      "id": "task-2",
+      "description": "Design channel adapter interfaces",
+      "purpose": "Each notification channel (email, push, in-app) needs a consistent interface so adding new channels doesn't require core changes",
+      "context": ["Event schema from Task 1", "Existing email integration at src/email/"],
+      "doneCriteria": "Channel adapter protocol with send(), getStatus(), retry() methods. Email and push implementations specified.",
       "status": "pending"
     }
   ]
@@ -314,7 +387,64 @@ if currentItem.status == .active {
 ### Phase 5: Plan Generation (refactor)
 
 - Update `StrategicPlanningNode` to generate structured `TaskPlan` (not raw markdown)
-- Update `TacticalPlanningNode` to refine items with purpose/files/done-criteria
+- Update `TacticalPlanningNode` to refine items with purpose/context/done-criteria
+
+---
+
+## Final Review Flow
+
+After the last task is signed off, the framework injects the **complete plan with all summaries** and asks the model to produce a final synthesis. This is critical — the model never sees the full picture during execution, so it needs a dedicated review pass at the end.
+
+### Flow
+
+```
+1. Model calls plan_signoff on final task
+2. Framework detects: all tasks complete, currentIndex == items.count
+3. Framework injects FULL PLAN (all items with their summaries):
+   ┌─────────────────────────────────────────────────────┐
+   │ ✅ All tasks complete!                               │
+   │                                                      │
+   │ Goal: Refactor persistence into repository pattern   │
+   │ Value: Clean separation of data access from logic    │
+   │ Domain: refactor                                     │
+   │                                                      │
+   │ 📋 Completed Tasks:                                  │
+   │ [x] Task 1: Analyze current persistence code         │
+   │     Summary: Read all files, documented patterns     │
+   │ [x] Task 2: Design repository protocol               │
+   │     Summary: Created TodoRepository with CRUD ops    │
+   │ [x] Task 3: Implement CoreData backend               │
+   │     Summary: Replaced TodoDataManager, tests pass    │
+   │                                                      │
+   │ Please review all completed work and provide a       │
+   │ final summary covering:                              │
+   │ - What was achieved                                  │
+   │ - Key design decisions                               │
+   │ - Files created/modified                             │
+   │ - Verification status                                │
+   │ - Any remaining considerations                       │
+   └─────────────────────────────────────────────────────┘
+4. Model produces final synthesis (no tools needed — just text)
+5. Framework delivers to user as the final response
+```
+
+### What Gets Injected
+
+The full plan document — but only `description + summary + status` per item (not the full context/purpose/done-criteria, which were for execution guidance and are no longer needed). The model sees:
+
+- **Goal** (reorients to the big picture)
+- **Value** (reminds why this mattered)
+- **Domain** (frames the synthesis appropriately)
+- **Each item**: `description` + `summary` (the model's own words from sign-off)
+
+This is ~200-300 tokens total for a 10-item plan. Negligible overhead.
+
+### Benefits
+
+1. **Context for synthesis** — The model has ALL the information needed for a comprehensive summary
+2. **No hallucination** — The model uses its own recorded summaries, not fabricated memory
+3. **Cohesive deliverable** — The final output connects individual tasks into a unified narrative
+4. **Accountability** — The model reviews what it actually did vs what was planned
 
 ---
 
