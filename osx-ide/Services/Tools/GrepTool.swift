@@ -2,7 +2,7 @@ import Foundation
 
 struct GrepTool: AITool {
     let name = "grep"
-    let description = "Search file contents using regex or plain text matching. WHAT: Searches file contents across the project for a pattern, returns matching lines with file paths and line numbers. WHEN: Use to find where functions, variables, or patterns are used. HOW: pattern (required, string) - the regex or text pattern to search. path (optional) - restrict search to a directory. OUTPUT: Returns matching lines with file path, line number, and content."
+let description = "Search file contents using regex or plain text matching."
     var parameters: [String: Any] {
         [
             "type": "object",

@@ -3,7 +3,7 @@ import Foundation
 /// List files in a directory
 struct ListFilesTool: AITool {
     let name = "list_dir"
-    let description = "List files and directories under a path. WHAT: Lists files and directories at the given path, with optional filtering. WHEN: Use to explore the project structure before reading or editing files. HOW: path (optional) - directory path, defaults to project root. query (optional, string) - case-insensitive filename filter. limit (optional, int, 1-1000) - max entries to return. OUTPUT: Returns a list of file/directory paths and their types. Vendor/dependency directories show as (excluded)."
+    let description = "List files and directories under a path with optional name filter and limit. Vendor directories are marked (excluded)."
     var parameters: [String: Any] {
         FileToolParameterSchemaBuilder.objectSchema(
             properties: [

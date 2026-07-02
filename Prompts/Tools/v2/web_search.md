@@ -1,44 +1,11 @@
-# web_search Tool
+# Tool: web_search
 
-## Purpose
-Search the web using Google. Returns structured search results with titles, URLs, and snippets. For reading full pages, use web_browse with a URL from the results.
+WHAT: Searches the web using Google and returns up to 10 organic search results with titles, URLs, and snippets.
 
-## Parameters
-- **query** (required, string): Search query.
-- **max_results** (optional, integer): Maximum number of results to return (default 10, max 20).
+WHEN: Use to find current information, documentation, tutorials, API references, or external resources. Always follow up with web_browse to read full articles from the results.
 
-## Feedback Format
+HOW:
+- query (required, string): The search query. Use natural language or keywords.
+- Overloading: Be specific with your query for better results. Include relevant keywords like "documentation", "tutorial", "API", or "best practices".
 
-```
-status: success
-message: "Found 10 results for 'Swift concurrency best practices'"
-content:
-  data:
-    items:
-      - label: "Swift Concurrency - Apple Documentation"
-        kind: "result"
-        description: "Learn about Swift concurrency with async/await, actors, and task groups."
-        path: "https://developer.apple.com/documentation/swift/concurrency"
-      - label: "Swift Concurrency Recipes"
-        kind: "result"
-        description: "Practical recipes for common concurrency patterns."
-        path: "https://example.com/swift-concurrency-recipes"
-  metadata:
-    totalResults: "10"
-    queryTimeMs: "850"
-```
-
-## Error Codes
-
-| Code | Meaning | Recovery |
-|------|---------|----------|
-| `SEARCH_BLOCKED` | Search engine blocked request (CAPTCHA) | Try a different query, or use web_browse with a known URL |
-| `NETWORK_TIMEOUT` | Search timed out | Retry with simpler query |
-| `NO_RESULTS` | No results found | Try different search terms |
-
-## Best Practices
-
-1. **Search first, browse second**: Use web_search to find relevant pages, then web_browse to read them in detail.
-2. **Be specific**: Include language/framework names in queries for better results.
-3. **Multiple queries**: If the first query doesn't find what you need, try different terms.
-4. **Documentation**: For API documentation, include "documentation" or "docs" in your query.
+OUTPUT: Returns search results with title, URL, and text snippet for each result.

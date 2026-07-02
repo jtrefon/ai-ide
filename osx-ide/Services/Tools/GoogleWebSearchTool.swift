@@ -5,7 +5,7 @@ import Foundation
 /// Does NOT maintain a browsing session — for deep browsing use `web_browse`.
 struct GoogleWebSearchTool: AITool {
     let name = "web_search"
-    let description = "Search the web using Google. WHAT: Performs a web search and returns up to 10 organic results with titles, URLs, and snippets. WHEN: Use to find current information, documentation, tutorials, or external resources. Paired with web_browse to read full pages. HOW: query (required, string) - the search query. OUTPUT: Returns search results with title, URL, and snippet for each."
+let description = "Search the web using Google."
 
     var parameters: [String: Any] {
         [

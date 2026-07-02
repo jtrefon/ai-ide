@@ -4,9 +4,10 @@ import AppKit
 final class CodeEditorTextView: NSTextView {
     let foldingManager = CodeFoldingManager()
     private lazy var foldingDelegate = FoldingLayoutManagerDelegate(manager: foldingManager)
-    private let ghostTextView = CodeEditorTextView.makeGhostTextView()
     private var ghostPresentation: InlineSuggestionPresentation?
-    private var scrollObs: NSKeyValueObservation?
+    private var ghostRange: NSRange?
+
+    private static let ghostAttributeKey = NSAttributedString.Key("com.osxide.ghostSuggestion")
 
     var hasInlineSuggestion: Bool {
         ghostPresentation != nil
@@ -18,24 +19,6 @@ final class CodeEditorTextView: NSTextView {
 
     override func viewWillMove(toSuperview newSuperview: NSView?) {
         super.viewWillMove(toSuperview: newSuperview)
-        if newSuperview != nil {
-            if ghostTextView.superview == nil {
-                addSubview(ghostTextView)
-            }
-            observeScrollView()
-        } else {
-            scrollObs = nil
-        }
-    }
-
-    private func observeScrollView() {
-        guard let scrollView = enclosingScrollView else { return }
-        scrollObs?.invalidate()
-        scrollObs = scrollView.contentView.observe(\.bounds, options: [.new]) { [weak self] _, _ in
-            DispatchQueue.main.async { [weak self] in
-                self?.updateGhostTextFrame()
-            }
-        }
     }
 
     func configureFolding() {
@@ -44,101 +27,88 @@ final class CodeEditorTextView: NSTextView {
 
     override func layout() {
         super.layout()
-        updateGhostTextFrame()
     }
 
     func updateGhostSuggestion(_ presentation: InlineSuggestionPresentation) {
+        clearGhostTextFromStorage()
+
         ghostPresentation = presentation
-        ghostTextView.isHidden = false
-        let fullText = String(presentation.suggestionText.prefix(600))
-        let firstLine = fullText.trimmingCharacters(in: CharacterSet.newlines).components(separatedBy: "\n").first ?? fullText
-        let ghostLine = String(firstLine.prefix(200))
-        let attrs = ghostTextAttributes()
-        ghostTextView.textStorage?.setAttributedString(NSAttributedString(string: ghostLine, attributes: attrs))
-        ghostTextView.toolTip = presentation.source.rawValue + " • " + String(Int(presentation.latencyMs)) + "ms"
-        ghostTextView.font = font
-        updateGhostTextFrame()
+        let text = String(presentation.suggestionText.prefix(600))
+        let cursor = selectedRange.location
+
+        guard let textStorage, let layoutManager else { return }
+
+        let insertionRange = NSRange(location: cursor, length: 0)
+        textStorage.beginEditing()
+        textStorage.replaceCharacters(in: insertionRange, with: text)
+
+        let newGhostRange = NSRange(location: cursor, length: (text as NSString).length)
+        textStorage.addAttribute(Self.ghostAttributeKey, value: true, range: newGhostRange)
+        textStorage.addAttribute(.foregroundColor, value: NSColor.placeholderTextColor, range: newGhostRange)
+        if let font {
+            textStorage.addAttribute(.font, value: font, range: newGhostRange)
+        }
+        textStorage.endEditing()
+
+        ghostRange = newGhostRange
+        needsDisplay = true
     }
 
     func clearInlineSuggestion() {
+        clearGhostTextFromStorage()
         ghostPresentation = nil
-        ghostTextView.string = ""
-        ghostTextView.toolTip = nil
-        ghostTextView.isHidden = true
+    }
+
+    private func clearGhostTextFromStorage() {
+        guard let range = ghostRange, let textStorage else { return }
+        textStorage.beginEditing()
+        textStorage.replaceCharacters(in: range, with: "")
+        textStorage.endEditing()
+        ghostRange = nil
     }
 
     @discardableResult
     func acceptInlineSuggestion() -> Bool {
-        guard let suggestion = ghostPresentation?.suggestionText, !suggestion.isEmpty else {
+        guard let presentation = ghostPresentation, !presentation.suggestionText.isEmpty else {
             return false
         }
+        guard let range = ghostRange, let textStorage else { return false }
 
-        clearInlineSuggestion()
-        insertText(suggestion, replacementRange: selectedRange)
+        textStorage.removeAttribute(Self.ghostAttributeKey, range: range)
+        textStorage.removeAttribute(.foregroundColor, range: range)
+        textStorage.addAttribute(.foregroundColor, value: NSColor.textColor, range: range)
+
+        let newCursor = range.location + range.length
+        setSelectedRange(NSRange(location: newCursor, length: 0))
+
+        ghostPresentation = nil
+        ghostRange = nil
         return true
     }
 
-    private func updateGhostTextFrame() {
-        guard ghostPresentation != nil, !ghostTextView.isHidden else { return }
-        guard let layoutManager, let textContainer else { return }
+    // MARK: - Text Storage Delegate
 
-        layoutManager.ensureLayout(for: textContainer)
+    func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
+        guard let ghostRange else { return }
 
-        let cursor = selectedRange.location
-        let glyphRange = layoutManager.glyphRange(forCharacterRange: NSRange(location: cursor, length: 0), actualCharacterRange: nil)
-        var cursorRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-        let origin = textContainerOrigin
-        cursorRect = cursorRect.offsetBy(dx: origin.x, dy: origin.y)
+        let ghostEnd = ghostRange.location + ghostRange.length
+        let editEnd = editedRange.location + editedRange.length
 
-        let width = max(bounds.width - cursorRect.minX - 8, 120)
-        ghostTextView.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
-        ghostTextView.frame = NSRect(
-            x: cursorRect.minX,
-            y: cursorRect.minY + 1,
-            width: width,
-            height: 1
-        )
-        if let lm = ghostTextView.layoutManager, let tc = ghostTextView.textContainer {
-            lm.ensureLayout(for: tc)
-            let used = lm.usedRect(for: tc)
-            ghostTextView.frame.size.height = max(used.height + 2, self.font?.pointSize ?? 12)
+        if editedRange.location >= ghostEnd {
+            return
         }
+
+        if editEnd <= ghostRange.location {
+            let newLocation = ghostRange.location + delta
+            self.ghostRange = NSRange(location: newLocation, length: ghostRange.length)
+            return
+        }
+
+        clearGhostTextFromStorage()
+        ghostPresentation = nil
     }
 
-    private func ghostTextAttributes() -> [NSAttributedString.Key: Any] {
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byWordWrapping
-        return [
-            .font: font ?? NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
-            .foregroundColor: NSColor.placeholderTextColor,
-            .paragraphStyle: paragraph
-        ]
-    }
-
-    private static func makeGhostTextView() -> NSTextView {
-        let textContainer = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
-        textContainer.widthTracksTextView = false
-        textContainer.heightTracksTextView = false
-        textContainer.lineFragmentPadding = 0
-
-        let layoutManager = NSLayoutManager()
-        layoutManager.addTextContainer(textContainer)
-
-        let textStorage = NSTextStorage()
-        textStorage.addLayoutManager(layoutManager)
-
-        let textView = NSTextView(frame: .zero, textContainer: textContainer)
-        textView.isEditable = false
-        textView.isSelectable = false
-        textView.drawsBackground = false
-        textView.backgroundColor = NSColor.clear
-        textView.textContainerInset = NSSize(width: 0, height: 0)
-        textView.isHorizontallyResizable = false
-        textView.isVerticallyResizable = true
-        textView.autoresizingMask = []
-        textView.isHidden = true
-        return textView
-    }
+    // MARK: - Folding (unchanged)
 
     @IBAction func toggleFoldAtCursor(_ sender: Any?) {
         let cursor = selectedRange.location

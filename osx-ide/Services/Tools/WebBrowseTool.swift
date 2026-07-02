@@ -5,7 +5,7 @@ import Foundation
 /// Each session maintains its own browser state (cookies, history, JS context).
 struct WebBrowseTool: AITool {
     let name = "web_browse"
-    let description = "Browse a webpage and extract its main readable content. WHAT: Fetches a URL and returns the page title, URL, and cleaned text content. WHEN: Use after web_search to read full articles, documentation, or API references. HOW: url (required, string) - the full URL to browse, including https://. OUTPUT: Returns the page title, URL, and main body text as plain text."
+let description = "Browse a webpage and extract its main readable content."
 
     var parameters: [String: Any] {
         [

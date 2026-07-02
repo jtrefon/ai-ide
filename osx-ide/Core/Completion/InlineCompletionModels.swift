@@ -72,7 +72,7 @@ struct InlineCompletionSettings: Equatable, Sendable {
             AppRuntimeEnvironment.launchContext.isTesting
 #endif
         }(),
-        debounceMilliseconds: 100,
+        debounceMilliseconds: 0,
         aggressiveness: 0.6,
         maxSuggestionLength: 120,
         multilineEnabled: true,

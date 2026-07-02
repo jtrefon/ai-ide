@@ -32,6 +32,30 @@ struct SystemPromptAssembler {
                     : "System/tool-system-prompt-concise",
                 projectRoot: input.projectRoot
             ))
+            // Load per-tool prompts from the v2 tool prompts directory
+            let toolPromptKeys = [
+                "Tools/v2/read_file",
+                "Tools/v2/write_file",
+                "Tools/v2/patch_file",
+                "Tools/v2/list_files",
+                "Tools/v2/search_project",
+                "Tools/v2/web_search",
+                "Tools/v2/web_browse",
+                "Tools/v2/run_command",
+                "Tools/v2/grep",
+                "Tools/v2/find_file",
+                "Tools/v2/delete_file",
+                "Tools/v2/get_project_structure"
+            ]
+            var toolPrompts: [String] = []
+            for key in toolPromptKeys {
+                if let prompt = try? PromptRepository.shared.prompt(key: key, projectRoot: input.projectRoot) {
+                    toolPrompts.append(prompt)
+                }
+            }
+            if !toolPrompts.isEmpty {
+                sections.append("## Tool Reference\n\nEach tool below has WHAT (what it does), WHEN (when to use it), HOW (parameters and overloading), and OUTPUT (response format).\n\n" + toolPrompts.joined(separator: "\n\n---\n\n"))
+            }
         }
 
         if let mode = input.mode {

@@ -10,7 +10,7 @@ import Foundation
 /// Write content to a file at the specified path. Overwrites if it exists.
 struct WriteFileTool: AITool {
     let name = "write_file"
-    let description = "Write content to a file. WHAT: Creates a new file or overwrites an existing one with the given content. WHEN: Use for creating NEW files only. For editing EXISTING files, prefer patch_file (more efficient). HOW: path (required) - absolute path to the file. content (required) - the full content to write. mode (optional) - apply (default, writes immediately) or propose (stages for review). OUTPUT: Returns success message with file size."
+    let description = "Write content to a file. Creates new files or overwrites existing. Prefer patch_file for editing existing files."
     var parameters: [String: Any] {
         [
             "type": "object",
