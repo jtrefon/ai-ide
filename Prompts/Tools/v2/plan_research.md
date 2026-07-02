@@ -11,4 +11,4 @@ Use all available tools to explore and understand the problem:
 
 Understand the current state thoroughly: what exists, what's missing, what needs to change.
 
-When you have a clear understanding of what needs to be done, call `plan(action: "finishTask", summary: "...")` with your proposed task breakdown. List each task on a new line.
+When you have a clear picture, call `plan(action: "finishTask", summary: "...")` with your proposed task breakdown. List each task on a new line. Each task should include what to do, which files are relevant, and how to verify it's done.
