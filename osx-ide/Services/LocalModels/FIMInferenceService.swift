@@ -57,17 +57,6 @@ actor FIMInferenceService {
         return container
     }
 
-    func unload() {
-        generationTask?.cancel()
-        generationTask = nil
-        modelContainer = nil
-        Memory.clearCache()
-    }
-
-    func prewarm() async throws {
-        _ = try await ensureLoaded()
-    }
-
     func generate(prefix: String, suffix: String, maxTokens: Int = 64) async throws -> String {
         try Task.checkCancellation()
         var output = ""

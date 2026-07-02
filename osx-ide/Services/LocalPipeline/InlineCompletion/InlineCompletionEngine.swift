@@ -110,20 +110,13 @@ final class InlineCompletionEngine {
                 return
             }
 
-            let slowCount = await self.telemetryService.recentSlowCompletions()
-            let decision = self.triggerPolicy.decision(
-                for: snapshot,
-                settings: settings,
-                recentSlowCompletions: slowCount
-            )
-            guard decision.shouldRequest else {
+            guard self.triggerPolicy.shouldRequest(for: snapshot, settings: settings) else {
                 await AppLogger.shared.debug(
                     category: .ai,
                     message: "inline_completion.suppressed.trigger_policy",
                     context: AppLogger.LogCallContext(metadata: [
                         "paneID": String(describing: snapshot.paneID),
-                        "trigger": snapshot.triggerReason.rawValue,
-                        "recentSlowCompletions": slowCount
+                        "trigger": snapshot.triggerReason.rawValue
                     ])
                 )
                 self.publish(nil, for: snapshot.paneID)
@@ -199,40 +192,29 @@ final class InlineCompletionEngine {
                 NotificationCenter.default.post(name: .inlineCompletionStatusDidChange, object: InlineCompletionStatus.generating)
 
                 let result: InlineCompletionResult?
-                var usedStreaming = false
 
                 if let stream = try await self.inferenceService.inferStreaming(for: request, settings: settings) {
-                    usedStreaming = true
                     var accumulated = ""
-                    var streamingResult: InlineCompletionResult?
                     do {
                         for try await chunk in stream {
                             if Task.isCancelled { break }
                             accumulated.append(chunk)
-                            let partial = InlineCompletionResult(
-                                requestId: requestID,
-                                suggestionText: accumulated,
-                                confidenceScore: 0.5,
-                                source: .local,
-                                latencyMs: 0
-                            )
-                            if let candidate = self.ranker.rank(partial, for: request, aggressiveness: settings.aggressiveness) {
-                                self.publish(candidate, for: snapshot.paneID)
-                            }
                         }
                         if !accumulated.isEmpty {
-                            streamingResult = InlineCompletionResult(
+                            result = InlineCompletionResult(
                                 requestId: requestID,
                                 suggestionText: accumulated,
                                 confidenceScore: 0.5,
                                 source: .local,
                                 latencyMs: 0
                             )
+                        } else {
+                            result = nil
                         }
                     } catch {
                         await AppLogger.shared.error(category: .ai, message: "inline_completion.stream_error", context: AppLogger.LogCallContext(metadata: ["error": String(describing: error)]))
+                        result = nil
                     }
-                    result = streamingResult
                 } else {
                     result = try await self.inferenceService.infer(for: request, settings: settings)
                 }
@@ -267,38 +249,9 @@ final class InlineCompletionEngine {
                 )
                 await self.telemetryService.recordObservedLatency(result.latencyMs)
 
-                if !usedStreaming,
-                   request.triggerReason == .automatic,
-                   result.latencyMs > self.automaticLatencyBudgetMs {
-                    await AppLogger.shared.debug(
-                        category: .ai,
-                        message: "inline_completion.suppressed.latency_budget_exceeded",
-                        context: AppLogger.LogCallContext(metadata: [
-                            "paneID": String(describing: snapshot.paneID),
-                            "requestId": requestID.uuidString,
-                            "latencyMs": result.latencyMs,
-                            "budgetMs": self.automaticLatencyBudgetMs,
-                            "source": result.source.rawValue
-                        ])
-                    )
-                    self.publish(nil, for: snapshot.paneID)
-                    NotificationCenter.default.post(name: .inlineCompletionStatusDidChange, object: InlineCompletionStatus.noSuggestion)
-                    return
-                }
-
+                let evaluation = self.ranker.evaluate(result, for: request, aggressiveness: settings.aggressiveness)
                 let presentation: InlineSuggestionPresentation?
-
-                if usedStreaming {
-                    presentation = InlineSuggestionPresentation(
-                        requestId: result.requestId,
-                        suggestionText: result.suggestionText,
-                        source: result.source,
-                        confidenceScore: result.confidenceScore,
-                        latencyMs: result.latencyMs
-                    )
-                } else {
-                    let evaluation = self.ranker.evaluate(result, for: request, aggressiveness: settings.aggressiveness)
-                    switch evaluation {
+                switch evaluation {
                     case let .accepted(candidate):
                         if let lastAccepted = self.lastAcceptedSuggestions[snapshot.paneID],
                            self.normalizedTrailingPrefix(request.prefix, candidate: candidate.suggestionText).hasSuffix(self.normalizedSuggestion(lastAccepted)),
@@ -328,7 +281,6 @@ final class InlineCompletionEngine {
                         )
                         presentation = nil
                     }
-                }
 
                 if let presentation {
                     await self.telemetryService.recordShown(presentation)

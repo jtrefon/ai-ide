@@ -2,7 +2,6 @@ import Foundation
 
 struct CompletionTriggerPolicyDecision: Equatable {
     let shouldRequest: Bool
-    let debounceMilliseconds: Int
 }
 
 @MainActor
@@ -18,43 +17,16 @@ struct CompletionTriggerPolicy {
         "sql", "graphql", "protobuf", "toml"
     ]
 
-    func decision(
+    func shouldRequest(
         for snapshot: InlineCompletionEditorSnapshot,
-        settings: InlineCompletionSettings,
-        recentSlowCompletions: Int
-    ) -> CompletionTriggerPolicyDecision {
-        guard settings.isEnabled else {
-            return CompletionTriggerPolicyDecision(shouldRequest: false, debounceMilliseconds: settings.debounceMilliseconds)
-        }
-
-        guard snapshot.triggerReason == .manual || !snapshot.hasSelection else {
-            return CompletionTriggerPolicyDecision(shouldRequest: false, debounceMilliseconds: settings.debounceMilliseconds)
-        }
-
-        guard snapshot.triggerReason == .manual || !snapshot.isComposingText else {
-            return CompletionTriggerPolicyDecision(shouldRequest: false, debounceMilliseconds: settings.debounceMilliseconds)
-        }
-
-        guard !snapshot.buffer.isEmpty else {
-            return CompletionTriggerPolicyDecision(shouldRequest: false, debounceMilliseconds: settings.debounceMilliseconds)
-        }
-
+        settings: InlineCompletionSettings
+    ) -> Bool {
+        guard settings.isEnabled else { return false }
+        guard snapshot.triggerReason == .manual || !snapshot.hasSelection else { return false }
+        guard snapshot.triggerReason == .manual || !snapshot.isComposingText else { return false }
+        guard !snapshot.buffer.isEmpty else { return false }
         let normalizedLanguage = snapshot.language.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard snapshot.triggerReason == .manual || supportedLanguages.contains(normalizedLanguage) else {
-            return CompletionTriggerPolicyDecision(shouldRequest: false, debounceMilliseconds: settings.debounceMilliseconds)
-        }
-
-        let computedDebounce: Int
-        if snapshot.triggerReason == .manual {
-            computedDebounce = 0
-        } else if recentSlowCompletions >= 3 {
-            computedDebounce = min(900, Int(Double(settings.debounceMilliseconds) * 1.8))
-        } else if recentSlowCompletions > 0 {
-            computedDebounce = min(600, Int(Double(settings.debounceMilliseconds) * 1.25))
-        } else {
-            computedDebounce = settings.debounceMilliseconds
-        }
-
-        return CompletionTriggerPolicyDecision(shouldRequest: true, debounceMilliseconds: computedDebounce)
+        guard snapshot.triggerReason == .manual || supportedLanguages.contains(normalizedLanguage) else { return false }
+        return true
     }
 }

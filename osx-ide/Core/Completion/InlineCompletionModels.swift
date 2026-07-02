@@ -3,7 +3,6 @@ import Foundation
 enum InlineCompletionSource: String, Codable, CaseIterable, Sendable {
     case local
     case remote
-    case hybrid
 }
 
 enum CompletionTriggerReason: String, Codable, CaseIterable, Sendable {
@@ -48,10 +47,6 @@ struct InlineSuggestionPresentation: Equatable, Sendable {
     let source: InlineCompletionSource
     let confidenceScore: Double
     let latencyMs: Double
-
-    var isMultiline: Bool {
-        suggestionText.contains("\n")
-    }
 }
 
 struct InlineCompletionSettings: Equatable, Sendable {
