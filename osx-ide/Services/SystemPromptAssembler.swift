@@ -45,7 +45,9 @@ struct SystemPromptAssembler {
                 "Tools/v2/grep",
                 "Tools/v2/find_file",
                 "Tools/v2/delete_file",
-                "Tools/v2/get_project_structure"
+                "Tools/v2/get_project_structure",
+                "Tools/v2/task_report",
+                "Tools/v2/task_signoff"
             ]
             var toolPrompts: [String] = []
             for key in toolPromptKeys {

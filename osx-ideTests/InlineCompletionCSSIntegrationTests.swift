@@ -11,9 +11,9 @@ final class InlineCompletionCSSIntegrationTests: XCTestCase {
         inference.responses = [.immediate("font-family: 'Arial', sans-serif;")]
 
         let engine = makeEngine(inference: inference)
-        var received: InlineSuggestionPresentation?
+        let received = ThreadSafeBox<InlineSuggestionPresentation?>(nil)
         engine.registerSuggestionHandler(for: .primary) { presentation in
-            if let presentation { received = presentation }
+            received.value = presentation
         }
 
         let snapshot = makeSnapshot(
@@ -23,8 +23,8 @@ final class InlineCompletionCSSIntegrationTests: XCTestCase {
         engine.requestCompletion(for: snapshot)
         try await Task.sleep(nanoseconds: 80_000_000)
 
-        XCTAssertNotNil(received, "Single-line completion should not be nil")
-        XCTAssertFalse(received!.suggestionText.contains("\n"),
+        XCTAssertNotNil(received.value, "Single-line completion should not be nil")
+        XCTAssertFalse(received.value!.suggestionText.contains("\n"),
                        "Single-line completion should not contain newlines")
     }
 
@@ -36,25 +36,24 @@ final class InlineCompletionCSSIntegrationTests: XCTestCase {
         ]
 
         let engine = makeEngine(inference: inference)
-        var received: InlineSuggestionPresentation?
-        let callback = { (presentation: InlineSuggestionPresentation?) in
-            if let p = presentation { received = p }
+        let received = ThreadSafeBox<InlineSuggestionPresentation?>(nil)
+        engine.registerSuggestionHandler(for: .primary) { presentation in
+            received.value = presentation
         }
-        engine.registerSuggestionHandler(for: .primary, handler: callback)
 
         // First completion
         engine.requestCompletion(for: makeSnapshot(buffer: ".button {\n    font-fa", cursor: 21))
         try await Task.sleep(nanoseconds: 80_000_000)
-        XCTAssertNotNil(received, "First single-line completion should not be nil")
-        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+        XCTAssertNotNil(received.value, "First single-line completion should not be nil")
+        engine.markAccepted(on: .primary, suggestionText: received.value?.suggestionText)
 
         // Second completion — different property
-        received = nil
+        received.value = nil
         engine.requestCompletion(for: makeSnapshot(buffer: ".button {\n    font-family: 'Arial', sans-serif;\n    colo", cursor: 57))
         try await Task.sleep(nanoseconds: 80_000_000)
 
-        XCTAssertNotNil(received, "Second single-line completion after accept should not be nil")
-        XCTAssertFalse(received!.suggestionText.contains("\n"),
+        XCTAssertNotNil(received.value, "Second single-line completion after accept should not be nil")
+        XCTAssertFalse(received.value!.suggestionText.contains("\n"),
                        "Second single-line completion should not contain newlines")
     }
 
@@ -67,32 +66,31 @@ final class InlineCompletionCSSIntegrationTests: XCTestCase {
         ]
 
         let engine = makeEngine(inference: inference)
-        var received: InlineSuggestionPresentation?
-        let callback = { (presentation: InlineSuggestionPresentation?) in
-            if let p = presentation { received = p }
+        let received = ThreadSafeBox<InlineSuggestionPresentation?>(nil)
+        engine.registerSuggestionHandler(for: .primary) { presentation in
+            received.value = presentation
         }
-        engine.registerSuggestionHandler(for: .primary, handler: callback)
 
         // First
         engine.requestCompletion(for: makeSnapshot(buffer: ".button {\n    font-fa", cursor: 21))
         try await Task.sleep(nanoseconds: 80_000_000)
-        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+        engine.markAccepted(on: .primary, suggestionText: received.value?.suggestionText)
 
         // Second
-        received = nil
+        received.value = nil
         engine.requestCompletion(for: makeSnapshot(buffer: ".button {\n    font-family: 'Arial', sans-serif;\n    colo", cursor: 57))
         try await Task.sleep(nanoseconds: 80_000_000)
-        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+        engine.markAccepted(on: .primary, suggestionText: received.value?.suggestionText)
 
         // Third — different property entirely
-        received = nil
+        received.value = nil
         engine.requestCompletion(for: makeSnapshot(buffer: ".button {\n    font-family: 'Arial', sans-serif;\n    color: #007aff;\n    backgr", cursor: 86))
         try await Task.sleep(nanoseconds: 80_000_000)
 
-        XCTAssertNotNil(received, "Third single-line completion after two accepts should not be nil")
-        XCTAssertEqual(received!.suggestionText, "background-color: #fff;",
+        XCTAssertNotNil(received.value, "Third single-line completion after two accepts should not be nil")
+        XCTAssertEqual(received.value!.suggestionText, "background-color: #fff;",
                        "Third completion should suggest background-color")
-        XCTAssertFalse(received!.suggestionText.contains("\n"),
+        XCTAssertFalse(received.value!.suggestionText.contains("\n"),
                        "Third single-line completion should not contain newlines")
     }
 
@@ -104,9 +102,9 @@ final class InlineCompletionCSSIntegrationTests: XCTestCase {
         inference.responses = [.immediate(multiLineText)]
 
         let engine = makeEngine(inference: inference)
-        var received: InlineSuggestionPresentation?
+        let received = ThreadSafeBox<InlineSuggestionPresentation?>(nil)
         engine.registerSuggestionHandler(for: .primary) { presentation in
-            if let p = presentation { received = p }
+            received.value = presentation
         }
 
         let snapshot = makeSnapshot(
@@ -117,10 +115,10 @@ final class InlineCompletionCSSIntegrationTests: XCTestCase {
         engine.requestCompletion(for: snapshot)
         try await Task.sleep(nanoseconds: 80_000_000)
 
-        XCTAssertNotNil(received, "First multi-line completion should not be nil")
-        XCTAssertTrue(received!.suggestionText.contains("display: flex"),
+        XCTAssertNotNil(received.value, "First multi-line completion should not be nil")
+        XCTAssertTrue(received.value!.suggestionText.contains("display: flex"),
                       "Multi-line should contain display: flex")
-        XCTAssertTrue(received!.suggestionText.contains("flex-direction"),
+        XCTAssertTrue(received.value!.suggestionText.contains("flex-direction"),
                       "Multi-line should contain flex-direction")
     }
 
@@ -132,25 +130,24 @@ final class InlineCompletionCSSIntegrationTests: XCTestCase {
         ]
 
         let engine = makeEngine(inference: inference)
-        var received: InlineSuggestionPresentation?
-        let callback = { (presentation: InlineSuggestionPresentation?) in
-            if let p = presentation { received = p }
+        let received = ThreadSafeBox<InlineSuggestionPresentation?>(nil)
+        engine.registerSuggestionHandler(for: .primary) { presentation in
+            received.value = presentation
         }
-        engine.registerSuggestionHandler(for: .primary, handler: callback)
 
         // First multi-line
         engine.requestCompletion(for: makeSnapshot(buffer: cssFixture, cursor: 8, triggerReason: .manual))
         try await Task.sleep(nanoseconds: 80_000_000)
-        XCTAssertNotNil(received, "First multi-line should not be nil")
-        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+        XCTAssertNotNil(received.value, "First multi-line should not be nil")
+        engine.markAccepted(on: .primary, suggestionText: received.value?.suggestionText)
 
         // Second multi-line — different content
-        received = nil
+        received.value = nil
         engine.requestCompletion(for: makeSnapshot(buffer: cssFixture, cursor: 40, triggerReason: .manual))
         try await Task.sleep(nanoseconds: 80_000_000)
 
-        XCTAssertNotNil(received, "Second multi-line after accept should not be nil")
-        XCTAssertTrue(received!.suggestionText.contains("display: grid"),
+        XCTAssertNotNil(received.value, "Second multi-line after accept should not be nil")
+        XCTAssertTrue(received.value!.suggestionText.contains("display: grid"),
                       "Second multi-line should contain display: grid")
     }
 
@@ -163,32 +160,31 @@ final class InlineCompletionCSSIntegrationTests: XCTestCase {
         ]
 
         let engine = makeEngine(inference: inference)
-        var received: InlineSuggestionPresentation?
-        let callback = { (presentation: InlineSuggestionPresentation?) in
-            if let p = presentation { received = p }
+        let received = ThreadSafeBox<InlineSuggestionPresentation?>(nil)
+        engine.registerSuggestionHandler(for: .primary) { presentation in
+            received.value = presentation
         }
-        engine.registerSuggestionHandler(for: .primary, handler: callback)
 
         // First
         engine.requestCompletion(for: makeSnapshot(buffer: cssFixture, cursor: 8, triggerReason: .manual))
         try await Task.sleep(nanoseconds: 80_000_000)
-        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+        engine.markAccepted(on: .primary, suggestionText: received.value?.suggestionText)
 
         // Second
-        received = nil
+        received.value = nil
         engine.requestCompletion(for: makeSnapshot(buffer: cssFixture, cursor: 40, triggerReason: .manual))
         try await Task.sleep(nanoseconds: 80_000_000)
-        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+        engine.markAccepted(on: .primary, suggestionText: received.value?.suggestionText)
 
         // Third
-        received = nil
+        received.value = nil
         engine.requestCompletion(for: makeSnapshot(buffer: cssFixture, cursor: cssFixture.count, triggerReason: .manual))
         try await Task.sleep(nanoseconds: 80_000_000)
 
-        XCTAssertNotNil(received, "Third multi-line after two accepts should not be nil")
-        XCTAssertTrue(received!.suggestionText.contains("position: relative"),
+        XCTAssertNotNil(received.value, "Third multi-line after two accepts should not be nil")
+        XCTAssertTrue(received.value!.suggestionText.contains("position: relative"),
                       "Third multi-line should contain position: relative")
-        XCTAssertTrue(received!.suggestionText.contains("border-radius"),
+        XCTAssertTrue(received.value!.suggestionText.contains("border-radius"),
                       "Third multi-line should contain border-radius")
     }
 
@@ -301,4 +297,9 @@ private final class CSSInlineCompletionSettingsStore: InlineCompletionSettingsSt
             debugOverlayEnabled: false
         )
     }
+}
+
+private final class ThreadSafeBox<T: Sendable>: @unchecked Sendable {
+    var value: T
+    init(_ initial: T) { value = initial }
 }
