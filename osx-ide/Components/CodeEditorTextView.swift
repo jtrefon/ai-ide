@@ -50,9 +50,11 @@ final class CodeEditorTextView: NSTextView {
     func updateGhostSuggestion(_ presentation: InlineSuggestionPresentation) {
         ghostPresentation = presentation
         ghostTextView.isHidden = false
-        let text = String(presentation.suggestionText.prefix(600))
+        let fullText = String(presentation.suggestionText.prefix(600))
+        let firstLine = fullText.trimmingCharacters(in: CharacterSet.newlines).components(separatedBy: "\n").first ?? fullText
+        let ghostLine = String(firstLine.prefix(200))
         let attrs = ghostTextAttributes()
-        ghostTextView.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: attrs))
+        ghostTextView.textStorage?.setAttributedString(NSAttributedString(string: ghostLine, attributes: attrs))
         ghostTextView.toolTip = presentation.source.rawValue + " • " + String(Int(presentation.latencyMs)) + "ms"
         ghostTextView.font = font
         updateGhostTextFrame()

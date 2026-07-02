@@ -180,7 +180,7 @@ final class InlineCompletionEngine {
                 triggerReason: snapshot.triggerReason,
                 maxSuggestionLength: maxSuggestionLength,
                 maxTokens: maxTokens,
-                allowMultiline: settings.multilineEnabled
+                allowMultiline: snapshot.triggerReason == .manual && settings.multilineEnabled
             )
 
             do {
@@ -199,35 +199,40 @@ final class InlineCompletionEngine {
                 NotificationCenter.default.post(name: .inlineCompletionStatusDidChange, object: InlineCompletionStatus.generating)
 
                 let result: InlineCompletionResult?
+                var usedStreaming = false
 
                 if let stream = try await self.inferenceService.inferStreaming(for: request, settings: settings) {
+                    usedStreaming = true
                     var accumulated = ""
-                    result = try await {
+                    var streamingResult: InlineCompletionResult?
+                    do {
                         for try await chunk in stream {
-                            if Task.isCancelled { return nil as InlineCompletionResult? }
+                            if Task.isCancelled { break }
                             accumulated.append(chunk)
-                            if accumulated.count < request.maxSuggestionLength {
-                                let partial = InlineCompletionResult(
-                                    requestId: requestID,
-                                    suggestionText: accumulated,
-                                    confidenceScore: 0.5,
-                                    source: .local,
-                                    latencyMs: 0
-                                )
-                                if let candidate = self.ranker.rank(partial, for: request, aggressiveness: settings.aggressiveness) {
-                                    self.publish(candidate, for: snapshot.paneID)
-                                }
+                            let partial = InlineCompletionResult(
+                                requestId: requestID,
+                                suggestionText: accumulated,
+                                confidenceScore: 0.5,
+                                source: .local,
+                                latencyMs: 0
+                            )
+                            if let candidate = self.ranker.rank(partial, for: request, aggressiveness: settings.aggressiveness) {
+                                self.publish(candidate, for: snapshot.paneID)
                             }
                         }
-                        guard !accumulated.isEmpty else { return nil as InlineCompletionResult? }
-                        return InlineCompletionResult(
-                            requestId: requestID,
-                            suggestionText: accumulated,
-                            confidenceScore: 0.5,
-                            source: .local,
-                            latencyMs: 0
-                        )
-                    }()
+                        if !accumulated.isEmpty {
+                            streamingResult = InlineCompletionResult(
+                                requestId: requestID,
+                                suggestionText: accumulated,
+                                confidenceScore: 0.5,
+                                source: .local,
+                                latencyMs: 0
+                            )
+                        }
+                    } catch {
+                        await AppLogger.shared.error(category: .ai, message: "inline_completion.stream_error", context: AppLogger.LogCallContext(metadata: ["error": String(describing: error)]))
+                    }
+                    result = streamingResult
                 } else {
                     result = try await self.inferenceService.infer(for: request, settings: settings)
                 }
@@ -262,7 +267,8 @@ final class InlineCompletionEngine {
                 )
                 await self.telemetryService.recordObservedLatency(result.latencyMs)
 
-                if request.triggerReason == .automatic,
+                if !usedStreaming,
+                   request.triggerReason == .automatic,
                    result.latencyMs > self.automaticLatencyBudgetMs {
                     await AppLogger.shared.debug(
                         category: .ai,
@@ -280,37 +286,48 @@ final class InlineCompletionEngine {
                     return
                 }
 
-                let evaluation = self.ranker.evaluate(result, for: request, aggressiveness: settings.aggressiveness)
                 let presentation: InlineSuggestionPresentation?
-                switch evaluation {
-                case let .accepted(candidate):
-                    if let lastAccepted = self.lastAcceptedSuggestions[snapshot.paneID],
-                       self.normalizedTrailingPrefix(request.prefix, candidate: candidate.suggestionText).hasSuffix(self.normalizedSuggestion(lastAccepted)),
-                       self.normalizedSuggestion(candidate.suggestionText) == self.normalizedSuggestion(lastAccepted) {
+
+                if usedStreaming {
+                    presentation = InlineSuggestionPresentation(
+                        requestId: result.requestId,
+                        suggestionText: result.suggestionText,
+                        source: result.source,
+                        confidenceScore: result.confidenceScore,
+                        latencyMs: result.latencyMs
+                    )
+                } else {
+                    let evaluation = self.ranker.evaluate(result, for: request, aggressiveness: settings.aggressiveness)
+                    switch evaluation {
+                    case let .accepted(candidate):
+                        if let lastAccepted = self.lastAcceptedSuggestions[snapshot.paneID],
+                           self.normalizedTrailingPrefix(request.prefix, candidate: candidate.suggestionText).hasSuffix(self.normalizedSuggestion(lastAccepted)),
+                           self.normalizedSuggestion(candidate.suggestionText) == self.normalizedSuggestion(lastAccepted) {
+                            await AppLogger.shared.debug(
+                                category: .ai,
+                                message: "inline_completion.suppressed.repeated_after_accept",
+                                context: AppLogger.LogCallContext(metadata: [
+                                    "paneID": String(describing: snapshot.paneID),
+                                    "requestId": requestID.uuidString,
+                                    "suggestionPreview": String(candidate.suggestionText.prefix(80))
+                                ])
+                            )
+                            presentation = nil
+                        } else {
+                            presentation = candidate
+                        }
+                    case let .rejected(reason):
                         await AppLogger.shared.debug(
                             category: .ai,
-                            message: "inline_completion.suppressed.repeated_after_accept",
+                            message: "inline_completion.rank_rejected",
                             context: AppLogger.LogCallContext(metadata: [
                                 "paneID": String(describing: snapshot.paneID),
                                 "requestId": requestID.uuidString,
-                                "suggestionPreview": String(candidate.suggestionText.prefix(80))
+                                "reason": reason
                             ])
                         )
                         presentation = nil
-                    } else {
-                        presentation = candidate
                     }
-                case let .rejected(reason):
-                    await AppLogger.shared.debug(
-                        category: .ai,
-                        message: "inline_completion.rank_rejected",
-                        context: AppLogger.LogCallContext(metadata: [
-                            "paneID": String(describing: snapshot.paneID),
-                            "requestId": requestID.uuidString,
-                            "reason": reason
-                        ])
-                    )
-                    presentation = nil
                 }
 
                 if let presentation {
@@ -340,7 +357,7 @@ final class InlineCompletionEngine {
         publish(nil, for: paneID)
 
         Task {
-            await telemetryService.recordCancelled()
+            await self.telemetryService.recordCancelled()
         }
     }
 
@@ -361,7 +378,7 @@ final class InlineCompletionEngine {
                     "suggestionPreview": String((suggestionText ?? "").prefix(80))
                 ])
             )
-            await telemetryService.recordAccepted()
+            await self.telemetryService.recordAccepted()
         }
     }
 
@@ -371,7 +388,7 @@ final class InlineCompletionEngine {
                 category: .ai,
                 message: "inline_completion.dismissed"
             )
-            await telemetryService.recordDismissed()
+            await self.telemetryService.recordDismissed()
         }
     }
 

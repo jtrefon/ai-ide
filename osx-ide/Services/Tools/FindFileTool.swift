@@ -2,10 +2,7 @@ import Foundation
 
 struct FindFileTool: AITool {
     let name = "find_file"
-    let description =         "Find files by name only (case insensitive). " +
-        "SECONDARY tool — only for locating files when you already know the exact name. " +
-        "For ALL other search tasks (classes, functions, variables, text patterns), use search_project instead. " +
-        "Skips vendor/dependency directories automatically."
+    let description = "Find files by name. WHAT: Searches for files matching a given filename query within the project. WHEN: Use when you know the filename but not the full path. Faster than list_files + manual scanning. HOW: query (required, string) - filename to search for (substring match). path (optional) - directory to search in, defaults to project root. OUTPUT: Returns matching file paths."
     var parameters: [String: Any] {
         [
             "type": "object",

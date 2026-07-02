@@ -76,92 +76,16 @@ final class AIServiceInlineCompletionProvider: InlineCompletionProviding {
         routingMode: InlineCompletionRoutingMode
     ) async throws -> (text: String, source: InlineCompletionSource)? {
         let offlineMode = await offlineModeChecker.isOfflineModeEnabled()
-        let hasLocalModel = if let localModelSelectionStore {
-            !(await localModelSelectionStore.selectedModelId().trimmingCharacters(in: .whitespacesAndNewlines)).isEmpty
-        } else {
-            offlineMode
-        }
 
-        await AppLogger.shared.debug(
-            category: .ai,
-            message: "inline_completion.provider_route",
-            context: AppLogger.LogCallContext(metadata: [
-                "trigger": triggerReason.rawValue,
-                "routingMode": routingMode.rawValue,
-                "offlineMode": offlineMode,
-                "hasLocalModel": hasLocalModel
-            ])
-        )
-
-        if let localServiceProvider, let remoteServiceProvider {
-            if offlineMode {
-                guard hasLocalModel else { return nil }
-                return try await completeWith(service: await localServiceProvider(), source: .local, prompt: prompt)
-            }
-
-            switch routingMode {
-            case .localOnly:
-                guard hasLocalModel else { return nil }
-                return try await completeWith(service: await localServiceProvider(), source: .local, prompt: prompt)
-            case .remoteOnly:
-                return try await completeWith(service: await remoteServiceProvider(), source: .remote, prompt: prompt)
-            case .hybridPreferLocal:
-                if hasLocalModel,
-                   let localResult = try await attemptCompletion(
-                        with: await localServiceProvider(),
-                        source: .local,
-                        prompt: prompt
-                   ) {
-                    return localResult
-                }
-                return try await completeWith(service: await remoteServiceProvider(), source: .remote, prompt: prompt)
-            case .hybridPreferRemote:
-                if let remoteResult = try await attemptCompletion(
-                    with: await remoteServiceProvider(),
-                    source: .remote,
-                    prompt: prompt
-                ) {
-                    return remoteResult
-                }
-                guard hasLocalModel else { return nil }
-                return try await completeWith(service: await localServiceProvider(), source: .local, prompt: prompt)
-            }
-        }
-
-        if triggerReason == .automatic && routingMode == .localOnly && !offlineMode {
-            return nil
-        }
-
-        let source: InlineCompletionSource = offlineMode ? .local : {
-            switch routingMode {
-            case .localOnly:
-                return .local
-            case .remoteOnly:
-                return .remote
-            case .hybridPreferLocal, .hybridPreferRemote:
-                return .hybrid
-            }
-        }()
-
-        return try await completeWith(service: aiServiceProvider(), source: source, prompt: prompt)
-    }
-
-    private func attemptCompletion(
-        with service: AIService?,
-        source: InlineCompletionSource,
-        prompt: String
-    ) async throws -> (text: String, source: InlineCompletionSource)? {
-        do {
-            return try await completeWith(service: service, source: source, prompt: prompt)
-        } catch {
-            await AppLogger.shared.warning(
-                category: .ai,
-                message: "inline_completion.provider_attempt_failed",
-                context: AppLogger.LogCallContext(metadata: [
-                    "source": source.rawValue,
-                    "error": String(describing: error)
-                ])
-            )
+        switch routingMode {
+        case .localOnly:
+            let service = await localServiceProvider?() ?? aiServiceProvider()
+            return try await completeWith(service: service, source: .local, prompt: prompt)
+        case .remoteOnly:
+            guard !offlineMode else { return nil }
+            let service = await remoteServiceProvider?() ?? aiServiceProvider()
+            return try await completeWith(service: service, source: .remote, prompt: prompt)
+        case .hybridPreferLocal, .hybridPreferRemote:
             return nil
         }
     }
@@ -196,7 +120,7 @@ final class AIServiceInlineCompletionProvider: InlineCompletionProviding {
         }
 
         let service = try await resolveFIMService(modelId: modelId)
-        return service.generateStream(prefix: prefix, suffix: suffix, maxTokens: maxTokens)
+        return await service.generateStream(prefix: prefix, suffix: suffix, maxTokens: maxTokens)
     }
 
     func completeLocally(

@@ -10,7 +10,7 @@ import Foundation
 /// Read content of a file
 struct ReadFileTool: AITool {
     let name = "read_file"
-    let description = "Read the contents of a file at the specified path."
+    let description = "Read a file with optional line range and line numbers. WHAT: Reads file content at path. WHEN: Use before editing to see current content. Use start_line/end_line to read only relevant portions instead of entire large files. HOW: path (required) - absolute path. start_line (optional, int) - 1-based start line, defaults to 1. end_line (optional, int) - 1-based end line, defaults to end of file. OUTPUT: Returns file content with each line prefixed by its line number like 1: import React. Lines without start_line/end_line return the full file unnumbered."
     var parameters: [String: Any] {
         [
             "type": "object",
