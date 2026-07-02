@@ -10,9 +10,6 @@ struct SystemPromptAssembler {
         let reasoningMode: ReasoningMode
         let stage: AIRequestStage?
         let includeModelReasoning: Bool
-        /// Optional context about the current active task. When set, injected as "## Current Task"
-        /// section after tool prompts, giving the model focused context for the task at hand.
-        let activeTaskContext: String?
     }
 
     func assemble(input: Input) throws -> String {
@@ -60,11 +57,6 @@ struct SystemPromptAssembler {
             }
             if !toolPrompts.isEmpty {
                 sections.append("## Tool Reference\n\nEach tool below has WHAT (what it does), WHEN (when to use it), HOW (parameters and overloading), and OUTPUT (response format).\n\n" + toolPrompts.joined(separator: "\n\n---\n\n"))
-            }
-
-            // Inject current task context if provided
-            if let taskContext = input.activeTaskContext, !taskContext.isEmpty {
-                sections.append(taskContext)
             }
         }
 

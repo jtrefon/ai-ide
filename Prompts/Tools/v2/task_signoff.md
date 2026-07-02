@@ -1,7 +1,9 @@
 # task_signoff Tool
 
 ## Purpose
-Complete the current task, provide a permanent summary of what was done, and advance to the next task. The summary is stored permanently and survives context compression — it will be shown to you later during the final review when all tasks are done.
+Complete the current task, provide a permanent summary of what was done, and advance to the next task. The summary is stored permanently and survives context compression.
+
+**Why use this tool:** When you call task_signoff, the framework injects the next task's full context — purpose, relevant files, and done criteria — directly into your view. You get a fresh, focused task with everything you need to know, every time. Without it, you'd have to remember what comes next and manually track progress across turns. Your summaries are also used for the final review when all tasks are done.
 
 ## When to Use
 - When you have COMPLETED the current task — all done criteria are met

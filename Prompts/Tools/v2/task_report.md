@@ -1,7 +1,9 @@
 # task_report Tool
 
 ## Purpose
-Report mid-task progress, findings, or blockers without signing off. Creates a permanent checkpoint that survives context compression — the framework stores your notes so you can recover progress after the conversation is compacted.
+Report mid-task progress, findings, or blockers without signing off. Creates a permanent checkpoint that survives context compression.
+
+**Why use this tool:** Your notes are saved permanently. After the conversation is compacted, your last report is re-injected into context — so you don't lose your place. Without this, all mid-task context is lost on compression and you'd have to rediscover where you were.
 
 ## When to Use
 - **Mid-task checkpoint**: You've completed a significant sub-step and want to persist progress

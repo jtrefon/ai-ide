@@ -125,7 +125,7 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
         runId: String
     ) async throws -> AIServiceResponse {
         _ = runId
-        let preparation = try await buildChatPreparation(request: request)
+        let preparation = try buildChatPreparation(request: request)
         if preparation.toolDefinitions?.isEmpty == false, !supportsStreamingWithTools {
             return try await performChatWithHistory(request)
         }
@@ -419,8 +419,7 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
             mode: request.mode,
             projectRoot: request.projectRoot,
             runId: request.runId,
-            stage: request.stage,
-            conversationId: request.conversationId
+            stage: request.stage
         )
     }
 
@@ -434,15 +433,14 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
             mode: request.mode,
             projectRoot: request.projectRoot,
             runId: nil,
-            stage: nil,
-            conversationId: nil
+            stage: nil
         ))
     }
 
     private func performChatWithHistory(
         _ request: OpenRouterChatHistoryInput
     ) async throws -> AIServiceResponse {
-        let preparation = try await buildChatPreparation(request: request)
+        let preparation = try buildChatPreparation(request: request)
 
         await logRequestStart(RequestStartContext(
             requestId: preparation.requestId,

@@ -3,12 +3,12 @@ import Foundation
 extension OpenRouterAIService {
     internal func buildChatPreparation(
         request: OpenRouterChatHistoryInput
-    ) async throws -> ChatPreparation {
+    ) throws -> ChatPreparation {
         let requestId = UUID().uuidString
         let settings = loadSettingsSnapshot()
         try validateSettings(apiKey: settings.apiKey, model: settings.model)
 
-        let systemContent = try await buildSystemContent(
+        let systemContent = try buildSystemContent(
             input: BuildSystemContentInput(
                 systemPrompt: settings.systemPrompt,
                 hasTools: request.tools?.isEmpty == false,
@@ -17,8 +17,7 @@ extension OpenRouterAIService {
                 projectRoot: request.projectRoot,
                 reasoningMode: settings.reasoningMode,
                 stage: request.stage,
-                useNativeReasoning: supportsNativeReasoning,
-                conversationId: request.conversationId
+                useNativeReasoning: supportsNativeReasoning
             )
         )
 
@@ -64,35 +63,8 @@ extension OpenRouterAIService {
         }
     }
 
-    internal func buildSystemContent(input: BuildSystemContentInput) async throws -> String {
-        let activeTaskContext: String?
-        if input.hasTools, let conversationId = input.conversationId {
-            let store = ConversationPlanStore.shared
-            if let plan = await store.getPlan(conversationId: conversationId),
-               let activeItem = plan.activeItem,
-               activeItem.status == .active {
-                let completed = plan.items.filter { $0.status == .completed || $0.status == .blocked }.count
-                let total = plan.items.count
-                activeTaskContext = """
-                ## Current Task
-
-                You are working on task \(completed + 1) of \(total) in a structured plan.
-
-                **Task:** \(activeItem.description)
-                **Purpose:** \(activeItem.purpose)
-                **Context:** \(activeItem.context.joined(separator: ", "))
-                **Done when:** \(activeItem.doneCriteria)
-
-                Use `task_report` for mid-task checkpoints. Use `task_signoff` when this task is complete — the framework will inject the next task's context automatically.
-                """
-            } else {
-                activeTaskContext = nil
-            }
-        } else {
-            activeTaskContext = nil
-        }
-
-        return try SystemPromptAssembler().assemble(
+    internal func buildSystemContent(input: BuildSystemContentInput) throws -> String {
+        try SystemPromptAssembler().assemble(
             input: .init(
                 systemPromptOverride: input.systemPrompt,
                 hasTools: input.hasTools,
@@ -101,8 +73,7 @@ extension OpenRouterAIService {
                 projectRoot: input.projectRoot,
                 reasoningMode: input.reasoningMode,
                 stage: input.stage,
-                includeModelReasoning: !input.useNativeReasoning,
-                activeTaskContext: activeTaskContext
+                includeModelReasoning: !input.useNativeReasoning
             )
         )
     }

@@ -1643,8 +1643,7 @@ actor LocalModelProcessAIService: AIService {
                 projectRoot: projectRoot,
                 reasoningMode: settings.reasoningMode,
                 stage: stage,
-                includeModelReasoning: settings.reasoningMode.includesModelReasoning && stage != .tool_loop,
-                activeTaskContext: nil
+                includeModelReasoning: settings.reasoningMode.includesModelReasoning && stage != .tool_loop
             )
         )
         var prompt = systemPrompt

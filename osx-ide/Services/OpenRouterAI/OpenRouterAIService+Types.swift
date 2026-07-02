@@ -10,7 +10,6 @@ extension OpenRouterAIService {
         let reasoningMode: ReasoningMode
         let stage: AIRequestStage?
         let useNativeReasoning: Bool
-        let conversationId: String?    // Used to fetch active task context
     }
 
     struct NativeReasoningConfiguration: Equatable, Sendable {
@@ -35,7 +34,6 @@ extension OpenRouterAIService {
         let projectRoot: URL?
         let runId: String?
         let stage: AIRequestStage?
-        let conversationId: String?
     }
 
     internal struct RequestStartContext {
