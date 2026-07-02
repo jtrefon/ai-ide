@@ -9,7 +9,7 @@ import Foundation
 /// - breakOutCantContinue: abort the plan with a reason
 struct PlanTool: AITool {
     let name = "plan"
-    let description = "Structured task planner. Call this once to commit to a plan — you'll work through tasks one at a time, receiving full context for each."
+    let description = "Structured task planner. First call enters planning mode — research the problem using all tools, explore the codebase, understand scope. Second call locks your plan and starts execution. Then call finishTask after each task to advance."
     var parameters: [String: Any] {
         [
             "type": "object",
@@ -110,7 +110,31 @@ struct PlanTool: AITool {
 
         // Fetch or initialise the plan
         if var plan = await store.getPlan(conversationId: conversationId) {
-            // Existing plan — advance or break
+            // Check if we're transitioning from planning to execution
+            if plan.items.isEmpty && action == "finishTask" {
+                // Second call: agent has finished researching and is proposing the plan
+                let taskItem = PlanItem(id: "task-1",
+                    description: summary,
+                    purpose: "As planned during research phase",
+                    context: [],
+                    doneCriteria: "Work is complete and verified",
+                    status: .active,
+                    summary: nil,
+                    blockedReason: nil)
+                plan.items = [taskItem]
+                plan.currentIndex = 0
+                await store.setPlan(conversationId: conversationId, plan: plan)
+                return """
+                status: success
+                message: "Plan locked. You've opted into structured execution. Work on the task and call finishTask when done to advance."
+                content:
+                  action: "finishTask"
+                  task: "\(summary)"
+                  progress: "0/1"
+                """
+            }
+
+            // Existing plan with items — advance or break
             guard let activeIndex = plan.items.firstIndex(where: { $0.status == .active }) else {
                 return """
                 status: error
@@ -184,37 +208,26 @@ struct PlanTool: AITool {
               progress: "\(completedCount)/\(totalCount)"
             """
         } else {
-            // No plan exists yet — first call creates a simple plan from the user's request
-            // In production, the StrategicPlanningNode generates a proper plan beforehand.
-            // For ad-hoc use, create a single-task plan as fallback.
-            let fallbackPlan = TaskPlan(
+            // No plan exists — enter planning mode.
+            // Agent researches using all tools, then calls finishTask to transition to execution.
+            let planningPlan = TaskPlan(
                 id: UUID().uuidString,
                 goal: summary,
                 value: "Complete the requested work",
                 domain: .implementation,
                 mode: .coder,
-                items: [
-                    PlanItem(id: "task-1",
-                        description: summary,
-                        purpose: "As requested by the user",
-                        context: [],
-                        doneCriteria: "Work is complete and verified",
-                        status: .active,
-                        summary: nil,
-                        blockedReason: nil)
-                ],
+                items: [],
                 createdAt: Date(),
                 completedAt: nil,
                 currentIndex: 0
             )
-            await store.setPlan(conversationId: conversationId, plan: fallbackPlan)
+            await store.setPlan(conversationId: conversationId, plan: planningPlan)
             return """
             status: success
-            message: "Plan created. You've opted into structured execution. Call finishTask when done, raiseQuestion if stuck, or breakOutCantContinue if blocked."
+            message: "Planning mode. Research the problem using all available tools — read files, search the codebase, browse the web, run commands. Understand the current state and explore what's needed. When you have a clear plan, call finishTask again with your proposed task breakdown."
             content:
               action: "finishTask"
-              task: "\(summary)"
-              progress: "0/1"
+              phase: "planning"
             """
         }
     }

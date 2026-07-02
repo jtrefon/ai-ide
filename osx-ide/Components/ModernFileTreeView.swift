@@ -30,6 +30,19 @@ struct ModernFileTreeView: NSViewRepresentable {
         let containerView = NSView()
         containerView.translatesAutoresizingMaskIntoConstraints = false
 
+        let visualEffectView = NSVisualEffectView()
+        visualEffectView.material = .underWindowBackground
+        visualEffectView.blendingMode = .withinWindow
+        visualEffectView.state = .active
+        visualEffectView.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(visualEffectView)
+        NSLayoutConstraint.activate([
+            visualEffectView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            visualEffectView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            visualEffectView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            visualEffectView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+        ])
+
         let outlineView = NSOutlineView(frame: .zero)
         outlineView.setAccessibilityIdentifier(AccessibilityID.fileExplorerOutline)
         outlineView.headerView = nil
@@ -39,7 +52,7 @@ struct ModernFileTreeView: NSViewRepresentable {
         outlineView.focusRingType = .none
         outlineView.allowsMultipleSelection = false
         outlineView.selectionHighlightStyle = .regular
-        outlineView.backgroundColor = .textBackgroundColor
+        outlineView.backgroundColor = .clear
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
         column.resizingMask = .autoresizingMask
@@ -58,7 +71,7 @@ struct ModernFileTreeView: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.documentView = outlineView
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = .textBackgroundColor
+        scrollView.backgroundColor = .clear
         scrollView.autohidesScrollers = true
 
         context.coordinator.attach(outlineView: outlineView)
