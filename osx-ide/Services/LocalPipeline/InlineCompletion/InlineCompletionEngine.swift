@@ -192,8 +192,10 @@ final class InlineCompletionEngine {
                 NotificationCenter.default.post(name: .inlineCompletionStatusDidChange, object: InlineCompletionStatus.generating)
 
                 let result: InlineCompletionResult?
+                let usedStreaming: Bool
 
                 if let stream = try await self.inferenceService.inferStreaming(for: request, settings: settings) {
+                    usedStreaming = true
                     var accumulated = ""
                     do {
                         for try await chunk in stream {
@@ -226,6 +228,7 @@ final class InlineCompletionEngine {
                         result = nil
                     }
                 } else {
+                    usedStreaming = false
                     result = try await self.inferenceService.infer(for: request, settings: settings)
                 }
 
@@ -259,9 +262,19 @@ final class InlineCompletionEngine {
                 )
                 await self.telemetryService.recordObservedLatency(result.latencyMs)
 
-                let evaluation = self.ranker.evaluate(result, for: request, aggressiveness: settings.aggressiveness)
                 let presentation: InlineSuggestionPresentation?
-                switch evaluation {
+
+                if usedStreaming {
+                    presentation = InlineSuggestionPresentation(
+                        requestId: result.requestId,
+                        suggestionText: result.suggestionText,
+                        source: result.source,
+                        confidenceScore: result.confidenceScore,
+                        latencyMs: result.latencyMs
+                    )
+                } else {
+                    let evaluation = self.ranker.evaluate(result, for: request, aggressiveness: settings.aggressiveness)
+                    switch evaluation {
                     case let .accepted(candidate):
                         if let lastAccepted = self.lastAcceptedSuggestions[snapshot.paneID],
                            self.normalizedTrailingPrefix(request.prefix, candidate: candidate.suggestionText).hasSuffix(self.normalizedSuggestion(lastAccepted)),
@@ -291,6 +304,7 @@ final class InlineCompletionEngine {
                         )
                         presentation = nil
                     }
+                }
 
                 if let presentation {
                     await self.telemetryService.recordShown(presentation)

@@ -74,7 +74,7 @@ struct PlanTool: AITool {
         }
 
         // complete or blocked = sign off the current task
-        let conversationId = raw["__conversation_id"] as? String ?? ""
+        let conversationId = raw["_conversation_id"] as? String ?? ""
 
         guard !conversationId.isEmpty else {
             return """
