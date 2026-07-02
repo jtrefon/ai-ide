@@ -1,4 +1,4 @@
-# Planning & Execution Architecture v2
+# Planning & Execution Architecture
 
 ## Philosophy
 
@@ -7,99 +7,160 @@ The current approach — inject the entire plan, let the model self-manage — f
 1. **Context dilution**: The plan takes up tokens, and as the conversation grows, the plan gets compressed/garbled
 2. **Loss of focus**: The model sees ALL tasks at once and jumps ahead, repeats, or forgets where it is
 3. **No anchor**: After context compression, the model can't reliably recover what was done vs what remains
-4. **No enforcement**: The model can declare "done" at any point — the framework can't verify
-5. **Domain blindness**: The plan structure assumes coding tasks — but the same system must handle architecture, research, refactoring, analysis, and design
+4. **Domain blindness**: The plan structure assumes coding tasks — but the same system must handle architecture, research, refactoring, analysis, and design
 
-**The fix**: Instead of dumping the entire plan into context, the framework manages the plan and feeds **one task at a time**. The model focuses on ONE thing, delivers it, signs off, and the framework injects the next.
+**The fix**: Instead of dumping the entire plan into context, the framework manages the plan and feeds **one task at a time**. The model focuses on ONE thing, delivers it, calls `finishTask`, and the framework injects the next.
 
 ### Design Principles
 
 1. **Domain agnostic** — The structure must work for ANY goal: architectural design, code implementation, security audit, performance analysis, research investigation, legacy migration. The framework does not assume "files" or "code." The model fills in the domain-specific details.
 
-2. **Value-driven** — Each task carries not just WHAT to do, but WHY it matters and WHAT VALUE it delivers. This keeps the model grounded in purpose, not just mechanical execution.
+2. **Model-chosen, not enforced** — The model opts in by calling `plan.init`. Once opted in, the tool's responses guide the model through phases, but there is no pipeline enforcement. The model commits to the plan through tool contract, not system gates.
 
-3. **Maximum focus** — The model sees ONE task at a time. No context wandering, no premature optimization, no task skipping.
+3. **Value-driven** — Each task carries not just WHAT to do, but WHY it matters and WHAT VALUE it delivers. This keeps the model grounded in purpose, not just mechanical execution.
 
-4. **Context survival** — Each task's summary is a permanent record. After compression, the model can fully reorient from the current task context alone.
+4. **Maximum focus** — The model sees ONE task at a time. No context wandering, no premature optimization, no task skipping.
 
-5. **Final synthesis** — After all tasks complete, the model reviews the full plan with all summaries and produces a cohesive final deliverable.
+5. **Context survival** — Each task's summary is a permanent record. After compression, the model can fully reorient from the current task context alone.
+
+6. **Final synthesis** — After all tasks complete, the model provides a final summary using its own recorded summaries.
 
 ---
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        FRAMEWORK (MANAGER)                         │
-│                                                                     │
-│  ┌──────────────┐    ┌──────────────────┐    ┌──────────────────┐  │
-│  │ Plan Store    │    │ Task Injector    │    │ Sign-off Gate    │  │
-│  │ (persisted)   │───▶│ (one-at-a-time)  │───▶│ (enforces        │  │
-│  │              │    │                  │    │  completion)     │  │
-│  └──────────────┘    └──────────────────┘    └──────────────────┘  │
-│                              │                       │              │
-│                              ▼                       ▼              │
-│                    ┌──────────────────┐    ┌──────────────────┐  │
-│                    │ Context Window   │    │ Tool Loop        │  │
-│                    │ (current task    │    │ (model executes)  │  │
-│                    │  only)           │    │                  │  │
-│                    └──────────────────┘    └──────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      FRAMEWORK (MANAGER)                               │
+│                                                                         │
+│  ┌──────────────────────┐    ┌────────────────────┐                    │
+│  │ ConversationPlanStore│    │   PlanTool (AITool)│                    │
+│  │ (persisted JSON)     │◄───│                    │                    │
+│  │                      │    │ init / finishTask  │                    │
+│  │                      │    │ raiseQuestion      │                    │
+│  │                      │    │ breakOutCantContinue│                   │
+│  └──────────────────────┘    └────────────────────┘                    │
+│         │                           │                                  │
+│         ▼                           ▼                                  │
+│  ┌──────────────────────────────────────────────────────┐              │
+│  │               Phase Guidance (injected by tool)       │              │
+│  │  plan_research.md → on init                           │              │
+│  │  plan_execution.md → on finishTask transition          │              │
+│  └──────────────────────────────────────────────────────┘              │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### The Critical Shift
+### The Three-Phase Flow
 
-| Before | After |
-|--------|-------|
-| Entire plan in context | One task in context |
-| Model self-manages progress | Framework manages progress |
-| Model decides when done | Framework enforces task completion |
-| Compression loses everything | Compression loses only current task's working context |
-| Large context required | Small context window works (even 8k models) |
-| Model direction dilutes over time | Model gets fresh direction per task |
+```
+init ──► Research Phase ──► finishTask ──► Execution Phase ──► finishTask ──► All Done
+              │                                │
+              │ (all tools available)          │ (one task at a time)
+              ▼                                ▼
+        read_file, search,               read_file, write_file,
+        web_browse, grep...              patch_file, run_command...
+```
 
 ---
 
-## Pre-Execution Review Gate
+## The `plan` Tool
 
-Before execution begins, the plan is shown to the user for approval. This prevents the model from executing a plan the user disagrees with — and gives the user a chance to adjust scope or direction before work starts.
+### Actions
 
-### Flow
+| Action | When | What happens |
+|--------|------|-------------|
+| `init` | Any time | Enters research phase. No summary needed — context comes from the conversation. |
+| `finishTask` | End of research or task completion | Research → execution: agent provides task breakdown in summary. Execution → next: marks task done, injects next task context. |
+| `raiseQuestion` | Mid-plan | Returns `status: question` with the query. Framework pauses for user input. |
+| `breakOutCantContinue` | Stuck | Aborts plan with reason. All remaining tasks marked blocked. |
 
+### Parameters
+
+- **action** (required): `"init"` | `"finishTask"` | `"raiseQuestion"` | `"breakOutCantContinue"`
+- **summary** (optional): For finishTask. During research: proposed task breakdown (each task on a new line). During execution: what was done, files changed, verification result.
+- **question** (optional): Required for raiseQuestion.
+- **blocker_reason** (optional): Required for breakOutCantContinue.
+
+### Output Format
+
+All responses return a ToolFeedback envelope:
+
+```text
+status: success | blocked | question | error
+message: "Human-readable description"
+content:
+  action: "finishTask"
+  phase: "researching" | "executing"
+  task: "Description of current task" (execution phase only)
+  purpose: "Why this matters" (execution phase only)
+  done_criteria: "How to verify" (execution phase only)
+  progress: "2/5" (execution phase only)
+  all_done: true (last task only)
 ```
-1. [Plan generated by Strategic/TacticalPlanningNode]
-2. [Plan shown to user:]
-   +-----------------------------------------------------+
-   | Plan: Refactor persistence to repository pattern    |
-   |                                                     |
-   | Goal: Separate data access from business logic      |
-   | Tasks:                                              |
-   |   [ ] 1. Analyze current persistence code           |
-   |   [ ] 2. Design repository protocol                 |
-   |   [ ] 3. Implement CoreData backend                 |
-   |   [ ] 4. Update consumers                           |
-   |   [ ] 5. Verify with tests                          |
-   |                                                     |
-   | [Approve] [Modify] [Cancel]                         |
-   +-----------------------------------------------------+
-3. User approves > Task 1 begins
-4. User modifies > Plan is updated, shown again
-5. User cancels > No execution, model returns to chat
-```
 
-### Implementation
+### Tool Prompt (`plan.md`)
 
-The `StrategicPlanningNode` generates the plan struct. The `TacticalPlanningNode` refines it. The plan is returned to the user as a preview via `PlanOutlineView` with approve/modify/cancel buttons. Only after approval does the framework route to the tool loop.
+Loaded into system prompt as a concise reference:
+
+- **Purpose**: Break down complex work into structured tasks. Call `init` to opt in.
+- **When to Use**: Multi-step tasks needing focus and structure.
+- **Available Methods**: Table of init/finishTask/raiseQuestion/breakOutCantContinue.
+- **Parameters**: Quick reference only. Phase-specific guidance is injected by tool responses at the right moment.
+
+### Phase Prompts (loaded by tool, NOT in system prompt)
+
+- **`plan_research.md`**: Injected when `init` is called. Tells the model to research using all tools, then call `finishTask` with its task breakdown.
+- **`plan_execution.md`**: Injected when `finishTask` transitions to execution. Tells the model to work on the current task and call `finishTask` when complete.
+
+---
+
+## The Three Phases in Detail
+
+### Phase 1: Research
+
+Triggered by `plan(action: "init")`.
+
+The model enters research mode. It uses all available tools (read_file, search_project, web_search, web_browse, run_command, grep, find_file) to explore the codebase, understand the problem, and gather context.
+
+The research prompt tells the model:
+
+> Your ONLY next step is to call `plan(action: "finishTask", summary: "...")` with your proposed task breakdown. You cannot skip this — the plan does not advance until you call finishTask.
+
+The model's summary becomes the task breakdown. Each line becomes a task item.
+
+### Phase 2: Plan → Execution Transition
+
+Triggered by `plan(action: "finishTask", summary: "...")` during research.
+
+The tool parses the summary into plan items (one per line), stores them in `ConversationPlanStore`, and returns the execution phase prompt with the first task's context.
+
+### Phase 3: Task-by-Task Execution
+
+Triggered by the execution phase prompt after transition.
+
+The model works on one task at a time. Each task has:
+- **description**: What to do
+- **purpose**: Why it matters
+- **done_criteria**: How to verify completion
+- **progress**: "2/5" showing current position
+
+The model calls `plan(action: "finishTask", summary: "...")` when the task is complete. The tool:
+1. Marks the current task complete with the summary
+2. Advances to the next pending task
+3. Returns the next task's context
+
+When the last task is complete, the tool returns `all_done: true` and asks for a final summary.
+
+### Circuit Breakers
+
+At any phase, the model can:
+
+- `raiseQuestion(question: "...")` — "I need clarification." Returns `status: question`. Framework pauses for user input.
+- `breakOutCantContinue(summary: "...", blocker_reason: "...")` — "This cannot be done." Returns `status: blocked`. Plan is terminated, remaining tasks marked blocked.
 
 ---
 
 ## Data Structures
-
-The structures are **domain-agnostic**. They avoid assumptions about "code" or "files." Instead, each task carries:
-- **What** to do (actionable description)
-- **Why** it matters (value, purpose, connects to goal)
-- **Context** (anything the model needs to know — could be files, URLs, concepts, prior decisions)
-- **Done criteria** (how to verify completion, specific to the domain)
 
 ### TaskPlan (Persisted, survives compression)
 
@@ -108,12 +169,13 @@ struct TaskPlan: Codable, Sendable {
     let id: String              // UUID — links plan to conversation
     let goal: String            // Single sentence: WHAT we're achieving
     let value: String           // WHY this matters — what success looks like
-    let domain: String          // The domain of work: "architecture" | "implementation" | "research" | "refactor" | "analysis" | "design"
+    let domain: Domain          // The domain of work
     let mode: AIMode            // coder or agent
     let items: [PlanItem]       // Ordered list of all tasks
     let createdAt: Date
     var completedAt: Date?
     var currentIndex: Int       // Which item the model is working on
+    var isComplete: Bool        // All items done or blocked
 }
 ```
 
@@ -122,12 +184,12 @@ struct TaskPlan: Codable, Sendable {
 ```swift
 struct PlanItem: Codable, Sendable {
     let id: String
-    let description: String          // WHAT to do (actionable, domain-specific)
-    let purpose: String              // WHY this exists — what value it delivers
-    let context: [String]            // WHERE/WHAT — relevant context (files, URLs, concepts, references)
+    let description: String          // WHAT to do
+    let purpose: String              // WHY this exists
+    let context: [String]            // WHERE/WHAT — relevant files, URLs, concepts
     let doneCriteria: String         // HOW to verify completion
     var status: ItemStatus           // pending | active | completed | blocked
-    var summary: String?             // Model's sign-off summary when done
+    var summary: String?             // Model's finishTask summary when done
     var blockedReason: String?       // If status == blocked
 }
 
@@ -139,194 +201,14 @@ enum ItemStatus: String, Codable, Sendable {
 }
 ```
 
-### Example: Coding Refactor
+### ConversationPlanStore
 
-```json
-{
-  "goal": "Refactor persistence layer into repository pattern",
-  "value": "Clean separation of data access from business logic, making the codebase testable and maintainable",
-  "domain": "refactor",
-  "mode": "coder",
-  "currentIndex": 0,
-  "items": [
-    {
-      "id": "task-1",
-      "description": "Analyze current persistence code",
-      "purpose": "Must understand existing implementation before designing replacement",
-      "context": ["src/data/TodoDataManager.swift", "src/models/Todo.swift"],
-      "doneCriteria": "All persistence-related files have been read and understood",
-      "status": "active"
-    },
-    {
-      "id": "task-2",
-      "description": "Design and implement TodoRepository protocol",
-      "purpose": "Repository interface decouples data access from business logic, enabling testability",
-      "context": ["src/repository/TodoRepository.swift (new file)"],
-      "doneCriteria": "Protocol compiles with CRUD method signatures, build passes",
-      "status": "pending"
-    }
-  ]
-}
-```
+Actor-based store with JSON persistence. Provides:
 
-### Example: Research Investigation
-
-```json
-{
-  "goal": "Evaluate Swift 6 concurrency migration complexity for the networking layer",
-  "value": "Clear understanding of migration effort, risks, and migration strategy before committing engineering time",
-  "domain": "research",
-  "mode": "coder",
-  "items": [
-    {
-      "id": "task-1",
-      "description": "Catalog all async patterns currently used in networking layer",
-      "purpose": "Baseline understanding of current state before evaluating migration paths",
-      "context": ["src/networking/*.swift", "Concurrency section of Swift 6 migration guide"],
-      "doneCriteria": "Complete inventory of callback-based, Combine-based, and Task-based patterns",
-      "status": "active"
-    },
-    {
-      "id": "task-2",
-      "description": "Research Swift 6 data race safety requirements for network callbacks",
-      "purpose": "Identify which current patterns will break under strict concurrency checking",
-      "context": ["https://developer.apple.com/documentation/swift/concurrency"],
-      "doneCriteria": "Documented list of breaking changes and migration strategies per pattern",
-      "status": "pending"
-    }
-  ]
-}
-```
-
-### Example: Architecture Design
-
-```json
-{
-  "goal": "Design event-driven notification system for multi-tenant SaaS platform",
-  "value": "Scalable, decoupled notification architecture that supports email, push, and in-app channels",
-  "domain": "architecture",
-  "mode": "agent",
-  "items": [
-    {
-      "id": "task-1",
-      "description": "Design event schema and topic taxonomy",
-      "purpose": "Foundation for all event-driven communication — must support multi-tenancy and extensibility",
-      "context": ["Current notification code at src/notifications/", "AWS EventBridge docs", "CloudEvents spec"],
-      "doneCriteria": "Event schema document with topic hierarchy, envelope format, and tenant routing strategy",
-      "status": "active"
-    },
-    {
-      "id": "task-2",
-      "description": "Design channel adapter interfaces",
-      "purpose": "Each notification channel (email, push, in-app) needs a consistent interface so adding new channels doesn't require core changes",
-      "context": ["Event schema from Task 1", "Existing email integration at src/email/"],
-      "doneCriteria": "Channel adapter protocol with send(), getStatus(), retry() methods. Email and push implementations specified.",
-      "status": "pending"
-    }
-  ]
-}
-```
-
----
-
-## Tool Set: `task_report` + `task_signoff`
-
-Two tools replace the single `plan_signoff`. One for mid-task progress, one for completion.
-
-### Tool 1: `task_report`
-
-Optional mid-task reporting. The model calls this to checkpoint progress, report findings, or flag issues — without signing off the task.
-
-**Parameters:**
-- `notes` (required, string): Progress update, findings, blockers, or anything worth persisting.
-- `status` (optional, string): `"in_progress"` (default) or `"blocked"`.
-- `blocker_reason` (optional, string): Required when status = "blocked".
-
-**Output:** Confirms the report was saved. The task remains active — model keeps working.
-
-**When to use:**
-- Mid-task checkpoint before doing something risky
-- Found something unexpected that changes the approach
-- Getting stuck — report the blocker with context
-- Task is taking many turns — checkpoint to survive compression
-
-### Tool 2: `task_signoff`
-
-Complete the current task and advance to the next. This is the primary tool for task lifecycle.
-
-**Parameters:**
-- `summary` (required, string): What was done, what was created/changed, verification result.
-- `blocked` (optional, boolean): Set true if this task cannot be completed.
-- `blocked_reason` (optional, string): Required if blocked=true.
-
-**Output:** Next task context is injected. Previous task summary is saved permanently.
-
-### Tool Prompts
-
-The model no longer manages the plan. Instead there's a single tool for task lifecycle:
-
-### Tool Definition
-
-**Name:** `plan_signoff`
-
-**Purpose:** Complete the current task, provide a summary, and signal readiness for the next task. The framework then injects the next task into context.
-
-**Parameters:**
-- `summary` (required, string): Brief summary of what was done, what files were changed, and verification result. This becomes the permanent record of the task.
-- `blocked` (optional, boolean): Set true if this task cannot be completed
-- `blocked_reason` (optional, string): Required if blocked=true. Explain why.
-
-**Output Structure:**
-```
-status: success
-content:
-  task_completed: "task-1"
-  next_task: { id: "task-2", description: "Design and implement TodoRepository protocol" }
-  progress: "1/3 — 33% complete"
-  message: |
-    ✅ Task complete: Analyze current persistence code
-    Summary: Read TodoDataManager.swift and Todo.swift. Current implementation uses
-    direct CoreData calls in the view model layer. No abstraction layer exists.
-
-    ▶ Next: Design and implement TodoRepository protocol
-    Purpose: Repository interface decouples data access from business logic
-    Files: src/repository/TodoRepository.swift
-    Done when: Protocol compiles with CRUD method signatures
-```
-
-### Tool Prompt
-
-```
-# plan_signoff Tool
-
-## Purpose
-Complete the current task, provide a summary, and advance to the next task.
-The framework manages the task queue. You work on ONE task at a time.
-
-## When to Use
-- When you have COMPLETED the current task (met all done criteria)
-- When the current task is BLOCKED and cannot proceed
-
-## When NOT to Use
-- Do NOT use for partial progress (just keep working)
-- Do NOT use to skip tasks (the framework enforces order)
-
-## Parameters
-- **summary** (required, string): What was done, what files changed, verification result.
-- **blocked** (optional, boolean): Set true if task is blocked.
-- **blocked_reason** (optional, string): Why the task cannot proceed.
-
-## Output Structure
-Returns the next task description, purpose, files, and done criteria.
-Previous task summary is recorded permanently.
-The framework handles all task queue management.
-
-## Best Practices
-1. Only call when the task is TRULY done — verify with builds/tests first
-2. Write a useful summary that could reorient you after context compression
-3. If blocked, explain exactly what's needed to unblock
-4. Do NOT plan future tasks — the framework handles sequencing
-```
+- `getPlan(conversationId:)` — Fetch current plan
+- `setPlan(conversationId:plan:)` — Save plan
+- LRU cache with `maxEntries` limit
+- Legacy string-based API for backward compatibility
 
 ---
 
@@ -334,193 +216,101 @@ The framework handles all task queue management.
 
 ### What the Model Sees at Each Step
 
-**Step 1 — Task Begins:**
+**After `init` (research phase):**
 ```
-You are working on Task 1 of 3.
-
-📋 Current Task: Analyze current persistence code
-   Purpose: Must understand existing implementation before designing replacement
-   Files: src/data/TodoDataManager.swift, src/models/Todo.swift
-   Done when: All persistence-related files have been read and understood
-
-Use plan_signoff when complete.
-(No other tasks are visible — focus on this one.)
+Planning mode. Research the problem using all available tools —
+read files, search the codebase, browse the web, run commands.
+Understand the current state. When you have a clear plan,
+call finishTask with your proposed task breakdown.
 ```
 
-**Step 2 — After plan_signoff:**
+**After `finishTask` (execution phase begins):**
 ```
-✅ Task 1 complete: Analyze current persistence code
-   Summary: Read TodoDataManager.swift and Todo.swift...
+Plan locked. 3 tasks defined. Starting execution.
 
-You are working on Task 2 of 3.
+Current task: Analyze current persistence code
+Purpose: Must understand existing implementation
+Done when: All persistence-related files have been read and understood
+Progress: 0/3
 
-📋 Current Task: Design and implement TodoRepository protocol
-   Purpose: Repository interface decouples data access from business logic
-   Files: src/repository/TodoRepository.swift
-   Done when: Protocol compiles with CRUD method signatures, build passes
+Work on this task. When complete, call finishTask.
 ```
 
-**Step 3 — All tasks complete:**
+**After each `finishTask` during execution:**
 ```
-🎉 All 3 tasks complete!
+Well done. Task 1/3 complete. Now working on task 2.
 
-Goal: Refactor persistence layer into repository pattern
+Current task: Design repository protocol
+Purpose: Repository interface decouples data access from business logic
+Done when: Protocol compiles with CRUD method signatures
+Progress: 1/3
+```
+
+**After final `finishTask`:**
+```
+All 3 tasks complete. Provide a final summary.
+
 Summary:
   - Task 1: Analyzed existing code ...
   - Task 2: Designed protocol ...
   - Task 3: Implemented repository ...
-
-Final summary for user.
 ```
 
 ### What Survives Context Compression
 
 After compression, only these elements are re-injected:
 1. The **goal** (one sentence)
-2. The **current task** (with purpose, files, done criteria)
-3. The **completed tasks list** (id + summary only — full descriptions are dropped)
+2. The **current task** (with purpose, done criteria)
+3. The **completed tasks list** (id + summary only)
 4. The **last tool result or error**
 
 This is roughly 1/10th of the full plan. The model can fully reorient from this.
 
 ---
 
-## Loop Enforcement
+## Artifact Detector Integration
 
-### Sign-off Gate (in ToolLoopHandler)
+The framework has a `hasOutstandingRequestedArtifacts` check that parses the user's input for file paths and verifies they've been created on disk. This is a safety net for non-plan sessions.
+
+When a plan is active, the artifact detector defers to the plan. In `ToolLoopHandler.swift`, the `requested_artifacts_completed` path checks:
 
 ```swift
-// After each tool iteration:
-if currentItem.status == .active {
-    let planProgress = PlanChecklistTracker.progress(in: plan)
-    
-    // Check if model's response contains plan_signoff
-    if !hasSignoff(modelResponse) {
-        // Model is still working — continue tool loop
-        continue
-    }
-    
-    // Model called plan_signoff — validate
-    if planProgress.isComplete {
-        // All items done — allow final response
-        return finalResponse()
-    }
-    
-    // Advance to next item
-    let nextItem = planStore.advanceToNext()
-    injectTask(nextItem)  // Replace context with next task
-    continue
+let planStillActive = await ConversationPlanStore.shared
+    .getPlan(conversationId: conversationId)
+    .map { !$0.isComplete } ?? false
+
+if !planStillActive {
+    // only then: log artifacts completed and force final response
 }
 ```
 
-### What Gets Blocked
-
-- Model cannot exit the tool loop while a task is `active` (no `plan_signoff` called)
-- Model cannot skip tasks (framework controls `currentIndex`)
-- Model cannot see future tasks (prevents context roaming)
-- After compression, only current task context is restored
+This prevents the artifact detector from ending the session while plan tasks remain.
 
 ---
 
-## Implementation Plan
+## Implementation Status
 
-### Phase 1: Data Layer (existing, needs refactor)
+| Component | File | Status |
+|-----------|------|--------|
+| TaskPlan types | `Services/Planning/TaskPlan.swift` | ✅ Done |
+| ConversationPlanStore | `Services/Planning/ConversationPlanStore.swift` | ✅ Done |
+| PlanTool (init/finishTask/raiseQuestion/breakOutCantContinue) | `Services/Planning/PlanTool.swift` | ✅ Done |
+| Tool prompt (concise reference) | `Prompts/Tools/v2/plan.md` | ✅ Done |
+| Research phase prompt | `Prompts/Tools/v2/plan_research.md` | ✅ Done |
+| Execution phase prompt | `Prompts/Tools/v2/plan_execution.md` | ✅ Done |
+| Mode advertisement | `Prompts/System/mode-coder.md` | ✅ Done |
+| Prompt wiring | `SystemPromptAssembler.swift` | ✅ Done |
+| Tool registration | `ConversationToolProvider.swift` | ✅ Done |
+| Artifact detector deferral | `ToolLoopHandler.swift` | ✅ Done |
 
-- Refactor `ConversationPlanStore` to store `TaskPlan` struct instead of raw markdown
-- Refactor `PlanChecklistTracker` to work with `PlanItem.status` instead of `[ ]` / `[x]`
-- Update `PlanOutlineView` to render structured plan
-- Update `PlanActiveItemResolver` to return current `PlanItem`
+### Design Principles Applied
 
-### Phase 2: Tool (new)
-
-- Create `PlanSignoffTool.swift` — the `plan_signoff` AITool
-- Register in `ConversationToolProvider.swift`
-- Create `Prompts/Tools/v2/plan_signoff.md` prompt
-
-### Phase 3: Context Injection (new)
-
-- Add `TaskInjector` — injects current task context into system prompt
-- Integrate with `SystemPromptAssembler` — replaces the full-plan injection with per-task injection
-- Handle context compression — store only completed item summaries
-
-### Phase 4: Loop Enforcement (new)
-
-- Add sign-off gate in `ToolLoopHandler`
-- Wire to `DispatcherNode` — prevent routing to final response while tasks remain
-- Handle blocked tasks — allow exit but require explanation
-
-### Phase 5: Plan Generation (refactor)
-
-- Update `StrategicPlanningNode` to generate structured `TaskPlan` (not raw markdown)
-- Update `TacticalPlanningNode` to refine items with purpose/context/done-criteria
-
----
-
-## Final Review Flow
-
-After the last task is signed off, the framework injects the **complete plan with all summaries** and asks the model to produce a final synthesis. This is critical — the model never sees the full picture during execution, so it needs a dedicated review pass at the end.
-
-### Flow
-
-```
-1. Model calls plan_signoff on final task
-2. Framework detects: all tasks complete, currentIndex == items.count
-3. Framework injects FULL PLAN (all items with their summaries):
-   ┌─────────────────────────────────────────────────────┐
-   │ ✅ All tasks complete!                               │
-   │                                                      │
-   │ Goal: Refactor persistence into repository pattern   │
-   │ Value: Clean separation of data access from logic    │
-   │ Domain: refactor                                     │
-   │                                                      │
-   │ 📋 Completed Tasks:                                  │
-   │ [x] Task 1: Analyze current persistence code         │
-   │     Summary: Read all files, documented patterns     │
-   │ [x] Task 2: Design repository protocol               │
-   │     Summary: Created TodoRepository with CRUD ops    │
-   │ [x] Task 3: Implement CoreData backend               │
-   │     Summary: Replaced TodoDataManager, tests pass    │
-   │                                                      │
-   │ Please review all completed work and provide a       │
-   │ final summary covering:                              │
-   │ - What was achieved                                  │
-   │ - Key design decisions                               │
-   │ - Files created/modified                             │
-   │ - Verification status                                │
-   │ - Any remaining considerations                       │
-   └─────────────────────────────────────────────────────┘
-4. Model produces final synthesis (no tools needed — just text)
-5. Framework delivers to user as the final response
-```
-
-### What Gets Injected
-
-The full plan document — but only `description + summary + status` per item (not the full context/purpose/done-criteria, which were for execution guidance and are no longer needed). The model sees:
-
-- **Goal** (reorients to the big picture)
-- **Value** (reminds why this mattered)
-- **Domain** (frames the synthesis appropriately)
-- **Each item**: `description` + `summary` (the model's own words from sign-off)
-
-This is ~200-300 tokens total for a 10-item plan. Negligible overhead.
-
-### Benefits
-
-1. **Context for synthesis** — The model has ALL the information needed for a comprehensive summary
-2. **No hallucination** — The model uses its own recorded summaries, not fabricated memory
-3. **Cohesive deliverable** — The final output connects individual tasks into a unified narrative
-4. **Accountability** — The model reviews what it actually did vs what was planned
-
----
-
-## Advantage Over Current Approach
-
-| Aspect | Current (passive plan) | Proposed (managed plan) |
-|--------|----------------------|------------------------|
-| Context usage | Entire plan + history | Current task only |
-| Scalability | Limited by context window | Works with any context window |
-| Focus | Model self-manages | Framework enforces one-at-a-time |
-| Recovery after compression | Unreliable — vague plan | Complete — task has full context |
-| Completion enforcement | None — model decides | Hard — framework enforces |
-| Task summary | Lost in history | Saved permanently |
-| Small model support | Poor — needs large context | Excellent — minimal context per task |
+| Before (old design) | After (current) |
+|--------|-------|
+| `task_report` + `task_signoff` (two tools) | `plan` tool with `init/finishTask/raiseQuestion/breakOutCantContinue` |
+| Pipeline enforcement | Model-chosen via tool contract |
+| Two phases (execute tasks) | Three phases (research → plan → execution) |
+| Mid-task `report` was vague | `finishTask` always ends a phase — never initiates |
+| No way to ask questions | `raiseQuestion` pauses for user input |
+| Artifact detector overrode plan | Artifact detector defers to plan |
+| Context injection in pipeline | Phase guidance injected by tool responses |
