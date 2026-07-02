@@ -1,12 +1,29 @@
-# Tool: find_file
+# find_file Tool
 
-WHAT: Finds files by filename (case-insensitive substring match) within the project.
+## Purpose
+Find files by name using case-insensitive substring matching across the project.
 
-WHEN: Use when you know the filename but not its full path. Faster than list_files + manual scanning through directories.
+## When to Use
+- When you know the filename but not its full path
+- Quick lookup before reading or editing a file
 
-HOW:
-- query (required, string): The filename to search for. Case-insensitive substring match.
-- path (optional, string): Directory to restrict the search to. Defaults to project root.
-- Overloading: Use the exact filename for precise results. Use a substring to find related files (e.g., "network" finds NetworkManager, NetworkService, etc.).
+## When NOT to Use
+- Do NOT use for searching file CONTENTS — use search_project instead
+- Do NOT use for exploring directory structure — use list_files instead
 
-OUTPUT: Returns the full paths of all matching files.
+## Parameters
+- **query** (required, string): Filename to search for (case-insensitive substring match).
+- **path** (optional, string): Directory to restrict the search to. Defaults to project root.
+
+## Usage Examples
+- `{ "query": "NetworkManager" }` — finds NetworkManager.swift, NetworkManagerTest.swift, etc.
+- `{ "query": "config", "path": "src" }`
+
+## Output Structure
+Returns a ToolFeedback envelope:
+- **status**: "success"
+- **content.items[]**: Full file paths matching the query
+- **message**: "Found 3 files"
+
+## Success Indicators
+- content.items contains matching file paths

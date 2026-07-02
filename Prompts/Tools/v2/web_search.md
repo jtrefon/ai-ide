@@ -1,11 +1,35 @@
-# Tool: web_search
+# web_search Tool
 
-WHAT: Searches the web using Google and returns up to 10 organic search results with titles, URLs, and snippets.
+## Purpose
+Search the web using Google to find current information, documentation, tutorials, and external resources.
 
-WHEN: Use to find current information, documentation, tutorials, API references, or external resources. Always follow up with web_browse to read full articles from the results.
+## When to Use
+- Finding documentation for libraries, frameworks, or APIs
+- Researching best practices, patterns, or solutions
+- Looking up error messages or troubleshooting
+- Finding tutorials or guides
 
-HOW:
-- query (required, string): The search query. Use natural language or keywords.
-- Overloading: Be specific with your query for better results. Include relevant keywords like "documentation", "tutorial", "API", or "best practices".
+## When NOT to Use
+- Do NOT use for information already in the project codebase
+- Do NOT use for simple lookups that read_file can handle
 
-OUTPUT: Returns search results with title, URL, and text snippet for each result.
+## Parameters
+- **query** (required, string): The search query. Use natural language or keywords.
+
+## Usage Examples
+- `{ "query": "Swift 6 concurrency best practices 2026" }`
+- `{ "query": "React TypeScript testing framework comparison" }`
+
+## Output Structure
+Returns a ToolFeedback envelope:
+- **status**: "success"
+- **content.items[]**: Search results with title, URL, and snippet
+- **message**: "Found 10 results"
+
+## Success Indicators
+- content.items contains search results
+
+## Best Practices
+1. Be specific with queries for better results
+2. Follow up with web_browse to read full articles from the results
+3. Use current year in queries for up-to-date information

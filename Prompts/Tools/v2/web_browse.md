@@ -1,11 +1,37 @@
-# Tool: web_browse
+# web_browse Tool
 
-WHAT: Fetches a URL and returns the page title, URL, and cleaned readable text content (strips ads, navigation, and clutter).
+## Purpose
+Fetch a URL and extract the page's title and main readable text content (strips ads, navigation, and clutter).
 
-WHEN: Use AFTER web_search to read full articles, documentation pages, API references, or tutorials. Essential for getting complete information that snippets don't provide.
+## When to Use
+- AFTER web_search to read full articles, documentation, or API references
+- Reading detailed guides or tutorials
+- Checking API documentation for specific parameters or endpoints
 
-HOW:
-- url (required, string): The full URL to browse, including https://.
-- Overloading: Use the URLs returned by web_search results. For documentation, browse the specific version or section page.
+## When NOT to Use
+- Do NOT use for search — use web_search instead
+- Do NOT use for pages behind login walls or paywalls
 
-OUTPUT: Returns the page title, URL, and main body text as plain text.
+## Parameters
+- **url** (required, string): The full URL to browse, including https://.
+
+## Usage Examples
+- `{ "url": "https://developer.apple.com/documentation/swift/concurrency" }`
+- `{ "url": "https://react.dev/learn/typescript" }`
+
+## Output Structure
+Returns a ToolFeedback envelope:
+- **status**: "success" | "error"
+- **content.text**: The page title and main body text
+- **message**: URL and content length
+
+## Success Indicators
+- content.text contains readable page content
+
+## Error Handling
+- NETWORK_ERROR: URL unreachable. Check the URL or try again.
+- BLOCKED: Site may be blocking automated access. Try a different source.
+
+## Best Practices
+1. Always use URLs from web_search results
+2. Browse specific documentation pages, not search results pages
