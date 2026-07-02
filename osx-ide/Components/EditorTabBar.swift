@@ -34,9 +34,12 @@ struct EditorTabBar: View {
                 .padding(.vertical, 4)
             }
             .frame(height: 32)
-            .background(.windowBackground)
-
-            Divider()
+            .background(.thinMaterial)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(.separator)
+                    .frame(height: 1)
+            }
         }
     }
 }
@@ -75,24 +78,24 @@ private struct TabBarButton: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .opacity(isHovered ? 1 : 0)
+                .opacity((isHovered || isActive) ? 1 : 0)
                 .frame(width: 16, height: 16)
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .padding(.vertical, 6)
             .background {
+                let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
                 if isActive {
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 5))
+                    shape
+                        .fill(.regularMaterial)
+                        .overlay(
+                            shape.stroke(.separator.opacity(0.35), lineWidth: 1)
+                        )
                 } else {
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(isHovered
-                            ? Color(nsColor: .controlBackgroundColor).opacity(0.15)
-                            : Color.clear)
-                        .strokeBorder(
-                            Color(nsColor: .separatorColor).opacity(isHovered ? 0.35 : 0.2),
-                            lineWidth: 1
+                    shape
+                        .fill(isHovered ? Color(nsColor: .controlBackgroundColor).opacity(0.12) : .clear)
+                        .overlay(
+                            shape.stroke(.separator.opacity(isHovered ? 0.35 : 0.18), lineWidth: 1)
                         )
                 }
             }

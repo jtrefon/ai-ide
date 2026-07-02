@@ -821,7 +821,10 @@ final class ToolLoopHandler {
                     projectRoot: projectRoot
                ),
                !toolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }) {
-                await AIToolTraceLogger.shared.log(type: "chat.tool_loop_requested_artifacts_completed", data: [
+                // Check if a structured plan is active — if so, the plan governs completion
+                let planStillActive = await ConversationPlanStore.shared.getPlan(conversationId: conversationId).map { !$0.isComplete } ?? false
+                if !planStillActive {
+                    await AIToolTraceLogger.shared.log(type: "chat.tool_loop_requested_artifacts_completed", data: [
                     "runId": runId,
                     "iteration": toolIteration
                 ])
@@ -838,6 +841,7 @@ final class ToolLoopHandler {
                 )
                 break
             }
+        }
             await advancePlanProgressIfNeeded(
                 conversationId: conversationId,
                 successfulMutationThisIteration: successfulMutationThisIteration
@@ -1881,7 +1885,12 @@ final class ToolLoopHandler {
         return mutatedArtifactPaths.allSatisfy { fileManager.fileExists(atPath: $0) }
     }
 
-    private func hasOutstandingRequestedArtifacts(userInput: String, projectRoot: URL) -> Bool {
+    private func hasOutstandingRequestedArtifacts(userInput: String, projectRoot: URL, planIncomplete: Bool = false) -> Bool {
+        // When a structured plan is active, the plan governs completion — not file-level artifact checks.
+        if planIncomplete {
+            return true
+        }
+
         let explicitArtifacts = requestedExplicitArtifacts(from: userInput, projectRoot: projectRoot)
         if explicitArtifacts.contains(where: { !FileManager.default.fileExists(atPath: $0) }) {
             return true

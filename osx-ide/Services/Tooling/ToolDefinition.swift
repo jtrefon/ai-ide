@@ -14,7 +14,6 @@ struct ToolSideEffect: OptionSet, Sendable, Codable {
     static let modifiesFile = ToolSideEffect(rawValue: 1 << 3)
     static let executesCommand = ToolSideEffect(rawValue: 1 << 4)
     static let makesNetworkRequest = ToolSideEffect(rawValue: 1 << 5)
-    static let none = ToolSideEffect(rawValue: 0)
 }
 
 enum ToolIsolation: String, Sendable, Codable { case concurrent, pathIsolated, sessionIsolated, globallySerial }
@@ -133,7 +132,7 @@ struct ToolDefinition: Sendable {
 
     static func query(
         name: String, desc: String, params: JSONSchema, caps: Set<ToolCapability>,
-        se: ToolSideEffect = .none, cf: String, pm: PromptMaterial,
+        se: ToolSideEffect = [], cf: String, pm: PromptMaterial,
         errorCodes: [ErrorCodeDocumentation] = [],
         exec: @escaping @Sendable (ToolExecutionRequest) async throws -> ToolFeedback
     ) -> ToolDefinition {
