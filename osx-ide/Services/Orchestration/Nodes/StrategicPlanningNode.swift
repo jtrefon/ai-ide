@@ -24,18 +24,16 @@ struct StrategicPlanningNode: OrchestrationNode {
             return state.transitioning(to: nextNodeId)
         }
 
-        let existingPlan = await planStore.get(conversationId: state.request.conversationId) ?? ""
-        let progress = PlanChecklistTracker.progress(in: existingPlan)
-        let shouldReuseExistingPlan = !existingPlan.isEmpty && progress.total > 0 && !progress.isComplete
+        let existingPlan = await planStore.getPlan(conversationId: state.request.conversationId)
+        let shouldReuse = existingPlan != nil && !existingPlan!.isComplete
 
-        let plan: String
-        if shouldReuseExistingPlan {
-            plan = existingPlan
-        } else {
-            plan = StrategicPlanSynthesizer.build(userInput: state.request.userInput)
+        if shouldReuse {
+            return state.transitioning(to: nextNodeId)
         }
 
-        await planStore.set(conversationId: state.request.conversationId, plan: plan)
+        // Generate a new structured plan
+        let plan = StrategicPlanSynthesizer.buildStructured(userInput: state.request.userInput, mode: state.request.mode)
+        await planStore.setPlan(conversationId: state.request.conversationId, plan: plan)
         return state.transitioning(to: nextNodeId)
     }
 }

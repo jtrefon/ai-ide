@@ -22,12 +22,25 @@ struct OrchestrationExecutionSignalBuilder {
             deliveryState = .missing
         }
 
-        let planMarkdown = await planStore.get(conversationId: state.request.conversationId) ?? ""
-        let progress = PlanChecklistTracker.progress(in: planMarkdown)
-        let planProgress = OrchestrationState.ExecutionSignals.PlanProgress(
-            completed: progress.completed,
-            total: progress.total
-        )
+        let planMarkdown: String
+        let planProgress: OrchestrationState.ExecutionSignals.PlanProgress
+        if let structuredPlan = await planStore.getPlan(conversationId: state.request.conversationId) {
+            let completed = structuredPlan.items.filter { $0.status == .completed }.count
+            let total = structuredPlan.items.count
+            planProgress = OrchestrationState.ExecutionSignals.PlanProgress(
+                completed: completed,
+                total: total
+            )
+            planMarkdown = structuredPlan.markdown
+        } else {
+            let markdown = await planStore.get(conversationId: state.request.conversationId) ?? ""
+            let progress = PlanChecklistTracker.progress(in: markdown)
+            planProgress = OrchestrationState.ExecutionSignals.PlanProgress(
+                completed: progress.completed,
+                total: progress.total
+            )
+            planMarkdown = markdown
+        }
 
         let missingClaimedArtifacts = !content.isEmpty && ChatPromptBuilder.hasMissingClaimedFileArtifacts(
             content: content,

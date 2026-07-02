@@ -18,6 +18,55 @@ enum StrategicPlanSynthesizer {
             4. [ ] Verify correctness and report completion
             """
     }
+
+    /// Generate a structured TaskPlan from the user input.
+    static func buildStructured(userInput: String, mode: AIMode) -> TaskPlan {
+        let normalized = userInput.lowercased()
+        let domain: PlanDomain = {
+            if normalized.contains("architecture") || normalized.contains("design") { return .architecture }
+            if normalized.contains("research") || normalized.contains("investigate") || normalized.contains("evaluate") { return .research }
+            if normalized.contains("refactor") || normalized.contains("migrate") || normalized.contains("restructure") { return .refactor }
+            if normalized.contains("analyze") || normalized.contains("audit") || normalized.contains("review") { return .analysis }
+            return .implementation
+        }()
+
+        return TaskPlan(
+            id: UUID().uuidString,
+            goal: userInput,
+            value: "Complete the requested task with verified, working results",
+            domain: domain,
+            mode: mode,
+            items: [
+                PlanItem(id: "task-1",
+                    description: "Explore and understand the relevant codebase areas",
+                    purpose: "Must understand current state before making changes",
+                    context: ["Use list_files, find_file, search_project to locate relevant files"],
+                    doneCriteria: "All relevant files identified and read",
+                    status: .pending, summary: nil, blockedReason: nil),
+                PlanItem(id: "task-2",
+                    description: "Plan the approach and identify files to modify",
+                    purpose: "Clear roadmap minimizes wasted work and ensures consistency",
+                    context: ["Review findings from task 1"],
+                    doneCriteria: "Exact list of files to create/modify is known",
+                    status: .pending, summary: nil, blockedReason: nil),
+                PlanItem(id: "task-3",
+                    description: "Implement the changes",
+                    purpose: "Execute the planned modifications",
+                    context: ["Read files before editing", "Use patch_file for edits", "Use write_file for new files"],
+                    doneCriteria: "All planned changes applied successfully",
+                    status: .pending, summary: nil, blockedReason: nil),
+                PlanItem(id: "task-4",
+                    description: "Verify correctness and summarize",
+                    purpose: "Ensure the changes work and nothing is broken",
+                    context: ["Run build/tests if applicable", "Read back modified files to verify"],
+                    doneCriteria: "Changes verified and final summary ready",
+                    status: .pending, summary: nil, blockedReason: nil)
+            ],
+            createdAt: Date(),
+            completedAt: nil,
+            currentIndex: 0
+        )
+    }
 }
 
 @MainActor

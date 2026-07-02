@@ -48,6 +48,9 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
         func reset() {
             plans.removeAll()
         }
+
+        func getPlan(conversationId: String) -> TaskPlan? { nil }
+        func setPlan(conversationId: String, plan: TaskPlan) {}
     }
 
     private struct StubBranchExecutionContinuationDecider: BranchExecutionContinuationDeciding {

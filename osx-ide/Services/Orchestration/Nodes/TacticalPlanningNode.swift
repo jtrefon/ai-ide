@@ -24,12 +24,23 @@ struct TacticalPlanningNode: OrchestrationNode {
             return state.transitioning(to: nextNodeId)
         }
 
-        let existingPlan = await planStore.get(conversationId: state.request.conversationId) ?? ""
-        let progress = PlanChecklistTracker.progress(in: existingPlan)
-        let shouldPreserveCurrentPlan = !existingPlan.isEmpty && progress.total > 0 && !progress.isComplete
+        if let existingPlan = await planStore.getPlan(conversationId: state.request.conversationId) {
+            let branchExecution = BranchExecutionPlanner.makeBranchExecution(
+                tacticalPlan: existingPlan.markdown,
+                userInput: state.request.userInput
+            )
+            return state.transitioning(
+                to: nextNodeId,
+                branchExecution: branchExecution
+            )
+        }
+
+        let existingStringPlan = await planStore.get(conversationId: state.request.conversationId) ?? ""
+        let progress = PlanChecklistTracker.progress(in: existingStringPlan)
+        let shouldPreserveCurrentPlan = !existingStringPlan.isEmpty && progress.total > 0 && !progress.isComplete
 
         let unifiedPlan = await TacticalPlanSynthesizer.mergeIntoStrategicPlan(
-            strategicPlan: existingPlan,
+            strategicPlan: existingStringPlan,
             userInput: state.request.userInput,
             preserveCurrentPlan: shouldPreserveCurrentPlan
         )
@@ -46,7 +57,7 @@ struct TacticalPlanningNode: OrchestrationNode {
 
         return state.transitioning(
             to: nextNodeId,
-            branchExecution: branchExecution,
+            branchExecution: branchExecution
         )
     }
 }

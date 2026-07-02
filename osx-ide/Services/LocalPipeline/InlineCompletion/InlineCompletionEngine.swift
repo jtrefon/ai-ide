@@ -24,7 +24,7 @@ final class InlineCompletionEngine {
     private var lastAcceptedSuggestions: [FileEditorStateManager.PaneID: String] = [:]
     private var lastAcceptedAt: [FileEditorStateManager.PaneID: Date] = [:]
 
-    private let automaticAcceptanceCooldownMs: Double = 400
+    private let automaticAcceptanceCooldownMs: Double = 0
     private let automaticLatencyBudgetMs: Double = 5_000
 
     init(

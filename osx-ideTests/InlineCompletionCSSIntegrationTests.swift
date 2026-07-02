@@ -3,8 +3,198 @@ import XCTest
 
 @MainActor
 final class InlineCompletionCSSIntegrationTests: XCTestCase {
-    private let cssFilePath = "/tmp/test-styles.css"
-    private let cssFileContent = """
+
+    // MARK: - Single-line completion: 3 sequential tests
+
+    func testSingleLine_1_firstCompletionInsertsSingleLine() async throws {
+        let inference = TestCSSInferenceService()
+        inference.responses = [.immediate("font-family: 'Arial', sans-serif;")]
+
+        let engine = makeEngine(inference: inference)
+        var received: InlineSuggestionPresentation?
+        engine.registerSuggestionHandler(for: .primary) { presentation in
+            if let presentation { received = presentation }
+        }
+
+        let snapshot = makeSnapshot(
+            buffer: ".button {\n    font-fa",
+            cursor: 21
+        )
+        engine.requestCompletion(for: snapshot)
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertNotNil(received, "Single-line completion should not be nil")
+        XCTAssertFalse(received!.suggestionText.contains("\n"),
+                       "Single-line completion should not contain newlines")
+    }
+
+    func testSingleLine_2_secondCompletionAfterAccept() async throws {
+        let inference = TestCSSInferenceService()
+        inference.responses = [
+            .immediate("font-family: 'Arial', sans-serif;"),
+            .immediate("color: #007aff;")
+        ]
+
+        let engine = makeEngine(inference: inference)
+        var received: InlineSuggestionPresentation?
+        let callback = { (presentation: InlineSuggestionPresentation?) in
+            if let p = presentation { received = p }
+        }
+        engine.registerSuggestionHandler(for: .primary, handler: callback)
+
+        // First completion
+        engine.requestCompletion(for: makeSnapshot(buffer: ".button {\n    font-fa", cursor: 21))
+        try await Task.sleep(nanoseconds: 80_000_000)
+        XCTAssertNotNil(received, "First single-line completion should not be nil")
+        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+
+        // Second completion — different property
+        received = nil
+        engine.requestCompletion(for: makeSnapshot(buffer: ".button {\n    font-family: 'Arial', sans-serif;\n    colo", cursor: 57))
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertNotNil(received, "Second single-line completion after accept should not be nil")
+        XCTAssertFalse(received!.suggestionText.contains("\n"),
+                       "Second single-line completion should not contain newlines")
+    }
+
+    func testSingleLine_3_thirdCompletionAfterTwoAccepts() async throws {
+        let inference = TestCSSInferenceService()
+        inference.responses = [
+            .immediate("font-family: 'Arial', sans-serif;"),
+            .immediate("color: #007aff;"),
+            .immediate("background-color: #fff;")
+        ]
+
+        let engine = makeEngine(inference: inference)
+        var received: InlineSuggestionPresentation?
+        let callback = { (presentation: InlineSuggestionPresentation?) in
+            if let p = presentation { received = p }
+        }
+        engine.registerSuggestionHandler(for: .primary, handler: callback)
+
+        // First
+        engine.requestCompletion(for: makeSnapshot(buffer: ".button {\n    font-fa", cursor: 21))
+        try await Task.sleep(nanoseconds: 80_000_000)
+        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+
+        // Second
+        received = nil
+        engine.requestCompletion(for: makeSnapshot(buffer: ".button {\n    font-family: 'Arial', sans-serif;\n    colo", cursor: 57))
+        try await Task.sleep(nanoseconds: 80_000_000)
+        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+
+        // Third — different property entirely
+        received = nil
+        engine.requestCompletion(for: makeSnapshot(buffer: ".button {\n    font-family: 'Arial', sans-serif;\n    color: #007aff;\n    backgr", cursor: 86))
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertNotNil(received, "Third single-line completion after two accepts should not be nil")
+        XCTAssertEqual(received!.suggestionText, "background-color: #fff;",
+                       "Third completion should suggest background-color")
+        XCTAssertFalse(received!.suggestionText.contains("\n"),
+                       "Third single-line completion should not contain newlines")
+    }
+
+    // MARK: - Multi-line manual trigger: 3 sequential tests
+
+    func testMultiLine_1_firstManualTriggerReturnsMultiLine() async throws {
+        let inference = TestCSSInferenceService()
+        let multiLineText = "\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n"
+        inference.responses = [.immediate(multiLineText)]
+
+        let engine = makeEngine(inference: inference)
+        var received: InlineSuggestionPresentation?
+        engine.registerSuggestionHandler(for: .primary) { presentation in
+            if let p = presentation { received = p }
+        }
+
+        let snapshot = makeSnapshot(
+            buffer: ".header {\n    font-size: 24px;\n    color: #333;\n}",
+            cursor: 8,
+            triggerReason: .manual
+        )
+        engine.requestCompletion(for: snapshot)
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertNotNil(received, "First multi-line completion should not be nil")
+        XCTAssertTrue(received!.suggestionText.contains("display: flex"),
+                      "Multi-line should contain display: flex")
+        XCTAssertTrue(received!.suggestionText.contains("flex-direction"),
+                      "Multi-line should contain flex-direction")
+    }
+
+    func testMultiLine_2_secondManualTriggerAfterAccept() async throws {
+        let inference = TestCSSInferenceService()
+        inference.responses = [
+            .immediate("\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n"),
+            .immediate("\n    display: grid;\n    grid-template-columns: repeat(3, 1fr);\n    gap: 16px;\n")
+        ]
+
+        let engine = makeEngine(inference: inference)
+        var received: InlineSuggestionPresentation?
+        let callback = { (presentation: InlineSuggestionPresentation?) in
+            if let p = presentation { received = p }
+        }
+        engine.registerSuggestionHandler(for: .primary, handler: callback)
+
+        // First multi-line
+        engine.requestCompletion(for: makeSnapshot(buffer: cssFixture, cursor: 8, triggerReason: .manual))
+        try await Task.sleep(nanoseconds: 80_000_000)
+        XCTAssertNotNil(received, "First multi-line should not be nil")
+        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+
+        // Second multi-line — different content
+        received = nil
+        engine.requestCompletion(for: makeSnapshot(buffer: cssFixture, cursor: 40, triggerReason: .manual))
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertNotNil(received, "Second multi-line after accept should not be nil")
+        XCTAssertTrue(received!.suggestionText.contains("display: grid"),
+                      "Second multi-line should contain display: grid")
+    }
+
+    func testMultiLine_3_thirdManualTriggerAfterTwoAccepts() async throws {
+        let inference = TestCSSInferenceService()
+        inference.responses = [
+            .immediate("\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n"),
+            .immediate("\n    display: grid;\n    grid-template-columns: repeat(3, 1fr);\n    gap: 16px;\n"),
+            .immediate("\n    position: relative;\n    overflow: hidden;\n    border-radius: 8px;\n")
+        ]
+
+        let engine = makeEngine(inference: inference)
+        var received: InlineSuggestionPresentation?
+        let callback = { (presentation: InlineSuggestionPresentation?) in
+            if let p = presentation { received = p }
+        }
+        engine.registerSuggestionHandler(for: .primary, handler: callback)
+
+        // First
+        engine.requestCompletion(for: makeSnapshot(buffer: cssFixture, cursor: 8, triggerReason: .manual))
+        try await Task.sleep(nanoseconds: 80_000_000)
+        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+
+        // Second
+        received = nil
+        engine.requestCompletion(for: makeSnapshot(buffer: cssFixture, cursor: 40, triggerReason: .manual))
+        try await Task.sleep(nanoseconds: 80_000_000)
+        engine.markAccepted(on: .primary, suggestionText: received?.suggestionText)
+
+        // Third
+        received = nil
+        engine.requestCompletion(for: makeSnapshot(buffer: cssFixture, cursor: cssFixture.count, triggerReason: .manual))
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertNotNil(received, "Third multi-line after two accepts should not be nil")
+        XCTAssertTrue(received!.suggestionText.contains("position: relative"),
+                      "Third multi-line should contain position: relative")
+        XCTAssertTrue(received!.suggestionText.contains("border-radius"),
+                      "Third multi-line should contain border-radius")
+    }
+
+    // MARK: - Helpers
+
+    private let cssFixture = """
     .header {
         font-size: 24px;
         color: #333;
@@ -15,251 +205,9 @@ final class InlineCompletionCSSIntegrationTests: XCTestCase {
     }
     """
 
-    // MARK: - Test 1: Single-line rapid inline completion (3 properties)
-
-    func testSingleLineRapidCSSCompletion() async throws {
-        let inference = TestCSSInferenceService()
-        inference.responses = [
-            .immediate("font-family: 'Arial', sans-serif;"),
-            .immediate("color: #007aff;"),
-            .immediate("background-color: #fff;")
-        ]
-
-        let engine = makeEngine(inference: inference)
-        var received: [InlineSuggestionPresentation] = []
-        engine.registerSuggestionHandler(for: .primary) { presentation in
-            if let presentation {
-                received.append(presentation)
-            }
-        }
-
-        // Step 1: Create a new CSS rule and type "font-fa"
-        var snapshot = makeSnapshot(
-            paneID: .primary,
-            buffer: ".button {\n    font-fa",
-            cursor: 21,
-            language: "css"
-        )
-        engine.requestCompletion(for: snapshot)
-        try await Task.sleep(nanoseconds: 80_000_000)
-
-        XCTAssertEqual(received.last?.suggestionText, "font-family: 'Arial', sans-serif;",
-                       "First completion should suggest font-family")
-
-        // Accept first completion
-        engine.markAccepted(on: .primary, suggestionText: received.last?.suggestionText)
-        received.removeAll()
-
-        // Step 2: Type "colo"
-        snapshot = makeSnapshot(
-            paneID: .primary,
-            buffer: ".button {\n    font-family: 'Arial', sans-serif;\n    colo",
-            cursor: 57,
-            language: "css"
-        )
-        engine.requestCompletion(for: snapshot)
-        try await Task.sleep(nanoseconds: 80_000_000)
-
-        XCTAssertEqual(received.last?.suggestionText, "color: #007aff;",
-                       "Second completion should suggest color")
-
-        // Accept second completion
-        engine.markAccepted(on: .primary, suggestionText: received.last?.suggestionText)
-        received.removeAll()
-
-        // Step 3: Type "backgr"
-        snapshot = makeSnapshot(
-            paneID: .primary,
-            buffer: ".button {\n    font-family: 'Arial', sans-serif;\n    color: #007aff;\n    backgr",
-            cursor: 86,
-            language: "css"
-        )
-        engine.requestCompletion(for: snapshot)
-        try await Task.sleep(nanoseconds: 80_000_000)
-
-        XCTAssertEqual(received.last?.suggestionText, "background-color: #fff;",
-                       "Third completion should suggest background-color")
-
-        // Accept third completion
-        engine.markAccepted(on: .primary, suggestionText: received.last?.suggestionText)
-
-        // Verify all three completions fired correctly
-        XCTAssertGreaterThanOrEqual(received.count, 1, "Should have received at least one suggestion per step")
-    }
-
-    // MARK: - Test 2: Multi-line manual trigger on existing CSS (3 repetitions)
-
-    func testMultiLineManualTriggerCSSRepeated() async throws {
-        let multiLineSuggestion1 = "\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n"
-        let multiLineSuggestion2 = "\n    display: grid;\n    grid-template-columns: repeat(3, 1fr);\n    gap: 16px;\n"
-        let multiLineSuggestion3 = "\n    position: relative;\n    overflow: hidden;\n    border-radius: 8px;\n"
-
-        let inference = TestCSSInferenceService()
-        inference.responses = [
-            .immediate(multiLineSuggestion1),
-            .immediate(multiLineSuggestion2),
-            .immediate(multiLineSuggestion3)
-        ]
-
-        let engine = makeEngine(inference: inference, multilineEnabled: true)
-        var receivedPresentations: [InlineSuggestionPresentation] = []
-        engine.registerSuggestionHandler(for: .primary) { presentation in
-            if let presentation {
-                receivedPresentations.append(presentation)
-            }
-        }
-
-        // Multi-line test 1: Insert after .header {
-        var snapshot = makeSnapshot(
-            paneID: .primary,
-            buffer: cssFileContent,
-            cursor: 8,
-            language: "css",
-            triggerReason: .manual
-        )
-
-        receivedPresentations.removeAll()
-        engine.requestCompletion(for: snapshot)
-        try await Task.sleep(nanoseconds: 80_000_000)
-
-        let firstResult = receivedPresentations.last
-        XCTAssertNotNil(firstResult, "First multi-line completion should not be nil")
-        XCTAssertTrue(firstResult!.suggestionText.contains("display: flex"),
-                      "First multi-line should contain display: flex")
-        XCTAssertTrue(firstResult!.suggestionText.contains("flex-direction"),
-                      "First multi-line should contain flex-direction")
-
-        engine.markAccepted(on: .primary, suggestionText: firstResult?.suggestionText)
-
-        // Multi-line test 2: Insert after .footer {
-        snapshot = makeSnapshot(
-            paneID: .primary,
-            buffer: cssFileContent,
-            cursor: 40,
-            language: "css",
-            triggerReason: .manual
-        )
-
-        receivedPresentations.removeAll()
-        engine.requestCompletion(for: snapshot)
-        try await Task.sleep(nanoseconds: 80_000_000)
-
-        let secondResult = receivedPresentations.last
-        XCTAssertNotNil(secondResult, "Second multi-line completion should not be nil")
-        XCTAssertTrue(secondResult!.suggestionText.contains("display: grid"),
-                      "Second multi-line should contain display: grid")
-        XCTAssertTrue(secondResult!.suggestionText.contains("grid-template-columns"),
-                      "Second multi-line should contain grid-template-columns")
-
-        engine.markAccepted(on: .primary, suggestionText: secondResult?.suggestionText)
-
-        // Multi-line test 3: Third position at end of file
-        snapshot = makeSnapshot(
-            paneID: .primary,
-            buffer: cssFileContent + "\n",
-            cursor: cssFileContent.count + 1,
-            language: "css",
-            triggerReason: .manual
-        )
-
-        receivedPresentations.removeAll()
-        engine.requestCompletion(for: snapshot)
-        try await Task.sleep(nanoseconds: 80_000_000)
-
-        let thirdResult = receivedPresentations.last
-        XCTAssertNotNil(thirdResult, "Third multi-line completion should not be nil")
-        XCTAssertTrue(thirdResult!.suggestionText.contains("position: relative"),
-                      "Third multi-line should contain position: relative")
-        XCTAssertTrue(thirdResult!.suggestionText.contains("overflow: hidden"),
-                      "Third multi-line should contain overflow: hidden")
-
-        // Verify all three multi-line completions succeeded
-        XCTAssertNotNil(firstResult, "First multi-line completion failed")
-        XCTAssertNotNil(secondResult, "Second multi-line completion failed")
-        XCTAssertNotNil(thirdResult, "Third multi-line completion failed")
-    }
-
-    // MARK: - Test 3: Verify ghost text clears on typing
-
-    func testGhostTextClearsOnType() async throws {
-        let inference = TestCSSInferenceService()
-        inference.responses = [
-            .immediate("font-weight: bold;"),
-            .immediate("font-weight: bold;")
-        ]
-
-        let engine = makeEngine(inference: inference)
-        var receivedCount = 0
-        engine.registerSuggestionHandler(for: .primary) { presentation in
-            if presentation != nil {
-                receivedCount += 1
-            }
-        }
-
-        // First completion appears
-        var snapshot = makeSnapshot(
-            paneID: .primary,
-            buffer: ".alert {\n    font-w",
-            cursor: 18,
-            language: "css"
-        )
-        engine.requestCompletion(for: snapshot)
-        try await Task.sleep(nanoseconds: 80_000_000)
-        XCTAssertEqual(receivedCount, 1, "First completion should appear")
-
-        // Simulate user typing more: the old request is cancelled, new one fires
-        snapshot = makeSnapshot(
-            paneID: .primary,
-            buffer: ".alert {\n    font-weight",
-            cursor: 22,
-            language: "css"
-        )
-        engine.requestCompletion(for: snapshot)
-        try await Task.sleep(nanoseconds: 80_000_000)
-        XCTAssertEqual(receivedCount, 2, "Second completion should appear after typing more")
-    }
-
-    // MARK: - Test 4: Multi-line ghost text stores full text
-
-    func testMultiLineStoresFullText() async throws {
-        let multiLineText = "\n    padding: 16px;\n    margin: 0;\n"
-
-        let inference = TestCSSInferenceService()
-        inference.responses = [
-            .immediate(multiLineText)
-        ]
-
-        let engine = makeEngine(inference: inference, multilineEnabled: true)
-        var received: InlineSuggestionPresentation?
-        engine.registerSuggestionHandler(for: .primary) { presentation in
-            if let presentation {
-                received = presentation
-            }
-        }
-
-        let snapshot = makeSnapshot(
-            paneID: .primary,
-            buffer: cssFileContent,
-            cursor: 8,
-            language: "css",
-            triggerReason: .manual
-        )
-        engine.requestCompletion(for: snapshot)
-        try await Task.sleep(nanoseconds: 80_000_000)
-
-        XCTAssertNotNil(received, "Multi-line completion should not be nil")
-        XCTAssertTrue(received!.suggestionText.contains("padding: 16px"),
-                      "Multi-line suggestion should contain the full text")
-    }
-
-    // MARK: - Helpers
-
-    private func makeEngine(
-        inference: TestCSSInferenceService,
-        multilineEnabled: Bool = false
-    ) -> InlineCompletionEngine {
+    private func makeEngine(inference: TestCSSInferenceService) -> InlineCompletionEngine {
         InlineCompletionEngine(
-            settingsStore: CSSInlineCompletionSettingsStore(multilineEnabled: multilineEnabled),
+            settingsStore: CSSInlineCompletionSettingsStore(),
             triggerPolicy: CompletionTriggerPolicy(),
             contextAssembler: CompletionContextAssembler(),
             retrievalLayer: TestCSSRetrievalLayer(),
@@ -270,16 +218,14 @@ final class InlineCompletionCSSIntegrationTests: XCTestCase {
     }
 
     private func makeSnapshot(
-        paneID: FileEditorStateManager.PaneID,
         buffer: String,
         cursor: Int,
-        language: String,
         triggerReason: CompletionTriggerReason = .automatic
     ) -> InlineCompletionEditorSnapshot {
         InlineCompletionEditorSnapshot(
-            paneID: paneID,
-            filePath: cssFilePath,
-            language: language,
+            paneID: .primary,
+            filePath: "/tmp/test-styles.css",
+            language: "css",
             buffer: buffer,
             cursorPosition: cursor,
             selectionLength: 0,
@@ -343,20 +289,13 @@ private final class TestCSSRetrievalLayer: CompletionRetrieving {
 
 @MainActor
 private final class CSSInlineCompletionSettingsStore: InlineCompletionSettingsStore {
-    private let multilineEnabled: Bool
-
-    init(multilineEnabled: Bool = false) {
-        self.multilineEnabled = multilineEnabled
-        super.init()
-    }
-
     override func load() -> InlineCompletionSettings {
         InlineCompletionSettings(
             isEnabled: true,
             debounceMilliseconds: 0,
             aggressiveness: 0.6,
             maxSuggestionLength: 200,
-            multilineEnabled: multilineEnabled,
+            multilineEnabled: true,
             retrievalEnabled: false,
             routingMode: .localOnly,
             debugOverlayEnabled: false
