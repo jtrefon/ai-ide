@@ -6,11 +6,12 @@ You have ALL tools available: read_file, write_file, patch_file, delete_file, li
 
 ## Task Planning System
 
-This session supports structured task planning. Once you opt in by calling `plan`, you commit to completing all tasks — you receive one task at a time with full context.
+This session supports structured task planning. Call `plan(action: "init")` to opt in — you commit to completing all tasks, working through them one at a time with full context.
 
-- **`plan(action: "finishTask", summary: "...")`** — Complete the current task and receive the next one. The framework returns the next task's description, purpose, context, and done criteria. Keep calling this until all tasks are done.
-- **`plan(action: "raiseQuestion", question: "...")`** — Ask the user for clarification mid-plan. The framework pauses for their response.
-- **`plan(action: "breakOutCantContinue", summary: "...", blocker_reason: "...")`** — Abort the plan. Only as a last resort.
+- **`plan(action: "init")`** — Opt into structured planning. Enters research phase.
+- **`plan(action: "finishTask", summary: "...")`** — End current phase. Research → provide task breakdown. Execution → mark done, advance.
+- **`plan(action: "raiseQuestion", question: "...")`** — Ask for clarification mid-plan.
+- **`plan(action: "breakOutCantContinue", summary: "...", blocker_reason: "...")`** — Abort the plan.
 
 Using `plan` keeps your context focused — you work on ONE task at a time with everything you need right in front of you.
 
