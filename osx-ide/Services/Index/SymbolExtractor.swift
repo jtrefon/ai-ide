@@ -19,6 +19,7 @@ public enum SymbolExtractor {
         case "js", "jsx", "mjs": return extractJSTS(content: content, filePath: url.path)
         case "ts", "tsx": return extractJSTS(content: content, filePath: url.path)
         case "py": return extractPython(content: content, filePath: url.path)
+        case "php": return extractPHP(content: content, filePath: url.path)
         default: return []
         }
     }
@@ -39,6 +40,10 @@ private let regexCache: [String: NSRegularExpression] = {
         "jsts_export": "export\\s+(default\\s+)?(function|class)\\s+([A-Za-z_]\\w*)",
         "py_class": "\\bclass\\s+([A-Za-z_]\\w*)\\s*[(:]",
         "py_def": "\\bdef\\s+([A-Za-z_]\\w*)\\s*\\(",
+        "php_class": "\\b(class|interface|trait)\\s+([A-Za-z_]\\w*)",
+        "php_function": "\\bfunction\\s+([A-Za-z_]\\w*)\\s*\\(",
+        "php_scope": "\\b(public|private|protected|static)\\b",
+        "php_property": "\\b(public|private|protected)\\s+\\$([A-Za-z_]\\w*)",
     ]
     var cache: [String: NSRegularExpression] = [:]
     for (key, pattern) in patterns {
@@ -182,4 +187,40 @@ private func extractPython(content: String, filePath: String) -> [ExtractedSymbo
     }
 
     return symbols
+}
+
+private func extractPHP(content: String, filePath: String) -> [ExtractedSymbol] {
+    let lines = content.components(separatedBy: .newlines)
+    var symbols: [ExtractedSymbol] = []
+    var lastClassName = ""
+
+    for (lineIndex, line) in lines.enumerated() {
+        let lineNum = lineIndex + 1
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("//"), !trimmed.hasPrefix("#"), !trimmed.hasPrefix("/*") else { continue }
+
+        if let m = match(trimmed, key: "php_class") {
+            symbols.append(ExtractedSymbol(name: m[2], kind: m[1], scope: extractPHPScope(from: trimmed), signature: "", parentName: "", lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+            lastClassName = m[2]
+            continue
+        }
+
+        if let m = match(trimmed, key: "php_function") {
+            let scope = extractPHPScope(from: trimmed)
+            symbols.append(ExtractedSymbol(name: m[1], kind: "function", scope: scope, signature: "", parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+            continue
+        }
+
+        if let m = match(trimmed, key: "php_property") {
+            symbols.append(ExtractedSymbol(name: m[2], kind: "property", scope: m[1], signature: "", parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+            continue
+        }
+    }
+
+    return symbols
+}
+
+private func extractPHPScope(from line: String) -> String {
+    guard let m = match(line, key: "php_scope"), m.count > 1 else { return "" }
+    return m[1]
 }

@@ -5,7 +5,7 @@ public actor IndexerActor {
     private let config: IndexConfiguration
     private let projectRoot: URL?
 
-    private static let supportedExtensions: Set<String> = ["swift", "js", "jsx", "mjs", "ts", "tsx", "py"]
+    private static let supportedExtensions: Set<String> = ["swift", "js", "jsx", "mjs", "ts", "tsx", "py", "php"]
 
     public init(
         database: DatabaseStore,
