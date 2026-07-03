@@ -240,6 +240,7 @@ class DependencyContainer: ObservableObject {
             // Defer conversation ingestion to background — don't block startup
             let eventBus = await MainActor.run { _eventBus }
             Task.detached(priority: .utility) { [weak self] in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5s cooloff for indexer to start first
                 await self?.ingestConversations(service: service, projectRoot: root, eventBus: eventBus)
             }
         }
