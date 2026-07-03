@@ -78,6 +78,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private let eventBus: any EventBusProtocol
     private var codebaseIndex: (any CodebaseIndexProtocol)?
     private var projectRoot: URL
+    private var vectorStoreService: VectorStoreService?
     private let conversationLogger: ConversationLogger
     private let settingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)
     private lazy var aiRouter = AIRouter(settingsStore: settingsStore)
@@ -472,8 +473,13 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     }
 
     func updateCodebaseIndex(_ newIndex: CodebaseIndexProtocol?) {
-        self.codebaseIndex = newIndex
+        codebaseIndex = newIndex
         aiInteractionCoordinator.updateCodebaseIndex(newIndex)
+    }
+
+    func updateVectorStoreService(_ service: VectorStoreService?) {
+        vectorStoreService = service
+        aiInteractionCoordinator.updateVectorStoreService(service)
     }
 
     func updateProjectRoot(_ newRoot: URL) {

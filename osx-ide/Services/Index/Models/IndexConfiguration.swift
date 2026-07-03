@@ -37,6 +37,7 @@ public struct IndexConfiguration: Codable, Sendable {
             "*.generated.*",
             ".git/*",
             ".ide",
+            ".osx-ide",
 
             "node_modules",
             "bower_components",

@@ -15,6 +15,7 @@ public struct RAGRetrievalCompletedEvent: Event {
     public let overviewCount: Int
     public let memoryCount: Int
     public let segmentCount: Int
+    public let conversationHistoryCount: Int
     public let evidenceCount: Int
     public let retrievalIntent: String
     public let retrievalConfidence: Double
@@ -25,6 +26,7 @@ public struct RAGRetrievalCompletedEvent: Event {
         overviewCount: Int,
         memoryCount: Int,
         segmentCount: Int,
+        conversationHistoryCount: Int = 0,
         evidenceCount: Int,
         retrievalIntent: String,
         retrievalConfidence: Double,
@@ -34,6 +36,7 @@ public struct RAGRetrievalCompletedEvent: Event {
         self.overviewCount = overviewCount
         self.memoryCount = memoryCount
         self.segmentCount = segmentCount
+        self.conversationHistoryCount = conversationHistoryCount
         self.evidenceCount = evidenceCount
         self.retrievalIntent = retrievalIntent
         self.retrievalConfidence = retrievalConfidence

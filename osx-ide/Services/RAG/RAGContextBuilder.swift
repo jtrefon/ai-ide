@@ -69,6 +69,7 @@ public enum RAGContextBuilder {
             "overviewCount": retrieval.projectOverviewLines.count,
             "memoryCount": retrieval.memoryLines.count,
             "segmentCount": retrieval.segmentLines.count,
+            "conversationHistoryCount": retrieval.conversationHistoryLines.count,
             "retrievalIntent": retrieval.intent.rawValue,
             "retrievalConfidence": retrieval.retrievalConfidence,
             "userInputLength": userInput.count
@@ -98,6 +99,7 @@ public enum RAGContextBuilder {
             overviewCount: retrieval.projectOverviewLines.count,
             memoryCount: retrieval.memoryLines.count,
             segmentCount: retrieval.segmentLines.count,
+            conversationHistoryCount: retrieval.conversationHistoryLines.count,
             evidenceCount: retrieval.evidenceCards.count,
             retrievalIntent: retrieval.intent.rawValue,
             retrievalConfidence: retrieval.retrievalConfidence,
@@ -128,27 +130,31 @@ public enum RAGContextBuilder {
     private static func trimContextToBudget(_ context: String, budget: Int, retrieval: RAGRetrievalResult) -> String? {
         guard budget > 0 else { return nil }
         
-        // Priority order: memory > overview > symbols > segments > reuse
+        // Priority order: memory > conversation_history > overview > symbols > segments > reuse
         var sections: [(priority: Int, content: String)] = []
         
         if !retrieval.memoryLines.isEmpty {
             sections.append((priority: 1, content: "PROJECT MEMORY (long-term rules):\n" + retrieval.memoryLines.joined(separator: "\n")))
         }
         
+        if !retrieval.conversationHistoryLines.isEmpty {
+            sections.append((priority: 2, content: "CONVERSATION HISTORY (relevant past turns):\n" + retrieval.conversationHistoryLines.joined(separator: "\n")))
+        }
+        
         if !retrieval.projectOverviewLines.isEmpty {
-            sections.append((priority: 2, content: "PROJECT OVERVIEW (Key Files):\n" + retrieval.projectOverviewLines.joined(separator: "\n")))
+            sections.append((priority: 3, content: "PROJECT OVERVIEW (Key Files):\n" + retrieval.projectOverviewLines.joined(separator: "\n")))
         }
         
         if !retrieval.symbolLines.isEmpty {
-            sections.append((priority: 3, content: "CODEBASE INDEX (matching symbols):\n" + retrieval.symbolLines.joined(separator: "\n")))
+            sections.append((priority: 4, content: "CODEBASE INDEX (matching symbols):\n" + retrieval.symbolLines.joined(separator: "\n")))
         }
         
         if !retrieval.segmentLines.isEmpty {
-            sections.append((priority: 4, content: "CODE SEGMENTS (high-signal snippets):\n" + retrieval.segmentLines.joined(separator: "\n")))
+            sections.append((priority: 5, content: "CODE SEGMENTS (high-signal snippets):\n" + retrieval.segmentLines.joined(separator: "\n")))
         }
         
         if !retrieval.reuseCandidateLines.isEmpty {
-            sections.append((priority: 5, content: "REUSE CANDIDATES (must consider before new implementation):\n" + retrieval.reuseCandidateLines.joined(separator: "\n")))
+            sections.append((priority: 6, content: "REUSE CANDIDATES (must consider before new implementation):\n" + retrieval.reuseCandidateLines.joined(separator: "\n")))
         }
         
         // Build context within budget
@@ -190,6 +196,10 @@ public enum RAGContextBuilder {
 
         if !retrieval.segmentLines.isEmpty {
             sections.append("CODE SEGMENTS (high-signal snippets):\n" + retrieval.segmentLines.joined(separator: "\n"))
+        }
+
+        if !retrieval.conversationHistoryLines.isEmpty {
+            sections.append("CONVERSATION HISTORY (relevant past turns):\n" + retrieval.conversationHistoryLines.joined(separator: "\n"))
         }
 
         if !retrieval.reuseCandidateLines.isEmpty {

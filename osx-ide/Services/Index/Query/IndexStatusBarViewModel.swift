@@ -14,6 +14,12 @@ final class IndexStatusBarViewModel: ObservableObject {
 
     @Published private(set) var embeddingModelIdentifier: String = "hashing_v1"
 
+    @Published private(set) var vectorStoreEntryCount: Int = 0
+    @Published private(set) var vectorStoreIsLoaded: Bool = false
+    @Published private(set) var isIngesting: Bool = false
+    @Published private(set) var ingestionProgress: Int = 0
+    @Published private(set) var ingestionTotal: Int = 0
+
     @Published private(set) var openRouterContextUsageText: String = ""
     @Published private(set) var localModelContextUsageText: String = ""
     @Published private(set) var remoteAICostText: String = ""
@@ -26,6 +32,7 @@ final class IndexStatusBarViewModel: ObservableObject {
     @Published private(set) var fimCompletionStatus: InlineCompletionStatus = .idle
 
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
+    private let vectorStoreProvider: () -> VectorStoreService?
     private let eventBus: EventBusProtocol
     private let refreshRemoteAIAccountBalance: @Sendable (_ runId: String?) async -> Void
     private let statsPollInterval: TimeInterval
@@ -36,11 +43,13 @@ final class IndexStatusBarViewModel: ObservableObject {
 
     init(
         codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
+        vectorStoreProvider: @escaping () -> VectorStoreService? = { nil },
         eventBus: EventBusProtocol,
         refreshRemoteAIAccountBalance: @escaping @Sendable (_ runId: String?) async -> Void = { _ in },
         statsPollInterval: TimeInterval = 2.0
     ) {
         self.codebaseIndexProvider = codebaseIndexProvider
+        self.vectorStoreProvider = vectorStoreProvider
         self.eventBus = eventBus
         self.refreshRemoteAIAccountBalance = refreshRemoteAIAccountBalance
         self.statsPollInterval = max(0.1, statsPollInterval)
@@ -75,11 +84,19 @@ final class IndexStatusBarViewModel: ObservableObject {
         }
 
         if let stats {
+            let embedStatus: String
+            if isIngesting {
+                embedStatus = "Embed \(ingestionProgress)/\(ingestionTotal)"
+            } else if vectorStoreIsLoaded {
+                embedStatus = "Embed \(vectorStoreEntryCount)"
+            } else {
+                embedStatus = "Embed init"
+            }
             if stats.totalProjectFileCount > 0 {
                 let indexed = min(stats.indexedResourceCount, stats.totalProjectFileCount)
-                return "Index \(indexed)/\(stats.totalProjectFileCount) | RAG Ready"
+                return "Index \(indexed)/\(stats.totalProjectFileCount) | \(embedStatus)"
             }
-            return "Index: \(stats.indexedResourceCount) files | RAG Ready"
+            return "Index: \(stats.indexedResourceCount) files | \(embedStatus)"
         }
 
         return "Index: unavailable"
@@ -104,7 +121,13 @@ final class IndexStatusBarViewModel: ObservableObject {
             ? stats.averageAIQualityScore
             : stats.averageQualityScore
         let quality = score > 0 ? String(format: "%.0f", score) : "0"
-        return "E \(embeddingModelIdentifier) | C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | M \(stats.memoryCount) (LT \(stats.longTermMemoryCount)) | DB \(size)"
+        let embedInfo: String
+        if vectorStoreIsLoaded {
+            embedInfo = "Embed \(vectorStoreEntryCount)"
+        } else {
+            embedInfo = "Embed -"
+        }
+        return "E \(embeddingModelIdentifier) | C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | M \(stats.memoryCount) (LT \(stats.longTermMemoryCount)) | DB \(size) | \(embedInfo)"
     }
 
     private func subscribeToEvents() {
@@ -132,6 +155,22 @@ final class IndexStatusBarViewModel: ObservableObject {
             self.currentFile = nil
             self.refreshStats()
             self.refreshEmbeddingModel()
+        }
+        .store(in: &cancellables)
+
+        eventBus.subscribe(to: VectorStoreStatusChangedEvent.self) { [weak self] event in
+            guard let self else { return }
+            self.vectorStoreEntryCount = event.entryCount
+            self.vectorStoreIsLoaded = event.isLoaded
+            self.isIngesting = false
+        }
+        .store(in: &cancellables)
+
+        eventBus.subscribe(to: VectorStoreIngestionProgressEvent.self) { [weak self] event in
+            guard let self else { return }
+            self.isIngesting = true
+            self.ingestionProgress = event.ingestedCount
+            self.ingestionTotal = event.totalCount
         }
         .store(in: &cancellables)
 

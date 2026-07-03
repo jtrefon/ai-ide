@@ -208,6 +208,10 @@ struct OSXIDEApp: App {
                 Button(localized("menu.tools.reindex_project_now")) {
                     appState.reindexProjectNow()
                 }
+
+                Button(localized("menu.tools.rebuild_vector_store")) {
+                    appState.rebuildVectorStore()
+                }
             }
 
             CommandMenu(localized("menu.editor")) {

@@ -7,6 +7,7 @@ struct IndexStatusBarView: View {
     init(
         appState: AppState,
         codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
+        vectorStoreProvider: @escaping () -> VectorStoreService?,
         eventBus: EventBusProtocol,
         refreshRemoteAIAccountBalance: @escaping @Sendable (_ runId: String?) async -> Void
     ) {
@@ -14,6 +15,7 @@ struct IndexStatusBarView: View {
         self._viewModel = StateObject(
             wrappedValue: IndexStatusBarViewModel(
                 codebaseIndexProvider: codebaseIndexProvider,
+                vectorStoreProvider: vectorStoreProvider,
                 eventBus: eventBus,
                 refreshRemoteAIAccountBalance: refreshRemoteAIAccountBalance
             )

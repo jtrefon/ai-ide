@@ -153,6 +153,7 @@
 "menu.tools.ai_enrichment_indexing.missing_model" = "Select an OpenRouter model in Settings before enabling AI enrichment indexing.";
 "menu.tools.format_document" = "Format Document";
 "menu.tools.reindex_project_now" = "Reindex Project Now";
+"menu.tools.rebuild_vector_store" = "Rebuild Vector Store";
 
 "menu.editor" = "Editor";
 "menu.editor.find" = "Find";

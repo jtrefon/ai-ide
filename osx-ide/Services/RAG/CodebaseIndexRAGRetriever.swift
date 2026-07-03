@@ -5,11 +5,13 @@ import Foundation
 /// All operations run asynchronously off the main thread.
 public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable {
     private let index: CodebaseIndexProtocol
+    private let vectorStoreService: VectorStoreService?
     private let intentClassifier: RetrievalIntentClassifier
     private let ranker: RAGEvidenceFusionRanker
 
-    public init(index: CodebaseIndexProtocol) {
+    public init(index: CodebaseIndexProtocol, vectorStoreService: VectorStoreService? = nil) {
         self.index = index
+        self.vectorStoreService = vectorStoreService
         self.intentClassifier = RetrievalIntentClassifier()
         self.ranker = RAGEvidenceFusionRanker()
     }
@@ -21,6 +23,7 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
         let symbolCandidates = await retrieveSymbolCandidates(userInput: request.userInput, projectRoot: request.projectRoot)
         let memoryCandidates = await retrieveMemoryCandidates(userInput: request.userInput)
         let segmentCandidates = await retrieveSegmentCandidates(userInput: request.userInput)
+        let conversationHistoryLines = await retrieveConversationHistory(userInput: request.userInput)
 
         let ranked = ranker.rank(
             candidates: overviewCandidates + symbolCandidates + memoryCandidates + segmentCandidates,
@@ -42,6 +45,7 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
             memoryLines: memoryLines,
             segmentLines: segmentLines,
             reuseCandidateLines: reuseCandidateLines,
+            conversationHistoryLines: conversationHistoryLines,
             evidenceCards: evidenceCards,
             intent: intent,
             retrievalConfidence: retrievalConfidence
@@ -210,6 +214,24 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
             deduplicated.append(segment)
         }
         return Array(deduplicated.prefix(20))
+    }
+
+    private func retrieveConversationHistory(userInput: String) async -> [String] {
+        guard let vectorStore = vectorStoreService else { return [] }
+        let embedder = HashingMemoryEmbeddingGenerator(dimensions: 512)
+        guard let results = try? await vectorStore.searchByText(
+            query: userInput,
+            embeddingGenerator: { try await embedder.generateEmbedding(for: $0) },
+            limit: 5
+        ), !results.isEmpty else { return [] }
+
+        return results.map { result in
+            if let meta = result.metadata {
+                let category = meta.category ?? "?"
+                return "- [\(category)] \(meta.text)"
+            }
+            return "- \(result.id): score=\(String(format: "%.2f", result.score))"
+        }
     }
 
     private func makeSegmentCandidate(rawLine: String, token: String) -> RAGEvidenceCandidate? {

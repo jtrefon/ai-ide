@@ -222,6 +222,24 @@ class DependencyContainer: ObservableObject {
             await MainActor.run {
                 _unifiedLintingFramework.runProjectScanIfNeeded()
             }
+
+            // Initialize vector store for RAG
+            let cfg = VectorStoreConfiguration.default(basePath: root)
+            let service = VectorStoreService.create(with: cfg)
+            do {
+                try await service.load()
+                Swift.print("[DIAG] VectorStore loaded: \(await service.entryCount) entries")
+            } catch {
+                Swift.print("[DIAG] VectorStore init (first launch - OK): \(error.localizedDescription)")
+            }
+            await MainActor.run {
+                _vectorStoreService = service
+                _conversationManager.updateVectorStoreService(service)
+            }
+
+            // Ingest uningested conversations from index.ndjson
+            let eventBus = await MainActor.run { _eventBus }
+            await ingestConversations(service: service, projectRoot: root, eventBus: eventBus)
         }
 
         await MainActor.run {
@@ -413,6 +431,29 @@ class DependencyContainer: ObservableObject {
         _projectCoordinator.rebuildIndex(overwriteDB: true)
     }
 
+    func rebuildVectorStore() {
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let service = await MainActor.run(body: { self?._vectorStoreService }) else { return }
+            await RAGTraceLogger.shared.log(type: "store.rebuild_start", data: [:])
+            do {
+                try await service.removeAll()
+                try await service.save()
+                await VectorStoreIngestionTracker.shared.clear()
+                Swift.print("[DIAG] VectorStore cleared, re-ingesting conversations...")
+                if let eventBus = await MainActor.run(body: { self?._eventBus }),
+                   let projectRoot = await MainActor.run(body: { self?._workspaceService.currentDirectory }) {
+                    await self?.ingestConversations(service: service, projectRoot: projectRoot, eventBus: eventBus)
+                }
+                await RAGTraceLogger.shared.log(type: "store.rebuild_complete", data: ["entries": await service.entryCount])
+            } catch {
+                Swift.print("[DIAG] VectorStore rebuild failed: \(error)")
+                await RAGTraceLogger.shared.log(type: "store.rebuild_error", data: [
+                    "error": error.localizedDescription
+                ])
+            }
+        }
+    }
+
     func configureCodebaseIndex(projectRoot: URL) {
         _projectCoordinator.configureProject(root: projectRoot)
     }
@@ -448,6 +489,12 @@ class DependencyContainer: ObservableObject {
             reindexProjectNow: { [weak self] in
                 self?.reindexProjectNow()
             },
+            vectorStoreServiceProvider: { [weak self] in
+                self?.vectorStoreService
+            },
+            rebuildVectorStore: { [weak self] in
+                self?.rebuildVectorStore()
+            },
             refreshRemoteAIAccountBalance: { [weak self] runId in
                 guard let self else { return }
                 await (self._aiService as? RemoteAIAccountStatusRefreshing)?.refreshAccountBalance(runId: runId)
@@ -461,6 +508,94 @@ class DependencyContainer: ObservableObject {
         // Update the existing conversation manager's AI service instead of creating a new one
         // to preserve loaded chat history
         _conversationManager.updateAIService(newService)
+    }
+
+    private nonisolated func ingestConversations(service: VectorStoreService, projectRoot: URL, eventBus: EventBusProtocol) async {
+        let tracker = VectorStoreIngestionTracker.shared
+        let convDir = projectRoot
+            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent("logs", isDirectory: true)
+            .appendingPathComponent("conversations", isDirectory: true)
+        let indexURL = convDir.appendingPathComponent("index.ndjson")
+
+        guard let contents = try? String(contentsOf: indexURL, encoding: .utf8) else {
+            let count = await service.entryCount
+            eventBus.publish(VectorStoreStatusChangedEvent(entryCount: count, isLoaded: true))
+            return
+        }
+
+        let lines = contents.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        var toIngest: [String] = []
+        for line in lines {
+            guard let data = line.data(using: .utf8),
+                  let entry = try? JSONDecoder().decode(ConversationIndexEntry.self, from: data),
+                  !(await tracker.isIngested(conversationId: entry.conversationId)) else { continue }
+            toIngest.append(entry.conversationId)
+        }
+
+        guard !toIngest.isEmpty else {
+            let count = await service.entryCount
+            eventBus.publish(VectorStoreStatusChangedEvent(entryCount: count, isLoaded: true))
+            return
+        }
+
+        Swift.print("[DIAG] VectorStore: ingesting \(toIngest.count) conversation(s)")
+        await RAGTraceLogger.shared.log(type: "store.ingest_start", data: ["count": toIngest.count])
+        eventBus.publish(VectorStoreIngestionProgressEvent(ingestedCount: 0, totalCount: toIngest.count))
+
+        let embedder = HashingMemoryEmbeddingGenerator(dimensions: 512)
+        var ingested: Int = 0
+
+        for convId in toIngest {
+            let convURL = convDir
+                .appendingPathComponent(convId, isDirectory: true)
+                .appendingPathComponent("conversation.ndjson")
+            guard let convData = try? String(contentsOf: convURL, encoding: .utf8) else {
+                await tracker.markIngested(conversationId: convId)
+                ingested += 1
+                continue
+            }
+
+            let eventLines = convData.components(separatedBy: .newlines).filter { !$0.isEmpty }
+            var queryText: String?
+
+            for eventLine in eventLines {
+                guard let eventData = eventLine.data(using: .utf8),
+                      let event = try? JSONDecoder().decode(ConversationLogEvent.self, from: eventData) else { continue }
+
+                if event.type == "chat.user_message" {
+                    queryText = extractString(from: event.data?["content"])
+                } else if event.type == "chat.assistant_message" || event.type == "chat.response" {
+                    if let q = queryText, let r = extractString(from: event.data?["content"]) {
+                        let qVec = (try? await embedder.generateEmbedding(for: q)) ?? []
+                        let rVec = (try? await embedder.generateEmbedding(for: r)) ?? []
+                        if !qVec.isEmpty, !rVec.isEmpty {
+                            let turn = VectorStoreService.ConversationTurn(
+                                query: q, response: r,
+                                source: "conversation", category: convId
+                            )
+                            try? await service.storeConversationTurn(turn: turn, queryVector: qVec, responseVector: rVec)
+                        }
+                    }
+                    queryText = nil
+                }
+            }
+
+            await tracker.markIngested(conversationId: convId)
+            ingested += 1
+            eventBus.publish(VectorStoreIngestionProgressEvent(ingestedCount: ingested, totalCount: toIngest.count))
+        }
+
+        try? await service.save()
+        let count = await service.entryCount
+        eventBus.publish(VectorStoreStatusChangedEvent(entryCount: count, isLoaded: true))
+        Swift.print("[DIAG] VectorStore: ingestion complete — \(count) entries")
+        await RAGTraceLogger.shared.log(type: "store.ingest_complete", data: ["entries": count])
+    }
+
+    private nonisolated func extractString(from logValue: LogValue?) -> String? {
+        guard case .string(let value) = logValue else { return nil }
+        return value
     }
 
     // MARK: - Stored Services
@@ -484,6 +619,7 @@ class DependencyContainer: ObservableObject {
     private let _inlineCompletionEngine: InlineCompletionEngine
     private let _snippetCompletionService: SnippetCompletionService
     private let _activityCoordinator: any AgentActivityCoordinating
+    private var _vectorStoreService: VectorStoreService?
     
     /// Accessor for activity coordinator (for integration with other services)
     var activityCoordinator: any AgentActivityCoordinating {
@@ -493,6 +629,11 @@ class DependencyContainer: ObservableObject {
     /// Accessor for snippet completion service (Cmd+Shift+I, multiline)
     var snippetCompletionService: SnippetCompletionService {
         return _snippetCompletionService
+    }
+
+    /// Vector store service for RAG-based retrieval
+    var vectorStoreService: VectorStoreService? {
+        _vectorStoreService
     }
 }
 

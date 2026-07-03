@@ -118,6 +118,7 @@ public struct RAGRetrievalResult: Sendable {
     public let memoryLines: [String]
     public let segmentLines: [String]
     public let reuseCandidateLines: [String]
+    public let conversationHistoryLines: [String]
     public let evidenceCards: [EvidenceCard]
     public let intent: RetrievalIntent
     public let retrievalConfidence: Double
@@ -128,6 +129,7 @@ public struct RAGRetrievalResult: Sendable {
         memoryLines: [String],
         segmentLines: [String] = [],
         reuseCandidateLines: [String] = [],
+        conversationHistoryLines: [String] = [],
         evidenceCards: [EvidenceCard] = [],
         intent: RetrievalIntent = .other,
         retrievalConfidence: Double = 0
@@ -137,6 +139,7 @@ public struct RAGRetrievalResult: Sendable {
         self.memoryLines = memoryLines
         self.segmentLines = segmentLines
         self.reuseCandidateLines = reuseCandidateLines
+        self.conversationHistoryLines = conversationHistoryLines
         self.evidenceCards = evidenceCards
         self.intent = intent
         self.retrievalConfidence = retrievalConfidence
@@ -148,6 +151,7 @@ public struct RAGRetrievalResult: Sendable {
         memoryLines: [],
         segmentLines: [],
         reuseCandidateLines: [],
+        conversationHistoryLines: [],
         evidenceCards: [],
         intent: .other,
         retrievalConfidence: 0

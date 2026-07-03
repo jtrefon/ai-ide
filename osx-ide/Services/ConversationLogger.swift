@@ -145,6 +145,8 @@ struct ConversationLogger {
         Task.detached(priority: .utility) {
             // CRITICAL: Set project root for all loggers including AI trace
             await AIToolTraceLogger.shared.setProjectRoot(projectRoot)
+            await RAGTraceLogger.shared.setProjectRoot(projectRoot)
+            await VectorStoreIngestionTracker.shared.setProjectRoot(projectRoot)
             await AppLogger.shared.setProjectRoot(projectRoot)
             await CrashReporter.shared.setProjectRoot(projectRoot)
             await ConversationLogStore.shared.setProjectRoot(projectRoot)

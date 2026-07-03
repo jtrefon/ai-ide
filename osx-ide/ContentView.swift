@@ -87,6 +87,7 @@ struct ContentView: View {
             IndexStatusBarView(
                 appState: appState,
                 codebaseIndexProvider: { appState.codebaseIndex },
+                vectorStoreProvider: { appState.vectorStoreService },
                 eventBus: appState.eventBus,
                 refreshRemoteAIAccountBalance: appState.refreshRemoteAIAccountBalance
             )

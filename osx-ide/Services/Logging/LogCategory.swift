@@ -8,4 +8,5 @@ public enum LogCategory: String, Codable, Sendable {
     case eventBus
     case error
     case localModel
+    case rag
 }

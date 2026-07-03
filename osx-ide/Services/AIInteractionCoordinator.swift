@@ -41,6 +41,7 @@ final class AIInteractionCoordinator {
 
     private var aiService: AIService
     private var codebaseIndex: CodebaseIndexProtocol?
+    private let vectorStoreService: VectorStoreService?
     private let conversationPolicy: ConversationPolicyProtocol
     private let settingsStore: any OpenRouterSettingsLoading
     private let eventBus: any EventBusProtocol
@@ -48,12 +49,14 @@ final class AIInteractionCoordinator {
     init(
         aiService: AIService,
         codebaseIndex: CodebaseIndexProtocol?,
+        vectorStoreService: VectorStoreService? = nil,
         conversationPolicy: ConversationPolicyProtocol = ConversationPolicy(),
         settingsStore: any OpenRouterSettingsLoading = OpenRouterSettingsStore(),
         eventBus: any EventBusProtocol
     ) {
         self.aiService = aiService
         self.codebaseIndex = codebaseIndex
+        self.vectorStoreService = vectorStoreService
         self.conversationPolicy = conversationPolicy
         self.settingsStore = settingsStore
         self.eventBus = eventBus
@@ -65,6 +68,10 @@ final class AIInteractionCoordinator {
 
     func updateCodebaseIndex(_ newIndex: CodebaseIndexProtocol?) {
         codebaseIndex = newIndex
+    }
+
+    func updateVectorStoreService(_ service: VectorStoreService?) {
+        vectorStoreService = service
     }
 
     func sendMessageWithRetry(
@@ -90,7 +97,7 @@ final class AIInteractionCoordinator {
         let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
         let retriever: (any RAGRetriever)?
         if let codebaseIndex, shouldUseRAGRetrieval(for: request.stage, settings: settings, usesLocalModel: request.usesLocalModel) {
-            retriever = CodebaseIndexRAGRetriever(index: codebaseIndex)
+            retriever = CodebaseIndexRAGRetriever(index: codebaseIndex, vectorStoreService: vectorStoreService)
         } else {
             retriever = nil
         }

@@ -67,6 +67,8 @@ class AppState: ObservableObject, IDEContext {
     private let configureCodebaseIndex: (URL) -> Void
     private let setCodebaseIndexEnabledImpl: (Bool) -> Void
     private let reindexProjectNowImpl: () -> Void
+    private let vectorStoreServiceProvider: () -> VectorStoreService?
+    private let rebuildVectorStoreImpl: () -> Void
     let refreshRemoteAIAccountBalance: @Sendable (_ runId: String?) async -> Void
     private var eventCancellables = Set<AnyCancellable>()
 
@@ -163,6 +165,8 @@ class AppState: ObservableObject, IDEContext {
         configureCodebaseIndex: @escaping (URL) -> Void,
         setCodebaseIndexEnabled: @escaping (Bool) -> Void,
         reindexProjectNow: @escaping () -> Void,
+        vectorStoreServiceProvider: @escaping () -> VectorStoreService?,
+        rebuildVectorStore: @escaping () -> Void,
         refreshRemoteAIAccountBalance: @escaping @Sendable (_ runId: String?) async -> Void
     ) {
         self.errorManager = errorManager
@@ -185,6 +189,8 @@ class AppState: ObservableObject, IDEContext {
         self.configureCodebaseIndex = configureCodebaseIndex
         self.setCodebaseIndexEnabledImpl = setCodebaseIndexEnabled
         self.reindexProjectNowImpl = reindexProjectNow
+        self.vectorStoreServiceProvider = vectorStoreServiceProvider
+        self.rebuildVectorStoreImpl = rebuildVectorStore
         self.refreshRemoteAIAccountBalance = refreshRemoteAIAccountBalance
 
         // Initialize specialized state managers
@@ -260,6 +266,14 @@ class AppState: ObservableObject, IDEContext {
 
     func reindexProjectNow() {
         reindexProjectNowImpl()
+    }
+
+    var vectorStoreService: VectorStoreService? {
+        vectorStoreServiceProvider()
+    }
+
+    func rebuildVectorStore() {
+        rebuildVectorStoreImpl()
     }
 
     // MARK: - State Coordination Methods (Keep high-level orchestration)

@@ -138,6 +138,16 @@ struct LogsPanelView: View {
                     .appendingPathComponent("indexing.log")
             }
             return FileManager.default.temporaryDirectory.appendingPathComponent("missing.log")
+
+        case .rag:
+            if let projectRoot {
+                return
+                    projectRoot
+                    .appendingPathComponent(".ide", isDirectory: true)
+                    .appendingPathComponent("logs", isDirectory: true)
+                    .appendingPathComponent("rag.ndjson")
+            }
+            return FileManager.default.temporaryDirectory.appendingPathComponent("missing.log")
         }
     }
 
@@ -171,6 +181,7 @@ struct LogsPanelView: View {
         case aiTrace
         case projectIndex
         case conversation
+        case rag
 
         var id: String { rawValue }
 
@@ -180,6 +191,7 @@ struct LogsPanelView: View {
             case .aiTrace: return "AI Trace"
             case .projectIndex: return "Index"
             case .conversation: return "Conversation"
+            case .rag: return "RAG"
             }
         }
     }
