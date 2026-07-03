@@ -46,44 +46,10 @@ final class DatabaseSchemaManager {
         CREATE INDEX IF NOT EXISTS idx_symbols_resource_id ON symbols(resource_id);
         CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
 
-        CREATE TABLE IF NOT EXISTS memories (
-            id TEXT PRIMARY KEY,
-            tier TEXT NOT NULL,
-            content TEXT NOT NULL,
-            category TEXT NOT NULL,
-            timestamp REAL NOT NULL,
-            protection_level INTEGER NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS memory_embeddings (
-            memory_id TEXT NOT NULL,
-            model_id TEXT NOT NULL,
-            dimensions INTEGER NOT NULL,
-            vector_blob BLOB NOT NULL,
-            updated_at REAL NOT NULL,
-            PRIMARY KEY(memory_id, model_id),
-            FOREIGN KEY(memory_id) REFERENCES memories(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS code_chunks (
-            resource_id TEXT NOT NULL,
-            model_id TEXT NOT NULL,
-            chunk_index INTEGER NOT NULL,
-            line_start INTEGER NOT NULL,
-            line_end INTEGER NOT NULL,
-            snippet TEXT NOT NULL,
-            dimensions INTEGER NOT NULL,
-            vector_blob BLOB NOT NULL,
-            updated_at REAL NOT NULL,
-            PRIMARY KEY(resource_id, model_id, chunk_index),
-            FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_memories_tier ON memories(tier);
-        CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category);
-        CREATE INDEX IF NOT EXISTS idx_memory_embeddings_model ON memory_embeddings(model_id);
-        CREATE INDEX IF NOT EXISTS idx_code_chunks_model ON code_chunks(model_id);
-        CREATE INDEX IF NOT EXISTS idx_code_chunks_resource_model ON code_chunks(resource_id, model_id);
+        -- Drop old tables that are no longer used (memories/code_chunks moved to VectorStore)
+        DROP TABLE IF EXISTS code_chunks;
+        DROP TABLE IF EXISTS memory_embeddings;
+        DROP TABLE IF EXISTS memories;
 
         CREATE TABLE IF NOT EXISTS symbol_names (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

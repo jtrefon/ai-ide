@@ -60,9 +60,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     let coordinator: IndexCoordinator
     let database: DatabaseStore
     let indexer: IndexerActor
-    let memoryManager: MemoryManager
     let queryService: QueryService
-    var memoryEmbeddingGenerator: any MemoryEmbeddingGenerating
     let aiService: AIService
     let dbPath: String
     let projectRoot: URL
@@ -90,19 +88,10 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         )
 
         self.database = try DatabaseStore(path: dbPath)
-        // CRITICAL: Use HashingMemoryEmbeddingGenerator for fast startup.
-        // CoreML model loading can take MINUTES on first run (NPU compilation).
-        // The async factory method will replace this with CoreML if available.
-        self.memoryEmbeddingGenerator = HashingMemoryEmbeddingGenerator()
         self.indexer = IndexerActor(
             database: database,
             config: resolvedConfig.configuration,
             projectRoot: projectRoot
-        )
-        self.memoryManager = MemoryManager(
-            database: database,
-            eventBus: eventBus,
-            embeddingGenerator: memoryEmbeddingGenerator
         )
         self.queryService = QueryService(database: database)
         self.coordinator = IndexCoordinator(
@@ -178,16 +167,12 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
             fatalError("Failed to create database: \(error)")
         }
 
-        let tempEmbeddingGenerator = MemoryEmbeddingGeneratorFactory.makeDefault(
-            projectRoot: projectRoot)
-
         // Create the index with temporary components
         let index = CodebaseIndex(
             eventBus: eventBus,
             projectRoot: projectRoot,
             aiService: aiService,
             database: tempDatabase,
-            embeddingGenerator: tempEmbeddingGenerator,
             config: resolvedConfig
         )
 
@@ -206,7 +191,6 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         projectRoot: URL,
         aiService: AIService,
         database: DatabaseStore,
-        embeddingGenerator: any MemoryEmbeddingGenerating,
         config: ResolvedIndexConfiguration
     ) {
         let initStart = Date()
@@ -222,11 +206,7 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
             storageDirectoryPath: config.configuration.storageDirectoryPath
         )
 
-        Swift.print("[DIAG] CodebaseIndex.init storing database reference...")
         self.database = database
-
-        Swift.print("[DIAG] CodebaseIndex.init storing embeddingGenerator reference...")
-        self.memoryEmbeddingGenerator = embeddingGenerator
 
         Swift.print("[DIAG] CodebaseIndex.init creating IndexerActor...")
         let indexerStart = Date()
@@ -237,17 +217,6 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         )
         Swift.print(
             "[DIAG] CodebaseIndex.init IndexerActor created in \(String(format: "%.2f", Date().timeIntervalSince(indexerStart) * 1000))ms"
-        )
-
-        Swift.print("[DIAG] CodebaseIndex.init creating MemoryManager...")
-        let memStart = Date()
-        self.memoryManager = MemoryManager(
-            database: database,
-            eventBus: eventBus,
-            embeddingGenerator: memoryEmbeddingGenerator
-        )
-        Swift.print(
-            "[DIAG] CodebaseIndex.init MemoryManager created in \(String(format: "%.2f", Date().timeIntervalSince(memStart) * 1000))ms"
         )
 
         Swift.print("[DIAG] CodebaseIndex.init creating QueryService...")
@@ -272,19 +241,6 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         Swift.print(
             "[DIAG] CodebaseIndex.init END total: \(String(format: "%.2f", Date().timeIntervalSince(initStart) * 1000))ms"
         )
-    }
-
-    public func upgradeEmbeddingGenerator(_ generator: any MemoryEmbeddingGenerating) {
-        self.memoryEmbeddingGenerator = generator
-        Task {
-            await memoryManager.updateEmbeddingGenerator(generator)
-            await indexer.updateEmbeddingGenerator(generator)
-        }
-    }
-
-    /// Returns the identifier of the current embedding model for display purposes
-    public var currentEmbeddingModelIdentifier: String {
-        memoryEmbeddingGenerator.modelIdentifier
     }
 
     private struct ResolvedIndexConfiguration {

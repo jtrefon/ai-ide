@@ -133,45 +133,7 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
     }
 
     private func retrieveMemoryCandidates(userInput: String) async -> [RAGEvidenceCandidate] {
-        if let provider = index as? MemoryEmbeddingSearchProviding,
-           let embeddingMatches = try? await provider.getRelevantMemories(userInput: userInput, limit: 15),
-           !embeddingMatches.isEmpty {
-            return embeddingMatches.enumerated().map { offset, match in
-                let normalizedSimilarity = max(0, min(1, match.similarityScore))
-                return RAGEvidenceCandidate(
-                    id: "memory|semantic|\(match.entry.id)|\(offset)",
-                    type: .memory,
-                    filePath: nil,
-                    lineStart: nil,
-                    lineEnd: nil,
-                    preview: "- \(match.entry.content)",
-                    searchableText: match.entry.content,
-                    qualityScore: nil,
-                    freshness: 0.7 + (normalizedSimilarity * 0.3),
-                    embeddingSimilarity: normalizedSimilarity
-                )
-            }
-        }
-
-        guard let longTerm = try? await index.getMemories(tier: .longTerm) else { return [] }
-
-        return longTerm
-            .sorted(by: { $0.content < $1.content })
-            .prefix(15)
-            .enumerated()
-            .map { offset, entry in
-                RAGEvidenceCandidate(
-                    id: "memory|long_term|\(offset)",
-                    type: .memory,
-                    filePath: nil,
-                    lineStart: nil,
-                    lineEnd: nil,
-                    preview: "- \(entry.content)",
-                    searchableText: entry.content,
-                    qualityScore: nil,
-                    freshness: 0.65
-                )
-            }
+        []
     }
 
     private func retrieveSegmentCandidates(userInput: String) async -> [RAGEvidenceCandidate] {

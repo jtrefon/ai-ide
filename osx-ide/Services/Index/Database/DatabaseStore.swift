@@ -133,53 +133,6 @@ public actor DatabaseStore {
         try database.searchSymbolsWithPaths(nameLike: query, limit: limit)
     }
 
-    // MARK: - Memory Operations
-
-    public func saveMemory(_ entry: MemoryEntry) throws {
-        try database.saveMemory(entry)
-    }
-
-    public func deleteMemory(id: String) throws {
-        try database.deleteMemory(id: id)
-    }
-
-    public func getMemories(tier: MemoryTier? = nil) throws -> [MemoryEntry] {
-        try database.getMemories(tier: tier)
-    }
-
-    public func saveMemoryEmbedding(memoryId: String, modelId: String, vector: [Float]) throws {
-        try database.saveMemoryEmbedding(memoryId: memoryId, modelId: modelId, vector: vector)
-    }
-
-    public func searchSimilarMemories(
-        modelId: String,
-        queryVector: [Float],
-        limit: Int,
-        tier: MemoryTier?
-    ) throws -> [MemorySimilarityResult] {
-        try database.searchSimilarMemories(modelId: modelId, queryVector: queryVector, limit: limit, tier: tier)
-    }
-
-    func replaceCodeChunks(
-        resourceId: String,
-        modelId: String,
-        chunks: [CodeChunkRecord]
-    ) throws {
-        try database.replaceCodeChunks(resourceId: resourceId, modelId: modelId, chunks: chunks)
-    }
-
-    func deleteCodeChunks(resourceId: String, modelId: String? = nil) throws {
-        try database.deleteCodeChunks(resourceId: resourceId, modelId: modelId)
-    }
-
-    func searchSimilarCodeChunks(
-        modelId: String,
-        queryVector: [Float],
-        limit: Int
-    ) throws -> [CodeChunkSimilarityResult] {
-        try database.searchSimilarCodeChunks(modelId: modelId, queryVector: queryVector, limit: limit)
-    }
-
     // MARK: - AI Enrichment Operations (stubs — always return defaults)
 
     public func isResourceAIEnriched(resourceId: String) throws -> Bool {

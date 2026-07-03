@@ -24,8 +24,6 @@ public class DatabaseManager {
     private let queueID = UUID()
 
     private lazy var schemaManager = DatabaseSchemaManager(database: self)
-    private lazy var memoryManager = DatabaseMemoryManager(database: self)
-    private lazy var codeChunkManager = DatabaseCodeChunkManager(database: self)
     private lazy var symbolManager = DatabaseSymbolManager(database: self)
     private lazy var queryExecutor = DatabaseQueryExecutor(database: self)
     public init(path: String) throws {
@@ -75,51 +73,6 @@ public class DatabaseManager {
     }
 
     // MARK: - Memory Operations
-
-    public func saveMemory(_ memory: MemoryEntry) throws {
-        try memoryManager.saveMemory(memory)
-    }
-
-    public func getMemories(tier: MemoryTier? = nil) throws -> [MemoryEntry] {
-        try memoryManager.getMemories(tier: tier)
-    }
-
-    public func deleteMemory(id: String) throws {
-        try memoryManager.deleteMemory(id: id)
-    }
-
-    public func saveMemoryEmbedding(memoryId: String, modelId: String, vector: [Float]) throws {
-        try memoryManager.saveMemoryEmbedding(memoryId: memoryId, modelId: modelId, vector: vector)
-    }
-
-    public func searchSimilarMemories(
-        modelId: String,
-        queryVector: [Float],
-        limit: Int,
-        tier: MemoryTier?
-    ) throws -> [MemorySimilarityResult] {
-        try memoryManager.searchSimilarMemories(modelId: modelId, queryVector: queryVector, limit: limit, tier: tier)
-    }
-
-    func replaceCodeChunks(
-        resourceId: String,
-        modelId: String,
-        chunks: [CodeChunkRecord]
-    ) throws {
-        try codeChunkManager.replaceCodeChunks(resourceId: resourceId, modelId: modelId, chunks: chunks)
-    }
-
-    func deleteCodeChunks(resourceId: String, modelId: String? = nil) throws {
-        try codeChunkManager.deleteCodeChunks(resourceId: resourceId, modelId: modelId)
-    }
-
-    func searchSimilarCodeChunks(
-        modelId: String,
-        queryVector: [Float],
-        limit: Int
-    ) throws -> [CodeChunkSimilarityResult] {
-        try codeChunkManager.searchSimilarCodeChunks(modelId: modelId, queryVector: queryVector, limit: limit)
-    }
 
     public func saveSymbols(_ symbols: [Symbol]) throws {
         try symbolManager.saveSymbols(symbols)
