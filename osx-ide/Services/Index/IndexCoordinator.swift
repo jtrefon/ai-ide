@@ -155,6 +155,11 @@ public actor IndexCoordinator {
     }
 
     private func processIndexFiles(_ files: [URL], total: Int, localGeneration: UInt64) async -> Int {
+        // Wait once for background work conditions before processing all files
+        await backgroundWorkGovernor.waitUntilReady(
+            for: .indexing,
+            reason: "reindex_batch:\(files.count)_files"
+        )
         var processed = 0
         for file in files {
             if Task.isCancelled || localGeneration != generation { break }
@@ -162,10 +167,6 @@ public actor IndexCoordinator {
                 await IndexLogger.shared.log("Reindex aborted: Indexing was disabled during process")
                 break
             }
-            await backgroundWorkGovernor.waitUntilReady(
-                for: .indexing,
-                reason: "reindex_file:\(file.lastPathComponent)"
-            )
             if Task.isCancelled || localGeneration != generation { break }
             await publishProgress(processed: processed, total: total, file: file)
             do {
@@ -327,10 +328,6 @@ public actor IndexCoordinator {
                     await IndexLogger.shared.log("Single file index skipped for \(url.path): Indexing disabled")
                     return
                 }
-                await self.backgroundWorkGovernor.waitUntilReady(
-                    for: .indexing,
-                    reason: "single_file:\(url.lastPathComponent)"
-                )
                 await IndexLogger.shared.log("Indexing single file: \(url.path)")
                 await self.eventBus.publish(IndexingStartedEvent())
                 await self.eventBus.publish(IndexingProgressEvent(processedCount: 0, totalCount: 1, currentFile: url))
