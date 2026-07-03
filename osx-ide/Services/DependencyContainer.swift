@@ -237,9 +237,11 @@ class DependencyContainer: ObservableObject {
                 _conversationManager.updateVectorStoreService(service)
             }
 
-            // Ingest uningested conversations from index.ndjson
+            // Defer conversation ingestion to background — don't block startup
             let eventBus = await MainActor.run { _eventBus }
-            await ingestConversations(service: service, projectRoot: root, eventBus: eventBus)
+            Task.detached(priority: .utility) { [weak self] in
+                await self?.ingestConversations(service: service, projectRoot: root, eventBus: eventBus)
+            }
         }
 
         await MainActor.run {
