@@ -24,44 +24,65 @@ public enum SymbolExtractor {
     }
 }
 
-// MARK: - Swift
+// MARK: - Pattern cache
 
-private let swiftScopePattern = try! NSRegularExpression(pattern: "\\b(public|private|internal|fileprivate|open|static|class)\\b")
-private let swiftSignaturePattern = try! NSRegularExpression(pattern: "\\(.*?\\)\\s*(async)?\\s*(throws)?\\s*->\\s*[^\\{;]+")
+private let regexCache: [String: NSRegularExpression] = {
+    let patterns = [
+        "swift_type": "\\b(actor|class|struct|enum|protocol|extension)\\s+([A-Za-z_]\\w*)",
+        "swift_method": "\\b(func|static\\s+func|class\\s+func)\\s+([A-Za-z_]\\w*)\\s*\\(",
+        "swift_property": "\\b(var|let)\\s+([A-Za-z_]\\w*)\\s*[=:]",
+        "swift_typealias": "\\btypealias\\s+([A-Za-z_]\\w*)",
+        "swift_scope": "\\b(public|private|internal|fileprivate|open|static|class)\\b",
+        "swift_sig": "\\(.*?\\)\\s*(async)?\\s*(throws)?\\s*->\\s*[^\\{;]+",
+        "jsts_class": "\\b(class|interface)\\s+([A-Za-z_]\\w*)",
+        "jsts_func": "\\b(function|const|let|var)\\s+([A-Za-z_]\\w*)\\s*[=:(]",
+        "jsts_export": "export\\s+(default\\s+)?(function|class)\\s+([A-Za-z_]\\w*)",
+        "py_class": "\\bclass\\s+([A-Za-z_]\\w*)\\s*[(:]",
+        "py_def": "\\bdef\\s+([A-Za-z_]\\w*)\\s*\\(",
+    ]
+    var cache: [String: NSRegularExpression] = [:]
+    for (key, pattern) in patterns {
+        if let regex = try? NSRegularExpression(pattern: pattern) {
+            cache[key] = regex
+        }
+    }
+    return cache
+}()
+
+private func match(_ text: String, key: String) -> [String]? {
+    guard let regex = regexCache[key] else { return nil }
+    let range = NSRange(text.startIndex..<text.endIndex, in: text)
+    guard let match = regex.firstMatch(in: text, range: range) else { return nil }
+    var groups: [String] = []
+    for i in 0..<match.numberOfRanges {
+        guard let r = Range(match.range(at: i), in: text) else { continue }
+        groups.append(String(text[r]))
+    }
+    return groups
+}
+
+// MARK: - Swift
 
 private func extractSwift(content: String, filePath: String) -> [ExtractedSymbol] {
     let lines = content.components(separatedBy: .newlines)
     var symbols: [ExtractedSymbol] = []
-    var braceDepth = 0
     var lastTypeName = ""
-    var lastTypeDepth = -1
 
     for (lineIndex, line) in lines.enumerated() {
         let lineNum = lineIndex + 1
         let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-        // Track brace depth for parent-child
-        for ch in line {
-            if ch == "{" { braceDepth += 1 }
-            if ch == "}" { braceDepth -= 1 }
-        }
-
-        // Type declarations: class, struct, enum, protocol, actor, extension
-        if let m = tryMatch(trimmed, pattern: "\\b(actor|class|struct|enum|protocol|extension)\\s+([A-Za-z_]\\w*)") {
+        if let m = match(trimmed, key: "swift_type") {
             let kind = m[1]
             let name = m[2]
             let scope = extractSwiftScope(from: trimmed)
-            let parent = kind == "extension" ? name : "" // extensions reference their type
+            let parent = kind == "extension" ? name : ""
             symbols.append(ExtractedSymbol(name: name, kind: kind, scope: scope, signature: "", parentName: parent, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
-            if kind != "extension" {
-                lastTypeName = name
-                lastTypeDepth = braceDepth - 1
-            }
+            if kind != "extension" { lastTypeName = name }
             continue
         }
 
-        // Methods/functions
-        if let m = tryMatch(trimmed, pattern: "\\b(func|static\\s+func|class\\s+func)\\s+([A-Za-z_]\\w*)\\s*\\(") {
+        if let m = match(trimmed, key: "swift_method") {
             let name = m[2]
             let scope = extractSwiftScope(from: trimmed)
             let sig = extractSwiftSignature(line: trimmed)
@@ -69,16 +90,14 @@ private func extractSwift(content: String, filePath: String) -> [ExtractedSymbol
             continue
         }
 
-        // Properties
-        if let m = tryMatch(trimmed, pattern: "\\b(var|let)\\s+([A-Za-z_]\\w*)\\s*[=:]") {
+        if let m = match(trimmed, key: "swift_property") {
             let name = m[2]
             let scope = extractSwiftScope(from: trimmed)
             symbols.append(ExtractedSymbol(name: name, kind: "property", scope: scope, signature: "", parentName: lastTypeName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
             continue
         }
 
-        // Typealias
-        if let m = tryMatch(trimmed, pattern: "\\btypealias\\s+([A-Za-z_]\\w*)") {
+        if let m = match(trimmed, key: "swift_typealias") {
             symbols.append(ExtractedSymbol(name: m[1], kind: "typealias", scope: "", signature: "", parentName: lastTypeName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
             continue
         }
@@ -88,15 +107,13 @@ private func extractSwift(content: String, filePath: String) -> [ExtractedSymbol
 }
 
 private func extractSwiftScope(from line: String) -> String {
-    let range = NSRange(line.startIndex..<line.endIndex, in: line)
-    guard let match = swiftScopePattern.firstMatch(in: line, range: range) else { return "" }
-    return String(line[Range(match.range(at: 1), in: line)!])
+    guard let m = match(line, key: "swift_scope"), m.count > 1 else { return "" }
+    return m[1]
 }
 
 private func extractSwiftSignature(line: String) -> String {
-    let range = NSRange(line.startIndex..<line.endIndex, in: line)
-    guard let match = swiftSignaturePattern.firstMatch(in: line, range: range) else { return "" }
-    return String(line[Range(match.range(at: 0), in: line)!])
+    guard let m = match(line, key: "swift_sig"), m.count > 0 else { return "" }
+    return m[0]
 }
 
 // MARK: - JS/TS
@@ -104,36 +121,25 @@ private func extractSwiftSignature(line: String) -> String {
 private func extractJSTS(content: String, filePath: String) -> [ExtractedSymbol] {
     let lines = content.components(separatedBy: .newlines)
     var symbols: [ExtractedSymbol] = []
-    var braceDepth = 0
     var lastClassName = ""
 
     for (lineIndex, line) in lines.enumerated() {
         let lineNum = lineIndex + 1
         let trimmed = line.trimmingCharacters(in: .whitespaces)
-        for ch in line {
-            if ch == "{" { braceDepth += 1 }
-            if ch == "}" { braceDepth -= 1 }
-        }
 
-        // class
-        if let m = tryMatch(trimmed, pattern: "\\b(class|interface)\\s+([A-Za-z_]\\w*)") {
-            let name = m[2]
-            symbols.append(ExtractedSymbol(name: name, kind: m[1], scope: extractJSScope(from: trimmed), signature: "", parentName: "", lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
-            lastClassName = name
+        if let m = match(trimmed, key: "jsts_class") {
+            symbols.append(ExtractedSymbol(name: m[2], kind: m[1], scope: extractJSScope(from: trimmed), signature: "", parentName: "", lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+            lastClassName = m[2]
             continue
         }
 
-        // function
-        if let m = tryMatch(trimmed, pattern: "\\b(function|const|let|var)\\s+([A-Za-z_]\\w*)\\s*[=:(]") {
-            let name = m[2]
+        if let m = match(trimmed, key: "jsts_func") {
             let kind = m[1] == "function" ? "function" : "variable"
-            let scope = extractJSScope(from: trimmed)
-            symbols.append(ExtractedSymbol(name: name, kind: kind, scope: scope, signature: "", parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+            symbols.append(ExtractedSymbol(name: m[2], kind: kind, scope: extractJSScope(from: trimmed), signature: "", parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
             continue
         }
 
-        // export default function/class
-        if let m = tryMatch(trimmed, pattern: "export\\s+(default\\s+)?(function|class)\\s+([A-Za-z_]\\w*)") {
+        if let m = match(trimmed, key: "jsts_export") {
             symbols.append(ExtractedSymbol(name: m[3], kind: m[2], scope: "export", signature: "", parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
             continue
         }
@@ -143,8 +149,7 @@ private func extractJSTS(content: String, filePath: String) -> [ExtractedSymbol]
 }
 
 private func extractJSScope(from line: String) -> String {
-    if line.contains("export ") { return "export" }
-    return ""
+    line.contains("export ") ? "export" : ""
 }
 
 // MARK: - Python
@@ -162,39 +167,19 @@ private func extractPython(content: String, filePath: String) -> [ExtractedSymbo
 
         guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
 
-        // class
-        if let m = tryMatch(trimmed, pattern: "\\bclass\\s+([A-Za-z_]\\w*)\\s*[(:]") {
-            let name = m[1]
-            symbols.append(ExtractedSymbol(name: name, kind: "class", scope: "", signature: "", parentName: "", lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
-            lastClassName = name
+        if let m = match(trimmed, key: "py_class") {
+            symbols.append(ExtractedSymbol(name: m[1], kind: "class", scope: "", signature: "", parentName: "", lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+            lastClassName = m[1]
             lastClassIndent = indent
             continue
         }
 
-        // def (method or function)
-        if let m = tryMatch(trimmed, pattern: "\\bdef\\s+([A-Za-z_]\\w*)\\s*\\(") {
-            let name = m[1]
-            let kind = (indent > lastClassIndent && !lastClassName.isEmpty) ? "method" : "function"
-            let parent = kind == "method" ? lastClassName : ""
-            symbols.append(ExtractedSymbol(name: name, kind: kind, scope: "", signature: "", parentName: parent, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+        if let m = match(trimmed, key: "py_def") {
+            let isMethod = indent > lastClassIndent && !lastClassName.isEmpty
+            symbols.append(ExtractedSymbol(name: m[1], kind: isMethod ? "method" : "function", scope: "", signature: "", parentName: isMethod ? lastClassName : "", lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
             continue
         }
     }
 
     return symbols
-}
-
-// MARK: - Helpers
-
-private func tryMatch(_ text: String, pattern: String) -> [String]? {
-    guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-    let range = NSRange(text.startIndex..<text.endIndex, in: text)
-    guard let match = regex.firstMatch(in: text, range: range) else { return nil }
-    var groups: [String] = []
-    for i in 0..<match.numberOfRanges {
-        if let r = Range(match.range(at: i), in: text) {
-            groups.append(String(text[r]))
-        }
-    }
-    return groups
 }
