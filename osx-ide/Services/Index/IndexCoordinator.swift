@@ -380,22 +380,9 @@ public actor IndexCoordinator {
         for file in files {
             let resourceId = file.absoluteString
             let fileModTime = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate?.timeIntervalSince1970
-            guard let fileModTime else {
-                count += 1
-                continue
-            }
+            guard let fileModTime else { count += 1; continue }
             let existingModTime = try? await indexer.getResourceLastModified(resourceId: resourceId)
             if let existingModTime, abs(existingModTime - fileModTime) < 0.001 {
-                continue
-            }
-            let content = try? String(contentsOf: file, encoding: .utf8)
-            guard let content else {
-                count += 1
-                continue
-            }
-            let currentHash = await indexer.computeHash(for: content)
-            let existingHash = try? await indexer.getResourceContentHash(resourceId: resourceId)
-            if let existingHash, !existingHash.isEmpty, existingHash == currentHash {
                 continue
             }
             count += 1
