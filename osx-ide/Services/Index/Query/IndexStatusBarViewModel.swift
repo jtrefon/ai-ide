@@ -12,8 +12,6 @@ final class IndexStatusBarViewModel: ObservableObject {
     @Published private(set) var isRetrieving: Bool = false
     @Published private(set) var retrievalStatus: String = ""
 
-    @Published private(set) var embeddingModelIdentifier: String = "hashing_v1"
-
     @Published private(set) var vectorStoreEntryCount: Int = 0
     @Published private(set) var vectorStoreIsLoaded: Bool = false
     @Published private(set) var isIngesting: Bool = false
@@ -83,19 +81,19 @@ final class IndexStatusBarViewModel: ObservableObject {
         }
 
         if let stats {
-            let embedStatus: String
+            let vsStatus: String
             if isIngesting {
-                embedStatus = "Embed \(ingestionProgress)/\(ingestionTotal)"
+                vsStatus = "VS \(ingestionProgress)/\(ingestionTotal)"
             } else if vectorStoreIsLoaded {
-                embedStatus = "Embed \(vectorStoreEntryCount)"
+                vsStatus = "VS \(vectorStoreEntryCount)"
             } else {
-                embedStatus = "Embed init"
+                vsStatus = "VS init"
             }
             if stats.totalProjectFileCount > 0 {
                 let indexed = min(stats.indexedResourceCount, stats.totalProjectFileCount)
-                return "Index \(indexed)/\(stats.totalProjectFileCount) | \(embedStatus)"
+                return "IDX \(indexed)/\(stats.totalProjectFileCount) | \(vsStatus)"
             }
-            return "Index: \(stats.indexedResourceCount) files | \(embedStatus)"
+            return "IDX \(stats.indexedResourceCount) | \(vsStatus)"
         }
 
         return "Index: unavailable"
@@ -120,13 +118,13 @@ final class IndexStatusBarViewModel: ObservableObject {
             ? stats.averageAIQualityScore
             : stats.averageQualityScore
         let quality = score > 0 ? String(format: "%.0f", score) : "0"
-        let embedInfo: String
+        let vsInfo: String
         if vectorStoreIsLoaded {
-            embedInfo = "Embed \(vectorStoreEntryCount)"
+            vsInfo = "VS \(vectorStoreEntryCount)"
         } else {
-            embedInfo = "Embed -"
+            vsInfo = "VS -"
         }
-        return "C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | DB \(size) | \(embedInfo)"
+        return "C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | IDX \(size) | \(vsInfo)"
     }
 
     private func subscribeToEvents() {
@@ -153,7 +151,6 @@ final class IndexStatusBarViewModel: ObservableObject {
             self.isIndexing = false
             self.currentFile = nil
             self.refreshStats()
-            self.refreshEmbeddingModel()
         }
         .store(in: &cancellables)
 
