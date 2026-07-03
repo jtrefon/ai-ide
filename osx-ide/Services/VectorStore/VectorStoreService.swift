@@ -120,6 +120,7 @@ public actor VectorStoreService {
 
     @discardableResult
     public func addBatch(
+        // swiftlint:disable:next large_tuple
         entries: [(text: String, vector: [Float], source: String, category: String?)]
     ) throws -> [String] {
         guard !entries.isEmpty else { return [] }

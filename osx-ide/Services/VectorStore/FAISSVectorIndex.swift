@@ -95,13 +95,13 @@ public final class FAISSVectorIndex: VectorIndex, @unchecked Sendable {
             throw VectorStoreError.invalidDimension(expected: dimensions, got: query.count)
         }
         let idx = try ensureIndex()
-        let k = min(limit, max(count, 1))
-        var distances = [Float](repeating: 0, count: k)
-        var labels = [Int64](repeating: -1, count: k)
+        let neighbors = min(limit, max(count, 1))
+        var distances = [Float](repeating: 0, count: neighbors)
+        var labels = [Int64](repeating: -1, count: neighbors)
         let code = query.withUnsafeBufferPointer { qBuf in
             distances.withUnsafeMutableBufferPointer { dBuf in
                 labels.withUnsafeMutableBufferPointer { lBuf in
-                    vs_index_search(idx, 1, qBuf.baseAddress, Int64(k), dBuf.baseAddress, lBuf.baseAddress)
+                    vs_index_search(idx, 1, qBuf.baseAddress, Int64(neighbors), dBuf.baseAddress, lBuf.baseAddress)
                 }
             }
         }

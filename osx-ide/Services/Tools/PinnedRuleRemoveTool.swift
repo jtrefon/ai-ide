@@ -2,7 +2,9 @@ import Foundation
 
 public final class PinnedRuleRemoveTool: AITool {
     public let name = "pinned_rule_remove"
-    public let description = "Remove a pinned rule by index. Use when a rule is obsolete and needs to be replaced. List rules first with pinned_rule_list to see indices."
+    public let description = "Remove a pinned rule by index. " +
+        "Use when a rule is obsolete and needs to be replaced. " +
+        "List rules first with pinned_rule_list to see indices."
     public var parameters: [String: Any] {
         [
             "type": "object",

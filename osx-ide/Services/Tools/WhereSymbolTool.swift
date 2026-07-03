@@ -2,7 +2,8 @@ import Foundation
 
 public final class WhereSymbolTool: AITool {
     public let name = "where_symbol"
-    public let description = "Find where a symbol is located in the project. Pass the symbol ID from locate_symbol."
+    public let description = "Find where a symbol is located in the project. " +
+        "Pass the symbol ID from locate_symbol."
     public var parameters: [String: Any] {
         [
             "type": "object",
@@ -27,10 +28,10 @@ public final class WhereSymbolTool: AITool {
         guard let id = raw["id"] as? Int else {
             return "Missing or invalid 'id' argument. Use locate_symbol first to get the ID."
         }
-        guard let db = databaseProvider() else {
+        guard let database = databaseProvider() else {
             return "Symbol index not available."
         }
-        let locations = try await db.whereSymbol(id: id)
+        let locations = try await database.whereSymbol(id: id)
         guard !locations.isEmpty else {
             return "No locations found for symbol id \(id)."
         }

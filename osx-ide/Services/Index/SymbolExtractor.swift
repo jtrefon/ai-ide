@@ -43,7 +43,7 @@ private let regexCache: [String: NSRegularExpression] = {
         "php_class": "\\b(class|interface|trait)\\s+([A-Za-z_]\\w*)",
         "php_function": "\\bfunction\\s+([A-Za-z_]\\w*)\\s*\\(",
         "php_scope": "\\b(public|private|protected|static)\\b",
-        "php_property": "\\b(public|private|protected)\\s+\\$([A-Za-z_]\\w*)",
+        "php_property": "\\b(public|private|protected)\\s+\\$([A-Za-z_]\\w*)"
     ]
     var cache: [String: NSRegularExpression] = [:]
     for (key, pattern) in patterns {
@@ -59,9 +59,9 @@ private func match(_ text: String, key: String) -> [String]? {
     let range = NSRange(text.startIndex..<text.endIndex, in: text)
     guard let match = regex.firstMatch(in: text, range: range) else { return nil }
     var groups: [String] = []
-    for i in 0..<match.numberOfRanges {
-        guard let r = Range(match.range(at: i), in: text) else { continue }
-        groups.append(String(text[r]))
+    for index in 0..<match.numberOfRanges {
+        guard let range = Range(match.range(at: index), in: text) else { continue }
+        groups.append(String(text[range]))
     }
     return groups
 }
@@ -77,33 +77,45 @@ private func extractSwift(content: String, filePath: String) -> [ExtractedSymbol
         let lineNum = lineIndex + 1
         let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-        if let m = match(trimmed, key: "swift_type") {
-            let kind = m[1]
-            let name = m[2]
+        if let groups = match(trimmed, key: "swift_type") {
+            let kind = groups[1]
+            let name = groups[2]
             let scope = extractSwiftScope(from: trimmed)
             let parent = kind == "extension" ? name : ""
-            symbols.append(ExtractedSymbol(name: name, kind: kind, scope: scope, signature: "", parentName: parent, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+            let sym = ExtractedSymbol(name: name, kind: kind, scope: scope, signature: "",
+                                      parentName: parent, lineStart: lineNum, lineEnd: lineNum,
+                                      filePath: filePath)
+            symbols.append(sym)
             if kind != "extension" { lastTypeName = name }
             continue
         }
 
-        if let m = match(trimmed, key: "swift_method") {
-            let name = m[2]
+        if let groups = match(trimmed, key: "swift_method") {
+            let name = groups[2]
             let scope = extractSwiftScope(from: trimmed)
             let sig = extractSwiftSignature(line: trimmed)
-            symbols.append(ExtractedSymbol(name: name, kind: "method", scope: scope, signature: sig, parentName: lastTypeName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+            let sym = ExtractedSymbol(name: name, kind: "method", scope: scope, signature: sig,
+                                      parentName: lastTypeName, lineStart: lineNum, lineEnd: lineNum,
+                                      filePath: filePath)
+            symbols.append(sym)
             continue
         }
 
-        if let m = match(trimmed, key: "swift_property") {
-            let name = m[2]
+        if let groups = match(trimmed, key: "swift_property") {
+            let name = groups[2]
             let scope = extractSwiftScope(from: trimmed)
-            symbols.append(ExtractedSymbol(name: name, kind: "property", scope: scope, signature: "", parentName: lastTypeName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+            let sym = ExtractedSymbol(name: name, kind: "property", scope: scope, signature: "",
+                                      parentName: lastTypeName, lineStart: lineNum, lineEnd: lineNum,
+                                      filePath: filePath)
+            symbols.append(sym)
             continue
         }
 
-        if let m = match(trimmed, key: "swift_typealias") {
-            symbols.append(ExtractedSymbol(name: m[1], kind: "typealias", scope: "", signature: "", parentName: lastTypeName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+        if let groups = match(trimmed, key: "swift_typealias") {
+            let sym = ExtractedSymbol(name: groups[1], kind: "typealias", scope: "", signature: "",
+                                      parentName: lastTypeName, lineStart: lineNum, lineEnd: lineNum,
+                                      filePath: filePath)
+            symbols.append(sym)
             continue
         }
     }
@@ -112,13 +124,13 @@ private func extractSwift(content: String, filePath: String) -> [ExtractedSymbol
 }
 
 private func extractSwiftScope(from line: String) -> String {
-    guard let m = match(line, key: "swift_scope"), m.count > 1 else { return "" }
-    return m[1]
+    guard let groups = match(line, key: "swift_scope"), groups.count > 1 else { return "" }
+    return groups[1]
 }
 
 private func extractSwiftSignature(line: String) -> String {
-    guard let m = match(line, key: "swift_sig"), m.count > 0 else { return "" }
-    return m[0]
+    guard let groups = match(line, key: "swift_sig"), groups.count > 0 else { return "" }
+    return groups[0]
 }
 
 // MARK: - JS/TS
@@ -132,20 +144,29 @@ private func extractJSTS(content: String, filePath: String) -> [ExtractedSymbol]
         let lineNum = lineIndex + 1
         let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-        if let m = match(trimmed, key: "jsts_class") {
-            symbols.append(ExtractedSymbol(name: m[2], kind: m[1], scope: extractJSScope(from: trimmed), signature: "", parentName: "", lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
-            lastClassName = m[2]
+        if let groups = match(trimmed, key: "jsts_class") {
+            let sym = ExtractedSymbol(name: groups[2], kind: groups[1], scope: extractJSScope(from: trimmed),
+                                      signature: "", parentName: "", lineStart: lineNum, lineEnd: lineNum,
+                                      filePath: filePath)
+            symbols.append(sym)
+            lastClassName = groups[2]
             continue
         }
 
-        if let m = match(trimmed, key: "jsts_func") {
-            let kind = m[1] == "function" ? "function" : "variable"
-            symbols.append(ExtractedSymbol(name: m[2], kind: kind, scope: extractJSScope(from: trimmed), signature: "", parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+        if let groups = match(trimmed, key: "jsts_func") {
+            let kind = groups[1] == "function" ? "function" : "variable"
+            let sym = ExtractedSymbol(name: groups[2], kind: kind, scope: extractJSScope(from: trimmed),
+                                      signature: "", parentName: lastClassName, lineStart: lineNum,
+                                      lineEnd: lineNum, filePath: filePath)
+            symbols.append(sym)
             continue
         }
 
-        if let m = match(trimmed, key: "jsts_export") {
-            symbols.append(ExtractedSymbol(name: m[3], kind: m[2], scope: "export", signature: "", parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+        if let groups = match(trimmed, key: "jsts_export") {
+            let sym = ExtractedSymbol(name: groups[3], kind: groups[2], scope: "export", signature: "",
+                                      parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum,
+                                      filePath: filePath)
+            symbols.append(sym)
             continue
         }
     }
@@ -172,16 +193,23 @@ private func extractPython(content: String, filePath: String) -> [ExtractedSymbo
 
         guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
 
-        if let m = match(trimmed, key: "py_class") {
-            symbols.append(ExtractedSymbol(name: m[1], kind: "class", scope: "", signature: "", parentName: "", lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
-            lastClassName = m[1]
+        if let groups = match(trimmed, key: "py_class") {
+            let sym = ExtractedSymbol(name: groups[1], kind: "class", scope: "", signature: "",
+                                      parentName: "", lineStart: lineNum, lineEnd: lineNum,
+                                      filePath: filePath)
+            symbols.append(sym)
+            lastClassName = groups[1]
             lastClassIndent = indent
             continue
         }
 
-        if let m = match(trimmed, key: "py_def") {
+        if let groups = match(trimmed, key: "py_def") {
             let isMethod = indent > lastClassIndent && !lastClassName.isEmpty
-            symbols.append(ExtractedSymbol(name: m[1], kind: isMethod ? "method" : "function", scope: "", signature: "", parentName: isMethod ? lastClassName : "", lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+            let sym = ExtractedSymbol(name: groups[1], kind: isMethod ? "method" : "function",
+                                      scope: "", signature: "",
+                                      parentName: isMethod ? lastClassName : "",
+                                      lineStart: lineNum, lineEnd: lineNum, filePath: filePath)
+            symbols.append(sym)
             continue
         }
     }
@@ -197,22 +225,32 @@ private func extractPHP(content: String, filePath: String) -> [ExtractedSymbol] 
     for (lineIndex, line) in lines.enumerated() {
         let lineNum = lineIndex + 1
         let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, !trimmed.hasPrefix("//"), !trimmed.hasPrefix("#"), !trimmed.hasPrefix("/*") else { continue }
+        guard !trimmed.isEmpty else { continue }
+        guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("#"), !trimmed.hasPrefix("/*") else { continue }
 
-        if let m = match(trimmed, key: "php_class") {
-            symbols.append(ExtractedSymbol(name: m[2], kind: m[1], scope: extractPHPScope(from: trimmed), signature: "", parentName: "", lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
-            lastClassName = m[2]
+        if let groups = match(trimmed, key: "php_class") {
+            let sym = ExtractedSymbol(name: groups[2], kind: groups[1], scope: extractPHPScope(from: trimmed),
+                                      signature: "", parentName: "", lineStart: lineNum, lineEnd: lineNum,
+                                      filePath: filePath)
+            symbols.append(sym)
+            lastClassName = groups[2]
             continue
         }
 
-        if let m = match(trimmed, key: "php_function") {
+        if let groups = match(trimmed, key: "php_function") {
             let scope = extractPHPScope(from: trimmed)
-            symbols.append(ExtractedSymbol(name: m[1], kind: "function", scope: scope, signature: "", parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+            let sym = ExtractedSymbol(name: groups[1], kind: "function", scope: scope, signature: "",
+                                      parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum,
+                                      filePath: filePath)
+            symbols.append(sym)
             continue
         }
 
-        if let m = match(trimmed, key: "php_property") {
-            symbols.append(ExtractedSymbol(name: m[2], kind: "property", scope: m[1], signature: "", parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum, filePath: filePath))
+        if let groups = match(trimmed, key: "php_property") {
+            let sym = ExtractedSymbol(name: groups[2], kind: "property", scope: groups[1], signature: "",
+                                      parentName: lastClassName, lineStart: lineNum, lineEnd: lineNum,
+                                      filePath: filePath)
+            symbols.append(sym)
             continue
         }
     }
@@ -221,6 +259,6 @@ private func extractPHP(content: String, filePath: String) -> [ExtractedSymbol] 
 }
 
 private func extractPHPScope(from line: String) -> String {
-    guard let m = match(line, key: "php_scope"), m.count > 1 else { return "" }
-    return m[1]
+    guard let groups = match(line, key: "php_scope"), groups.count > 1 else { return "" }
+    return groups[1]
 }
