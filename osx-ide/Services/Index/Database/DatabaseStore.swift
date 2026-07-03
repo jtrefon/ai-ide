@@ -202,24 +202,13 @@ public actor DatabaseStore {
             content_hash = excluded.content_hash,
             language = excluded.language;
         """
-
-        let ftsDeleteSql = "DELETE FROM resources_fts WHERE content_id = ?;"
-        let ftsInsertSql = "INSERT INTO resources_fts (path, content, content_id) VALUES (?, ?, ?);"
-
-        try database.transaction {
-            try database.execute(
-                sql: sql,
-                parameters: [
-                    request.resourceId,
-                    request.path,
-                    request.language,
-                    request.timestamp,
-                    request.contentHash
-                ]
-            )
-            try database.execute(sql: ftsDeleteSql, parameters: [request.resourceId])
-            try database.execute(sql: ftsInsertSql, parameters: [request.path, request.content, request.resourceId])
-        }
+        try database.execute(sql: sql, parameters: [
+            request.resourceId,
+            request.path,
+            request.language,
+            request.timestamp,
+            request.contentHash
+        ])
     }
 
     public func deleteResource(resourceId: String) throws {

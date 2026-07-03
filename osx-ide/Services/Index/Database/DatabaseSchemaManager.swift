@@ -47,6 +47,7 @@ final class DatabaseSchemaManager {
         CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
 
         -- Drop old tables that are no longer used (memories/code_chunks moved to VectorStore)
+        DROP TABLE IF EXISTS resources_fts;
         DROP TABLE IF EXISTS code_chunks;
         DROP TABLE IF EXISTS memory_embeddings;
         DROP TABLE IF EXISTS memories;
