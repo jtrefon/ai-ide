@@ -88,9 +88,6 @@ final class DatabaseSchemaManager {
             columnDefinition: "INTEGER NOT NULL DEFAULT 0"
         )
         try ensureColumnExists(table: "resources", column: "summary", columnDefinition: "TEXT")
-        try database.execute(sql: "CREATE INDEX IF NOT EXISTS idx_memory_embeddings_model ON memory_embeddings(model_id);")
-        try database.execute(sql: "CREATE INDEX IF NOT EXISTS idx_code_chunks_model ON code_chunks(model_id);")
-        try database.execute(sql: "CREATE INDEX IF NOT EXISTS idx_code_chunks_resource_model ON code_chunks(resource_id, model_id);")
     }
 
     private func ensureColumnExists(table: String, column: String, columnDefinition: String) throws {
