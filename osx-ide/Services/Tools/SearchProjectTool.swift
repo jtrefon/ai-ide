@@ -48,19 +48,8 @@ struct SearchProjectTool: AITool {
         // 1. Vector semantic search via index (best for conceptual relevance)
         if let index {
             let semanticStart = ContinuousClock.now
-            if let chunks = try? await index.getRelevantCodeChunks(userInput: query, limit: maxResults / 2) {
-                for chunk in chunks {
-                    entries.append(SearchEntry(
-                        file: chunk.filePath,
-                        line: chunk.lineStart,
-                        matchType: "semantic",
-                        context: chunk.snippet.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120).description
-                    ))
-                }
-                print("[SEARCH-PROJECT] semantic search found \(chunks.count) chunks in \(Self.milliseconds(semanticStart.duration(to: ContinuousClock.now)))ms")
-            } else {
-                print("[SEARCH-PROJECT] semantic search failed/returned nil in \(Self.milliseconds(semanticStart.duration(to: ContinuousClock.now)))ms")
-            }
+            // Semantic search via MLX embeddings removed — RAG handles contextual retrieval
+            _ = semanticStart
         }
 
         // 2. Symbol search via index (authoritative for code structure)

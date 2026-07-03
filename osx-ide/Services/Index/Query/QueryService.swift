@@ -21,33 +21,4 @@ public struct QueryService: Sendable {
         try await database.searchSymbolsWithPaths(nameLike: query, limit: limit)
     }
 
-    public func getMemories(tier: MemoryTier? = nil) async throws -> [MemoryEntry] {
-        try await database.getMemories(tier: tier)
-    }
-
-    public func searchSimilarMemories(
-        modelId: String,
-        queryVector: [Float],
-        limit: Int,
-        tier: MemoryTier?
-    ) async throws -> [MemorySimilarityResult] {
-        try await database.searchSimilarMemories(
-            modelId: modelId,
-            queryVector: queryVector,
-            limit: limit,
-            tier: tier
-        )
-    }
-
-    public func searchSimilarCodeChunks(
-        modelId: String,
-        queryVector: [Float],
-        limit: Int
-    ) async throws -> [CodeChunkSimilarityResult] {
-        try await database.searchSimilarCodeChunks(
-            modelId: modelId,
-            queryVector: queryVector,
-            limit: limit
-        )
-    }
 }

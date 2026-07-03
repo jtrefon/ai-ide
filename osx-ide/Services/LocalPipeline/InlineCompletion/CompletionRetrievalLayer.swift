@@ -109,12 +109,7 @@ final class CompletionRetrievalLayer: CompletionRetrieving {
     }
 
     private func semanticContextLines(query: String, index: CodebaseIndexProtocol) async -> [String] {
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedQuery.count >= 8 else { return [] }
-        guard let chunks = try? await index.getRelevantCodeChunks(userInput: trimmedQuery, limit: 3) else { return [] }
-        return chunks.prefix(3).map {
-            "[semantic] \($0.filePath):\($0.lineStart)-\($0.lineEnd) \($0.snippet)"
-        }
+        []
     }
 }
 

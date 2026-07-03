@@ -158,16 +158,6 @@ public struct RAGRetrievalResult: Sendable {
     )
 }
 
-public struct MemorySimilarityResult: Sendable {
-    public let entry: MemoryEntry
-    public let similarityScore: Double
-
-    public init(entry: MemoryEntry, similarityScore: Double) {
-        self.entry = entry
-        self.similarityScore = similarityScore
-    }
-}
-
 public struct CodeChunkSimilarityResult: Sendable {
     public let filePath: String
     public let lineStart: Int
@@ -188,12 +178,6 @@ public struct CodeChunkSimilarityResult: Sendable {
         self.snippet = snippet
         self.similarityScore = similarityScore
     }
-}
-
-/// Protocol for services that can search memories by semantic similarity.
-/// NOT isolated to @MainActor to avoid blocking UI during embedding generation.
-public protocol MemoryEmbeddingSearchProviding: Sendable {
-    func getRelevantMemories(userInput: String, limit: Int) async throws -> [MemorySimilarityResult]
 }
 
 public protocol CodeChunkEmbeddingSearchProviding: Sendable {

@@ -57,7 +57,6 @@ final class IndexStatusBarViewModel: ObservableObject {
         subscribeToEvents()
         startStatsPolling()
         refreshStats()
-        refreshEmbeddingModel()
         scheduleInitialRemoteBalanceRefresh()
         refreshFIMAvailability()
     }
@@ -322,18 +321,6 @@ final class IndexStatusBarViewModel: ObservableObject {
         guard let codebaseIndex = codebaseIndexProvider() else { return }
         Task { @MainActor in
             self.stats = try? await codebaseIndex.getStats()
-        }
-    }
-
-    private func refreshEmbeddingModel() {
-        guard let codebaseIndex = codebaseIndexProvider() else { return }
-        Task { @MainActor in
-            let modelId = codebaseIndex.currentEmbeddingModelIdentifier
-            if modelId.contains("hashing") {
-                self.embeddingModelIdentifier = "hashing"
-            } else {
-                self.embeddingModelIdentifier = "bge-s"
-            }
         }
     }
 

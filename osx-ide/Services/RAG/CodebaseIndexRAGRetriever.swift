@@ -137,24 +137,6 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
     }
 
     private func retrieveSegmentCandidates(userInput: String) async -> [RAGEvidenceCandidate] {
-        if let semanticMatches = try? await index.getRelevantCodeChunks(userInput: userInput, limit: 12),
-           !semanticMatches.isEmpty {
-            return semanticMatches.map { match in
-                RAGEvidenceCandidate(
-                    id: "segment|semantic|\(match.filePath)|\(match.lineStart)|\(match.lineEnd)",
-                    type: .segment,
-                    filePath: match.filePath,
-                    lineStart: match.lineStart,
-                    lineEnd: match.lineEnd,
-                    preview: "- [segment] \(match.filePath):\(match.lineStart)-\(match.lineEnd): \(match.snippet)",
-                    searchableText: "\(match.filePath) \(match.snippet)",
-                    qualityScore: inferredQualityScore(from: match.snippet),
-                    freshness: 0.75 + max(0, min(0.2, match.similarityScore * 0.2)),
-                    embeddingSimilarity: max(0, min(1, match.similarityScore))
-                )
-            }
-        }
-
         let queryTokens = uniqueOrderedTokens(tokenizeForSymbolSearch(userInput)).prefix(3)
         guard !queryTokens.isEmpty else { return [] }
 

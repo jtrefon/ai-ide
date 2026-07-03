@@ -83,6 +83,11 @@ extension CodebaseIndex {
         return (sizeBytes, isInWorkspace)
     }
 
+    public func getSummaries(projectRoot: URL, limit: Int) async throws -> [(path: String, summary: String)] {
+        let paths = try await database.listResourcePaths(matching: nil, limit: limit, offset: 0)
+        return paths.map { ($0, "") }
+    }
+
     private func symbolKindStats(
         _ kindCounts: [String: Int]
     ) -> SymbolKindStats {

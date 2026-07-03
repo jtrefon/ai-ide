@@ -57,11 +57,6 @@ public enum ContextBuilder {
             parts.append("CODEBASE INDEX (matching symbols):\n" + lines.joined(separator: "\n"))
         }
 
-        if let longTerm = try? await index.getMemories(tier: .longTerm), !longTerm.isEmpty {
-            let lines = longTerm.prefix(15).map { "- \($0.content)" }
-            parts.append("PROJECT MEMORY (long-term rules):\n" + lines.joined(separator: "\n"))
-        }
-
         return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }
 }

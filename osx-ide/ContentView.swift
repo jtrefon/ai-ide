@@ -47,7 +47,7 @@ struct ContentView: View {
         return ZStack {
             mainLayout
         }
-        .background(.ultraThinMaterial)
+        .glassEffect(.regular, in: .rect(cornerRadius: 0))
         .environment(\.font, .system(size: CGFloat(uiState.fontSize)))
         .preferredColorScheme(appState.selectedTheme.colorScheme)
         .accessibilityIdentifier(AccessibilityID.appRootView)
@@ -621,7 +621,7 @@ private struct OverlayHostView: View {
                 }
             )
         }
-        .background(.ultraThinMaterial)
+        .glassEffect(.regular, in: .rect(cornerRadius: 0))
     }
 }
 
