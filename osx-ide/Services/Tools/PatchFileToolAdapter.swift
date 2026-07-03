@@ -6,6 +6,7 @@ import Foundation
 /// This is the BRIDGE between architectures: v2 tool logic → old execution pipeline.
 struct PatchFileToolAdapter: AITool {
     let inner = PatchFileTool()
+    let projectRoot: URL
 
     let name = "patch_file"
     let description = "Edit an existing file by line range. Preferred for all edits — surgical, precise, context-efficient. Read the file first for line numbers."
@@ -51,7 +52,7 @@ struct PatchFileToolAdapter: AITool {
                 "end_line": .integer(endLine),
                 "new_content": .string(newContent)
             ],
-            context: ExecutionContext.coder(cid: "adapter", tid: UUID().uuidString, root: URL(fileURLWithPath: "/"))
+            context: ExecutionContext.coder(cid: "adapter", tid: UUID().uuidString, root: projectRoot)
         )
 
         let feedback = try await inner.exec(request: req)

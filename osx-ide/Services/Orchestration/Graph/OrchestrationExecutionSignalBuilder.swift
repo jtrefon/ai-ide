@@ -1,5 +1,6 @@
 import Foundation
 
+@available(*, deprecated, message: "Legacy execution signal system. PlanTool manages plan state directly.")
 struct OrchestrationExecutionSignalBuilder {
     private let planStore: any ConversationPlanStoring
 

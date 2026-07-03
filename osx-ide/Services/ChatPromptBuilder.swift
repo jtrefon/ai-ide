@@ -214,12 +214,16 @@ class ChatPromptBuilder {
         var output = text
         let patterns = [
             #"(?is)<tool_call>\s*.*?\s*</tool_call>"#,
+            // <tool_call> without closing tag (file path on first line, content follows)
+            #"(?is)<tool_call>(?:(?!</tool_call>).)*\z"#,
             #"(?is)<tool_code>\s*.*?\s*</tool_code>"#,
             #"(?is)<arg_key>\s*.*?\s*</arg_key>"#,
             #"(?is)<arg_value>\s*.*?\s*</arg_value>"#,
             #"(?is)<minimax:tool_call>\s*.*?\s*</minimax:tool_call>"#,
             #"(?is)<invoke\s+name=\"[^\"]+\"\s*>.*?</invoke>"#,
             #"(?is)</?parameter\s+name=\"[^\"]+\"[^>]*>"#,
+            #"(?is)<parameter=[^\s>]+>\s*|</parameter>"#,
+            #"(?is)<function=[^\s>]+>\s*|</function>"#,
             #"(?is)</?param\s+name=\"[^\"]+\"[^>]*>"#,
             // Pipe-delimited tool call format: tool_name|{json}
             #"[a-z_]+\|[\[{][^}\]]*[\]}]"#,
@@ -931,7 +935,12 @@ class ChatPromptBuilder {
             "which option",
             "which one",
             "should i proceed",
-            "do you want me to"
+            "do you want me to",
+            "you'll want to",
+            "you would need to",
+            "remaining step",
+            "follow up on",
+            "if you haven't already"
         ]
 
         return triggers.contains(where: { text.contains($0) })

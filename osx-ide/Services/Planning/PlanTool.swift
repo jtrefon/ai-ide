@@ -13,7 +13,7 @@ import Foundation
 ///   - `breakOutCantContinue` — abort the plan
 struct PlanTool: AITool {
     let name = "plan"
-    let description = "Opt into structured planning. Call init to start — research using all tools. Then finishTask ends each phase and advances to the next."
+    let description = "Opt into structured planning. Call init to start — research using all tools. Then finishTask ends each phase and advances to the next. During execution, call finishTask after EACH task to record progress and reveal the next task."
     var parameters: [String: Any] {
         [
             "type": "object",
@@ -147,7 +147,7 @@ struct PlanTool: AITool {
             let items: [PlanItem]
             if lines.count > 1 {
                 items = lines.enumerated().map { (i, line) in
-                    let clean = line.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: #"^\d+[\.\)]\s*"#, with: "", options: .regularExpression)
+                    let clean = Self.stripNumbering(line.trimmingCharacters(in: .whitespaces))
                     return PlanItem(id: "task-\(i + 1)", description: clean, purpose: "Step in the plan", context: [], doneCriteria: "Complete and verified", status: i == 0 ? .active : .pending, summary: nil, blockedReason: nil)
                 }
             } else {
@@ -158,15 +158,21 @@ struct PlanTool: AITool {
             await store.setPlan(conversationId: conversationId, plan: plan)
 
             let first = items[0]
+            let executionGuidance = loadPhasePrompt(key: "plan_execution", defaults: ["phase": "executing"], replacements: [
+                "TASK": first.description.sanitized(),
+                "PURPOSE": first.purpose.sanitized(),
+                "DONE_CRITERIA": first.doneCriteria.sanitized(),
+                "PROGRESS": "0/\(items.count)"
+            ])
             return """
             status: success
-            message: "Plan locked. \(items.count) tasks defined. Starting execution."
+            message: "\(executionGuidance)"
             content:
               action: "finishTask"
               phase: "executing"
-              task: "\(first.description)"
-              purpose: "\(first.purpose)"
-              done_criteria: "\(first.doneCriteria)"
+              task: "\(first.description.sanitized())"
+              purpose: "\(first.purpose.sanitized())"
+              done_criteria: "\(first.doneCriteria.sanitized())"
               progress: "0/\(items.count)"
             """
         }
@@ -177,23 +183,14 @@ struct PlanTool: AITool {
                 return error("No active task found.", code: "NO_ACTIVE_TASK")
             }
 
-            plan.items[activeIndex].status = .completed
-            plan.items[activeIndex].summary = summary
-
-            let nextActive = plan.items.firstIndex(where: { $0.status == .pending })
-            if let nextActive {
-                plan.currentIndex = nextActive
-                plan.items[nextActive].status = .active
-            } else {
-                plan.currentIndex = plan.items.count
-                plan.completedAt = Date()
-            }
-            await store.setPlan(conversationId: conversationId, plan: plan)
+            plan.completeItem(at: activeIndex, summary: summary)
 
             let completed = plan.items.filter { $0.status == .completed || $0.status == .blocked }.count
             let total = plan.items.count
 
-            guard let nextActive, nextActive < plan.items.count else {
+            guard let nextActive = plan.activateNextPending() else {
+                plan.completedAt = Date()
+                await store.setPlan(conversationId: conversationId, plan: plan)
                 return """
                 status: success
                 message: "All \(total) tasks complete. Provide a final summary."
@@ -204,17 +201,25 @@ struct PlanTool: AITool {
                 """
             }
 
+            plan.currentIndex = nextActive
+            await store.setPlan(conversationId: conversationId, plan: plan)
+
             let next = plan.items[nextActive]
+            let executionGuidance = loadPhasePrompt(key: "plan_execution", defaults: ["phase": "executing"], replacements: [
+                "TASK": next.description.sanitized(),
+                "PURPOSE": next.purpose.sanitized(),
+                "DONE_CRITERIA": next.doneCriteria.sanitized(),
+                "PROGRESS": "\(completed)/\(total)"
+            ])
             return """
             status: success
-            message: "Well done. Task \(completed)/\(total) complete. Now working on task \(completed + 1)."
+            message: "\(executionGuidance)"
             content:
               action: "finishTask"
               phase: "executing"
-              task: "\(next.description)"
-              purpose: "\(next.purpose)"
-              context: \(next.context.map { "\"\($0)\"" }.joined(separator: ", "))
-              done_criteria: "\(next.doneCriteria)"
+              task: "\(next.description.sanitized())"
+              purpose: "\(next.purpose.sanitized())"
+              done_criteria: "\(next.doneCriteria.sanitized())"
               progress: "\(completed)/\(total)"
             """
         }
@@ -227,6 +232,15 @@ struct PlanTool: AITool {
           action: "finishTask"
           all_done: true
         """
+    }
+
+    /// Strip leading numbering like "1.", "2)", "3." from a task line.
+    private static func stripNumbering(_ line: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"^\d+[\.\)]\s*"#, options: .anchorsMatchLines) else {
+            return line
+        }
+        let range = NSRange(line.startIndex..., in: line)
+        return regex.stringByReplacingMatches(in: line, range: range, withTemplate: "")
     }
 
     private func error(_ message: String, code: String) -> String {

@@ -1,5 +1,6 @@
 import Foundation
 
+@available(*, deprecated, message: "Legacy branch execution system. PlanTool's structured TaskPlan is the replacement.")
 protocol BranchExecutionContinuationDeciding: Sendable {
     func shouldResumeExecution(
         from state: OrchestrationState,

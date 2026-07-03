@@ -84,13 +84,34 @@ struct TaskPlan: Codable, Sendable {
         return lines.joined(separator: "\n")
     }
 
+    /// Complete the item at the given index with a summary and mark it completed.
+    /// Does NOT advance to the next item — call `activateNextPending()` separately.
+    mutating func completeItem(at index: Int, summary: String) {
+        guard index < items.count else { return }
+        items[index].status = .completed
+        items[index].summary = summary
+    }
+
+    /// Activate the next pending item and return its index, or nil if none remain.
+    /// Scans for the next `.pending` item (skipping blocked items).
+    @discardableResult
+    mutating func activateNextPending() -> Int? {
+        guard let next = items.firstIndex(where: { $0.status == .pending }) else {
+            return nil
+        }
+        items[next].status = .active
+        return next
+    }
+
     /// Advance to the next pending item. Returns false if already at end.
+    /// Uses `activateNextPending()` internally for consistent scanning logic.
+    @discardableResult
     mutating func advance() -> Bool {
         guard currentIndex < items.count else { return false }
         items[currentIndex].status = .completed
         currentIndex += 1
-        if currentIndex < items.count {
-            items[currentIndex].status = .active
+        if let next = activateNextPending() {
+            currentIndex = next
         }
         if isComplete {
             completedAt = Date()

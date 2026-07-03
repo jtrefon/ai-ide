@@ -65,6 +65,8 @@ final class ToolLoopHandler {
         var consecutivePostMutationNonMutationIterations = 0
         var consecutiveNonRecoverableMutationFailureIterations = 0
         var lastContinuationRecoveryIteration = -10  // cooldown: 3 iterations between recoveries
+        var lastNudgedPlanTask: String? = nil        // tracks plan task nudge to avoid spam
+        var hasNudgedResearchPhase = false           // tracks research-phase nudge to avoid spam
         let maxIterations = if usesLocalModel {
             ToolLoopConstants.maxMLXIterations
         } else if mode == .agent {
@@ -879,6 +881,21 @@ final class ToolLoopHandler {
             if let failureRecoveryMessage {
                 followupMessages.append(failureRecoveryMessage)
             }
+            if let planNudge = await planExecutionNudgeMessage(
+                conversationId: conversationId,
+                successfulMutationThisIteration: successfulMutationThisIteration,
+                toolCalls: uniqueToolCalls,
+                lastNudgedPlanTask: &lastNudgedPlanTask
+            ) {
+                followupMessages.append(planNudge)
+            }
+            if let researchNudge = await planResearchNudgeMessage(
+                conversationId: conversationId,
+                toolCalls: uniqueToolCalls,
+                hasNudged: &hasNudgedResearchPhase
+            ) {
+                followupMessages.append(researchNudge)
+            }
             if shouldInjectStepUpdateInstruction(
                 iteration: toolIteration,
                 consecutiveReadOnlyIterations: consecutiveReadOnlyToolIterations,
@@ -1234,7 +1251,7 @@ final class ToolLoopHandler {
                 }
             }
 
-             if mode == .agent,
+             if mode == .agent || mode == .coder,
                 currentResponse.toolCalls?.isEmpty ?? true,
                 let content = currentResponse.content,
                 !(await shouldPreserveNoToolHandoffWithoutIncompletePlan(
@@ -1287,7 +1304,7 @@ final class ToolLoopHandler {
                 }
             }
 
-             if mode == .agent,
+             if mode == .agent || mode == .coder,
                 currentResponse.toolCalls?.isEmpty ?? true,
                 let content = currentResponse.content,
                 !(await shouldPreserveNoToolHandoffWithoutIncompletePlan(
@@ -1585,6 +1602,47 @@ final class ToolLoopHandler {
             content: "Tool execution loop context: The following tool messages are system tool outputs. " +
                 "They are not user-visible. Use them to decide next tool calls or provide a final response. " +
                 "Do not echo raw tool envelopes."
+        )
+    }
+
+    private func planExecutionNudgeMessage(
+        conversationId: String,
+        successfulMutationThisIteration: Bool,
+        toolCalls: [AIToolCall],
+        lastNudgedPlanTask: inout String?
+    ) async -> ChatMessage? {
+        guard successfulMutationThisIteration else { return nil }
+        guard let plan = await ConversationPlanStore.shared.getPlan(conversationId: conversationId),
+              !plan.isComplete,
+              let activeItem = plan.activeItem else { return nil }
+        let calledFinishTaskThisIteration = toolCalls.contains { call in
+            call.name == "plan" && (call.arguments["action"] as? String) == "finishTask"
+        }
+        if calledFinishTaskThisIteration { return nil }
+        if lastNudgedPlanTask == activeItem.id { return nil }
+        lastNudgedPlanTask = activeItem.id
+        return ChatMessage(
+            role: .system,
+            content: "[Plan] You are executing a plan. When the current task is complete, call `plan(action: \"finishTask\", summary: \"...\")` to save your summary and advance to the next task."
+        )
+    }
+
+    private func planResearchNudgeMessage(
+        conversationId: String,
+        toolCalls: [AIToolCall],
+        hasNudged: inout Bool
+    ) async -> ChatMessage? {
+        guard let plan = await ConversationPlanStore.shared.getPlan(conversationId: conversationId),
+              plan.items.isEmpty else { return nil }
+        let calledFinishTaskThisIteration = toolCalls.contains { call in
+            call.name == "plan" && (call.arguments["action"] as? String) == "finishTask"
+        }
+        if calledFinishTaskThisIteration { return nil }
+        if hasNudged { return nil }
+        hasNudged = true
+        return ChatMessage(
+            role: .system,
+            content: "[Plan] You are in the research phase. Use tools to explore the codebase and understand the current state. When you have a clear picture, call `plan(action: \"finishTask\", summary: \"...\")` with your proposed task breakdown. Do not start coding yet."
         )
     }
 
@@ -2035,6 +2093,11 @@ final class ToolLoopHandler {
         successfulMutationThisIteration: Bool
     ) async {
         guard successfulMutationThisIteration else { return }
+
+        // If a structured TaskPlan exists, the new PlanTool handles advancement
+        if await ConversationPlanStore.shared.getPlan(conversationId: conversationId) != nil {
+            return
+        }
 
         guard let currentPlan = await ConversationPlanStore.shared.get(conversationId: conversationId),
               !currentPlan.isEmpty,

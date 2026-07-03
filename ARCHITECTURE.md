@@ -250,8 +250,6 @@ User types character
 User types: "Add error handling to all API routes"
   → ConversationManager routes to CloudConversationService
     → ConversationOrchestrator.run()
-      → StrategicPlanningNode (creates a plan)
-      → TacticalPlanningNode (merges user input into plan)
       → DispatcherNode (sends initial LLM response)
         → model responds with tool calls
       → ToolLoopNode:

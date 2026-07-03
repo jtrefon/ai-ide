@@ -53,7 +53,7 @@ private let toolLoopExecutionToolNames: Set<String> = [
         
         // Agent mode with stage-based filtering
         switch stage {
-        case .strategic_planning, .tactical_planning, .qa_tool_output_review, .qa_quality_review:
+        case .qa_tool_output_review, .qa_quality_review:
             // Read-only tools for planning and QA stages
             return filterReadOnlyTools(from: modeAllowedTools)
             

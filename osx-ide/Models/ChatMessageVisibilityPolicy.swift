@@ -20,11 +20,8 @@ struct ChatMessageVisibilityPolicy {
     
     /// Determines if a message should be displayed in the UI.
     /// Draft messages are always displayed, non-draft messages are filtered if empty.
-    /// Tool execution messages are internal to the agent loop and hidden from chat.
+    /// Tool execution messages are deduplicated (latest per toolCallId) by MessageFilterCoordinator.
     static func shouldDisplayMessage(_ message: ChatMessage) -> Bool {
-        if message.isToolExecution {
-            return false  // Tool executions are internal agent loop messages, not user-facing chat
-        }
         if isSyntheticAssistantProgressMessage(message) {
             return false
         }

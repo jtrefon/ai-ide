@@ -1,6 +1,6 @@
 # Autonomous Continuation With Tools
 
-You are continuing in agent mode with tools available.
+You are continuing with tools available.
 
 The assistant asked the user for the next step or extra input.
 Continue autonomously with the safest reasonable assumptions.

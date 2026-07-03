@@ -25,17 +25,6 @@ enum ToolLoopUtilities {
         return "Plan:\n\(trimmedPlan)"
     }
 
-    private static func nextPendingSection(from planMarkdown: String) -> String {
-        guard let nextPendingLine = planMarkdown
-            .components(separatedBy: .newlines)
-            .first(where: { $0.contains("- [ ]") })?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !nextPendingLine.isEmpty else {
-            return ""
-        }
-        return "Next unfinished item:\n\(nextPendingLine)"
-    }
-
     // MARK: - Text Processing
     
     /// Truncates text to a specified limit with a truncation marker.
@@ -344,6 +333,7 @@ enum ToolLoopUtilities {
         return messages
     }
 
+    @available(*, deprecated, message: "Use PlanTool's structured TaskPlan instead. Legacy markdown-based plan continuation.")
     static func buildPlanContinuationMessages(
         userInput: String,
         conversationId: String,
@@ -367,17 +357,12 @@ enum ToolLoopUtilities {
             parts.append(contextSection)
         }
 
-        parts.append(try prompt(
-                key: "ConversationFlow/Corrections/plan_continuation",
-                projectRoot: projectRoot,
-                replacements: [
-                    "{{COMPLETED_COUNT}}": String(completedCount),
-                    "{{TOTAL_COUNT}}": String(totalCount),
-                    "{{ASSISTANT_DRAFT}}": currentAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines),
-                    "{{PLAN_MARKDOWN}}": planMarkdown,
-                    "{{NEXT_PENDING_SECTION}}": nextPendingSection(from: planMarkdown)
-                ]
-            ))
+        parts.append("""
+        The implementation plan is not complete yet (Progress: \(completedCount)/\(totalCount)).
+        Continue with the next unfinished task.
+        Current assistant draft:
+        \(currentAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines))
+        """)
 
         var messages = historyMessages.filter { $0.role == .system && !$0.content.contains("focused execution mode") }
         messages.append(ChatMessage(role: .system, content: parts.joined(separator: "\n\n")))

@@ -3,8 +3,6 @@ import Foundation
 public enum AIRequestStage: String, Codable, Sendable {
     case warmup
     case initial_response
-    case strategic_planning
-    case tactical_planning
     case tool_loop
     case final_response
     case qa_tool_output_review
@@ -31,7 +29,7 @@ public enum AIRequestStage: String, Codable, Sendable {
     ) -> String? {
         guard reasoningMode.includesAgentReasoning, mode == .agent else { return nil }
         switch stage {
-        case .initial_response, .strategic_planning, .tactical_planning, .tool_loop:
+        case .initial_response, .tool_loop:
             return nil
         default:
             return stage?.reasoningPromptKey ?? AIRequestStage.other.reasoningPromptKey

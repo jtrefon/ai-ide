@@ -1,5 +1,6 @@
 import Foundation
 
+@available(*, deprecated, message: "Use PlanTool's structured TaskPlan instead. Legacy markdown checklist system.")
 struct PlanChecklistProgress {
     let completed: Int
     let total: Int
@@ -14,6 +15,7 @@ struct PlanChecklistProgress {
     }
 }
 
+@available(*, deprecated, message: "Use PlanTool's structured TaskPlan instead. Legacy markdown checklist system.")
 enum PlanChecklistTracker {
     static func progress(in plan: String) -> PlanChecklistProgress {
         let statuses = checklistStatuses(in: plan)

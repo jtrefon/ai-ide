@@ -76,7 +76,7 @@ final class InitialResponseHandler {
             }
         }
 
-         if mode == .agent,
+         if mode == .agent || mode == .coder,
             response.toolCalls?.isEmpty ?? true,
             let content = response.content,
             ChatPromptBuilder.isRequestingUserInputForNextStep(content: content),
@@ -101,7 +101,7 @@ final class InitialResponseHandler {
                  .get()
          }
 
-         if mode == .agent,
+         if mode == .agent || mode == .coder,
             response.toolCalls?.isEmpty ?? true,
             let content = response.content,
             ChatPromptBuilder.isRequestingUserInputForNextStep(content: content),

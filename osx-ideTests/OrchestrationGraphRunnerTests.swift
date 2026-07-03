@@ -521,7 +521,7 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
             qaReviewEnabled: false
         )
 
-        XCTAssertEqual(graph.entryNodeId, StrategicPlanningNode.idValue)
+        XCTAssertEqual(graph.entryNodeId, DispatcherNode.idValue)
     }
 
     func testConversationFlowGraphStartsAtDispatcherForComplexAgentRequest() {
@@ -539,7 +539,7 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
             qaReviewEnabled: false
         )
 
-        XCTAssertEqual(graph.entryNodeId, StrategicPlanningNode.idValue)
+        XCTAssertEqual(graph.entryNodeId, DispatcherNode.idValue)
     }
 
     @MainActor

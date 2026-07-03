@@ -140,19 +140,7 @@ final class ConversationPolicyTests: XCTestCase {
 
     // MARK: - Agent mode: QA stages (read-only)
 
-    // MARK: - Agent mode: planning stages (read-only)
-
-    func testAgentModeStrategicPlanningReturnsReadOnlyTools() {
-        let result = policy.allowedTools(for: .strategic_planning, mode: .agent, from: allTools)
-        let names = Set(result.map(\.name))
-        XCTAssertEqual(names, expectedReadOnly)
-    }
-
-    func testAgentModeTacticalPlanningReturnsReadOnlyTools() {
-        let result = policy.allowedTools(for: .tactical_planning, mode: .agent, from: allTools)
-        let names = Set(result.map(\.name))
-        XCTAssertEqual(names, expectedReadOnly)
-    }
+    // MARK: - Agent mode: QA stages (read-only)
 
     func testAgentModeQAToolOutputReviewReturnsReadOnlyTools() {
         let result = policy.allowedTools(for: .qa_tool_output_review, mode: .agent, from: allTools)

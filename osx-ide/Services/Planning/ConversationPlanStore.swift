@@ -23,6 +23,7 @@ actor ConversationPlanStore {
 
     // MARK: - Legacy string-based API (deprecated)
 
+    @available(*, deprecated, message: "Use getPlan(conversationId:) with structured TaskPlan instead.")
     func get(conversationId: String) -> String? {
         if let cached = cache[conversationId] {
             touchAccessOrder(conversationId)
@@ -37,6 +38,7 @@ actor ConversationPlanStore {
         return text
     }
 
+    @available(*, deprecated, message: "Use setPlan(conversationId:plan:) with structured TaskPlan instead.")
     func set(conversationId: String, plan: String) {
         storeCacheEntry(conversationId: conversationId, plan: plan)
         guard let url = planFileURL(conversationId: conversationId, ext: "md") else { return }

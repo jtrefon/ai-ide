@@ -135,10 +135,7 @@ An engineering lead who can architect and execute entire projects. The AI handle
 All three modes route through the **same ToolLoopHandler** execution engine. There is no separate executor for any mode. The engine adapts behavior based on the mode setting in the request.
 
 ### Planning
-Both Coder and Agent run through StrategicPlanningNode and TacticalPlanningNode for complex inputs. Chat skips planning entirely.
-
-### Enforcement
-Plan adherence is tracked by PlanChecklistTracker and enforced by the DispatcherNode. The loop cannot exit while incomplete checklist items remain (unless the model explicitly marks them as blocked).
+Coder mode supports structured task planning via the `plan` tool. The model opts in by calling `plan.init`, researches the problem, provides a task breakdown via `finishTask`, then works through tasks one at a time. See [Planning & Execution Architecture](planning-execution-architecture.md) for details.
 
 ### Architecture Reference
-See [Planning & Enforcement](planning-enforcement.md) for details on the planning tool and loop enforcer.
+See [Planning & Execution Architecture](planning-execution-architecture.md) for details on the PlanTool and its three-phase flow.

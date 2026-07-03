@@ -7,8 +7,6 @@ public enum RAGContextBuilder {
         .tool_loop: 16_000,             // 4K tokens * 4 chars/token
         .final_response: 8_000,         // 2K tokens * 4 chars/token
         .warmup: 32_000,
-        .strategic_planning: 24_000,
-        .tactical_planning: 24_000,
         .qa_tool_output_review: 16_000,
         .qa_quality_review: 16_000,
         .other: 32_000

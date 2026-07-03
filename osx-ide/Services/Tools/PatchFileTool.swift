@@ -33,7 +33,12 @@ struct PatchFileTool: @unchecked Sendable {
         let startLine = try (request.optionalInt("start_line") ?? { throw ToolExecError.missing("start_line") }())
         let endLine = try (request.optionalInt("end_line") ?? { throw ToolExecError.missing("end_line") }())
         let newContent = try request.requiredString("new_content")
-        let url = URL(fileURLWithPath: path)
+        let url: URL
+        if path.hasPrefix("/") {
+            url = URL(fileURLWithPath: path)
+        } else {
+            url = request.context.projectRoot.appendingPathComponent(path)
+        }
 
         // Read file
         guard let data = fileManager.contents(atPath: url.path) else {

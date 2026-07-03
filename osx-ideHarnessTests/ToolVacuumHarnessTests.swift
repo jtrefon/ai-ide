@@ -254,22 +254,6 @@ final class ToolVacuumHarnessTests: XCTestCase {
         XCTAssertTrue(symbolSearchResult.contains("src/App.jsx:1-3"))
     }
 
-    func testPlanSynthesizersProduceStructuredPlansInIsolation() async throws {
-        let userInput = "Validate basic tool execution coverage for the local agent pipeline"
-
-        let strategicPlan = await StrategicPlanSynthesizer.build(userInput: userInput)
-        XCTAssertTrue(strategicPlan.contains("# Implementation Plan"))
-        XCTAssertTrue(strategicPlan.contains("Goal:"))
-
-        let tacticalPlan = await TacticalPlanSynthesizer.mergeIntoStrategicPlan(
-            strategicPlan: strategicPlan,
-            userInput: userInput,
-            preserveCurrentPlan: false
-        )
-        XCTAssertTrue(tacticalPlan.lowercased().contains("read relevant source files"))
-        XCTAssertTrue(tacticalPlan.lowercased().contains("apply focused edits"))
-    }
-
     func testIndexMemoryToolsPersistAndListStableResultsInIsolation() async throws {
         let mockIndex = MockCodebaseIndex()
         let addMemoryTool = IndexAddMemoryTool(index: mockIndex)

@@ -16,12 +16,12 @@ Break down complex work into structured, focused tasks. Call `init` to opt in �
 | Method | When | What happens |
 |--------|------|-------------|
 | `init` | Start planning | Enters research phase. Use all tools to explore. |
-| `finishTask` | End current phase | Research → execution: provide task breakdown. Execution → next: mark task done, advance. |
+| `finishTask` | End current phase | Research → execution: provide task breakdown. Execution → per-task: mark the CURRENT task done and advance to the next. MUST be called after each task. |
 | `raiseQuestion` | Mid-plan | Pauses for user clarification. |
 | `breakOutCantContinue` | Stuck | Aborts plan with reason. |
 
 ## Parameters
 - **action** (required, string): `"init"` | `"finishTask"` | `"raiseQuestion"` | `"breakOutCantContinue"`
-- **summary** (optional, string): For finishTask. During research: your proposed task breakdown. During execution: what was done.
+- **summary** (required for finishTask, string): During research: your proposed plan. During execution: what was done and what files changed for the current task.
 - **question** (optional, string): Required for raiseQuestion.
 - **blocker_reason** (optional, string): Required for breakOutCantContinue.

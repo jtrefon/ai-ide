@@ -10,11 +10,11 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
     public var description: String {
         switch self {
         case .chat:
-            return "Read-only conversation. AI can answer questions, search code, browse the web — but cannot write or edit files. For when you want AI perspective without changing anything."
+            return "Read-only. Can search and browse — but cannot write, edit, or run terminal commands."
         case .coder:
-            return "Pair programming partner with full tool access. AI plans, decomposes tasks, executes edits, runs commands, searches the web — guided by your direction. Tracks progress across multi-step tasks."
+            return "Full-access pair programming. All tools, all rights, guided by your direction. The primary mode."
         case .agent:
-            return "Full autonomy assistant. AI plans top-level strategy, spawns sub-agents with dedicated prompts, delegates work across architecture/UI/testing/infra. For long-running, large-scale projects."
+            return "Autonomous swarm execution (future). Parallel agent spawning for concurrent progress. Future work."
         }
     }
 
@@ -29,16 +29,15 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Whether this mode uses the new Phase 1 architecture (CoderOrchestrator)
-    /// vs the old ToolLoopHandler architecture.
+    /// Whether this mode uses the coder pipeline (ToolLoopHandler) vs a different architecture.
     var usesNewArchitecture: Bool {
         self == .coder
     }
 
-    /// Modes differ only in AUTONOMY LEVEL, not capability or tool access.
-    /// - chat:  Read-only. No file writes. You do the coding, AI provides perspective. 1.5x-2x multiplier.
-    /// - coder: Full tools + planning. AI takes direction, decomposes, executes, tracks. 3x-5x multiplier.
-    /// - agent: Full tools + sub-agents + delegation. AI plans top-level, spawns specialists. 10x+ multiplier.
+    /// Three distinct modes for three distinct purposes.
+    /// - chat:  Read-only conversation. No file alterations, no terminal execution.
+    /// - coder: Full tool access + structured planning. The primary mode. Competing with Cursor, Windsurf, Code Pilot.
+    /// - agent: Future autonomous swarm execution. Parallel agent spawning. Not yet implemented.
     public func allowedTools(from allTools: [AITool]) -> [AITool] {
         switch self {
         case .chat:

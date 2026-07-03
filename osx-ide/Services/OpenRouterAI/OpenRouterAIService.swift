@@ -992,7 +992,7 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
             return hasTools ? 2048 : 420
         case .final_response:
             return 500
-        case .initial_response, .strategic_planning, .tactical_planning:
+        case .initial_response:
             return hasTools ? 420 : 640
         case .qa_tool_output_review, .qa_quality_review:
             return 520
@@ -1121,6 +1121,8 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
         let decoders: [(String) -> [AIToolCall]?] = [
             decodeStructuredXMLToolCalls,
             decodeLegacyToolCodeCalls,
+            decodeBareFunctionCalls,
+            decodeToolCallBlockContent,
             decodeMinimaxToolCalls
         ]
 
@@ -1187,16 +1189,24 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
         guard !matches.isEmpty else { return nil }
 
         let toolPattern = #"<tool\s+name=\"([^\"]+)\"\s*>(.*?)</tool>"#
+        let functionEqPattern = #"<function=([^\s>]+)>\s*(.*?)\s*</function>"#
         let argPattern = #"<arg\s+name=\"([^\"]+)\"\s*>(.*?)</arg>"#
         let parameterPattern = #"<parameter\s+name=\"([^\"]+)\"\s*>(.*?)</parameter>"#
+        let parameterEqPattern = #"<parameter=([^\s>]+)>\s*(.*?)\s*</parameter>"#
         guard let toolRegex = try? NSRegularExpression(
                 pattern: toolPattern,
+                options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ), let functionEqRegex = try? NSRegularExpression(
+                pattern: functionEqPattern,
                 options: [.caseInsensitive, .dotMatchesLineSeparators]
         ), let argRegex = try? NSRegularExpression(
                 pattern: argPattern,
                 options: [.caseInsensitive, .dotMatchesLineSeparators]
         ), let parameterRegex = try? NSRegularExpression(
                 pattern: parameterPattern,
+                options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ), let parameterEqRegex = try? NSRegularExpression(
+                pattern: parameterEqPattern,
                 options: [.caseInsensitive, .dotMatchesLineSeparators]
         ) else {
             return nil
@@ -1211,7 +1221,14 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
             let body = String(content[bodyRange])
             let bodyNSRange = NSRange(body.startIndex..<body.endIndex, in: body)
 
-            return toolRegex.matches(in: body, options: [], range: bodyNSRange).compactMap { toolMatch in
+            // Try standard <tool name="..."> format first, then <function=...> format
+            let standardMatches = toolRegex.matches(in: body, options: [], range: bodyNSRange)
+            let functionEqMatches = standardMatches.isEmpty ? functionEqRegex.matches(in: body, options: [], range: bodyNSRange) : []
+
+            let matched = standardMatches.isEmpty ? functionEqMatches : standardMatches
+            let isFunctionEqFormat = !standardMatches.isEmpty ? false : !functionEqMatches.isEmpty
+
+            return matched.compactMap { toolMatch in
                 guard toolMatch.numberOfRanges == 3,
                       let nameRange = Range(toolMatch.range(at: 1), in: body),
                       let toolBodyRange = Range(toolMatch.range(at: 2), in: body) else {
@@ -1223,6 +1240,7 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
 
                 let toolBody = String(body[toolBodyRange])
                 let toolBodyNSRange = NSRange(toolBody.startIndex..<toolBody.endIndex, in: toolBody)
+
                 var arguments = recoverArguments(
                     in: toolBody,
                     range: toolBodyNSRange,
@@ -1233,6 +1251,13 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
                         in: toolBody,
                         range: toolBodyNSRange,
                         regex: parameterRegex
+                    )
+                }
+                if arguments.isEmpty, isFunctionEqFormat {
+                    arguments = recoverArguments(
+                        in: toolBody,
+                        range: toolBodyNSRange,
+                        regex: parameterEqRegex
                     )
                 }
 
@@ -1347,6 +1372,95 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
         return toolCalls.isEmpty ? nil : toolCalls
     }
 
+    nonisolated private static func decodeBareFunctionCalls(from content: String) -> [AIToolCall]? {
+        let pattern = #"<function=([^\s>]+)>\s*(.*?)\s*</function>"#
+        guard let regex = try? NSRegularExpression(
+            pattern: pattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else {
+            return nil
+        }
+
+        let contentRange = NSRange(content.startIndex..<content.endIndex, in: content)
+        let matches = regex.matches(in: content, options: [], range: contentRange)
+        guard !matches.isEmpty else { return nil }
+
+        let parameterPattern = #"<parameter=([^\s>]+)>\s*(.*?)\s*</parameter>"#
+        let namedParameterPattern = #"<parameter\s+name=\"([^\"]+)\"\s*>(.*?)</parameter>"#
+        guard let paramRegex = try? NSRegularExpression(
+            pattern: parameterPattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ), let namedParamRegex = try? NSRegularExpression(
+            pattern: namedParameterPattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else {
+            return nil
+        }
+
+        let toolCalls = matches.compactMap { match -> AIToolCall? in
+            guard match.numberOfRanges == 3,
+                  let nameRange = Range(match.range(at: 1), in: content),
+                  let bodyRange = Range(match.range(at: 2), in: content) else {
+                return nil
+            }
+
+            let toolName = normalizeRecoveredToolName(String(content[nameRange]))
+            guard !toolName.isEmpty else { return nil }
+
+            let body = String(content[bodyRange])
+            let bodyNSRange = NSRange(body.startIndex..<body.endIndex, in: body)
+
+            var arguments = recoverArguments(in: body, range: bodyNSRange, regex: paramRegex)
+            if arguments.isEmpty {
+                arguments = recoverArguments(in: body, range: bodyNSRange, regex: namedParamRegex)
+            }
+
+            return AIToolCall(
+                id: UUID().uuidString,
+                name: toolName,
+                arguments: arguments
+            )
+        }
+
+        return toolCalls.isEmpty ? nil : toolCalls
+    }
+
+    nonisolated private static func decodeToolCallBlockContent(from content: String) -> [AIToolCall]? {
+        let parts = content.components(separatedBy: "<tool_call>")
+        guard parts.count > 1 else { return nil }
+
+        var toolCalls: [AIToolCall] = []
+        for part in parts.dropFirst() {
+            let body: String
+            if let closeRange = part.range(of: "</tool_call>", options: .caseInsensitive) {
+                body = String(part[..<closeRange.lowerBound])
+            } else {
+                body = part
+            }
+
+            let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+
+            let lines = trimmed.components(separatedBy: "\n")
+            guard lines.count >= 2 else { continue }
+
+            let path = lines[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !path.isEmpty, path.hasPrefix("/") || path.hasPrefix(".") else { continue }
+
+            let fileContent = lines.dropFirst().joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !fileContent.isEmpty else { continue }
+
+            toolCalls.append(AIToolCall(
+                id: UUID().uuidString,
+                name: "write_file",
+                arguments: ["path": path, "content": fileContent]
+            ))
+        }
+
+        return toolCalls.isEmpty ? nil : toolCalls
+    }
+
     nonisolated private static func decodeMinimaxToolCalls(from content: String) -> [AIToolCall]? {
         let pattern = #"<invoke\s+name=\"([^\"]+)\"\s*>(.*?)</invoke>"#
         guard let regex = try? NSRegularExpression(
@@ -1405,7 +1519,9 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
             #"(?is)<tool\s+name=\"[^\"]+\"\s*>.*?</tool>"#,
             #"(?is)</?arg\s+name=\"[^\"]+\">"#,
             #"(?is)</?parameter\s+name=\"[^\"]+\">"#,
-            #"(?is)</?param\s+name=\"[^\"]+\">"#
+            #"(?is)</?param\s+name=\"[^\"]+\">"#,
+            #"(?is)<function=[^\s>]+>\s*|</function>"#,
+            #"(?is)<parameter=[^\s>]+>\s*|</parameter>"#
         ]
 
         for pattern in patterns {

@@ -3,11 +3,11 @@ import XCTest
 
 @MainActor
 final class ReasoningAndToolArgumentRegressionTests: XCTestCase {
-    func testAgentReasoningPromptIsDisabledForStrategicPlanning() {
+    func testAgentReasoningPromptIsDisabledForInitialResponse() {
         let promptKey = AIRequestStage.reasoningPromptKeyIfNeeded(
             reasoningMode: .agent,
             mode: .agent,
-            stage: .strategic_planning
+            stage: .initial_response
         )
 
         XCTAssertNil(promptKey)
