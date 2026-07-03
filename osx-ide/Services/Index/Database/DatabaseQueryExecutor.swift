@@ -121,14 +121,10 @@ final class DatabaseQueryExecutor {
 
     func getIndexStatsCounts() throws -> IndexStatsCounts {
         let resourceCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM resources;")
-        let symbolCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM symbols;")
-        let memoryCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM memories;")
-        let longTermMemoryCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM memories WHERE tier = 'long';")
+        let symbolCount = try database.scalarInt(sql: "SELECT COUNT(*) FROM symbol_names;")
         return IndexStatsCounts(
             indexedResourceCount: resourceCount,
-            symbolCount: symbolCount,
-            memoryCount: memoryCount,
-            longTermMemoryCount: longTermMemoryCount
+            symbolCount: symbolCount
         )
     }
 

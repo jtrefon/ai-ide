@@ -268,7 +268,7 @@ struct ContentView: View {
         if bottomViews.count == 1, let pluginView = bottomViews.first {
             pluginView.makeView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.ultraThinMaterial)
+                .glassEffect(.regular, in: .rect(cornerRadius: 0))
                 .frame(minHeight: 100)
         } else if bottomViews.count > 1 {
             let selectedName = uiState.bottomPanelSelectedName
@@ -279,7 +279,7 @@ struct ContentView: View {
                 selectedView.makeView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .background(.ultraThinMaterial)
+            .glassEffect(.regular, in: .rect(cornerRadius: 0))
             .frame(minHeight: 100)
         }
     }

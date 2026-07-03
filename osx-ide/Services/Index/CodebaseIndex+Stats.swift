@@ -40,8 +40,6 @@ extension CodebaseIndex {
             protocolCount: kindStats.protocolCount,
             functionCount: kindStats.functionCount,
             variableCount: kindStats.variableCount,
-            memoryCount: counts.memoryCount,
-            longTermMemoryCount: counts.longTermMemoryCount,
             databaseSizeBytes: metadata.sizeBytes,
             databasePath: dbPath,
             isDatabaseInWorkspace: metadata.isInWorkspace,

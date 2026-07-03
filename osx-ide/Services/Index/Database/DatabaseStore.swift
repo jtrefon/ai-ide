@@ -21,14 +21,10 @@ public enum DatabaseValue: Sendable {
 public struct IndexStatsCounts: Sendable {
     public let indexedResourceCount: Int
     public let symbolCount: Int
-    public let memoryCount: Int
-    public let longTermMemoryCount: Int
 
-    public init(indexedResourceCount: Int, symbolCount: Int, memoryCount: Int, longTermMemoryCount: Int) {
+    public init(indexedResourceCount: Int, symbolCount: Int) {
         self.indexedResourceCount = indexedResourceCount
         self.symbolCount = symbolCount
-        self.memoryCount = memoryCount
-        self.longTermMemoryCount = longTermMemoryCount
     }
 }
 

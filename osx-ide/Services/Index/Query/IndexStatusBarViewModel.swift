@@ -127,7 +127,7 @@ final class IndexStatusBarViewModel: ObservableObject {
         } else {
             embedInfo = "Embed -"
         }
-        return "E \(embeddingModelIdentifier) | C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | M \(stats.memoryCount) (LT \(stats.longTermMemoryCount)) | DB \(size) | \(embedInfo)"
+        return "C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | DB \(size) | \(embedInfo)"
     }
 
     private func subscribeToEvents() {

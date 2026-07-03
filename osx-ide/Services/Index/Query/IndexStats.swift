@@ -12,8 +12,6 @@ public struct IndexStats: Sendable {
     public let protocolCount: Int
     public let functionCount: Int
     public let variableCount: Int
-    public let memoryCount: Int
-    public let longTermMemoryCount: Int
     public let databaseSizeBytes: Int64
     public let databasePath: String
     public let isDatabaseInWorkspace: Bool
@@ -32,8 +30,6 @@ public struct IndexStats: Sendable {
         protocolCount: Int,
         functionCount: Int,
         variableCount: Int,
-        memoryCount: Int,
-        longTermMemoryCount: Int,
         databaseSizeBytes: Int64,
         databasePath: String,
         isDatabaseInWorkspace: Bool,
@@ -51,8 +47,6 @@ public struct IndexStats: Sendable {
         self.protocolCount = protocolCount
         self.functionCount = functionCount
         self.variableCount = variableCount
-        self.memoryCount = memoryCount
-        self.longTermMemoryCount = longTermMemoryCount
         self.databaseSizeBytes = databaseSizeBytes
         self.databasePath = databasePath
         self.isDatabaseInWorkspace = isDatabaseInWorkspace
