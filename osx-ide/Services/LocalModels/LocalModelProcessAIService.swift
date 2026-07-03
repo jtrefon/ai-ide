@@ -1634,6 +1634,12 @@ actor LocalModelProcessAIService: AIService {
         projectRoot: URL?,
         settings: OpenRouterSettings
     ) throws -> String {
+        let pinnedRules: [String] = {
+            if let root = projectRoot {
+                return PinnedRulesStore.load(projectRoot: root)
+            }
+            return []
+        }()
         let systemPrompt = try SystemPromptAssembler().assemble(
             input: .init(
                 systemPromptOverride: settings.systemPrompt,
@@ -1643,7 +1649,8 @@ actor LocalModelProcessAIService: AIService {
                 projectRoot: projectRoot,
                 reasoningMode: settings.reasoningMode,
                 stage: stage,
-                includeModelReasoning: settings.reasoningMode.includesModelReasoning && stage != .tool_loop
+                includeModelReasoning: settings.reasoningMode.includesModelReasoning && stage != .tool_loop,
+                pinnedRules: pinnedRules
             )
         )
         var prompt = systemPrompt

@@ -10,10 +10,17 @@ struct SystemPromptAssembler {
         let reasoningMode: ReasoningMode
         let stage: AIRequestStage?
         let includeModelReasoning: Bool
+        let pinnedRules: [String]
     }
 
     func assemble(input: Input) throws -> String {
         var sections: [String] = []
+
+        if !input.pinnedRules.isEmpty {
+            sections.append("PINNED RULES (always follow, non-negotiable):\n" + input.pinnedRules.enumerated().map { i, rule in
+                "\(i + 1). \(rule)"
+            }.joined(separator: "\n"))
+        }
 
         let systemPromptOverride = input.systemPromptOverride.trimmingCharacters(in: .whitespacesAndNewlines)
         if systemPromptOverride.isEmpty {

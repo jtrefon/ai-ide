@@ -40,6 +40,11 @@ final class ConversationToolProvider {
         tools.append(PatchFileToolAdapter(projectRoot: projectRoot))
         tools.append(DeleteFileTool(pathValidator: pathValidator, eventBus: eventBus))
         
+        // Pinned Rules Tools
+        tools.append(PinnedRuleAddTool(projectRoot: projectRoot))
+        tools.append(PinnedRuleRemoveTool(projectRoot: projectRoot))
+        tools.append(PinnedRuleListTool(projectRoot: projectRoot))
+
         // RAG & Index Tools
         if let index = codebaseIndexProvider() {
             tools.append(IndexSearchTextTool(index: index))
@@ -47,8 +52,6 @@ final class ConversationToolProvider {
             tools.append(IndexFindFilesTool(index: index))
             tools.append(IndexListFilesTool(index: index))
             tools.append(IndexReadFileTool(index: index))
-            tools.append(IndexListMemoriesTool(index: index))
-            tools.append(IndexAddMemoryTool(index: index))
         }
 
         // Search & Structure Tools

@@ -310,8 +310,11 @@ struct ContentView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .frame(height: AppConstants.Layout.headerHeight)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(radius: 10)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.separator.opacity(0.25), lineWidth: 1)
+        )
     }
 
     @ViewBuilder
@@ -629,3 +632,4 @@ struct ContentView_Previews: PreviewProvider {
         ContentView(appState: DependencyContainer().makeAppState())
     }
 }
+

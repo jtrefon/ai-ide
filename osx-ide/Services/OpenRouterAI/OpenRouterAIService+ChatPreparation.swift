@@ -64,7 +64,13 @@ extension OpenRouterAIService {
     }
 
     internal func buildSystemContent(input: BuildSystemContentInput) throws -> String {
-        try SystemPromptAssembler().assemble(
+        let pinnedRules: [String] = {
+            if let root = input.projectRoot {
+                return PinnedRulesStore.load(projectRoot: root)
+            }
+            return []
+        }()
+        return try SystemPromptAssembler().assemble(
             input: .init(
                 systemPromptOverride: input.systemPrompt,
                 hasTools: input.hasTools,
@@ -73,7 +79,8 @@ extension OpenRouterAIService {
                 projectRoot: input.projectRoot,
                 reasoningMode: input.reasoningMode,
                 stage: input.stage,
-                includeModelReasoning: !input.useNativeReasoning
+                includeModelReasoning: !input.useNativeReasoning,
+                pinnedRules: pinnedRules
             )
         )
     }

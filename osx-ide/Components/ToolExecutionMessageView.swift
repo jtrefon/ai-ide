@@ -104,8 +104,7 @@ struct ToolExecutionMessageView: View {
                 toolExecutionContent
             }
         }
-        .background(.ultraThinMaterial)
-        .cornerRadius(12)
+        .glassEffect(.regular, in: .rect(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(.separator.opacity(0.5), lineWidth: 1)
@@ -390,3 +389,4 @@ struct ToolExecutionMessageView: View {
         .frame(width: 16, height: 16)
     }
 }
+

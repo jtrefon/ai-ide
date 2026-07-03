@@ -87,7 +87,8 @@ private struct TabBarButton: View {
                 let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
                 if isActive {
                     shape
-                        .fill(.regularMaterial)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 6))
                         .overlay(
                             shape.stroke(.separator.opacity(0.35), lineWidth: 1)
                         )
