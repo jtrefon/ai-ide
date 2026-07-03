@@ -118,14 +118,18 @@ public actor IndexCoordinator {
 
         // Run file enumeration off main thread
         let excludePatterns = config.excludePatterns
-        let files = await Task.detached(priority: .userInitiated) {
+        let allFiles = await Task.detached(priority: .userInitiated) {
             IndexFileEnumerator.enumerateProjectFiles(
                 rootURL: rootURL,
                 excludePatterns: excludePatterns
             )
         }.value
+
+        // Only index files with supported extensions
+        let supportedExts: Set<String> = ["swift", "js", "jsx", "mjs", "ts", "tsx", "py", "php"]
+        let files = allFiles.filter { supportedExts.contains($0.pathExtension.lowercased()) }
         let total = files.count
-        await IndexLogger.shared.log("Found \(total) files to index")
+        await IndexLogger.shared.log("Found \(allFiles.count) project files (\(total) indexable)")
 
         // Clean up stale entries for files that no longer exist on disk
         await cleanupStaleEntries(files: files, rootURL: rootURL)
