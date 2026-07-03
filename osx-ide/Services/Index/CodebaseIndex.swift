@@ -58,7 +58,7 @@ public actor CodebaseIndexInitializationState {
 public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
     let eventBus: EventBusProtocol
     let coordinator: IndexCoordinator
-    let database: DatabaseStore
+    public let database: DatabaseStore
     let indexer: IndexerActor
     let queryService: QueryService
     let aiService: AIService

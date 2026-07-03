@@ -41,7 +41,7 @@ final class AIInteractionCoordinator {
 
     private var aiService: AIService
     private var codebaseIndex: CodebaseIndexProtocol?
-    private let vectorStoreService: VectorStoreService?
+    private var vectorStoreService: VectorStoreService?
     private let conversationPolicy: ConversationPolicyProtocol
     private let settingsStore: any OpenRouterSettingsLoading
     private let eventBus: any EventBusProtocol

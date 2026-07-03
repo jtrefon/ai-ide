@@ -16,9 +16,9 @@ public final class InspectSymbolTool: AITool {
         ]
     }
 
-    private let databaseProvider: () -> DatabaseStore?
+    private let databaseProvider: @Sendable () -> DatabaseStore?
 
-    public init(databaseProvider: @escaping () -> DatabaseStore?) {
+    public init(databaseProvider: @escaping @Sendable () -> DatabaseStore?) {
         self.databaseProvider = databaseProvider
     }
 

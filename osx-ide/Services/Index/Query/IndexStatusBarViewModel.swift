@@ -310,7 +310,6 @@ final class IndexStatusBarViewModel: ObservableObject {
             .autoconnect()
             .sink { [weak self] _ in
                 self?.refreshStats()
-                self?.refreshEmbeddingModel()
             }
     }
 

@@ -1,6 +1,14 @@
 import Foundation
 
 extension CodebaseIndex {
+    public func searchSymbols(nameLike query: String, limit: Int) async throws -> [Symbol] {
+        try await queryService.searchSymbols(nameLike: query, limit: limit)
+    }
+
+    public func searchSymbolsWithPaths(nameLike query: String, limit: Int) async throws -> [SymbolSearchResult] {
+        try await queryService.searchSymbolsWithPaths(nameLike: query, limit: limit)
+    }
+
     public func searchIndexedText(pattern: String, limit: Int = 100) async throws -> [String] {
         let needle = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
         if needle.isEmpty { return [] }

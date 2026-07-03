@@ -316,30 +316,28 @@ public class DatabaseManager {
         }
     }
 
-    func inspectSymbol(id: Int) -> (kind: String, scope: String, signature: String, parentName: String)? {
+    func inspectSymbol(id: Int) throws -> (kind: String, scope: String, signature: String, parentName: String)? {
         let sql = "SELECT kind, scope, signature, parent_name FROM symbol_details WHERE id = ?;"
-        var result: (String, String, String, String)?
-        syncOnQueue {
+        return try syncOnQueue {
             var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return }
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return nil }
             defer { sqlite3_finalize(statement) }
             sqlite3_bind_int(statement, 1, Int32(id))
-            guard sqlite3_step(statement) == SQLITE_ROW else { return }
+            guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
             let kind = String(cString: sqlite3_column_text(statement, 0))
             let scope = sqlite3_column_type(statement, 1) != SQLITE_NULL ? String(cString: sqlite3_column_text(statement, 1)) : ""
             let sig = sqlite3_column_type(statement, 2) != SQLITE_NULL ? String(cString: sqlite3_column_text(statement, 2)) : ""
             let parent = sqlite3_column_type(statement, 3) != SQLITE_NULL ? String(cString: sqlite3_column_text(statement, 3)) : ""
-            result = (kind, scope, sig, parent)
+            return (kind, scope, sig, parent)
         }
-        return result
     }
 
-    func whereSymbol(id: Int) -> [(filePath: String, lineStart: Int, lineEnd: Int)] {
+    func whereSymbol(id: Int) throws -> [(filePath: String, lineStart: Int, lineEnd: Int)] {
         let sql = "SELECT file_path, line_start, line_end FROM symbol_locations WHERE symbol_id = ?;"
-        var results: [(String, Int, Int)] = []
-        syncOnQueue {
+        return try syncOnQueue {
+            var results: [(String, Int, Int)] = []
             var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return }
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return results }
             defer { sqlite3_finalize(statement) }
             sqlite3_bind_int(statement, 1, Int32(id))
             while sqlite3_step(statement) == SQLITE_ROW {
@@ -348,8 +346,8 @@ public class DatabaseManager {
                 let end = Int(sqlite3_column_int(statement, 2))
                 results.append((path, start, end))
             }
+            return results
         }
-        return results
     }
 
     func insertSymbols(_ symbols: [ExtractedSymbol]) throws {
@@ -357,7 +355,12 @@ public class DatabaseManager {
             for sym in symbols {
                 // Insert or get name ID
                 try execute(sql: "INSERT OR IGNORE INTO symbol_names(name) VALUES (?);", parameters: [sym.name])
-                guard let nameId = try scalarInt(sql: "SELECT id FROM symbol_names WHERE name = ?;", parameters: [sym.name]) else { continue }
+                let nameId: Int
+                do {
+                    nameId = try scalarInt(sql: "SELECT id FROM symbol_names WHERE name = ?;", parameters: [sym.name])
+                } catch {
+                    continue
+                }
                 // Insert details
                 try execute(sql: """
                     INSERT OR REPLACE INTO symbol_details(id, kind, scope, signature, parent_name)
