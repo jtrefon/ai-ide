@@ -84,6 +84,30 @@ final class DatabaseSchemaManager {
         CREATE INDEX IF NOT EXISTS idx_memory_embeddings_model ON memory_embeddings(model_id);
         CREATE INDEX IF NOT EXISTS idx_code_chunks_model ON code_chunks(model_id);
         CREATE INDEX IF NOT EXISTS idx_code_chunks_resource_model ON code_chunks(resource_id, model_id);
+
+        CREATE TABLE IF NOT EXISTS symbol_names (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        );
+
+        CREATE TABLE IF NOT EXISTS symbol_details (
+            id INTEGER PRIMARY KEY REFERENCES symbol_names(id),
+            kind TEXT NOT NULL,
+            scope TEXT DEFAULT '',
+            signature TEXT DEFAULT '',
+            parent_name TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_details_kind ON symbol_details(kind);
+        CREATE INDEX IF NOT EXISTS idx_details_parent ON symbol_details(parent_name);
+
+        CREATE TABLE IF NOT EXISTS symbol_locations (
+            symbol_id INTEGER NOT NULL REFERENCES symbol_names(id),
+            file_path TEXT NOT NULL,
+            line_start INTEGER NOT NULL,
+            line_end INTEGER DEFAULT 0,
+            PRIMARY KEY (symbol_id, file_path, line_start)
+        );
+        CREATE INDEX IF NOT EXISTS idx_locations_file ON symbol_locations(file_path);
         """
         try database.execute(sql: sql)
     }

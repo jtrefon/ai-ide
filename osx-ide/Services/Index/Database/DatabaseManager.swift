@@ -351,6 +351,94 @@ public class DatabaseManager {
         }
     }
 
+    func locateSymbolId(name: String) throws -> Int? {
+        try syncOnQueue {
+            let sql = "SELECT id FROM symbol_names WHERE name = ?;"
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return nil }
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_text(statement, 1, (name as NSString).utf8String, -1, nil)
+            guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+            return Int(sqlite3_column_int(statement, 0))
+        }
+    }
+
+    func inspectSymbol(id: Int) -> (kind: String, scope: String, signature: String, parentName: String)? {
+        let sql = "SELECT kind, scope, signature, parent_name FROM symbol_details WHERE id = ?;"
+        var result: (String, String, String, String)?
+        syncOnQueue {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_int(statement, 1, Int32(id))
+            guard sqlite3_step(statement) == SQLITE_ROW else { return }
+            let kind = String(cString: sqlite3_column_text(statement, 0))
+            let scope = sqlite3_column_type(statement, 1) != SQLITE_NULL ? String(cString: sqlite3_column_text(statement, 1)) : ""
+            let sig = sqlite3_column_type(statement, 2) != SQLITE_NULL ? String(cString: sqlite3_column_text(statement, 2)) : ""
+            let parent = sqlite3_column_type(statement, 3) != SQLITE_NULL ? String(cString: sqlite3_column_text(statement, 3)) : ""
+            result = (kind, scope, sig, parent)
+        }
+        return result
+    }
+
+    func whereSymbol(id: Int) -> [(filePath: String, lineStart: Int, lineEnd: Int)] {
+        let sql = "SELECT file_path, line_start, line_end FROM symbol_locations WHERE symbol_id = ?;"
+        var results: [(String, Int, Int)] = []
+        syncOnQueue {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_int(statement, 1, Int32(id))
+            while sqlite3_step(statement) == SQLITE_ROW {
+                let path = String(cString: sqlite3_column_text(statement, 0))
+                let start = Int(sqlite3_column_int(statement, 1))
+                let end = Int(sqlite3_column_int(statement, 2))
+                results.append((path, start, end))
+            }
+        }
+        return results
+    }
+
+    func insertSymbols(_ symbols: [ExtractedSymbol]) throws {
+        try transaction {
+            for sym in symbols {
+                // Insert or get name ID
+                try execute(sql: "INSERT OR IGNORE INTO symbol_names(name) VALUES (?);", parameters: [sym.name])
+                guard let nameId = try scalarInt(sql: "SELECT id FROM symbol_names WHERE name = ?;", parameters: [sym.name]) else { continue }
+                // Insert details
+                try execute(sql: """
+                    INSERT OR REPLACE INTO symbol_details(id, kind, scope, signature, parent_name)
+                    VALUES (?, ?, ?, ?, ?);
+                """, parameters: [nameId, sym.kind, sym.scope, sym.signature, sym.parentName])
+                // Insert location
+                try execute(sql: """
+                    INSERT OR REPLACE INTO symbol_locations(symbol_id, file_path, line_start, line_end)
+                    VALUES (?, ?, ?, ?);
+                """, parameters: [nameId, sym.filePath, sym.lineStart, sym.lineEnd])
+            }
+        }
+    }
+
+    func deleteSymbolsByFile(filePath: String) throws {
+        let ids = try syncOnQueue {
+            var ids: [Int] = []
+            let sql = "SELECT symbol_id FROM symbol_locations WHERE file_path = ?;"
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return ids }
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_text(statement, 1, (filePath as NSString).utf8String, -1, nil)
+            while sqlite3_step(statement) == SQLITE_ROW {
+                ids.append(Int(sqlite3_column_int(statement, 0)))
+            }
+            return ids
+        }
+        try execute(sql: "DELETE FROM symbol_locations WHERE file_path = ?;", parameters: [filePath])
+        for id in ids {
+            try execute(sql: "DELETE FROM symbol_details WHERE id = ?;", parameters: [id])
+            try execute(sql: "DELETE FROM symbol_names WHERE id = ? AND NOT EXISTS (SELECT 1 FROM symbol_locations WHERE symbol_id = ?);", parameters: [id, id])
+        }
+    }
+
     private func executeUnsafe(sql: String) throws {
         var errorMessage: UnsafeMutablePointer<Int8>?
         if sqlite3_exec(db, sql, nil, nil, &errorMessage) != SQLITE_OK {

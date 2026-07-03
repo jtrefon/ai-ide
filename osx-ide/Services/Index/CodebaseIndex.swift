@@ -96,7 +96,6 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         self.memoryEmbeddingGenerator = HashingMemoryEmbeddingGenerator()
         self.indexer = IndexerActor(
             database: database,
-            embeddingGenerator: memoryEmbeddingGenerator,
             config: resolvedConfig.configuration,
             projectRoot: projectRoot
         )
@@ -233,7 +232,6 @@ public class CodebaseIndex: CodebaseIndexProtocol, @unchecked Sendable {
         let indexerStart = Date()
         self.indexer = IndexerActor(
             database: database,
-            embeddingGenerator: embeddingGenerator,
             config: config.configuration,
             projectRoot: projectRoot
         )

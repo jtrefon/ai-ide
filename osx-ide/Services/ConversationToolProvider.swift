@@ -45,13 +45,12 @@ final class ConversationToolProvider {
         tools.append(PinnedRuleRemoveTool(projectRoot: projectRoot))
         tools.append(PinnedRuleListTool(projectRoot: projectRoot))
 
-        // RAG & Index Tools
-        if let index = codebaseIndexProvider() {
-            tools.append(IndexSearchTextTool(index: index))
-            tools.append(IndexSearchSymbolsTool(index: index))
-            tools.append(IndexFindFilesTool(index: index))
-            tools.append(IndexListFilesTool(index: index))
-            tools.append(IndexReadFileTool(index: index))
+        // Symbol Lookup Tools
+        let databaseStore = codebaseIndexProvider()?.database
+        if let db = databaseStore {
+            tools.append(LocateSymbolTool(databaseProvider: { db }))
+            tools.append(InspectSymbolTool(databaseProvider: { db }))
+            tools.append(WhereSymbolTool(databaseProvider: { db }))
         }
 
         // Search & Structure Tools

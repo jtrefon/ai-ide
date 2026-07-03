@@ -216,6 +216,28 @@ public actor DatabaseStore {
         try database.getSymbolKindCounts()
     }
 
+    // MARK: - New Symbol Table Operations
+
+    public func locateSymbolId(name: String) throws -> Int? {
+        try database.locateSymbolId(name: name)
+    }
+
+    public func inspectSymbol(id: Int) throws -> (kind: String, scope: String, signature: String, parentName: String)? {
+        try database.inspectSymbol(id: id)
+    }
+
+    public func whereSymbol(id: Int) throws -> [(filePath: String, lineStart: Int, lineEnd: Int)] {
+        try database.whereSymbol(id: id)
+    }
+
+    public func insertSymbols(_ symbols: [ExtractedSymbol]) throws {
+        try database.insertSymbols(symbols)
+    }
+
+    public func deleteSymbolsByFile(filePath: String) throws {
+        try database.deleteSymbolsByFile(filePath: filePath)
+    }
+
     // MARK: - Raw Operations
 
     public func execute(sql: String, parameters: [DatabaseValue]) throws {
