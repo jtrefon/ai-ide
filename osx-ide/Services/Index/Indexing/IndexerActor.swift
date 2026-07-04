@@ -46,11 +46,24 @@ public actor IndexerActor {
         guard !symbols.isEmpty else { return }
         try await database.deleteSymbolsByFile(filePath: url.path)
         try await database.insertSymbols(symbols)
+        // Also write to legacy symbols table for searchSymbols/searchSymbolsWithPaths
+        try await database.saveSymbols(symbols.map { sym in
+            Symbol(
+                id: UUID().uuidString,
+                resourceId: resourceId,
+                name: sym.name,
+                kind: SymbolKind(rawValue: sym.kind) ?? .unknown,
+                lineStart: sym.lineStart,
+                lineEnd: sym.lineEnd,
+                description: nil
+            )
+        })
     }
 
     public func removeFile(at url: URL) async throws {
         let resourceId = url.absoluteString
         try await database.deleteResource(resourceId: resourceId)
+        try await database.deleteSymbols(for: resourceId)
         try await database.deleteSymbolsByFile(filePath: url.path)
     }
 

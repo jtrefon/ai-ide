@@ -32,9 +32,24 @@ final class DatabaseSchemaManager {
         DROP TABLE IF EXISTS code_chunks;
         DROP TABLE IF EXISTS memory_embeddings;
         DROP TABLE IF EXISTS memories;
-        DROP TABLE IF EXISTS symbols;
 
-        CREATE TABLE IF NOT EXISTS symbol_names (
+        -- Legacy symbols table — still queried by searchSymbols/searchSymbolsWithPaths
+        -- protocol methods. The new 3-table schema (symbol_names/details/locations)
+        -- is populated in parallel and queried by locate_symbol/inspect_symbol/where_symbol.
+        CREATE TABLE IF NOT EXISTS symbols (
+            id TEXT PRIMARY KEY,
+            resource_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            line_start INTEGER NOT NULL,
+            line_end INTEGER NOT NULL,
+            description TEXT,
+            FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
+        CREATE INDEX IF NOT EXISTS idx_symbols_resource_id ON symbols(resource_id);
+
+        -- New 3-table symbol schema (populated by IndexerActor.insertSymbols)
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE
         );
