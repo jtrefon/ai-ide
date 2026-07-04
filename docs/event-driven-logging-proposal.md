@@ -124,13 +124,15 @@ LLM responds "I found the login page at /auth"
 
 All callers of `ConversationLogStore.shared.append()` (FinalResponseHandler, ToolLoopHandler, QAReviewHandler, ConversationLogger) **automatically** produce `ContextLogEvent` via the instrumented log store. No per-file migration needed.
 
-### Phase 2 — Event-Driven Embedding (next + 1)
+### Phase 2 — Event-Driven Embedding ✅
 
-| File | Change |
-|---|---|
-| `VectorStoreEmbeddingCoordinator.swift` | Replace FS-watching with EventBus subscription |
-| `VectorStoreEmbeddingCoordinator.swift` | Remove `flush()`, `debounce`, `pendingConversations` — embed immediately on event |
-| `DependencyContainer.swift` | Remove `ingestConversations()` startup path (replaced by live events) |
+| File | Change | Status |
+|---|---|---|
+| `VectorStoreEmbeddingCoordinator.swift` | Replaced FS-watching with EventBus subscription to `ContextLogEvent` + `ToolResultEvent` | ✅ |
+| `VectorStoreEmbeddingCoordinator.swift` | Removed `flush()`, `debounce`, `pendingConversations`, file I/O — embeds immediately on event | ✅ |
+| `DependencyContainer.swift` | Removed `projectRoot` and `setEmbeddedTurnCount` from coordinator wiring | ✅ |
+
+The coordinator now receives content in-memory: buffers `chat.user_message`, pairs with `chat.assistant_message`, embeds both and stores in FAISS. No disk read needed. Also embeds tool execution results on `execute_success`/`execute_error`.
 
 ### Phase 3 — Additional Data Sources (future)
 

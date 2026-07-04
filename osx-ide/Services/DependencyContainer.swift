@@ -234,7 +234,6 @@ class DependencyContainer: ObservableObject {
             let eventBus = await MainActor.run { _eventBus }
             let embeddingCoordinator = VectorStoreEmbeddingCoordinator(
                 vectorStoreService: service,
-                projectRoot: root,
                 eventBus: eventBus
             )
             await embeddingCoordinator.start()
@@ -246,7 +245,7 @@ class DependencyContainer: ObservableObject {
             // Defer conversation ingestion to background — don't block startup
             Task.detached(priority: .utility) { [weak self] in
                 try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5s cooloff for indexer to start first
-                await self?.ingestConversations(service: service, projectRoot: root, eventBus: eventBus, embeddingCoordinator: embeddingCoordinator)
+                await self?.ingestConversations(service: service, projectRoot: root, eventBus: eventBus)
             }
         }
 
@@ -518,7 +517,7 @@ class DependencyContainer: ObservableObject {
         _conversationManager.updateAIService(newService)
     }
 
-    private nonisolated func ingestConversations(service: VectorStoreService, projectRoot: URL, eventBus: EventBusProtocol, embeddingCoordinator: VectorStoreEmbeddingCoordinator? = nil) async {
+    private nonisolated func ingestConversations(service: VectorStoreService, projectRoot: URL, eventBus: EventBusProtocol) async {
         let tracker = VectorStoreIngestionTracker.shared
         let convDir = projectRoot
             .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
@@ -590,7 +589,6 @@ class DependencyContainer: ObservableObject {
             }
 
             let totalEvents = eventLines.count
-            await embeddingCoordinator?.setEmbeddedTurnCount(conversationId: convId, count: totalEvents / 2)
             await tracker.markIngested(conversationId: convId)
             ingested += 1
             eventBus.publish(VectorStoreIngestionProgressEvent(ingestedCount: ingested, totalCount: toIngest.count))

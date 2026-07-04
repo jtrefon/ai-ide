@@ -1,124 +1,83 @@
 import Foundation
 import Combine
 
+/// Subscribes to contextual data events and embeds content into the vector store.
+/// Event-driven replacement for the FS-watching approach — content arrives
+/// in-memory as typed structs, no file I/O, no debounce.
 public actor VectorStoreEmbeddingCoordinator {
     private weak var vectorStoreService: VectorStoreService?
-    private let projectRoot: URL
     private let eventBus: EventBusProtocol
     private let embedder: HashingMemoryEmbeddingGenerator
-    private let logFileQueue = DispatchQueue(label: "com.vectorstore.embedding.log", qos: .utility)
-
-    private var pendingConversations: Set<String> = []
-    private var flushTask: Task<Void, Never>?
-    private var embeddedTurnCounts: [String: Int] = [:]
     private var bag: Set<AnyCancellable> = []
 
-    private static let debounceNanoseconds: UInt64 = 2_000_000_000
-    private static let flushThreshold = 5
+    /// Buffers the last user message per conversation for pairing with assistant responses.
+    private var pendingQueries: [String: String] = [:]
 
     public init(
         vectorStoreService: VectorStoreService,
-        projectRoot: URL,
         eventBus: EventBusProtocol,
         dimensions: Int = 512
     ) {
         self.vectorStoreService = vectorStoreService
-        self.projectRoot = projectRoot
         self.eventBus = eventBus
         self.embedder = HashingMemoryEmbeddingGenerator(dimensions: dimensions)
     }
 
     public func start() {
-        let handler: @Sendable (URL) -> Void = { [weak self] url in
-            Task { [weak self] in
-                await self?.handleFileEvent(url: url)
-            }
+        let ctxHandler: @Sendable (ContextLogEvent) -> Void = { [weak self] event in
+            Task { [weak self] in await self?.handleContextLog(event) }
         }
-        eventBus.subscribe(to: IDEFileCreatedEvent.self) { handler($0.url) }.store(in: &bag)
-        eventBus.subscribe(to: IDEFileModifiedEvent.self) { handler($0.url) }.store(in: &bag)
-    }
+        eventBus.subscribe(to: ContextLogEvent.self, handler: ctxHandler).store(in: &bag)
 
-    private func handleFileEvent(url: URL) {
-        guard url.lastPathComponent == "conversation.ndjson" else { return }
-        let convId = url.deletingLastPathComponent().lastPathComponent
-        pendingConversations.insert(convId)
-        scheduleFlush()
-    }
-
-    private func scheduleFlush() {
-        flushTask?.cancel()
-        flushTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: Self.debounceNanoseconds)
-            await self?.flushIfNeeded()
+        let toolHandler: @Sendable (ToolResultEvent) -> Void = { [weak self] event in
+            Task { [weak self] in await self?.handleToolResult(event) }
         }
+        eventBus.subscribe(to: ToolResultEvent.self, handler: toolHandler).store(in: &bag)
     }
 
-    private func flushIfNeeded() async {
-        guard !pendingConversations.isEmpty else { return }
-        await flush()
-    }
+    // MARK: - ContextLogEvent
 
-    private func hasReachedThreshold(_ convs: Set<String>) -> Bool {
-        convs.count >= Self.flushThreshold
-    }
+    private func handleContextLog(_ event: ContextLogEvent) async {
+        guard let convId = event.conversationId else { return }
 
-    private func flush() async {
-        let convs = pendingConversations
-        pendingConversations = []
-        flushTask = nil
+        if event.source == "chat.user_message" {
+            pendingQueries[convId] = event.content
+        } else if event.source == "chat.assistant_message" || event.source == "chat.response" {
+            guard let queryText = pendingQueries.removeValue(forKey: convId) else { return }
 
-        for convId in convs {
-            let convDir = ConversationScopedNDJSONStore.projectConversationDirectory(
-                projectRoot: projectRoot,
-                conversationId: convId
+            let qVec = (try? await embedder.generateEmbedding(for: queryText)) ?? []
+            let rVec = (try? await embedder.generateEmbedding(for: event.content)) ?? []
+            guard !qVec.isEmpty, !rVec.isEmpty else { return }
+
+            let turn = VectorStoreService.ConversationTurn(
+                query: queryText,
+                response: String(event.content.prefix(500)),
+                source: "conversation",
+                category: convId
             )
-            let fileURL = convDir.appendingPathComponent("conversation.ndjson")
-            guard let data = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
-            let eventLines = data.components(separatedBy: .newlines).filter { !$0.isEmpty }
-            let totalTurns = eventLines.count / 2
-            let alreadyEmbedded = embeddedTurnCounts[convId] ?? 0
-
-            guard totalTurns > alreadyEmbedded else { continue }
-
-            let queryStart = alreadyEmbedded * 2
-            guard queryStart + 1 < eventLines.count else { continue }
-
-            for i in stride(from: queryStart, to: eventLines.count - 1, by: 2) {
-                let queryLine = eventLines[i]
-                let responseLine = eventLines[i + 1]
-                guard let queryEvent = try? JSONDecoder().decode(ConversationLogEvent.self, from: Data(queryLine.utf8)),
-                      let responseEvent = try? JSONDecoder().decode(ConversationLogEvent.self, from: Data(responseLine.utf8)),
-                      let queryText = extractString(from: queryEvent.data?["content"]),
-                      let responseText = extractString(from: responseEvent.data?["content"]) else {
-                    break
-                }
-
-                let qVec = (try? await embedder.generateEmbedding(for: queryText)) ?? []
-                let rVec = (try? await embedder.generateEmbedding(for: responseText)) ?? []
-                guard !qVec.isEmpty, !rVec.isEmpty else { break }
-
-                let turn = VectorStoreService.ConversationTurn(
-                    query: queryText,
-                    response: String(responseText.prefix(500)),
-                    source: "conversation",
-                    category: convId
-                )
-                try? await vectorStoreService?.storeConversationTurn(
-                    turn: turn,
-                    queryVector: qVec,
-                    responseVector: rVec
-                )
-                embeddedTurnCounts[convId] = (embeddedTurnCounts[convId] ?? 0) + 1
-            }
+            try? await vectorStoreService?.storeConversationTurn(
+                turn: turn,
+                queryVector: qVec,
+                responseVector: rVec
+            )
         }
     }
 
-    public func setEmbeddedTurnCount(conversationId: String, count: Int) {
-        embeddedTurnCounts[conversationId] = count
-    }
+    // MARK: - ToolResultEvent
 
-    private func extractString(from logValue: LogValue?) -> String? {
-        guard case .string(let value) = logValue else { return nil }
-        return value
+    private func handleToolResult(_ event: ToolResultEvent) async {
+        guard event.type == "execute_success" || event.type == "execute_error",
+              let output = event.output, !output.isEmpty else { return }
+
+        let text = "Tool \(event.toolName): \(output)"
+        let vec = (try? await embedder.generateEmbedding(for: text)) ?? []
+        guard !vec.isEmpty else { return }
+
+        try? await vectorStoreService?.addEntry(
+            text: String(text.prefix(500)),
+            vector: vec,
+            source: event.toolName,
+            category: event.conversationId
+        )
     }
 }
