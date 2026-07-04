@@ -23,6 +23,9 @@ class UIStateManager: ObservableObject {
     @Published var isAIChatVisible: Bool = true {
         didSet { trackChange("isAIChatVisible", from: oldValue, to: isAIChatVisible) }
     }
+    @Published var isCodePanelVisible: Bool = true {
+        didSet { trackChange("isCodePanelVisible", from: oldValue, to: isCodePanelVisible) }
+    }
     @Published var bottomPanelSelectedName: String = AppConstants.Overlay.internalTerminalPanelName {
         didSet { trackChange("bottomPanelSelectedName", from: oldValue, to: bottomPanelSelectedName) }
     }
@@ -161,6 +164,10 @@ class UIStateManager: ObservableObject {
 
     func setAIChatVisible(_ visible: Bool) {
         isAIChatVisible = visible
+    }
+
+    func setCodePanelVisible(_ visible: Bool) {
+        isCodePanelVisible = visible
     }
 
     func updateSidebarWidth(_ width: Double) {
@@ -359,6 +366,7 @@ class UIStateManager: ObservableObject {
         isSidebarVisible = true
         isTerminalVisible = true
         isAIChatVisible = true
+        isCodePanelVisible = true
         sidebarWidth = AppConstants.Layout.defaultSidebarWidth
         terminalHeight = AppConstants.Layout.defaultTerminalHeight
         chatPanelWidth = AppConstants.Layout.defaultChatPanelWidth

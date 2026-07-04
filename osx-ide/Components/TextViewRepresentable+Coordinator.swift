@@ -231,7 +231,7 @@ extension TextViewRepresentable {
                 invalidateInlineCompletion()
             }
 
-            let indentUnit = IndentationStyle.current().indentUnit(tabWidth: AppConstants.Editor.tabWidth)
+            let indentUnit = detectIndent(from: textView.string)
             let currentLineRange = nsString.lineRange(for: NSRange(location: safeCursor, length: 0))
             let currentLine = nsString.substring(with: currentLineRange)
             let baseIndent = leadingWhitespace(of: currentLine)
@@ -294,10 +294,8 @@ extension TextViewRepresentable {
             if baseIndent.hasSuffix("\t") {
                 return String(baseIndent.dropLast(1))
             }
-            let tabWidth = AppConstants.Editor.tabWidth
-            let spacesToRemove = min(tabWidth, baseIndent.count)
-            let trimmed = String(baseIndent.dropLast(spacesToRemove))
-            return trimmed
+            let spacesToRemove = min(indentUnit.count, baseIndent.count)
+            return String(baseIndent.dropLast(spacesToRemove))
         }
 
         @MainActor
@@ -323,6 +321,37 @@ extension TextViewRepresentable {
                 }
             }
             return result
+        }
+
+        /// Detects the indent style used in the file content.
+        /// Returns the indent unit string (e.g. "\t", "  ", "    ") that matches
+        /// the prevailing style, falling back to the global preference if
+        /// the file has no detectable indentation.
+        private func detectIndent(from content: String) -> String {
+            let lines = content.components(separatedBy: .newlines)
+            var tabCount = 0
+            var spaceCounts: [Int: Int] = [:]
+
+            for line in lines.prefix(100) {
+                let indent = leadingWhitespace(of: line)
+                guard indent.count > 0 else { continue }
+
+                if indent.contains("\t") {
+                    tabCount += 1
+                    continue
+                }
+                spaceCounts[indent.count, default: 0] += 1
+            }
+
+            if tabCount > 0 {
+                return "\t"
+            }
+
+            if let (width, _) = spaceCounts.max(by: { $0.value < $1.value }) {
+                return String(repeating: " ", count: width)
+            }
+
+            return IndentationStyle.current().indentUnit(tabWidth: AppConstants.Editor.tabWidth)
         }
 
         @MainActor

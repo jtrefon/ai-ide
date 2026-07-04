@@ -186,6 +186,7 @@ final class ProjectSessionCoordinator {
         ui.isSidebarVisible = uiConfig.isSidebarVisible
         ui.isTerminalVisible = uiConfig.isTerminalVisible
         ui.isAIChatVisible = uiConfig.isAIChatVisible
+        ui.isCodePanelVisible = uiConfig.isCodePanelVisible
         let referenceFrame = window?.frame
             ?? normalizedWindowRect
             ?? NSRect(x: 0, y: 0, width: visibleFrame.width, height: visibleFrame.height)

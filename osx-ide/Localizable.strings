@@ -134,18 +134,18 @@
 "alert.error.title" = "Error";
 "alert.suggestion_format" = "Suggestion: %@";
 
-"menu.settings" = "Settings...";
 "menu.new_project" = "New Project";
 "menu.open" = "Open...";
 "menu.open_folder" = "Open Folder...";
 "menu.save" = "Save";
 "menu.save_as" = "Save As...";
 
-"menu.toggle.file_explorer" = "Show File Explorer";
-"menu.toggle.terminal" = "Show Terminal";
-"menu.toggle.ai_chat" = "Show AI Chat";
-"menu.toggle.hidden_files" = "Show Hidden Files";
+"menu.toggle.file_explorer" = "File Explorer";
+"menu.toggle.terminal" = "Terminal";
+"menu.toggle.ai_chat" = "AI Chat";
+"menu.toggle.hidden_files" = "Hidden Files";
 "menu.toggle.markdown_view" = "Markdown Preview";
+"menu.toggle.code_panel" = "Code";
 
 "menu.tools" = "Tools";
 "menu.tools.codebase_index_enabled" = "Codebase Index Enabled";

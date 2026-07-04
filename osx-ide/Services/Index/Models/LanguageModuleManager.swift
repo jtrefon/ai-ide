@@ -1,5 +1,4 @@
 import Foundation
-import AppKit
 import Combine
 
 /// Manages registration and activation of language modules.

@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 
 public enum LanguageModuleCapability: String, CaseIterable, Sendable {

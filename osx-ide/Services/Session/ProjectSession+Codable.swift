@@ -13,6 +13,7 @@ extension ProjectSession {
         case isSidebarVisible
         case isTerminalVisible
         case isAIChatVisible
+        case isCodePanelVisible
         case sidebarWidth
         case terminalHeight
         case chatPanelWidth
@@ -77,6 +78,7 @@ extension ProjectSession {
             isSidebarVisible: try container.decodeIfPresent(Bool.self, forKey: .isSidebarVisible) ?? true,
             isTerminalVisible: try container.decodeIfPresent(Bool.self, forKey: .isTerminalVisible) ?? true,
             isAIChatVisible: try container.decodeIfPresent(Bool.self, forKey: .isAIChatVisible) ?? true,
+            isCodePanelVisible: try container.decodeIfPresent(Bool.self, forKey: .isCodePanelVisible) ?? true,
             sidebarWidth: try container.decodeIfPresent(Double.self, forKey: .sidebarWidth) ?? 250,
             terminalHeight: try container.decodeIfPresent(Double.self, forKey: .terminalHeight) ?? 200,
             chatPanelWidth: try container.decodeIfPresent(Double.self, forKey: .chatPanelWidth) ?? 300

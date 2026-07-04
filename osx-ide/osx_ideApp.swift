@@ -74,6 +74,7 @@ struct OSXIDEApp: App {
             appSt.ui.isSidebarVisible = true
             appSt.ui.isTerminalVisible = true
             appSt.ui.isAIChatVisible = true
+            appSt.ui.isCodePanelVisible = true
             appSt.ui.bottomPanelSelectedName = AppConstants.Overlay.internalTerminalPanelName
         }
 
@@ -112,13 +113,6 @@ struct OSXIDEApp: App {
         .windowToolbarStyle(.unifiedCompact)
         .commands {
             if !isUnitTesting {
-            CommandGroup(replacing: .appSettings) {
-                SettingsLink {
-                    Label(localized("menu.settings"), systemImage: "gearshape")
-                }
-                .keyboardShortcut(",", modifiers: [.command])
-            }
-
             CommandGroup(replacing: .newItem) {
                 Button(localized("menu.new_project")) {
                     Task { try? await appState.commandRegistry.execute(.projectNew) }
@@ -162,6 +156,11 @@ struct OSXIDEApp: App {
                 Toggle(localized("menu.toggle.ai_chat"), isOn: Binding(
                     get: { appState.ui.isAIChatVisible },
                     set: { appState.ui.isAIChatVisible = $0 }
+                ))
+
+                Toggle(localized("menu.toggle.code_panel"), isOn: Binding(
+                    get: { appState.ui.isCodePanelVisible },
+                    set: { appState.ui.isCodePanelVisible = $0 }
                 ))
 
                 Divider()
@@ -421,6 +420,7 @@ private struct AppRootView: View {
                         appState.ui.isSidebarVisible = true
                         appState.ui.isTerminalVisible = true
                         appState.ui.isAIChatVisible = true
+                        appState.ui.isCodePanelVisible = true
                         appState.ui.bottomPanelSelectedName = AppConstants.Overlay.internalTerminalPanelName
                     }
                     NSApp.activate(ignoringOtherApps: true)
@@ -430,6 +430,7 @@ private struct AppRootView: View {
                         appState.ui.isSidebarVisible = true
                         appState.ui.isTerminalVisible = true
                         appState.ui.isAIChatVisible = true
+                        appState.ui.isCodePanelVisible = true
                         appState.ui.bottomPanelSelectedName = AppConstants.Overlay.internalTerminalPanelName
                     }
                     UICompositionRoot.compose(

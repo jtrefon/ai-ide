@@ -183,15 +183,19 @@ struct ContentView: View {
 
     // MARK: - Layout: Editor & Terminal
 
+    @ViewBuilder
     private var editorAndTerminal: some View {
-        EditorTerminalSplitView(
-            isTerminalVisible: uiState.isTerminalVisible,
-            terminalHeight: uiState.terminalHeight,
-            setTerminalHeight: { uiState.updateTerminalHeight($0) },
-            editor: { editorArea },
-            terminal: { terminalPanel }
-        )
-        .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
+        if uiState.isCodePanelVisible || uiState.isTerminalVisible {
+            EditorTerminalSplitView(
+                isCodePanelVisible: uiState.isCodePanelVisible,
+                isTerminalVisible: uiState.isTerminalVisible,
+                terminalHeight: uiState.terminalHeight,
+                setTerminalHeight: { uiState.updateTerminalHeight($0) },
+                editor: { editorArea },
+                terminal: { terminalPanel }
+            )
+            .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     @ViewBuilder
@@ -375,6 +379,7 @@ struct ContentView: View {
 // MARK: - Private: EditorTerminalSplitView
 
 private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
+    let isCodePanelVisible: Bool
     let isTerminalVisible: Bool
     let terminalHeight: Double
     let setTerminalHeight: (Double) -> Void
@@ -391,9 +396,11 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
             let maxAllowedTerminal = max(AppConstants.Layout.minTerminalHeight, containerHeight - minEditorHeight - 2)
 
             VStack(spacing: 0) {
-                editor()
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: .infinity)
+                if isCodePanelVisible {
+                    editor()
+                        .frame(maxWidth: .infinity)
+                        .frame(maxHeight: .infinity)
+                }
 
                 if isTerminalVisible {
                     Color.clear
