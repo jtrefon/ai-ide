@@ -100,7 +100,29 @@ struct IndexStatusBarView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .layoutPriority(layoutPriority)
+                .help(tooltip(for: text))
         }
+    }
+
+    private func tooltip(for text: String) -> String {
+        if text.hasPrefix("IDX") { return "Code symbol index — files indexed / total project files" }
+        if text.hasPrefix("VS") { return "Vector Store — FAISS-based conversation history RAG" }
+        if text.hasPrefix("AC") { return "Auto Complete — inline code completion via local FIM model" }
+        if text.hasPrefix("C ") || text.hasPrefix("C\t") { return "Class count in symbol index" }
+        if text.hasPrefix("F ") { return "Function count in symbol index" }
+        if text.hasPrefix("S ") { return "Total symbol count in index" }
+        if text.hasPrefix("Q ") { return "Average quality score of indexed files" }
+        if text.hasPrefix("CTX") { return "Context window usage (current / max tokens)" }
+        if text.hasPrefix("RAG:") { return "Retrieval-Augmented Generation — searching codebase context" }
+        if text.hasPrefix("Indexing") { return "Building code symbol index..." }
+        if text.contains("Index: unavailable") { return "Code index database not yet initialized" }
+        return ""
+    }
+
+    private func statusTooltip(_ text: String) -> String {
+        if text.hasPrefix("Indexing") || text.hasPrefix("RAG:") { return tooltip(for: text) }
+        if text.contains("Index: unavailable") { return tooltip(for: text) }
+        return "IDX: symbol index | VS: conversation history RAG | AC: auto-complete"
     }
 
     var body: some View {
@@ -120,6 +142,7 @@ struct IndexStatusBarView: View {
                 Text(viewModel.statusText)
                     .font(.caption)
                     .lineLimit(1)
+                    .help( statusTooltip(viewModel.statusText) )
             }
 
             Spacer(minLength: 8)
