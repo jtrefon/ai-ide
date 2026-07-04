@@ -33,7 +33,7 @@ final class CoderModeIntegrationTest: XCTestCase {
         greet(name: "World")
         """.write(to: testFile, atomically: true, encoding: .utf8)
 
-        let adapter = PatchFileToolAdapter()
+        let adapter = PatchFileToolAdapter(projectRoot: tmpDir)
 
         // Step 1: Patch — change "World" to "Swift"
         let result = try await adapter.execute(arguments: ToolArguments([
@@ -78,7 +78,7 @@ final class CoderModeIntegrationTest: XCTestCase {
         }
         """.write(to: testFile, atomically: true, encoding: .utf8)
 
-        let adapter = PatchFileToolAdapter()
+        let adapter = PatchFileToolAdapter(projectRoot: tmpDir)
 
         // Replace the function body entirely
         let result = try await adapter.execute(arguments: ToolArguments([
@@ -97,7 +97,7 @@ final class CoderModeIntegrationTest: XCTestCase {
 
     /// Tests that errors return structured feedback, not crashes.
     func testErrorFeedbackEnvelope() async throws {
-        let adapter = PatchFileToolAdapter()
+        let adapter = PatchFileToolAdapter(projectRoot: tmpDir)
 
         // Test 1: Missing file
         let result1 = try await adapter.execute(arguments: ToolArguments([

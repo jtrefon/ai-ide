@@ -155,23 +155,21 @@ final class ConversationSendCoordinatorTests: XCTestCase {
     }
 
     private final class FakeCodebaseIndex: CodebaseIndexProtocol {
-        let currentEmbeddingModelIdentifier: String = "hashing_v1"
         private(set) var getSummariesCallCount: Int = 0
         private(set) var searchSymbolsWithPathsCallCount: Int = 0
-        private(set) var getMemoriesCallCount: Int = 0
 
         let summaries: [(path: String, summary: String)]
         let symbolsByQuery: [String: [SymbolSearchResult]]
-        let longTermMemories: [MemoryEntry]
+
+        var database: DatabaseStore
 
         init(
             summaries: [(path: String, summary: String)],
-            symbolsByQuery: [String: [SymbolSearchResult]],
-            longTermMemories: [MemoryEntry]
+            symbolsByQuery: [String: [SymbolSearchResult]]
         ) {
             self.summaries = summaries
             self.symbolsByQuery = symbolsByQuery
-            self.longTermMemories = longTermMemories
+            database = try! DatabaseStore(path: "/tmp/test_conv_\(UUID().uuidString).db")
         }
 
         func start() {}
@@ -233,25 +231,6 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             return summaries
         }
 
-        func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry] {
-            _ = tier
-            getMemoriesCallCount += 1
-            return longTermMemories
-        }
-
-        func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult] {
-            _ = userInput
-            _ = limit
-            return []
-        }
-
-        func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
-            _ = content
-            _ = tier
-            _ = category
-            return MemoryEntry(id: UUID().uuidString, tier: tier, content: content, category: category, timestamp: Date(), protectionLevel: 0)
-        }
-
         func getStats() async throws -> IndexStats {
             IndexStats(
                 indexedResourceCount: 0,
@@ -265,8 +244,6 @@ final class ConversationSendCoordinatorTests: XCTestCase {
                 protocolCount: 0,
                 functionCount: 0,
                 variableCount: 0,
-                memoryCount: 0,
-                longTermMemoryCount: 0,
                 databaseSizeBytes: 0,
                 databasePath: "",
                 isDatabaseInWorkspace: false,
@@ -334,11 +311,9 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             availableTools: []
         ))
         
-        // The retry should work and there should be an assistant message
         let assistantMessages = historyCoordinator.messages.filter { $0.role == .assistant }
         XCTAssertFalse(assistantMessages.isEmpty, "Should have at least one assistant message")
         
-        // Check if the retry worked by looking for any non-empty assistant response
         let hasNonEmptyResponse = assistantMessages.contains { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         XCTAssertTrue(hasNonEmptyResponse, "Should have a non-empty assistant response")
     }
@@ -404,15 +379,9 @@ final class ConversationSendCoordinatorTests: XCTestCase {
             ]
         ]
 
-        let longTermMemories = [
-            MemoryEntry(id: "1", tier: .longTerm, content: "Z rule", category: "rules", timestamp: Date(), protectionLevel: 0),
-            MemoryEntry(id: "2", tier: .longTerm, content: "A rule", category: "rules", timestamp: Date(), protectionLevel: 0)
-        ]
-
         let fakeIndex = FakeCodebaseIndex(
             summaries: summaries,
-            symbolsByQuery: symbolsByQuery,
-            longTermMemories: longTermMemories
+            symbolsByQuery: symbolsByQuery
         )
 
         let aiService = SpyAIService(response: AIServiceResponse(content: "Done", toolCalls: nil))
@@ -439,21 +408,19 @@ final class ConversationSendCoordinatorTests: XCTestCase {
         XCTAssertTrue(unwrappedContext.contains("RAG CONTEXT:"))
         XCTAssertTrue(unwrappedContext.contains("PROJECT OVERVIEW (Key Files):"))
         XCTAssertTrue(unwrappedContext.contains("CODEBASE INDEX (matching symbols):"))
-        XCTAssertTrue(unwrappedContext.contains("PROJECT MEMORY (long-term rules):"))
 
         XCTAssertTrue(unwrappedContext.contains("- a.swift: A summary"))
         XCTAssertTrue(unwrappedContext.contains("- b.swift: B summary"))
 
         let overviewIndex = unwrappedContext.range(of: "PROJECT OVERVIEW")?.lowerBound
-        let memoryIndex = unwrappedContext.range(of: "PROJECT MEMORY")?.lowerBound
+        let symbolIndex = unwrappedContext.range(of: "CODEBASE INDEX")?.lowerBound
         XCTAssertNotNil(overviewIndex)
-        XCTAssertNotNil(memoryIndex)
-        if let overviewIndex, let memoryIndex {
-            XCTAssertLessThan(overviewIndex, memoryIndex)
+        XCTAssertNotNil(symbolIndex)
+        if let overviewIndex, let symbolIndex {
+            XCTAssertLessThan(overviewIndex, symbolIndex)
         }
 
         XCTAssertGreaterThan(fakeIndex.getSummariesCallCount, 0)
-        XCTAssertGreaterThan(fakeIndex.getMemoriesCallCount, 0)
         XCTAssertGreaterThan(fakeIndex.searchSymbolsWithPathsCallCount, 0)
     }
 

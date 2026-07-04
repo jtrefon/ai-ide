@@ -232,6 +232,18 @@ launch_app() {
 run_tests() {
     local suite=$1
     local explicit_modules="${SWIFT_ENABLE_EXPLICIT_MODULES:-NO}"
+    # UI-heavy tests that create AppKit views — skipped from unit test run
+    # to avoid spawning macOS services (linkd, etc.). These test in-process
+    # UI components (NSTextView, NSOutlineView, CodeEditorTextView) and
+    # are not XCUITest style.
+    local skip_ui_tests=(
+        "-skip-testing:osx-ideTests/CodeEditorTextViewInlineCompletionTests"
+        "-skip-testing:osx-ideTests/CodeEditorViewHelpersTests"
+        "-skip-testing:osx-ideTests/TextViewInlineCompletionCoordinatorTests"
+        "-skip-testing:osx-ideTests/LineNumberRulerViewTests"
+        "-skip-testing:osx-ideTests/FileTreeIsolationTests"
+        "-skip-testing:osx-ideTests/UILayoutNormalizerTests"
+    )
     echo "Running unit tests..."
     prepare_derived_data_packages "$DERIVED_DATA_PATH_TEST"
     if [ -n "$suite" ]; then
@@ -246,6 +258,7 @@ run_tests() {
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
                    SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
+                   "${skip_ui_tests[@]}" \
                    test -only-testing:osx-ideTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideHarnessTests
     else
         xcodebuild -project "$PROJECT_NAME.xcodeproj" \
@@ -255,6 +268,7 @@ run_tests() {
                    -destination 'platform=macOS' \
                    ENABLE_PREVIEWS=NO \
                    SWIFT_ENABLE_EXPLICIT_MODULES="$explicit_modules" \
+                   "${skip_ui_tests[@]}" \
                    test -only-testing:osx-ideTests -skip-testing:osx-ideUITests -skip-testing:osx-ideHarnessTests
     fi
 }

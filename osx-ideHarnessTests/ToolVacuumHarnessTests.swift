@@ -4,12 +4,15 @@ import XCTest
 @MainActor
 final class ToolVacuumHarnessTests: XCTestCase {
     private final class MockCodebaseIndex: CodebaseIndexProtocol {
-        var currentEmbeddingModelIdentifier: String = "hashing_v1"
+        var database: DatabaseStore
         var mockListFilesResult: [String] = []
         var mockReadFileResult: String = ""
         var mockSearchTextResult: [String] = []
         var mockSearchSymbolsWithPathsResult: [SymbolSearchResult] = []
-        var mockMemoriesResult: [MemoryEntry] = []
+
+        init() {
+            database = try! DatabaseStore(path: "/tmp/test_tool_vacuum_\(UUID().uuidString).db")
+        }
 
         func start() {}
         func stop() {}
@@ -30,27 +33,6 @@ final class ToolVacuumHarnessTests: XCTestCase {
             mockSearchSymbolsWithPathsResult
         }
         func getSummaries(projectRoot: URL, limit: Int) async throws -> [(path: String, summary: String)] { [] }
-        func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry] {
-            guard let tier else { return mockMemoriesResult }
-            return mockMemoriesResult.filter { $0.tier == tier }
-        }
-        func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult] {
-            _ = userInput
-            _ = limit
-            return []
-        }
-        func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
-            let entry = MemoryEntry(
-                id: UUID().uuidString,
-                tier: tier,
-                content: content,
-                category: category,
-                timestamp: Date(),
-                protectionLevel: 0
-            )
-            mockMemoriesResult.insert(entry, at: 0)
-            return entry
-        }
         func getStats() async throws -> IndexStats {
             IndexStats(
                 indexedResourceCount: 0,
@@ -64,8 +46,6 @@ final class ToolVacuumHarnessTests: XCTestCase {
                 protocolCount: 0,
                 functionCount: 0,
                 variableCount: 0,
-                memoryCount: 0,
-                longTermMemoryCount: 0,
                 databaseSizeBytes: 0,
                 databasePath: "",
                 isDatabaseInWorkspace: false,
@@ -188,91 +168,6 @@ final class ToolVacuumHarnessTests: XCTestCase {
         ]))
         XCTAssertTrue(listResult.contains("main.jsx"))
         XCTAssertTrue(listResult.contains("App.jsx"))
-    }
-
-    func testIndexToolsExposeStableAuthoritativeResultsInIsolation() async throws {
-        let mockIndex = MockCodebaseIndex()
-        mockIndex.mockListFilesResult = [
-            "src/App.jsx",
-            "src/main.jsx"
-        ]
-        mockIndex.mockReadFileResult = [
-            "1 | export default function App() {",
-            "2 |   return <div>Hello Vacuum</div>",
-            "3 | }"
-        ].joined(separator: "\n")
-        mockIndex.mockSearchTextResult = [
-            "src/App.jsx:2:   return <div>Hello Vacuum</div>"
-        ]
-        mockIndex.mockSearchSymbolsWithPathsResult = [
-            SymbolSearchResult(
-                symbol: Symbol(
-                    id: UUID().uuidString,
-                    resourceId: "resource-src-app",
-                    name: "App",
-                    kind: .function,
-                    lineStart: 1,
-                    lineEnd: 3,
-                    description: nil
-                ),
-                filePath: "src/App.jsx"
-            )
-        ]
-
-        let indexListFilesTool = IndexListFilesTool(index: mockIndex)
-        let indexReadFileTool = IndexReadFileTool(index: mockIndex)
-        let indexSearchTextTool = IndexSearchTextTool(index: mockIndex)
-        let indexSearchSymbolsTool = IndexSearchSymbolsTool(index: mockIndex)
-
-        let listedFiles = try await indexListFilesTool.execute(arguments: ToolArguments([
-            "query": "src",
-            "limit": 10,
-            "offset": 0
-        ]))
-        XCTAssertTrue(listedFiles.contains("src/App.jsx"))
-        XCTAssertTrue(listedFiles.contains("src/main.jsx"))
-
-        let readResult = try await indexReadFileTool.execute(arguments: ToolArguments([
-            "path": "src/App.jsx",
-            "start_line": 1,
-            "end_line": 3,
-            "_conversation_id": "tool-vacuum-index"
-        ]))
-        XCTAssertTrue(readResult.contains("Hello Vacuum"))
-
-        let textSearchResult = try await indexSearchTextTool.execute(arguments: ToolArguments([
-            "pattern": "Hello Vacuum",
-            "limit": 10
-        ]))
-        XCTAssertTrue(textSearchResult.contains("src/App.jsx:2:"))
-
-        let symbolSearchResult = try await indexSearchSymbolsTool.execute(arguments: ToolArguments([
-            "query": "App",
-            "limit": 10
-        ]))
-        XCTAssertTrue(symbolSearchResult.contains("[function] App"))
-        XCTAssertTrue(symbolSearchResult.contains("src/App.jsx:1-3"))
-    }
-
-    func testIndexMemoryToolsPersistAndListStableResultsInIsolation() async throws {
-        let mockIndex = MockCodebaseIndex()
-        let addMemoryTool = IndexAddMemoryTool(index: mockIndex)
-        let listMemoriesTool = IndexListMemoriesTool(index: mockIndex)
-
-        let addResult = try await addMemoryTool.execute(arguments: ToolArguments([
-            "content": "Planner output should remain concise and actionable",
-            "tier": "longTerm",
-            "category": "architecture"
-        ]))
-        XCTAssertTrue(addResult.contains("Memory saved:"))
-        XCTAssertTrue(addResult.contains("[longTerm]"))
-
-        let listResult = try await listMemoriesTool.execute(arguments: ToolArguments([
-            "tier": "longTerm",
-            "limit": 10
-        ]))
-        XCTAssertTrue(listResult.contains("Planner output should remain concise and actionable"))
-        XCTAssertTrue(listResult.contains("category=architecture"))
     }
 
     private func makeTempDir(prefix: String) -> URL {

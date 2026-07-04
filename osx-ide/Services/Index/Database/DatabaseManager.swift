@@ -90,10 +90,6 @@ public class DatabaseManager {
         try symbolManager.searchSymbolsWithPaths(nameLike: query, limit: limit)
     }
 
-    public func candidatePathsForFTS(query: String, limit: Int) throws -> [String] {
-        try queryExecutor.candidatePathsForFTS(query: query, limit: limit)
-    }
-
     public func hasResourcePath(_ absolutePath: String) throws -> Bool {
         try queryExecutor.hasResourcePath(absolutePath)
     }
@@ -112,10 +108,6 @@ public class DatabaseManager {
 
     public func getResourceLastModified(resourceId: String) throws -> Double? {
         try queryExecutor.getResourceLastModified(resourceId: resourceId)
-    }
-
-    public func getResourceContentHash(resourceId: String) throws -> String? {
-        try queryExecutor.getResourceContentHash(resourceId: resourceId)
     }
 
     public func searchSymbols(nameLike query: String, limit: Int = 50) throws -> [Symbol] {
@@ -160,10 +152,6 @@ public class DatabaseManager {
 
     public func getSymbolKindCounts() throws -> [String: Int] {
         try symbolManager.getSymbolKindCounts()
-    }
-
-    public func searchFTS(query: String, limit: Int) throws -> [(path: String, snippet: String)] {
-        try queryExecutor.searchFTS(query: query, limit: limit)
     }
 
     internal func withPreparedStatement<T>(

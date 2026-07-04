@@ -47,9 +47,7 @@ struct SearchProjectTool: AITool {
 
         // 1. Vector semantic search via index (best for conceptual relevance)
         if let index {
-            let semanticStart = ContinuousClock.now
             // Semantic search via MLX embeddings removed — RAG handles contextual retrieval
-            _ = semanticStart
         }
 
         // 2. Symbol search via index (authoritative for code structure)
@@ -200,7 +198,7 @@ struct SearchProjectTool: AITool {
 
         var output = "Found \(entries.count) occurrence(s) of \"\(query)\":\n\n"
         for (file, fileEntries) in grouped {
-            output += "📄 \(file)\n"
+            output += "# \(file)\n"
             for entry in fileEntries.prefix(20) {
                 let lineInfo = entry.line > 0 ? "L\(entry.line) " : ""
                 output += "  \(lineInfo)[\(entry.matchType)] \(entry.context)\n"

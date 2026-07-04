@@ -8,7 +8,7 @@ public actor VectorStoreIngestionTracker {
 
     public func setProjectRoot(_ root: URL) {
         let storePath = root
-            .appendingPathComponent(".osx-ide", isDirectory: true)
+            .appendingPathComponent(".ide", isDirectory: true)
             .appendingPathComponent("vector_store", isDirectory: true)
         persistenceURL = storePath.appendingPathComponent("ingested-conversations.json")
         load()

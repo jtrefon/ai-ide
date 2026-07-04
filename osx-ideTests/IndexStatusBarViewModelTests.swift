@@ -3,28 +3,10 @@ import XCTest
 
 @MainActor
 final class IndexStatusBarViewModelTests: XCTestCase {
-    func testEmbeddingModelLabelRefreshesAfterAsyncUpgradeWithoutEvents() {
-        let index = FakeCodebaseIndex(currentEmbeddingModelIdentifier: "hashing_v1")
-        let viewModel = IndexStatusBarViewModel(
-            codebaseIndexProvider: { index },
-            eventBus: EventBus(),
-            refreshRemoteAIAccountBalance: { _ in },
-            statsPollInterval: 0.1
-        )
-
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-        XCTAssertEqual(viewModel.embeddingModelIdentifier, "hashing")
-
-        index.currentEmbeddingModelIdentifier = "bert_nomic-embed-text-v1.5"
-
-        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-        XCTAssertEqual(viewModel.embeddingModelIdentifier, "bge-s")
-    }
-
     func testRemoteAIUsageDisplaysBalanceWhenProvided() {
         let eventBus = EventBus()
         let viewModel = IndexStatusBarViewModel(
-            codebaseIndexProvider: { FakeCodebaseIndex(currentEmbeddingModelIdentifier: "hashing_v1") },
+            codebaseIndexProvider: { FakeCodebaseIndex() },
             eventBus: eventBus,
             refreshRemoteAIAccountBalance: { _ in },
             statsPollInterval: 60
@@ -56,7 +38,7 @@ final class IndexStatusBarViewModelTests: XCTestCase {
         let eventBus = EventBus()
         let refreshExpectation = expectation(description: "refresh balance")
         let viewModel = IndexStatusBarViewModel(
-            codebaseIndexProvider: { FakeCodebaseIndex(currentEmbeddingModelIdentifier: "hashing_v1") },
+            codebaseIndexProvider: { FakeCodebaseIndex() },
             eventBus: eventBus,
             refreshRemoteAIAccountBalance: { runId in
                 if runId == "run-42" {
@@ -75,10 +57,10 @@ final class IndexStatusBarViewModelTests: XCTestCase {
 
 @MainActor
 private final class FakeCodebaseIndex: CodebaseIndexProtocol {
-    var currentEmbeddingModelIdentifier: String
+    var database: DatabaseStore
 
-    init(currentEmbeddingModelIdentifier: String) {
-        self.currentEmbeddingModelIdentifier = currentEmbeddingModelIdentifier
+    init() {
+        database = try! DatabaseStore(path: "/tmp/test_statusbar_\(UUID().uuidString).db")
     }
 
     func start() {}
@@ -93,23 +75,6 @@ private final class FakeCodebaseIndex: CodebaseIndexProtocol {
     func searchSymbols(nameLike query: String, limit: Int) async throws -> [Symbol] { [] }
     func searchSymbolsWithPaths(nameLike query: String, limit: Int) async throws -> [SymbolSearchResult] { [] }
     func getSummaries(projectRoot: URL, limit: Int) async throws -> [(path: String, summary: String)] { [] }
-    func getMemories(tier: MemoryTier?) async throws -> [MemoryEntry] { [] }
-    func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult] {
-        _ = userInput
-        _ = limit
-        return []
-    }
-
-    func addMemory(content: String, tier: MemoryTier, category: String) async throws -> MemoryEntry {
-        MemoryEntry(
-            id: UUID().uuidString,
-            tier: tier,
-            content: content,
-            category: category,
-            timestamp: Date(),
-            protectionLevel: 0
-        )
-    }
 
     func getStats() async throws -> IndexStats {
         IndexStats(
@@ -124,8 +89,6 @@ private final class FakeCodebaseIndex: CodebaseIndexProtocol {
             protocolCount: 0,
             functionCount: 0,
             variableCount: 0,
-            memoryCount: 0,
-            longTermMemoryCount: 0,
             databaseSizeBytes: 0,
             databasePath: "",
             isDatabaseInWorkspace: false,

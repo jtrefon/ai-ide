@@ -24,7 +24,7 @@ final class ProductionToolHarness: XCTestCase {
         let testFile = tmpDir.appendingPathComponent("test.swift")
         try "let x = 1\nlet y = 2\nlet z = 3".write(to: testFile, atomically: true, encoding: .utf8)
 
-        let adapter = PatchFileToolAdapter()
+        let adapter = PatchFileToolAdapter(projectRoot: tmpDir)
         XCTAssertEqual(adapter.name, "patch_file")
         XCTAssertTrue(adapter.description.contains("line range"))
 
@@ -48,7 +48,7 @@ final class ProductionToolHarness: XCTestCase {
 
     func testPatchFileToolFileNotFound() async throws {
         // Adapter returns formatted feedback (doesn't throw) — error envelope in the string
-        let adapter = PatchFileToolAdapter()
+        let adapter = PatchFileToolAdapter(projectRoot: tmpDir)
         let result = try await adapter.execute(arguments: ToolArguments([
             "path": "/nonexistent/path.txt",
             "start_line": 1,

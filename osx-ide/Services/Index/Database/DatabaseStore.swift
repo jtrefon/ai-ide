@@ -28,13 +28,18 @@ public struct IndexStatsCounts: Sendable {
     }
 }
 
-public struct UpsertResourceAndFTSRequest: Sendable {
+public struct UpsertResourceRequest: Sendable {
     public let resourceId: String
     public let path: String
     public let language: String
     public let timestamp: Double
-    public let contentHash: String
-    public let content: String
+
+    public init(resourceId: String, path: String, language: String, timestamp: Double) {
+        self.resourceId = resourceId
+        self.path = path
+        self.language = language
+        self.timestamp = timestamp
+    }
 }
 
 /// Actor-based database store providing thread-safe access to the index database.
@@ -61,10 +66,6 @@ public actor DatabaseStore {
         try database.getResourceLastModified(resourceId: resourceId)
     }
 
-    public func getResourceContentHash(resourceId: String) throws -> String? {
-        try database.getResourceContentHash(resourceId: resourceId)
-    }
-
     public func listResourcePaths(matching query: String?, limit: Int, offset: Int) throws -> [String] {
         try database.listResourcePaths(matching: query, limit: limit, offset: offset)
     }
@@ -79,14 +80,6 @@ public actor DatabaseStore {
 
     public func pruneResourcesNotInPaths(_ knownPaths: Set<String>) throws -> Int {
         try database.pruneResourcesNotInPaths(knownPaths)
-    }
-
-    public func candidatePathsForFTS(query: String, limit: Int) throws -> [String] {
-        try database.candidatePathsForFTS(query: query, limit: limit)
-    }
-
-    public func searchFTS(query: String, limit: Int) throws -> [(path: String, snippet: String)] {
-        try database.searchFTS(query: query, limit: limit)
     }
 
     // MARK: - Symbol Operations
@@ -193,21 +186,19 @@ public actor DatabaseStore {
         try database.execute(sql: sql, parameters: parameters.map { $0.anyValue })
     }
 
-    public func upsertResourceAndFTS(_ request: UpsertResourceAndFTSRequest) throws {
+    public func upsertResource(_ request: UpsertResourceRequest) throws {
         let sql = """
-        INSERT INTO resources (id, path, language, last_modified, content_hash, quality_score)
-        VALUES (?, ?, ?, ?, ?, 0.0)
+        INSERT INTO resources (id, path, language, last_modified)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             last_modified = excluded.last_modified,
-            content_hash = excluded.content_hash,
             language = excluded.language;
         """
         try database.execute(sql: sql, parameters: [
             request.resourceId,
             request.path,
             request.language,
-            request.timestamp,
-            request.contentHash
+            request.timestamp
         ])
     }
 

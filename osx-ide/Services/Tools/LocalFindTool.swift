@@ -151,13 +151,11 @@ struct LocalFindTool: AITool {
 
     // MARK: - Formatting
 
-    // MARK: - Formatting
-
     private func format(entries: [SearchEntry], phrase: String) -> String {
         let grouped = Dictionary(grouping: entries) { $0.file }.sorted { $0.key < $1.key }
         var output = "Found \(entries.count) match(s) for \"\(phrase)\":\n\n"
         for (file, fileEntries) in grouped {
-            output += "📄 \(file)\n"
+            output += "# \(file)\n"
             for e in fileEntries.prefix(10) {
                 let info = e.line > 0 ? "L\(e.line) " : ""
                 output += "  \(info)[\(e.matchType)] \(e.context)\n"

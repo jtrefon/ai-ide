@@ -25,32 +25,14 @@ final class DatabaseSchemaManager {
             quality_details TEXT
         );
 
-        CREATE VIRTUAL TABLE IF NOT EXISTS resources_fts USING fts5(
-            path,
-            content,
-            content_id UNINDEXED
-        );
-
-        CREATE TABLE IF NOT EXISTS symbols (
-            id TEXT PRIMARY KEY,
-            resource_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            kind TEXT NOT NULL,
-            line_start INTEGER NOT NULL,
-            line_end INTEGER NOT NULL,
-            description TEXT,
-            FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE
-        );
-
         CREATE INDEX IF NOT EXISTS idx_resources_path ON resources(path);
-        CREATE INDEX IF NOT EXISTS idx_symbols_resource_id ON symbols(resource_id);
-        CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
 
-        -- Drop old tables that are no longer used (memories/code_chunks moved to VectorStore)
+        -- Drop old tables that are no longer used (memories/code_chunks/FTS)
         DROP TABLE IF EXISTS resources_fts;
         DROP TABLE IF EXISTS code_chunks;
         DROP TABLE IF EXISTS memory_embeddings;
         DROP TABLE IF EXISTS memories;
+        DROP TABLE IF EXISTS symbols;
 
         CREATE TABLE IF NOT EXISTS symbol_names (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

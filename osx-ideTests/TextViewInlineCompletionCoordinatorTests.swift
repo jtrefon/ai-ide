@@ -148,6 +148,18 @@ final class TextViewInlineCompletionCoordinatorTests: XCTestCase {
                 ),
                 ranker: SuggestionRanker()
             ),
+            snippetCompletionService: SnippetCompletionService(
+                inferenceService: CompletionInferenceService(
+                    provider: AIServiceInlineCompletionProvider(
+                        aiServiceProvider: { nil },
+                        offlineModeChecker: TestTextViewOfflineModeChecker()
+                    )
+                ),
+                retrievalLayer: CompletionRetrievalLayer(
+                    projectRootProvider: { nil },
+                    codebaseIndexProvider: { nil }
+                )
+            ),
             showLineNumbers: false,
             wordWrap: false,
             fontSize: 12,

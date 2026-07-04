@@ -4,14 +4,11 @@ public actor RAGTraceLogger {
     public static let shared = RAGTraceLogger()
 
     private let sessionId: String
-    private let encoder: JSONEncoder
+
     private var projectLogFileURL: URL?
 
     public init(sessionId: String = UUID().uuidString) {
         self.sessionId = sessionId
-        let enc = JSONEncoder()
-        enc.outputFormatting = []
-        self.encoder = enc
     }
 
     public func setProjectRoot(_ projectRoot: URL) {
@@ -26,8 +23,11 @@ public actor RAGTraceLogger {
             guard let logFileURL = projectLogFileURL else { return }
             try ensureDirectoryExists(for: logFileURL)
 
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
             let payload: [String: Any] = [
-                "ts": ISO8601DateFormatter().string(from: Date()),
+                "ts": f.string(from: Date()),
                 "session": sessionId,
                 "type": type,
                 "file": file,
@@ -49,6 +49,7 @@ public actor RAGTraceLogger {
                 try data.write(to: logFileURL, options: [.atomic])
             }
         } catch {
+            // Silently skip logging errors to avoid impacting caller
         }
     }
 

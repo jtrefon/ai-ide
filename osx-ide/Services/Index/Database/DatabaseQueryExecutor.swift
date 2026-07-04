@@ -33,32 +33,6 @@ final class DatabaseQueryExecutor {
         }
     }
 
-    func candidatePathsForFTS(query: String, limit: Int) throws -> [String] {
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedQuery.isEmpty { return [] }
-
-        let sql = """
-        SELECT path
-        FROM resources_fts
-        WHERE resources_fts MATCH ?
-        ORDER BY rank
-        LIMIT ?;
-        """
-
-        return try database.withPreparedStatement(sql: sql) { statement in
-            sqlite3_bind_text(statement, 1, (trimmedQuery as NSString).utf8String, -1, Self.sqliteTransient)
-            sqlite3_bind_int(statement, 2, Int32(limit))
-
-            var paths: [String] = []
-            while sqlite3_step(statement) == SQLITE_ROW {
-                if let pathPtr = sqlite3_column_text(statement, 0) {
-                    paths.append(String(cString: pathPtr))
-                }
-            }
-            return paths
-        }
-    }
-
     func hasResourcePath(_ absolutePath: String) throws -> Bool {
         let sql = "SELECT 1 FROM resources WHERE path = ? LIMIT 1;"
         return try database.withPreparedStatement(sql: sql) { statement in
@@ -100,16 +74,6 @@ final class DatabaseQueryExecutor {
         }
     }
 
-    func getResourceContentHash(resourceId: String) throws -> String? {
-        let sql = "SELECT content_hash FROM resources WHERE id = ? LIMIT 1;"
-        return try database.withPreparedStatement(sql: sql) { statement -> String? in
-            sqlite3_bind_text(statement, 1, (resourceId as NSString).utf8String, -1, Self.sqliteTransient)
-            guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
-            guard let ptr = sqlite3_column_text(statement, 0) else { return nil }
-            return String(cString: ptr)
-        }
-    }
-
     func isResourceAIEnriched(resourceId: String) throws -> Bool {
         let sql = "SELECT ai_enriched FROM resources WHERE id = ? LIMIT 1;"
         return try database.withPreparedStatement(sql: sql) { statement in
@@ -126,30 +90,6 @@ final class DatabaseQueryExecutor {
             indexedResourceCount: resourceCount,
             symbolCount: symbolCount
         )
-    }
-
-    func searchFTS(query: String, limit: Int) throws -> [(path: String, snippet: String)] {
-        let sql = """
-        SELECT path, snippet(resources_fts, 1, '', '', '...', 64) as match_snippet
-        FROM resources_fts
-        WHERE resources_fts MATCH ?
-        ORDER BY rank
-        LIMIT ?;
-        """
-
-        return try database.withPreparedStatement(sql: sql) { statement in
-            sqlite3_bind_text(statement, 1, (query as NSString).utf8String, -1, Self.sqliteTransient)
-            sqlite3_bind_int(statement, 2, Int32(limit))
-
-            var results: [(path: String, snippet: String)] = []
-            while sqlite3_step(statement) == SQLITE_ROW {
-                if let pathPtr = sqlite3_column_text(statement, 0),
-                   let snippetPtr = sqlite3_column_text(statement, 1) {
-                    results.append((String(cString: pathPtr), String(cString: snippetPtr)))
-                }
-            }
-            return results
-        }
     }
 
     func pruneResourcesOutside(projectRoot: URL) throws -> Int {

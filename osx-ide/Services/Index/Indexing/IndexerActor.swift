@@ -34,14 +34,12 @@ public actor IndexerActor {
         let symbols = SymbolExtractor.extract(from: url, content: content)
         let timestamp = fileModTime ?? Date().timeIntervalSince1970
 
-        try await database.upsertResourceAndFTS(
-            UpsertResourceAndFTSRequest(
+        try await database.upsertResource(
+            UpsertResourceRequest(
                 resourceId: resourceId,
                 path: url.path,
                 language: url.pathExtension.lowercased(),
-                timestamp: timestamp,
-                contentHash: "",
-                content: ""
+                timestamp: timestamp
             )
         )
 
@@ -58,10 +56,6 @@ public actor IndexerActor {
 
     func getResourceLastModified(resourceId: String) async throws -> Double? {
         try await database.getResourceLastModified(resourceId: resourceId)
-    }
-
-    func getResourceContentHash(resourceId: String) async throws -> String? {
-        try await database.getResourceContentHash(resourceId: resourceId)
     }
 
     func pruneResourcesNotInPaths(_ knownPaths: Set<String>) async throws -> Int {
