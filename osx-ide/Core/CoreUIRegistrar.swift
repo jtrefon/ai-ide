@@ -26,14 +26,16 @@ struct CoreUIRegistrar<Context: IDEContext & ObservableObject> {
             point: .panelBottom,
             name: AppConstants.Overlay.internalTerminalPanelName,
             icon: "terminal",
-            view: NativeTerminalView(
-                currentDirectory: Binding(
-                    get: { context.workspace.currentDirectory },
-                    set: { _ in }
-                ),
-                ui: context.ui,
-                eventBus: context.eventBus
-            )
+            makeView: {
+                NativeTerminalView(
+                    currentDirectory: Binding(
+                        get: { context.workspace.currentDirectory },
+                        set: { _ in }
+                    ),
+                    ui: context.ui,
+                    eventBus: context.eventBus
+                )
+            }
         )
 
         registry.register(

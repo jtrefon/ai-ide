@@ -56,6 +56,7 @@ public struct SwiftTermView: NSViewRepresentable {
         // spawn fell back to the home directory).
         if let newDir = projectDirectory, newDir != context.coordinator.spawnedInDirectory {
             context.coordinator.spawnedInDirectory = newDir
+            nsView.terminate()
             nsView.startProcess(
                 executable: context.coordinator.shellPath ?? shellPath,
                 args: context.coordinator.shellArgs ?? shellArgs,
