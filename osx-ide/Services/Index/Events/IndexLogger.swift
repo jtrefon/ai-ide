@@ -16,7 +16,7 @@ public actor IndexLogger {
             return
         }
 
-        let ideDir = projectRoot.appendingPathComponent(".ide", isDirectory: true)
+        let ideDir = projectRoot.appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
         let logsDir = ideDir.appendingPathComponent("logs", isDirectory: true)
 
         do {

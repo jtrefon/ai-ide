@@ -14,7 +14,7 @@ public actor ConversationIndexStore {
     private func projectIndexFileURL() -> URL? {
         guard let projectRoot else { return nil }
         return projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("logs", isDirectory: true)
             .appendingPathComponent("conversations", isDirectory: true)
             .appendingPathComponent("index.ndjson")

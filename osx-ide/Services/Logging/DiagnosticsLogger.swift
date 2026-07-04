@@ -55,7 +55,7 @@ public actor DiagnosticsLogger {
     private init() {}
     
     public func setup(projectRoot: URL) {
-        let ideDir = projectRoot.appendingPathComponent(".ide", isDirectory: true)
+        let ideDir = projectRoot.appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
         let logsDir = ideDir.appendingPathComponent("logs", isDirectory: true)
         
         do {

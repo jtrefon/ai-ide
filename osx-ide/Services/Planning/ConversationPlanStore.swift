@@ -113,7 +113,7 @@ actor ConversationPlanStore {
     private func planFileURL(conversationId: String, ext: String) -> URL? {
         guard let projectRoot else { return nil }
         return projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("plans", isDirectory: true)
             .appendingPathComponent("\(conversationId).\(ext)")
     }

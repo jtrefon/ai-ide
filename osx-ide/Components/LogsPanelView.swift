@@ -102,7 +102,7 @@ struct LogsPanelView: View {
         case .aiTrace:
             if let projectRoot {
                 let logsDir = projectRoot
-                    .appendingPathComponent(".ide", isDirectory: true)
+                    .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
                     .appendingPathComponent("logs", isDirectory: true)
                 let traceFile = logsDir.appendingPathComponent("ai-trace.ndjson")
                 if FileManager.default.fileExists(atPath: traceFile.path) {
@@ -133,7 +133,7 @@ struct LogsPanelView: View {
             if let projectRoot {
                 return
                     projectRoot
-                    .appendingPathComponent(".ide", isDirectory: true)
+                    .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
                     .appendingPathComponent("logs", isDirectory: true)
                     .appendingPathComponent("indexing.log")
             }
@@ -143,7 +143,7 @@ struct LogsPanelView: View {
             if let projectRoot {
                 return
                     projectRoot
-                    .appendingPathComponent(".ide", isDirectory: true)
+                    .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
                     .appendingPathComponent("logs", isDirectory: true)
                     .appendingPathComponent("rag.ndjson")
             }

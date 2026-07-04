@@ -36,8 +36,7 @@ public struct IndexConfiguration: Codable, Sendable {
         excludePatterns: [
             "*.generated.*",
             ".git/*",
-            ".ide",
-            ".osx-ide",
+            AppConstantsFileSystem.projectDirName,
 
             "node_modules",
             "bower_components",

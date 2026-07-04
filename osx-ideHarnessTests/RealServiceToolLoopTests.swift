@@ -331,7 +331,7 @@ final class RealServiceToolLoopTests: XCTestCase {
             else { continue }
             let filePath = url.standardizedFileURL.path
             let relative = String(filePath.dropFirst(basePath.count + 1))
-            if !relative.hasPrefix(".ide") {
+            if !relative.hasPrefix(AppConstantsFileSystem.projectDirName) {
                 files.append(relative)
             }
         }

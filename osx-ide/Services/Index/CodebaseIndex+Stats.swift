@@ -76,7 +76,7 @@ extension CodebaseIndex {
             sizeBytes = 0
         }
 
-        let workspaceIndexDir = projectRoot.appendingPathComponent(".ide").appendingPathComponent("index")
+        let workspaceIndexDir = projectRoot.appendingPathComponent(AppConstantsFileSystem.projectDirName).appendingPathComponent("index")
         let dbURL = URL(fileURLWithPath: dbPath)
         let isInWorkspace = dbURL.path.hasPrefix(workspaceIndexDir.path)
 

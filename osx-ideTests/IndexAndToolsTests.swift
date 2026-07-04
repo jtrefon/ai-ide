@@ -24,8 +24,8 @@ struct IndexAndToolsTests {
         try "export const x = 1\n".write(to: srcFile, atomically: true, encoding: .utf8)
 
         let patterns = IndexExcludePatternManager.loadExcludePatterns(projectRoot: tempRoot, defaultPatterns: IndexConfiguration.default.excludePatterns)
-        let excludeFile = tempRoot.appendingPathComponent(".ide").appendingPathComponent("index_exclude")
-        #expect(FileManager.default.fileExists(atPath: excludeFile.path), "Expected .ide/index_exclude to be created")
+        let excludeFile = tempRoot.appendingPathComponent(AppConstantsFileSystem.projectDirName).appendingPathComponent("index_exclude")
+        #expect(FileManager.default.fileExists(atPath: excludeFile.path), "Expected \(AppConstantsFileSystem.projectDirName)/index_exclude to be created")
 
         let files = IndexFileEnumerator.enumerateProjectFiles(rootURL: tempRoot, excludePatterns: patterns)
 

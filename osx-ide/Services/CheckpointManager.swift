@@ -12,7 +12,7 @@ public actor CheckpointManager {
 
     public func checkpointsRootDirectory() -> URL? {
         projectRoot?
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("checkpoints", isDirectory: true)
     }
 

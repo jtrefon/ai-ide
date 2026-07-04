@@ -5,7 +5,7 @@ enum ConversationScopedNDJSONStore {
     /// All telemetry is now stored in project directory for proper isolation
     static func projectConversationDirectory(projectRoot: URL, conversationId: String) -> URL {
         projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("logs", isDirectory: true)
             .appendingPathComponent("conversations", isDirectory: true)
             .appendingPathComponent(conversationId, isDirectory: true)

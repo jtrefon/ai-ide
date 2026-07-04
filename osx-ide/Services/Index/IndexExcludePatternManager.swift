@@ -15,7 +15,7 @@ struct IndexExcludePatternManager {
     /// Loads exclude patterns from project configuration
     static func loadExcludePatterns(projectRoot: URL, defaultPatterns: [String]) -> [String] {
         let fileManager = FileManager.default
-        let ideDir = projectRoot.appendingPathComponent(".ide", isDirectory: true)
+        let ideDir = projectRoot.appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
         let excludeFile = ideDir.appendingPathComponent("index_exclude", isDirectory: false)
 
         do {

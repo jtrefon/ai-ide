@@ -13,7 +13,7 @@ public actor RAGTraceLogger {
 
     public func setProjectRoot(_ projectRoot: URL) {
         let logsDir = projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("logs", isDirectory: true)
         self.projectLogFileURL = logsDir.appendingPathComponent("rag.ndjson")
     }

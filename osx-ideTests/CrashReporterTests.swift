@@ -25,7 +25,7 @@ struct CrashReporterTests {
         )
 
         let crashLogURL = tempRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("logs", isDirectory: true)
             .appendingPathComponent("crash.ndjson")
 

@@ -230,11 +230,23 @@ class DependencyContainer: ObservableObject {
                 _conversationManager.updateVectorStoreService(service)
             }
 
-            // Defer conversation ingestion to background — don't block startup
+            // Wire continuous embedding via .ide FS events
             let eventBus = await MainActor.run { _eventBus }
+            let embeddingCoordinator = VectorStoreEmbeddingCoordinator(
+                vectorStoreService: service,
+                projectRoot: root,
+                eventBus: eventBus
+            )
+            await embeddingCoordinator.start()
+
+            // Wire event-driven logging coordinator
+            let logCoordinator = LogCoordinator(projectRoot: root, eventBus: eventBus)
+            logCoordinator.start()
+
+            // Defer conversation ingestion to background — don't block startup
             Task.detached(priority: .utility) { [weak self] in
                 try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5s cooloff for indexer to start first
-                await self?.ingestConversations(service: service, projectRoot: root, eventBus: eventBus)
+                await self?.ingestConversations(service: service, projectRoot: root, eventBus: eventBus, embeddingCoordinator: embeddingCoordinator)
             }
         }
 
@@ -506,10 +518,10 @@ class DependencyContainer: ObservableObject {
         _conversationManager.updateAIService(newService)
     }
 
-    private nonisolated func ingestConversations(service: VectorStoreService, projectRoot: URL, eventBus: EventBusProtocol) async {
+    private nonisolated func ingestConversations(service: VectorStoreService, projectRoot: URL, eventBus: EventBusProtocol, embeddingCoordinator: VectorStoreEmbeddingCoordinator? = nil) async {
         let tracker = VectorStoreIngestionTracker.shared
         let convDir = projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("logs", isDirectory: true)
             .appendingPathComponent("conversations", isDirectory: true)
         let indexURL = convDir.appendingPathComponent("index.ndjson")
@@ -577,6 +589,8 @@ class DependencyContainer: ObservableObject {
                 }
             }
 
+            let totalEvents = eventLines.count
+            await embeddingCoordinator?.setEmbeddedTurnCount(conversationId: convId, count: totalEvents / 2)
             await tracker.markIngested(conversationId: convId)
             ingested += 1
             eventBus.publish(VectorStoreIngestionProgressEvent(ingestedCount: ingested, totalCount: toIngest.count))

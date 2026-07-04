@@ -322,7 +322,7 @@ public class ChatHistoryManager: ObservableObject {
     private func historyFileURL() -> URL? {
         guard let projectRoot else { return nil }
         return projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("chat", isDirectory: true)
             .appendingPathComponent("history.json")
     }

@@ -133,7 +133,7 @@ final class AgenticHarnessTests: XCTestCase {
             else { continue }
             let filePath = url.standardizedFileURL.path
             let relative = String(filePath.dropFirst(basePath.count + 1))
-            if !relative.hasPrefix(".ide") {
+            if !relative.hasPrefix(AppConstantsFileSystem.projectDirName) {
                 files.append(relative)
             }
         }
@@ -378,7 +378,7 @@ final class AgenticHarnessTests: XCTestCase {
     {
         let url =
             projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("orchestration", isDirectory: true)
             .appendingPathComponent("runs", isDirectory: true)
             .appendingPathComponent(conversationId, isDirectory: true)

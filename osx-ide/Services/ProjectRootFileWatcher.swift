@@ -33,7 +33,7 @@ actor ProjectRootFileWatcherActor {
 
     private static func isIDEConfigPath(_ path: String) -> Bool {
         let normalized = (path as NSString).standardizingPath
-        return normalized.contains("/.ide/") || normalized.hasSuffix("/.ide")
+        return normalized.contains("/\(AppConstantsFileSystem.projectDirName)/") || normalized.hasSuffix("/\(AppConstantsFileSystem.projectDirName)")
     }
 
     init(
@@ -167,16 +167,17 @@ actor ProjectRootFileWatcherActor {
     }
 
     private func flushChanges() {
-        let created = pendingCreated.filter { !Self.isIDEConfigPath($0) }
-        let modified = pendingModified.filter { !Self.isIDEConfigPath($0) }
-        let deleted = pendingDeleted.filter { !Self.isIDEConfigPath($0) }
         pendingCreated = []
         pendingModified = []
         pendingDeleted = []
         flushTask = nil
 
         var actualModifications = Set<String>()
-        for path in modified {
+        for path in pendingModified {
+            if Self.isIDEConfigPath(path) {
+                eventBus.publish(IDEFileModifiedEvent(url: URL(fileURLWithPath: path)))
+                continue
+            }
             let url = URL(fileURLWithPath: path)
             let currentMod = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
             if let currentMod, lastKnownModDates[path] != currentMod {
@@ -185,23 +186,33 @@ actor ProjectRootFileWatcherActor {
             }
         }
 
-        for path in created {
-            eventBus.publish(FileCreatedEvent(url: URL(fileURLWithPath: path)))
-            if let mod = try? URL(fileURLWithPath: path).resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
-                lastKnownModDates[path] = mod
+        var nonIDEStructural = Set<String>()
+        for path in pendingCreated {
+            if Self.isIDEConfigPath(path) {
+                eventBus.publish(IDEFileCreatedEvent(url: URL(fileURLWithPath: path)))
+            } else {
+                eventBus.publish(FileCreatedEvent(url: URL(fileURLWithPath: path)))
+                nonIDEStructural.insert(path)
+                if let mod = try? URL(fileURLWithPath: path).resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
+                    lastKnownModDates[path] = mod
+                }
             }
         }
         for path in actualModifications {
             eventBus.publish(FileModifiedEvent(url: URL(fileURLWithPath: path)))
         }
-        for path in deleted {
-            eventBus.publish(FileDeletedEvent(url: URL(fileURLWithPath: path)))
-            lastKnownModDates.removeValue(forKey: path)
+        for path in pendingDeleted {
+            if Self.isIDEConfigPath(path) {
+                eventBus.publish(IDEFileDeletedEvent(url: URL(fileURLWithPath: path)))
+            } else {
+                eventBus.publish(FileDeletedEvent(url: URL(fileURLWithPath: path)))
+                nonIDEStructural.insert(path)
+                lastKnownModDates.removeValue(forKey: path)
+            }
         }
 
-        let structural = created.union(deleted)
-        if !structural.isEmpty {
-            eventBus.publish(FileTreeRefreshRequestedEvent(paths: Array(structural).sorted()))
+        if !nonIDEStructural.isEmpty {
+            eventBus.publish(FileTreeRefreshRequestedEvent(paths: Array(nonIDEStructural).sorted()))
         }
     }
 }

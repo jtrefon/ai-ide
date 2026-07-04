@@ -71,7 +71,7 @@ struct WorkspaceFallbackSearcher {
 
     private func shouldSkipDirectory(_ url: URL) -> Bool {
         let name = url.lastPathComponent.lowercased()
-        return name == ".git" || name == ".ide" || name == "node_modules"
+        return name == ".git" || name == AppConstantsFileSystem.projectDirName || name == "node_modules"
     }
 
     private func shouldSearchFile(_ url: URL) -> Bool {

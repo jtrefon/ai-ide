@@ -43,7 +43,7 @@ public actor ProjectSessionStore {
         }
 
         return projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("session.json")
     }
 

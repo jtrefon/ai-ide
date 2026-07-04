@@ -251,7 +251,7 @@ public enum RAGContextBuilder {
         let maxChars = 3000
 
         let ignoredDirs: Set<String> = [
-            ".git", ".ide", "node_modules", ".build", "DerivedData",
+            ".git", AppConstantsFileSystem.projectDirName, "node_modules", ".build", "DerivedData",
             "__pycache__", ".venv", "venv", "build", "dist", ".next",
             "coverage", ".turbo", ".cache"
         ]

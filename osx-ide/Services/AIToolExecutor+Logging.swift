@@ -17,6 +17,17 @@ extension AIToolExecutor {
             ])
         )
 
+        eventBus?.publish(ToolResultEvent(
+            conversationId: conversationId,
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            type: "execute_start",
+            input: nil,
+            output: nil,
+            duration: nil,
+            metadata: ["targetPath": targetFile ?? ""]
+        ))
+
         await ExecutionLogStore.shared.append(
             ExecutionLogAppendRequest(
                 toolCallId: toolCall.id,
@@ -55,6 +66,18 @@ extension AIToolExecutor {
         totalLength: Int
     ) async {
         let cappedChunk = String(chunk.suffix(16_384))
+
+        eventBus?.publish(ToolResultEvent(
+            conversationId: conversationId,
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            type: "execute_progress",
+            input: nil,
+            output: cappedChunk,
+            duration: nil,
+            metadata: ["totalLength": String(totalLength)]
+        ))
+
         await ExecutionLogStore.shared.append(
             ExecutionLogAppendRequest(
                 toolCallId: toolCall.id,
@@ -80,6 +103,17 @@ extension AIToolExecutor {
                 "resultLength": resultLength
             ])
         )
+
+        eventBus?.publish(ToolResultEvent(
+            conversationId: conversationId,
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            type: "execute_success",
+            input: nil,
+            output: nil,
+            duration: nil,
+            metadata: ["resultLength": String(resultLength)]
+        ))
 
         await ExecutionLogStore.shared.append(
             ExecutionLogAppendRequest(
@@ -123,6 +157,17 @@ extension AIToolExecutor {
             ])
         )
 
+        eventBus?.publish(ToolResultEvent(
+            conversationId: conversationId,
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            type: "execute_error",
+            input: nil,
+            output: error.localizedDescription,
+            duration: nil,
+            metadata: [:]
+        ))
+
         await ExecutionLogStore.shared.append(
             ExecutionLogAppendRequest(
                 toolCallId: toolCall.id,
@@ -163,6 +208,17 @@ extension AIToolExecutor {
                 "toolCallId": toolCall.id
             ])
         )
+
+        eventBus?.publish(ToolResultEvent(
+            conversationId: conversationId,
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            type: "not_found",
+            input: nil,
+            output: nil,
+            duration: nil,
+            metadata: [:]
+        ))
 
         if let conversationId {
             await ConversationLogStore.shared.append(

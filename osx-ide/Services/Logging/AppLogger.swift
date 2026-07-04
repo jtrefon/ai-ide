@@ -47,7 +47,7 @@ public actor AppLogger {
     }
 
     public func setProjectRoot(_ projectRoot: URL) {
-        let ideDir = projectRoot.appendingPathComponent(".ide", isDirectory: true)
+        let ideDir = projectRoot.appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
         let logsDir = ideDir.appendingPathComponent("logs", isDirectory: true)
         self.projectLogFileURL = logsDir.appendingPathComponent("app.ndjson")
     }

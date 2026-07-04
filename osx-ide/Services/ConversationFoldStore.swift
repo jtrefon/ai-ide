@@ -40,7 +40,7 @@ public actor ConversationFoldStore {
 
     private func foldsDirectoryURL() -> URL {
         projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("chat", isDirectory: true)
             .appendingPathComponent("folds", isDirectory: true)
     }

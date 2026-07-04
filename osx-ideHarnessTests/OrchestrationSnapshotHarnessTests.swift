@@ -32,7 +32,7 @@ final class OrchestrationSnapshotHarnessTests: XCTestCase {
         ))
 
         let snapshotFileURL = projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("orchestration", isDirectory: true)
             .appendingPathComponent("runs", isDirectory: true)
             .appendingPathComponent(conversationId, isDirectory: true)
@@ -243,7 +243,7 @@ final class OrchestrationSnapshotHarnessTests: XCTestCase {
 
     private func readSnapshots(projectRoot: URL, conversationId: String, runId: String) throws -> [OrchestrationRunSnapshot] {
         let url = projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("orchestration", isDirectory: true)
             .appendingPathComponent("runs", isDirectory: true)
             .appendingPathComponent(conversationId, isDirectory: true)

@@ -27,7 +27,7 @@ public struct VectorStoreConfiguration: Sendable {
     }
 
     public static func `default`(basePath: URL) -> VectorStoreConfiguration {
-        let storePath = basePath.appendingPathComponent(".osx-ide/vector_store")
+        let storePath = basePath.appendingPathComponent(AppConstantsFileSystem.projectDirName).appendingPathComponent("vector_store")
         return VectorStoreConfiguration(storePath: storePath)
     }
 }

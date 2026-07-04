@@ -759,7 +759,7 @@ class ChatPromptBuilder {
         )
 
         while let next = enumerator?.nextObject() as? URL {
-            if next.path.contains("/.ide/") {
+            if next.path.contains("/\(AppConstantsFileSystem.projectDirName)/") {
                 enumerator?.skipDescendants()
                 continue
             }

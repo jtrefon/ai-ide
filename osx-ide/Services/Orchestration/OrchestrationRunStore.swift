@@ -38,7 +38,7 @@ actor OrchestrationRunStore {
     private func snapshotFileURL(conversationId: String, runId: String) -> URL? {
         guard let projectRoot else { return nil }
         return projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("orchestration", isDirectory: true)
             .appendingPathComponent("runs", isDirectory: true)
             .appendingPathComponent(conversationId, isDirectory: true)

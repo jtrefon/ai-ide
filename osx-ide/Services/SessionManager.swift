@@ -192,7 +192,7 @@ final class SessionManager: ObservableObject {
 
     private static func sessionsDirectory(projectRoot: URL) -> URL {
         projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("chat", isDirectory: true)
             .appendingPathComponent("sessions", isDirectory: true)
     }

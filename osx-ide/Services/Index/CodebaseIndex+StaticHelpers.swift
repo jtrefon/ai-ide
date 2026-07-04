@@ -65,7 +65,7 @@ extension CodebaseIndex {
             }
         }
 
-        let ideDir = projectRoot.appendingPathComponent(".ide")
+        let ideDir = projectRoot.appendingPathComponent(AppConstantsFileSystem.projectDirName)
         let indexDir = ideDir.appendingPathComponent("index")
 
         do {

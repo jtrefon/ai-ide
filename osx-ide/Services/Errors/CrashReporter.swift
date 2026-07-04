@@ -20,7 +20,7 @@ public actor CrashReporter: CrashReporting {
     }
 
     public func setProjectRoot(_ root: URL) async {
-        let ideDir = root.appendingPathComponent(".ide", isDirectory: true)
+        let ideDir = root.appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
         let logsDir = ideDir.appendingPathComponent("logs", isDirectory: true)
         self.projectCrashLogFileURL = logsDir.appendingPathComponent("crash.ndjson")
     }

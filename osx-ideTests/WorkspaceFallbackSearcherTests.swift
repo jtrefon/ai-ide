@@ -20,7 +20,7 @@ struct WorkspaceFallbackSearcherTests {
             withIntermediateDirectories: true
         )
         try FileManager.default.createDirectory(
-            at: root.appendingPathComponent(".ide"),
+            at: root.appendingPathComponent(AppConstantsFileSystem.projectDirName),
             withIntermediateDirectories: true
         )
 
@@ -35,7 +35,7 @@ struct WorkspaceFallbackSearcherTests {
             encoding: .utf8
         )
         try "needle".write(
-            to: root.appendingPathComponent(".ide/a.swift"),
+            to: root.appendingPathComponent(AppConstantsFileSystem.projectDirName).appendingPathComponent("a.swift"),
             atomically: true,
             encoding: .utf8
         )

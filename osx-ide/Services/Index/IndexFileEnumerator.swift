@@ -28,7 +28,7 @@ struct IndexFileEnumerator {
             let relativePath = relativePath(from: rootURL, to: url)
 
             if isDirectory {
-                if url.lastPathComponent == ".ide" {
+                if url.lastPathComponent == AppConstantsFileSystem.projectDirName {
                     enumerator.skipDescendants()
                     continue
                 }

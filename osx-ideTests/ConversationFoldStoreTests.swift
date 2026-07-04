@@ -13,14 +13,14 @@ final class ConversationFoldStoreTests: XCTestCase {
         let entry = try await store.write(summary: "summary", content: "content")
 
         let indexURL = projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("chat", isDirectory: true)
             .appendingPathComponent("folds", isDirectory: true)
             .appendingPathComponent("index.json")
         XCTAssertTrue(FileManager.default.fileExists(atPath: indexURL.path))
 
         let contentURL = projectRoot
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("chat", isDirectory: true)
             .appendingPathComponent("folds", isDirectory: true)
             .appendingPathComponent("\(entry.id).txt")

@@ -11,7 +11,7 @@ public actor PatchSetStore {
 
     public func stagingRootDirectory() -> URL? {
         projectRoot?
-            .appendingPathComponent(".ide", isDirectory: true)
+            .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
             .appendingPathComponent("staging", isDirectory: true)
     }
 
