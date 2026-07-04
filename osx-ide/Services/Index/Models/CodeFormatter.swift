@@ -1,20 +1,12 @@
-//
-//  CodeFormatter.swift
-//  osx-ide
-//
-//  Created by Cascade on 02/01/2026.
-//
-
 import Foundation
 
 public struct CodeFormatter {
     public static func format(_ code: String, language: CodeLanguage) -> String {
-        let configuration = LanguageKeywordRepository.formattingConfiguration(for: language)
-        let indentString = IndentationStyle.current().indentUnit(tabWidth: max(1, configuration.indentWidth))
-
+        let config = LanguageFormattingConfiguration.default
+        let indentString = IndentationStyle.current().indentUnit(tabWidth: max(1, config.indentWidth))
         let strategy: CodeFormattingStrategy = DefaultCodeFormattingStrategy()
         let formatted = strategy.format(code: code, language: language, indentUnit: indentString)
-        return applyFormattingRules(formatted, configuration: configuration)
+        return applyFormattingRules(formatted, configuration: config)
     }
 
     private static func applyFormattingRules(

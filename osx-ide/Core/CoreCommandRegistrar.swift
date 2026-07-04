@@ -4,7 +4,6 @@ import AppKit
 struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
     let commandRegistry: CommandRegistry
     let context: Context
-    let languageModuleManager: LanguageModuleManager
 
     func registerAll() {
         registerFileCommands()
@@ -45,12 +44,6 @@ struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
             let content = context.fileEditor.editorContent
             let languageStr = context.fileEditor.editorLanguage
             let language = CodeLanguage(rawValue: languageStr) ?? .unknown
-            if let module = languageModuleManager.getModule(for: language) {
-                let formatted = module.format(content)
-                context.fileEditor.editorContent = formatted
-                return
-            }
-
             context.fileEditor.editorContent = CodeFormatter.format(content, language: language)
         }
 

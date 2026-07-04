@@ -52,16 +52,9 @@ class DependencyContainer: ObservableObject {
         _diagnosticsStore = DiagnosticsStore(eventBus: _eventBus)
 
         let languageModuleManager = LanguageModuleManager(
-            modules: [
-                SwiftModule(),
-                JavaScriptModule(),
-                TypeScriptModule(),
-                TSXModule(),
-                PythonModule(),
-                HTMLModule(),
-                CSSModule(),
-                JSONModule()
-            ],
+            modules: LanguageModuleManager.shared.availableLanguages.compactMap { language in
+                LanguageModuleManager.shared.getModule(for: language)
+            },
             settingsStore: settingsStore
         )
         _languageModuleManager = languageModuleManager

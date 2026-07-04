@@ -3,6 +3,23 @@ import Neon
 import SwiftTreeSitter
 import CodeEditLanguages
 
+public enum TreeSitterHighlightError: Error, CustomStringConvertible {
+    case unsupportedLanguage(String)
+    case parseFailed(String)
+    case noHighlightsQuery(String)
+
+    public var description: String {
+        switch self {
+        case .unsupportedLanguage(let id):
+            return "Unsupported language for tree-sitter highlighting: '\(id)'"
+        case .parseFailed(let id):
+            return "Failed to parse code for language '\(id)'"
+        case .noHighlightsQuery(let id):
+            return "No highlights query available for language '\(id)'"
+        }
+    }
+}
+
 @MainActor
 public final class TreeSitterHighlightService {
     public static let shared = TreeSitterHighlightService()
@@ -197,7 +214,47 @@ public final class TreeSitterHighlightService {
 
     // MARK: - Debug
 
-    private static let logUnknownTokens = true
+    private static let logUnknownTokens = false
+
+    // MARK: - Offline / Preview Highlighting
+
+    /// Highlights a plain string using tree-sitter, returning an `NSAttributedString`.
+    /// Uses the same `attributeProvider` and color scheme as the live editor.
+    public func highlightPreview(code: String, languageIdentifier: String) throws -> NSAttributedString {
+        guard let langConfig = languageConfiguration(for: languageIdentifier) else {
+            throw TreeSitterHighlightError.unsupportedLanguage(languageIdentifier)
+        }
+
+        let parser = Parser()
+        try parser.setLanguage(langConfig.language)
+
+        guard let tree = parser.parse(code) else {
+            throw TreeSitterHighlightError.parseFailed(languageIdentifier)
+        }
+
+        guard let highlightsQuery = langConfig.queries[.highlights] else {
+            throw TreeSitterHighlightError.noHighlightsQuery(languageIdentifier)
+        }
+
+        let result = NSMutableAttributedString(string: code, attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+            .foregroundColor: Self.nsColor(0xDC, 0xDC, 0xDC)
+        ])
+
+        let cursor = highlightsQuery.execute(in: tree)
+        for match in cursor {
+            for capture in match.captures {
+                guard let name = capture.name else { continue }
+                let token = Token(name: name, range: capture.range)
+                let attrs = Self.attributeProvider(token)
+                if let color = attrs[NSAttributedString.Key.foregroundColor] as? NSColor {
+                    result.addAttribute(NSAttributedString.Key.foregroundColor, value: color, range: capture.range)
+                }
+            }
+        }
+
+        return result
+    }
 
     // MARK: - Color Scheme (VS Code Dark+ inspired)
 
@@ -366,7 +423,9 @@ public final class TreeSitterHighlightService {
             attrs[.foregroundColor] = nsColor(0xC5, 0x86, 0xC0)
 
         default:
-            print("[token] UNKNOWN: '\(token.name)' range=\(token.range) length=\(token.range.length)")
+            if logUnknownTokens {
+                print("[token] UNKNOWN: '\(token.name)' range=\(token.range) length=\(token.range.length)")
+            }
             attrs[.foregroundColor] = nsColor(0xDC, 0xDC, 0xDC)
         }
 

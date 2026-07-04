@@ -1,4 +1,5 @@
 import SwiftUI
+import SyntaxHighlighting
 
 struct CodePreviewView: View {
     let code: String
@@ -79,47 +80,14 @@ struct CodePreviewView: View {
     }
 
     private var highlightedAttributedString: AttributedString? {
-        guard let language = language, let codeLanguage = codeLanguage(from: language) else {
+        guard let language = language else { return nil }
+        guard let nsAttributed = try? TreeSitterHighlightService.shared.highlightPreview(
+            code: code,
+            languageIdentifier: language
+        ) else {
             return nil
         }
-        guard let module = LanguageModuleManager.shared.getHighlightModule(for: codeLanguage) else {
-            return nil
-        }
-        let nsFont = resolveNSFont(size: fontSize, family: fontFamily)
-        let nsAttributed = module.highlight(code, font: nsFont)
         return AttributedString(nsAttributed)
-    }
-
-    private func codeLanguage(from alias: String) -> CodeLanguage? {
-        let lowercased = alias.lowercased()
-        let aliasMap: [String: CodeLanguage] = [
-            "js": .javascript,
-            "ts": .typescript,
-            "jsx": .tsx,
-            "tsx": .tsx,
-            "py": .python,
-            "yaml": .yaml,
-            "yml": .yaml,
-            "md": .markdown,
-            "json": .json,
-            "txt": .unknown,
-            "sh": .unknown,
-            "bash": .unknown,
-            "zsh": .unknown,
-            "shell": .unknown,
-            "console": .unknown,
-            "text": .unknown,
-            "swift": .swift,
-            "javascript": .javascript,
-            "typescript": .typescript,
-            "python": .python,
-            "html": .html,
-            "css": .css,
-        ]
-        if let mapped = aliasMap[lowercased] {
-            return mapped
-        }
-        return CodeLanguage(rawValue: lowercased)
     }
 
     private func resolveFont(size: Double, family: String) -> Font {
@@ -127,13 +95,6 @@ struct CodePreviewView: View {
             return Font(nsFont)
         }
         return .system(size: CGFloat(size), weight: .regular, design: .monospaced)
-    }
-
-    private func resolveNSFont(size: Double, family: String) -> NSFont {
-        if let nsFont = NSFont(name: family, size: CGFloat(size)) {
-            return nsFont
-        }
-        return .monospacedSystemFont(ofSize: CGFloat(size), weight: .regular)
     }
 
     private func copyCode() {

@@ -114,9 +114,7 @@ final class UnifiedLintingFramework {
             content = loaded
         }
 
-        let rules = LanguageKeywordRepository.lintRules(for: language)
         let diagnostics = runBuiltinRules(
-            rules: rules,
             content: content,
             relativePath: relativePath(for: fileURL) ?? fileURL.lastPathComponent
         )
@@ -139,26 +137,8 @@ final class UnifiedLintingFramework {
         return rel
     }
 
-    private func runBuiltinRules(rules: [LintRuleDefinition], content: String, relativePath: String) -> [Diagnostic] {
-        let enabledRules = rules.filter(\.enabled)
-        guard !enabledRules.isEmpty else { return [] }
-
-        let lines = content.components(separatedBy: .newlines)
-        var diagnostics: [Diagnostic] = []
-
-        for rule in enabledRules {
-            switch rule.id {
-            case "line-length", "pep8-line-length":
-                let max = Int(rule.options["max"] ?? "120") ?? 120
-                diagnostics.append(contentsOf: findLineLengthIssues(lines: lines, max: max, path: relativePath, severity: severity(from: rule.severity), message: rule.message))
-            case "trailing-whitespace":
-                diagnostics.append(contentsOf: findTrailingWhitespaceIssues(lines: lines, path: relativePath, severity: severity(from: rule.severity), message: rule.message))
-            default:
-                continue
-            }
-        }
-
-        return diagnostics
+    private func runBuiltinRules(content: String, relativePath: String) -> [Diagnostic] {
+        []
     }
 
     private func severity(from value: String) -> DiagnosticSeverity {

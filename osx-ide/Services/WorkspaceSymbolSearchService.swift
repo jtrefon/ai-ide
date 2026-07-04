@@ -141,8 +141,7 @@ final class WorkspaceSymbolSearchService {
     ) -> [(name: String, kind: SymbolKind, line: Int)] {
         if let codeLanguage = CodeLanguage(rawValue: language.lowercased()),
            let module = LanguageModuleManager.shared.getModule(for: codeLanguage) {
-            return module.symbolExtractor
-                .extractSymbols(content: content, resourceId: resourceId)
+            return module.parseSymbols(content: content, resourceId: resourceId)
                 .map { (name: $0.name, kind: $0.kind, line: $0.lineStart) }
         }
 

@@ -153,37 +153,28 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .onAppear {
-                applyHorizontalPanelWidths(
-                    proposedSidebarWidth: uiState.sidebarWidth,
-                    proposedChatWidth: uiState.chatPanelWidth,
-                    windowWidth: proxy.size.width
-                )
+                applyHorizontalPanelWidths(proposedSidebarWidth: uiState.sidebarWidth, proposedChatWidth: uiState.chatPanelWidth, windowWidth: proxy.size.width)
             }
             .onChange(of: proxy.size.width) { oldWidth, newWidth in
                 guard abs(newWidth - oldWidth) > 2, dragSidebarWidth == nil, dragChatWidth == nil else { return }
-                applyHorizontalPanelWidths(
-                    proposedSidebarWidth: uiState.sidebarWidth,
-                    proposedChatWidth: uiState.chatPanelWidth,
-                    windowWidth: newWidth
-                )
+                applyHorizontalPanelWidths(proposedSidebarWidth: uiState.sidebarWidth, proposedChatWidth: uiState.chatPanelWidth, windowWidth: newWidth)
             }
         }
     }
 
     private func applyHorizontalPanelWidths(
-        proposedSidebarWidth: Double?,
-        proposedChatWidth: Double?,
+        proposedSidebarWidth: Double,
+        proposedChatWidth: Double,
         windowWidth: CGFloat
     ) {
-        if let proposed = proposedSidebarWidth, uiState.isSidebarVisible {
-            let clamped = UILayoutNormalizer.normalizeSidebarWidth(proposed, windowWidth: windowWidth)
+        if uiState.isSidebarVisible {
+            let clamped = UILayoutNormalizer.normalizeSidebarWidth(proposedSidebarWidth, windowWidth: windowWidth)
             if abs(uiState.sidebarWidth - clamped) > 0.5 {
                 uiState.updateSidebarWidth(clamped)
             }
         }
-
-        if let proposed = proposedChatWidth, uiState.isAIChatVisible {
-            let clamped = UILayoutNormalizer.normalizeChatPanelWidth(proposed, windowWidth: windowWidth)
+        if uiState.isAIChatVisible {
+            let clamped = UILayoutNormalizer.normalizeChatPanelWidth(proposedChatWidth, windowWidth: windowWidth)
             if abs(uiState.chatPanelWidth - clamped) > 0.5 {
                 uiState.updateChatPanelWidth(clamped)
             }
@@ -397,10 +388,7 @@ private struct EditorTerminalSplitView<Editor: View, Terminal: View>: View {
         GeometryReader { proxy in
             let containerHeight = proxy.size.height
             let minEditorHeight = Double(AppConstants.Layout.minTerminalHeight)
-            let maxAllowedTerminal = max(
-                AppConstants.Layout.minTerminalHeight,
-                min(AppConstants.Layout.maxTerminalHeight, containerHeight - minEditorHeight - 2)
-            )
+            let maxAllowedTerminal = max(AppConstants.Layout.minTerminalHeight, containerHeight - minEditorHeight - 2)
 
             VStack(spacing: 0) {
                 editor()

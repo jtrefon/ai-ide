@@ -47,21 +47,14 @@ enum UILayoutNormalizer {
     }
 
     static func normalizeSidebarWidth(_ width: Double, windowWidth: CGFloat) -> Double {
-        let maxByWindow = max(AppConstants.Layout.minSidebarWidth, Double(windowWidth * 0.35))
-        return clamp(width, min: AppConstants.Layout.minSidebarWidth, max: min(AppConstants.Layout.maxSidebarWidth, maxByWindow))
+        max(AppConstants.Layout.minSidebarWidth, width)
     }
 
     static func normalizeChatPanelWidth(_ width: Double, windowWidth: CGFloat) -> Double {
-        let maxByWindow = max(AppConstants.Layout.minChatPanelWidth, Double(windowWidth * 0.45))
-        return clamp(width, min: AppConstants.Layout.minChatPanelWidth, max: min(AppConstants.Layout.maxChatPanelWidth, maxByWindow))
+        max(AppConstants.Layout.minChatPanelWidth, width)
     }
 
     static func normalizeTerminalHeight(_ height: Double, windowHeight: CGFloat) -> Double {
-        let maxByWindow = max(AppConstants.Layout.minTerminalHeight, Double(windowHeight * 0.55))
-        return clamp(height, min: AppConstants.Layout.minTerminalHeight, max: min(AppConstants.Layout.maxTerminalHeight, maxByWindow))
-    }
-
-    private static func clamp(_ value: Double, min minValue: Double, max maxValue: Double) -> Double {
-        max(minValue, min(maxValue, value))
+        max(AppConstants.Layout.minTerminalHeight, height)
     }
 }

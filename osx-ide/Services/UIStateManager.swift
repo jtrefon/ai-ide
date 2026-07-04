@@ -164,17 +164,17 @@ class UIStateManager: ObservableObject {
     }
 
     func updateSidebarWidth(_ width: Double) {
-        sidebarWidth = max(AppConstants.Layout.minSidebarWidth, min(AppConstants.Layout.maxSidebarWidth, width))
+        sidebarWidth = max(AppConstants.Layout.minSidebarWidth, width)
         uiService.setSidebarWidth(sidebarWidth)
     }
 
     func updateTerminalHeight(_ height: Double) {
-        terminalHeight = max(AppConstants.Layout.minTerminalHeight, min(AppConstants.Layout.maxTerminalHeight, height))
+        terminalHeight = max(AppConstants.Layout.minTerminalHeight, height)
         uiService.setTerminalHeight(terminalHeight)
     }
 
     func updateChatPanelWidth(_ width: Double) {
-        chatPanelWidth = max(AppConstants.Layout.minChatPanelWidth, min(AppConstants.Layout.maxChatPanelWidth, width))
+        chatPanelWidth = max(AppConstants.Layout.minChatPanelWidth, width)
         uiService.setChatPanelWidth(chatPanelWidth)
     }
 
