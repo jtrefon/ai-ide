@@ -241,15 +241,13 @@ public final class TreeSitterHighlightService {
             .foregroundColor: Self.nsColor(0xDC, 0xDC, 0xDC)
         ])
 
-        let cursor = highlightsQuery.execute(in: tree)
-        for match in cursor {
-            for capture in match.captures {
-                guard let name = capture.name else { continue }
-                let token = Token(name: name, range: capture.range)
-                let attrs = Self.attributeProvider(token)
-                if let color = attrs[NSAttributedString.Key.foregroundColor] as? NSColor {
-                    result.addAttribute(NSAttributedString.Key.foregroundColor, value: color, range: capture.range)
-                }
+        let namedRanges = highlightsQuery.execute(in: tree).highlights()
+
+        for nr in namedRanges {
+            let token = Token(name: nr.name, range: nr.range)
+            let attrs = Self.attributeProvider(token)
+            if let color = attrs[NSAttributedString.Key.foregroundColor] as? NSColor {
+                result.addAttribute(NSAttributedString.Key.foregroundColor, value: color, range: nr.range)
             }
         }
 
