@@ -50,6 +50,7 @@ final class DatabaseSchemaManager {
         CREATE INDEX IF NOT EXISTS idx_symbols_resource_id ON symbols(resource_id);
 
         -- New 3-table symbol schema (populated by IndexerActor.insertSymbols)
+        CREATE TABLE IF NOT EXISTS symbol_names (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE
         );

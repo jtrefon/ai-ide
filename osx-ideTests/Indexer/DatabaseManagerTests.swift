@@ -124,5 +124,13 @@ final class DatabaseManagerTests: XCTestCase {
         XCTAssertEqual(results.first?.qualityScore, 9.2)
     }
 
-
-}
+    func testSchemaTablesExist() throws {
+        // Validate all expected tables were created by DatabaseSchemaManager.
+        // A missing CREATE TABLE or syntax error in the schema SQL causes
+        // DatabaseManager.init to throw on startup, crashing the app.
+        for table in ["resources", "symbols", "symbol_names", "symbol_details", "symbol_locations"] {
+            let sql = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?;"
+            let count = try dbManager.scalarInt(sql: sql, parameters: [table])
+            XCTAssertEqual(count, 1, "Expected table '\(table)' to exist in schema")
+        }
+    }}
