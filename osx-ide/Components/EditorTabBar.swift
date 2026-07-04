@@ -7,39 +7,60 @@ struct EditorTabBar: View {
     let onClose: (UUID) -> Void
     let onFocus: () -> Void
 
+    @State private var hoveredTabID: UUID?
+
+    private let minTabWidth: CGFloat = 80
+    private let spacing: CGFloat = 4
+
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    if tabs.isEmpty {
-                        Text(NSLocalizedString("editor.untitled", comment: ""))
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                    } else {
-                        ForEach(tabs) { tab in
-                            TabBarButton(
-                                tab: tab,
-                                isActive: tab.id == activeTabID,
-                                onActivate: { onActivate(tab.id) },
-                                onClose: { onClose(tab.id) },
-                                onFocus: onFocus
-                            )
-                        }
-                    }
+            if tabs.isEmpty {
+                HStack {
+                    Text(NSLocalizedString("editor.untitled", comment: ""))
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .frame(height: 32)
+                .background(.thinMaterial)
+            } else {
+                GeometryReader { geometry in
+                    let tabCount = max(tabs.count, 1)
+                    let tabWidth = max(
+                        minTabWidth,
+                        (geometry.size.width - 8 - spacing * CGFloat(tabCount - 1)) / CGFloat(tabCount)
+                    )
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: spacing) {
+                            ForEach(tabs) { tab in
+                                TabBarButton(
+                                    tab: tab,
+                                    isActive: tab.id == activeTabID,
+                                    isHovered: hoveredTabID == tab.id,
+                                    onActivate: { onActivate(tab.id); onFocus() },
+                                    onClose: { onClose(tab.id) }
+                                )
+                                .frame(width: tabWidth)
+                                .onHover { hovering in
+                                    hoveredTabID = hovering ? tab.id : nil
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .frame(minWidth: geometry.size.width)
+                    }
+                }
+                .frame(height: 32)
+                .background(.thinMaterial)
             }
-            .frame(height: 32)
-            .background(.thinMaterial)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(.separator)
-                    .frame(height: 1)
-            }
+
+            Rectangle()
+                .fill(.separator)
+                .frame(height: 1)
         }
     }
 }
@@ -47,72 +68,61 @@ struct EditorTabBar: View {
 private struct TabBarButton: View {
     let tab: EditorPaneStateManager.EditorTab
     let isActive: Bool
+    let isHovered: Bool
     let onActivate: () -> Void
     let onClose: () -> Void
-    let onFocus: () -> Void
 
-    @State private var isHovered = false
+    @State private var closeHovered = false
 
     private var displayName: String {
         URL(fileURLWithPath: tab.filePath).lastPathComponent
-            + (tab.isDirty ? " •" : "")
+            + (tab.isDirty ? " \u{2022}" : "")
     }
 
     var body: some View {
-        Button(action: {
-            onFocus()
-            onActivate()
-        }) {
-            HStack(spacing: 4) {
-                Text(displayName)
-                    .lineLimit(1)
-                    .font(.body)
-                    .foregroundColor(isActive ? .primary : .secondary)
+        HStack(spacing: 4) {
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .opacity((closeHovered || isHovered || isActive) ? 1 : 0)
+            .frame(width: 16, height: 16)
+            .onHover { hovering in
+                closeHovered = hovering
+            }
 
-                Button(action: {
-                    onFocus()
-                    onClose()
-                }) {
-                    Image(systemName: "xmark")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .opacity((isHovered || isActive) ? 1 : 0)
-                .frame(width: 16, height: 16)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background {
-                let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-                if isActive {
-                    shape
-                        .fill(AppConstants.Color.surfaceCard)
-                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 6))
-                        .overlay(
-                            shape.stroke(.separator.opacity(0.35), lineWidth: 1)
-                        )
-                } else {
-                    shape
-                        .fill(isHovered ? AppConstants.Color.surfaceCard.opacity(0.12) : .clear)
-                        .overlay(
-                            shape.stroke(.separator.opacity(isHovered ? 0.35 : 0.18), lineWidth: 1)
-                        )
-                }
-            }
-            .overlay(MiddleClickView(action: onClose))
+            Text(displayName)
+                .lineLimit(1)
+                .font(.system(size: 11))
+                .foregroundColor(isActive ? .primary : .secondary)
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            isHovered = hovering
+        .padding(.leading, 4)
+        .padding(.trailing, 8)
+        .padding(.vertical, 4)
+        .background {
+            if isActive {
+                Capsule()
+                    .fill(.regularMaterial)
+                    .glassEffect(.regular, in: Capsule())
+            } else {
+                Capsule()
+                    .fill(isHovered ? Color(nsColor: .controlBackgroundColor).opacity(0.25) : .clear)
+                    .overlay(
+                        Capsule()
+                            .stroke(.separator.opacity(isHovered ? 0.25 : 0.1), lineWidth: 0.5)
+                    )
+            }
         }
+        .contentShape(Capsule())
+        .onTapGesture { onActivate() }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .animation(.easeInOut(duration: 0.15), value: isActive)
+        .overlay(MiddleClickView(action: onClose))
     }
 }
 
-/// Captures middle-click (button 3) on tab close buttons.
-/// macOS convention with no SwiftUI gesture equivalent — requires AppKit.
 private struct MiddleClickView: NSViewRepresentable {
     let action: () -> Void
 

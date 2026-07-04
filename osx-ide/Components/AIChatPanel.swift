@@ -86,54 +86,53 @@ struct AIChatPanel: View {
                         ForEach(displayedTabs) { tab in
                             let isActive = tab.id == conversationManager.currentConversationId
                             let isHovered = hoveredTabId == tab.id
-                            Button {
-                                conversationManager.switchConversation(to: tab.id)
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text(tab.title)
-                                        .lineLimit(1)
-                                        .font(.body)
-                                        .foregroundColor(isActive ? .primary : .secondary)
-                                    if displayedTabs.count > 1 {
-                                        Button {
-                                            conversationManager.closeConversation(id: tab.id)
-                                        } label: {
-                                            Image(systemName: "xmark")
-                                                .font(.caption2.weight(.semibold))
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .opacity(isHovered ? 1 : 0)
-                                        .frame(width: 16, height: 16)
-                                        .help("Close conversation")
+                            HStack(spacing: 4) {
+                                if displayedTabs.count > 1 {
+                                    Button {
+                                        conversationManager.closeConversation(id: tab.id)
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.secondary)
                                     }
+                                    .buttonStyle(.plain)
+                                    .opacity(isHovered ? 1 : 0)
+                                    .frame(width: 16, height: 16)
+                                    .help("Close conversation")
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background {
-                                    if isActive {
-                                        RoundedRectangle(cornerRadius: 5)
-                                            .fill(AppConstants.Color.surfaceCard)
-                                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 5))
-                                    } else {
-                                        RoundedRectangle(cornerRadius: 5)
-                                            .fill(isHovered
-                                                ? AppConstants.Color.surfaceCard.opacity(0.15)
-                                                : Color.clear)
-                                            .strokeBorder(
-                                                Color(nsColor: .separatorColor).opacity(isHovered ? 0.35 : 0.2),
-                                                lineWidth: 1
-                                            )
-                                    }
-                                }
-                                .animation(.easeInOut(duration: 0.15), value: isHovered)
-                                .animation(.easeInOut(duration: 0.15), value: isActive)
+                                Text(tab.title)
+                                    .lineLimit(1)
+                                    .font(.body)
+                                    .foregroundColor(isActive ? .primary : .secondary)
                             }
-                            .buttonStyle(.plain)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background {
+                                if isActive {
+                                    Capsule()
+                                        .fill(AppConstants.Color.surfaceCard)
+                                        .glassEffect(.regular, in: Capsule())
+                                } else {
+                                    Capsule()
+                                        .fill(isHovered
+                                            ? AppConstants.Color.surfaceCard.opacity(0.15)
+                                            : Color.clear)
+                                        .strokeBorder(
+                                            Color(nsColor: .separatorColor).opacity(isHovered ? 0.35 : 0.2),
+                                            lineWidth: 1
+                                        )
+                                }
+                            }
+                            .contentShape(Capsule())
+                            .onTapGesture {
+                                conversationManager.switchConversation(to: tab.id)
+                            }
                             .onHover { hovering in
                                 if hovering { hoveredTabId = tab.id }
                                 else if hoveredTabId == tab.id { hoveredTabId = nil }
                             }
+                            .animation(.easeInOut(duration: 0.15), value: isHovered)
+                            .animation(.easeInOut(duration: 0.15), value: isActive)
                             .accessibilityIdentifier("ConversationTab_\(tab.id)")
                         }
                     }

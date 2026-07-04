@@ -304,7 +304,17 @@ final class IndexStatusBarViewModel: ObservableObject {
             .autoconnect()
             .sink { [weak self] _ in
                 self?.refreshStats()
+                self?.refreshVectorStoreState()
             }
+    }
+
+    private func refreshVectorStoreState() {
+        guard !vectorStoreIsLoaded, let vs = vectorStoreProvider() else { return }
+        Task { @MainActor in
+            let count = await vs.entryCount
+            self.vectorStoreEntryCount = count
+            self.vectorStoreIsLoaded = true
+        }
     }
 
     private func refreshStats() {
