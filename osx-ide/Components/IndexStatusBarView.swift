@@ -162,7 +162,6 @@ struct IndexStatusBarView: View {
             }
 
             HStack(spacing: 6) {
-                statusLabel(viewModel.fimStatusText)
                 statusLabel(viewModel.openRouterContextUsageText)
                 statusLabel(viewModel.localModelContextUsageText)
                 statusLabel(viewModel.remoteAICostText)

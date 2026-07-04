@@ -81,30 +81,31 @@ final class IndexStatusBarViewModel: ObservableObject {
         }
 
         if let stats {
-            let vsStatus: String
+            let vsInfo: String
             if isIngesting {
-                vsStatus = "VS \(ingestionProgress)/\(ingestionTotal)"
+                vsInfo = "VS embedding \(ingestionProgress)/\(ingestionTotal)"
             } else if vectorStoreIsLoaded {
-                vsStatus = "VS \(vectorStoreEntryCount)"
+                vsInfo = "VS OK"
             } else {
-                vsStatus = "VS init"
+                vsInfo = "VS init"
             }
+            let acInfo = acStatusText
             if stats.totalProjectFileCount > 0 {
                 let indexed = min(stats.indexedResourceCount, stats.totalProjectFileCount)
-                return "IDX \(indexed)/\(stats.totalProjectFileCount) | \(vsStatus)"
+                return "IDX \(indexed)/\(stats.totalProjectFileCount) | \(vsInfo) | \(acInfo)"
             }
-            return "IDX \(stats.indexedResourceCount) | \(vsStatus)"
+            return "IDX \(stats.indexedResourceCount) | \(vsInfo) | \(acInfo)"
         }
 
         return "Index: unavailable"
     }
 
-    var fimStatusText: String {
-        guard isFIMAvailable else { return "Complete: -" }
+    var acStatusText: String {
+        guard isFIMAvailable else { return "AC -" }
         switch fimCompletionStatus {
-        case .generating: return "Complete: WIP"
-        case .noSuggestion: return "Complete: NA"
-        case .idle: return "Complete: OK"
+        case .generating: return "AC WIP"
+        case .noSuggestion: return "AC NA"
+        case .idle: return "AC OK"
         }
     }
 
@@ -118,13 +119,7 @@ final class IndexStatusBarViewModel: ObservableObject {
             ? stats.averageAIQualityScore
             : stats.averageQualityScore
         let quality = score > 0 ? String(format: "%.0f", score) : "0"
-        let vsInfo: String
-        if vectorStoreIsLoaded {
-            vsInfo = "VS \(vectorStoreEntryCount)"
-        } else {
-            vsInfo = "VS -"
-        }
-        return "C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | IDX \(size) | \(vsInfo)"
+        return "C \(stats.classCount) | F \(stats.functionCount) | S \(stats.symbolCount) | Q \(quality) | IDX \(size)"
     }
 
     private func subscribeToEvents() {
