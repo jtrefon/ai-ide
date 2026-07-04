@@ -217,13 +217,17 @@ class DependencyContainer: ObservableObject {
             }
 
             // Initialize vector store for RAG
+            let eventBus = await MainActor.run { _eventBus }
             let cfg = VectorStoreConfiguration.default(basePath: root)
             let service = VectorStoreService.create(with: cfg)
             do {
                 try await service.load()
-                Swift.print("[DIAG] VectorStore loaded: \(await service.entryCount) entries")
+                let count = await service.entryCount
+                Swift.print("[DIAG] VectorStore loaded: \(count) entries")
+                eventBus.publish(VectorStoreStatusChangedEvent(entryCount: count, isLoaded: true))
             } catch {
                 Swift.print("[DIAG] VectorStore init (first launch - OK): \(error.localizedDescription)")
+                eventBus.publish(VectorStoreStatusChangedEvent(entryCount: 0, isLoaded: true))
             }
             await MainActor.run {
                 _vectorStoreService = service
@@ -231,7 +235,6 @@ class DependencyContainer: ObservableObject {
             }
 
             // Wire continuous embedding via .ide FS events
-            let eventBus = await MainActor.run { _eventBus }
             let embeddingCoordinator = VectorStoreEmbeddingCoordinator(
                 vectorStoreService: service,
                 eventBus: eventBus

@@ -31,11 +31,17 @@ public actor ConversationLogStore {
 
         let content = data?["content"] as? String ?? ""
         if !content.isEmpty || type.hasPrefix("tool.") || type.hasPrefix("chat.") {
+            let safeMetadata: [String: String] = (data ?? [:]).compactMapValues { value in
+                if let str = value as? String { return str }
+                if let num = value as? NSNumber { return num.stringValue }
+                if let bool = value as? Bool { return bool ? "true" : "false" }
+                return nil
+            }
             eventBus?.publish(ContextLogEvent(
                 conversationId: conversationId,
                 source: type,
                 content: content,
-                metadata: data?.mapValues { "\($0)" } ?? [:]
+                metadata: safeMetadata
             ))
         }
 
