@@ -60,7 +60,7 @@ struct EditorPaneView: View {
             .padding(16)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(AppConstants.Color.terminalBackground)
         .overlay(
             Rectangle()
                 .stroke(isFocused ? Color.accentColor.opacity(0.35) : Color.clear, lineWidth: 2)
@@ -108,6 +108,6 @@ struct EditorPaneView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(AppConstants.Color.terminalBackground)
     }
 }

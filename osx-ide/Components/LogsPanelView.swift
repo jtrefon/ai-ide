@@ -41,7 +41,7 @@ struct LogsPanelView: View {
                     }
                     .padding(8)
                 }
-                .background(Color(nsColor: .textBackgroundColor))
+                .background(AppConstants.Color.terminalBackground)
                 .onChange(of: tailer.lines.count) { _, count in
                     guard follow, count > 0 else { return }
 
@@ -58,7 +58,7 @@ struct LogsPanelView: View {
                 }
             }
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(AppConstants.Color.terminalBackground)
         .onAppear {
             tailer.start()
 

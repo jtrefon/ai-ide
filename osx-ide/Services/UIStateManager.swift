@@ -98,7 +98,6 @@ class UIStateManager: ObservableObject {
     // MARK: - Theme State
 
     @Published var selectedTheme: AppTheme = .system
-    @Published var isDarkMode: Bool = false
 
     // MARK: - Services
 
@@ -115,7 +114,6 @@ class UIStateManager: ObservableObject {
         self.uiService = uiService
         self.eventBus = eventBus
         loadSettings()
-        updateTheme()
         setupEventSubscriptions()
     }
     
@@ -301,7 +299,6 @@ class UIStateManager: ObservableObject {
     func setTheme(_ theme: AppTheme) {
         selectedTheme = theme
         uiService.setTheme(theme)
-        updateTheme()
     }
 
     func setCliTimeoutSeconds(_ seconds: Double) {
@@ -318,22 +315,6 @@ class UIStateManager: ObservableObject {
     func setAgentQAReviewEnabled(_ enabled: Bool) {
         agentQAReviewEnabled = enabled
         uiService.setAgentQAReviewEnabled(enabled)
-    }
-
-    private func updateTheme() {
-        switch selectedTheme {
-        case .light:
-            isDarkMode = false
-        case .dark:
-            isDarkMode = true
-        case .system:
-            if let app = NSApp {
-                let currentAppearance = app.effectiveAppearance
-                isDarkMode = currentAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            } else {
-                isDarkMode = false
-            }
-        }
     }
 
     // MARK: - Settings Persistence
@@ -369,8 +350,6 @@ class UIStateManager: ObservableObject {
         terminalForegroundColor = settings.terminalForegroundColor
         terminalBackgroundColor = settings.terminalBackgroundColor
         terminalShell = settings.terminalShell
-
-        updateTheme()
     }
 
     func resetToDefaults() {
@@ -407,8 +386,6 @@ class UIStateManager: ObservableObject {
         terminalForegroundColor = "#D4D4D4" // Light gray
         terminalBackgroundColor = "#1E1E1E" // Dark gray
         terminalShell = "/bin/zsh"
-
-        updateTheme()
     }
 
     // MARK: - Settings Export/Import

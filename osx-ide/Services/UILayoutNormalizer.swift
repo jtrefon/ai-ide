@@ -61,39 +61,6 @@ enum UILayoutNormalizer {
         return clamp(height, min: AppConstants.Layout.minTerminalHeight, max: min(AppConstants.Layout.maxTerminalHeight, maxByWindow))
     }
 
-    static func rebalanceHorizontalPanels(
-        sidebarWidth: Double,
-        chatWidth: Double,
-        isSidebarVisible: Bool,
-        isChatVisible: Bool,
-        windowWidth: CGFloat,
-        minimumEditorWidth: Double
-    ) -> (sidebar: Double, chat: Double) {
-        var sidebar = isSidebarVisible ? sidebarWidth : 0
-        var chat = isChatVisible ? chatWidth : 0
-
-        let minimumRequired = sidebar + chat + minimumEditorWidth
-        let available = Double(windowWidth)
-
-        guard minimumRequired > available, (sidebar + chat) > 0 else {
-            return (sidebar, chat)
-        }
-
-        let overflow = minimumRequired - available
-        let totalPanels = sidebar + chat
-        let sidebarShare = sidebar / totalPanels
-        let chatShare = chat / totalPanels
-
-        if isSidebarVisible {
-            sidebar = max(AppConstants.Layout.minSidebarWidth, sidebar - (overflow * sidebarShare))
-        }
-        if isChatVisible {
-            chat = max(AppConstants.Layout.minChatPanelWidth, chat - (overflow * chatShare))
-        }
-
-        return (sidebar, chat)
-    }
-
     private static func clamp(_ value: Double, min minValue: Double, max maxValue: Double) -> Double {
         max(minValue, min(maxValue, value))
     }

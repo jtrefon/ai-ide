@@ -407,7 +407,6 @@ private struct AppRootView: View {
     let isContainerInitialized: Bool
     let initializationStatus: String
     @State private var didInitializeCorePlugin: Bool = false
-    @State private var cmdWMonitor: Any?
 
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
@@ -468,20 +467,7 @@ private struct AppRootView: View {
                 LoadingOverlayView(status: initializationStatus)
             }
         }
-        .onAppear {
-            cmdWMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "w" {
-                    appState.fileEditor.closeActiveTab()
-                    return nil
-                }
-                return event
-            }
-        }
-        .onDisappear {
-            if let monitor = cmdWMonitor {
-                NSEvent.removeMonitor(monitor)
-            }
-        }
+
     }
 }
 

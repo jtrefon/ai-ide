@@ -20,8 +20,9 @@ struct ContentView: View {
 
     @State private var logsFollow: Bool = true
     @State private var logsSource: String = LogsPanelView.LogSource.app.rawValue
-    @State private var sidebarDragStartWidth: Double?
-    @State private var chatDragStartWidth: Double?
+    @State private var dragSidebarWidth: Double?
+    @State private var dragChatWidth: Double?
+    @State private var dragWindowWidth: CGFloat = 0
 
     init(appState: AppState) {
         self.appState = appState
@@ -99,25 +100,27 @@ struct ContentView: View {
 
     private var workspaceLayout: some View {
         GeometryReader { proxy in
+            let sidebarW = dragSidebarWidth ?? uiState.sidebarWidth
+            let chatW = dragChatWidth ?? uiState.chatPanelWidth
             HStack(spacing: 0) {
                 if uiState.isSidebarVisible, let pluginView = registry.views(for: .sidebarLeft).first {
                     pluginView.makeView()
-                        .frame(width: uiState.sidebarWidth)
+                        .frame(width: sidebarW)
                         .frame(maxHeight: .infinity)
                         .accessibilityIdentifier(AccessibilityID.leftSidebarPanel)
 
                     PanelDivider(orientation: .vertical) {
-                        if sidebarDragStartWidth == nil {
-                            sidebarDragStartWidth = uiState.sidebarWidth
+                        if dragSidebarWidth == nil {
+                            dragSidebarWidth = uiState.sidebarWidth
+                            dragWindowWidth = proxy.size.width
                         }
-                        let proposed = (sidebarDragStartWidth ?? uiState.sidebarWidth) + $0.translation.width
-                        applyHorizontalPanelWidths(
-                            proposedSidebarWidth: proposed,
-                            proposedChatWidth: nil,
-                            windowWidth: proxy.size.width
-                        )
+                        let proposed = (dragSidebarWidth ?? uiState.sidebarWidth) + $0.translation.width
+                        dragSidebarWidth = UILayoutNormalizer.normalizeSidebarWidth(proposed, windowWidth: dragWindowWidth)
                     } onEnded: {
-                        sidebarDragStartWidth = nil
+                        if let w = dragSidebarWidth {
+                            uiState.updateSidebarWidth(w)
+                        }
+                        dragSidebarWidth = nil
                     }
                     .accessibilityIdentifier(AccessibilityID.sidebarResizeHandle)
                 }
@@ -127,22 +130,22 @@ struct ContentView: View {
 
                     if uiState.isAIChatVisible, let pluginView = registry.views(for: .panelRight).first {
                         PanelDivider(orientation: .vertical) {
-                            if chatDragStartWidth == nil {
-                                chatDragStartWidth = uiState.chatPanelWidth
+                            if dragChatWidth == nil {
+                                dragChatWidth = uiState.chatPanelWidth
+                                dragWindowWidth = proxy.size.width
                             }
-                            let proposed = (chatDragStartWidth ?? uiState.chatPanelWidth) - $0.translation.width
-                            applyHorizontalPanelWidths(
-                                proposedSidebarWidth: nil,
-                                proposedChatWidth: proposed,
-                                windowWidth: proxy.size.width
-                            )
+                            let proposed = (dragChatWidth ?? uiState.chatPanelWidth) - $0.translation.width
+                            dragChatWidth = UILayoutNormalizer.normalizeChatPanelWidth(proposed, windowWidth: dragWindowWidth)
                         } onEnded: {
-                            chatDragStartWidth = nil
+                            if let w = dragChatWidth {
+                                uiState.updateChatPanelWidth(w)
+                            }
+                            dragChatWidth = nil
                         }
                         .accessibilityIdentifier(AccessibilityID.chatResizeHandle)
 
                         pluginView.makeView()
-                            .frame(width: uiState.chatPanelWidth)
+                            .frame(width: chatW)
                             .frame(maxHeight: .infinity)
                             .accessibilityIdentifier(AccessibilityID.rightChatPanel)
                     }
@@ -156,11 +159,12 @@ struct ContentView: View {
                     windowWidth: proxy.size.width
                 )
             }
-            .onChange(of: proxy.size.width) { _, width in
+            .onChange(of: proxy.size.width) { oldWidth, newWidth in
+                guard abs(newWidth - oldWidth) > 2, dragSidebarWidth == nil, dragChatWidth == nil else { return }
                 applyHorizontalPanelWidths(
                     proposedSidebarWidth: uiState.sidebarWidth,
                     proposedChatWidth: uiState.chatPanelWidth,
-                    windowWidth: width
+                    windowWidth: newWidth
                 )
             }
         }
@@ -171,24 +175,18 @@ struct ContentView: View {
         proposedChatWidth: Double?,
         windowWidth: CGFloat
     ) {
-        let sidebarSource = proposedSidebarWidth ?? uiState.sidebarWidth
-        let chatSource = proposedChatWidth ?? uiState.chatPanelWidth
-        let sidebar = UILayoutNormalizer.normalizeSidebarWidth(sidebarSource, windowWidth: windowWidth)
-        let chat = UILayoutNormalizer.normalizeChatPanelWidth(chatSource, windowWidth: windowWidth)
-        let balanced = UILayoutNormalizer.rebalanceHorizontalPanels(
-            sidebarWidth: sidebar,
-            chatWidth: chat,
-            isSidebarVisible: uiState.isSidebarVisible,
-            isChatVisible: uiState.isAIChatVisible,
-            windowWidth: windowWidth,
-            minimumEditorWidth: 400
-        )
-
-        if uiState.isSidebarVisible, abs(uiState.sidebarWidth - balanced.sidebar) > 0.5 {
-            uiState.updateSidebarWidth(balanced.sidebar)
+        if let proposed = proposedSidebarWidth, uiState.isSidebarVisible {
+            let clamped = UILayoutNormalizer.normalizeSidebarWidth(proposed, windowWidth: windowWidth)
+            if abs(uiState.sidebarWidth - clamped) > 0.5 {
+                uiState.updateSidebarWidth(clamped)
+            }
         }
-        if uiState.isAIChatVisible, abs(uiState.chatPanelWidth - balanced.chat) > 0.5 {
-            uiState.updateChatPanelWidth(balanced.chat)
+
+        if let proposed = proposedChatWidth, uiState.isAIChatVisible {
+            let clamped = UILayoutNormalizer.normalizeChatPanelWidth(proposed, windowWidth: windowWidth)
+            if abs(uiState.chatPanelWidth - clamped) > 0.5 {
+                uiState.updateChatPanelWidth(clamped)
+            }
         }
     }
 
@@ -506,20 +504,14 @@ private struct PanelDivider: View {
 
 private struct WindowSetupView: View {
     @ObservedObject var appState: AppState
-    @State private var window: NSWindow?
+    @Environment(\.nsWindow) private var nsWindow: NSWindow?
 
     var body: some View {
         Color.clear
             .frame(width: 0, height: 0)
-            .background(WindowResolver { window in
-                self.window = window
+            .background(WindowCaptureView { window in
                 appState.windowProvider.setWindow(window)
                 appState.attachWindow(window)
-                window.isOpaque = true
-                window.backgroundColor = NSColor.windowBackgroundColor
-                window.hasShadow = true
-                window.styleMask.insert(.resizable)
-                window.styleMask.insert(.unifiedTitleAndToolbar)
                 window.title = appState.workspace.currentDirectory?.lastPathComponent ?? "osx-ide"
 
                 guard let screen = window.screen ?? NSScreen.main else { return }
@@ -536,28 +528,8 @@ private struct WindowSetupView: View {
                 }
             })
             .onReceive(appState.workspace.$currentDirectory) { newDirectory in
-                window?.title = newDirectory?.lastPathComponent ?? "osx-ide"
+                nsWindow?.title = newDirectory?.lastPathComponent ?? "osx-ide"
             }
-    }
-}
-
-private struct WindowResolver: NSViewRepresentable {
-    let onResolve: (NSWindow) -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            onResolve(window)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            guard let window = nsView.window else { return }
-            onResolve(window)
-        }
     }
 }
 

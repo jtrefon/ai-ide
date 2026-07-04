@@ -87,14 +87,14 @@ private struct TabBarButton: View {
                 let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
                 if isActive {
                     shape
-                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .fill(AppConstants.Color.surfaceCard)
                         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 6))
                         .overlay(
                             shape.stroke(.separator.opacity(0.35), lineWidth: 1)
                         )
                 } else {
                     shape
-                        .fill(isHovered ? Color(nsColor: .controlBackgroundColor).opacity(0.12) : .clear)
+                        .fill(isHovered ? AppConstants.Color.surfaceCard.opacity(0.12) : .clear)
                         .overlay(
                             shape.stroke(.separator.opacity(isHovered ? 0.35 : 0.18), lineWidth: 1)
                         )
@@ -111,6 +111,8 @@ private struct TabBarButton: View {
     }
 }
 
+/// Captures middle-click (button 3) on tab close buttons.
+/// macOS convention with no SwiftUI gesture equivalent — requires AppKit.
 private struct MiddleClickView: NSViewRepresentable {
     let action: () -> Void
 

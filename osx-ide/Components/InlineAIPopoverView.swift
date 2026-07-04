@@ -105,7 +105,7 @@ struct InlineAIPopoverView: View {
                     .padding(6)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(nsColor: .controlBackgroundColor))
+                            .fill(AppConstants.Color.surfaceCard)
                     )
                     .onSubmit {
                         manager.submitQuestion(context: nil)

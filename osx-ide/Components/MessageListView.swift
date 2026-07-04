@@ -29,7 +29,7 @@ private struct TypingDotsBubbleView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(Color(nsColor: .secondarySystemFill).opacity(0.5))
+                .background(AppConstants.Color.surfaceCard.opacity(0.5))
             .clipShape(Capsule())
             .frame(height: 34)
             .opacity(isActive ? 1 : 0)

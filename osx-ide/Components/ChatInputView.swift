@@ -44,13 +44,13 @@ struct ChatInputView: View {
                 .padding(.vertical, 10)
                 .background {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .fill(AppConstants.Color.surfaceCard)
                         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .stroke(
-                            isInputFocused ? Color.accentColor.opacity(0.5) : Color(NSColor.separatorColor).opacity(0.3),
+                            isInputFocused ? Color.accentColor.opacity(0.5) : AppConstants.Color.separatorSubtle,
                             lineWidth: isInputFocused ? 1.5 : 0.5
                         )
                 )
@@ -63,7 +63,7 @@ struct ChatInputView: View {
                         .font(.system(size: 26))
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(
-                            canSend ? Color.white : Color(NSColor.placeholderTextColor).opacity(0.5),
+                            canSend ? Color.white : AppConstants.Color.textTertiary.opacity(0.5),
                             canSend ? Color.accentColor : Color.clear
                         )
                         .background {

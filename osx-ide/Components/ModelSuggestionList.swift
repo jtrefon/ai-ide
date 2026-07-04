@@ -34,7 +34,7 @@ struct ModelSuggestionList: View {
                             .padding(.vertical, 8)
                         }
                         .buttonStyle(.plain)
-                        .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
+                        .background(AppConstants.Color.surfaceCard.opacity(0.3))
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                 }

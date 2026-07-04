@@ -113,12 +113,12 @@ struct AIChatPanel: View {
                                 .background {
                                     if isActive {
                                         RoundedRectangle(cornerRadius: 5)
-                                            .fill(Color(nsColor: .controlBackgroundColor))
+                                            .fill(AppConstants.Color.surfaceCard)
                                             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 5))
                                     } else {
                                         RoundedRectangle(cornerRadius: 5)
                                             .fill(isHovered
-                                                ? Color(nsColor: .controlBackgroundColor).opacity(0.15)
+                                                ? AppConstants.Color.surfaceCard.opacity(0.15)
                                                 : Color.clear)
                                             .strokeBorder(
                                                 Color(nsColor: .separatorColor).opacity(isHovered ? 0.35 : 0.2),
