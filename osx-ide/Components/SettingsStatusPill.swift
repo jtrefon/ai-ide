@@ -19,7 +19,7 @@ struct SettingsStatusPill: View {
         .clipShape(Capsule())
         .overlay(
             Capsule()
-                .stroke(Color.white.opacity(0.08), lineWidth: 0.6)
+                .stroke(AppConstants.Color.separatorSubtle, lineWidth: 0.6)
         )
     }
 

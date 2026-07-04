@@ -85,8 +85,8 @@ class UIStateManager: ObservableObject {
 
     @Published var terminalFontSize: Double = 12
     @Published var terminalFontFamily: String = "SF Mono"
-    @Published var terminalForegroundColor: String = "#00FF00" // Green
-    @Published var terminalBackgroundColor: String = "#000000" // Black
+    @Published var terminalForegroundColor: String = "#D4D4D4" // Light gray
+    @Published var terminalBackgroundColor: String = "#1E1E1E" // Dark gray
     @Published var terminalShell: String = "/bin/zsh"
 
     // MARK: - Agent Settings
@@ -404,8 +404,8 @@ class UIStateManager: ObservableObject {
         // Reset terminal settings to defaults
         terminalFontSize = 12
         terminalFontFamily = "SF Mono"
-        terminalForegroundColor = "#00FF00" // Green
-        terminalBackgroundColor = "#000000" // Black
+        terminalForegroundColor = "#D4D4D4" // Light gray
+        terminalBackgroundColor = "#1E1E1E" // Dark gray
         terminalShell = "/bin/zsh"
 
         updateTheme()

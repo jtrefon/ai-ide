@@ -104,8 +104,7 @@ final class IndexStatusBarViewModel: ObservableObject {
         guard isFIMAvailable else { return "AC -" }
         switch fimCompletionStatus {
         case .generating: return "AC WIP"
-        case .noSuggestion: return "AC NA"
-        case .idle: return "AC OK"
+        case .idle, .noSuggestion: return "AC OK"
         }
     }
 

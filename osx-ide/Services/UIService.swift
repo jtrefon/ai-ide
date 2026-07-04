@@ -188,8 +188,8 @@ final class UIService: UIServiceProtocol {
         let terminalFontSize = settingsStore.double(forKey: "terminalFontSize")
         let terminalFontSizeValue = terminalFontSize == 0 ? 12 : terminalFontSize
         let terminalFontFamily = settingsStore.string(forKey: "terminalFontFamily") ?? "SF Mono"
-        let terminalForegroundColor = settingsStore.string(forKey: "terminalForegroundColor") ?? "#00FF00"
-        let terminalBackgroundColor = settingsStore.string(forKey: "terminalBackgroundColor") ?? "#000000"
+        let terminalForegroundColor = settingsStore.string(forKey: "terminalForegroundColor") ?? "#D4D4D4"
+        let terminalBackgroundColor = settingsStore.string(forKey: "terminalBackgroundColor") ?? "#1E1E1E"
         let terminalShell = settingsStore.string(forKey: "terminalShell") ?? "/bin/zsh"
 
         let bottomPanel = settingsStore.string(forKey: "bottomPanelSelectedName") ?? AppConstants.Overlay.internalTerminalPanelName

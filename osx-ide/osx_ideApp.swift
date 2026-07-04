@@ -108,6 +108,7 @@ struct OSXIDEApp: App {
                 )
             }
         }
+        .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unifiedCompact)
         .commands {
             if !isUnitTesting {

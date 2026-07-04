@@ -200,7 +200,7 @@ struct AIChatPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.aiChatPanel)
-        .background(.regularMaterial)
+        .nativeGlassBackground(.panel, cornerRadius: 0)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Picker(localized("ai_chat.mode"), selection: modeBinding) {

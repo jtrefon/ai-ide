@@ -10,8 +10,7 @@ struct OverlayCard<Content: View>: View {
     var body: some View {
         content
             .padding(AppConstants.Overlay.containerPadding)
-            .background(.regularMaterial)
-            .cornerRadius(AppConstants.Overlay.containerCornerRadius)
-            .shadow(radius: AppConstants.Overlay.containerShadowRadius)
+            .nativeGlassBackground(.panel, cornerRadius: AppConstants.Overlay.containerCornerRadius, showBorder: true)
+            .elevation(.overlay)
     }
 }

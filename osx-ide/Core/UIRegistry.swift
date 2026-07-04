@@ -15,6 +15,10 @@ public struct PluginView: Identifiable {
     public let name: String
     public let iconName: String?
 
+    public var displayName: String {
+        name.replacingOccurrences(of: "Internal.", with: "")
+    }
+
     public init<V: View>(name: String, iconName: String? = nil, makeView: @escaping () -> V) {
         self.name = name
         self.iconName = iconName

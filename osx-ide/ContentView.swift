@@ -47,7 +47,7 @@ struct ContentView: View {
         return ZStack {
             mainLayout
         }
-        .glassEffect(.regular, in: .rect(cornerRadius: 0))
+        .nativeGlassBackground(.panel, cornerRadius: 0)
         .environment(\.font, .system(size: CGFloat(uiState.fontSize)))
         .preferredColorScheme(appState.selectedTheme.colorScheme)
         .accessibilityIdentifier(AccessibilityID.appRootView)
@@ -268,7 +268,7 @@ struct ContentView: View {
         if bottomViews.count == 1, let pluginView = bottomViews.first {
             pluginView.makeView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .glassEffect(.regular, in: .rect(cornerRadius: 0))
+                .nativeGlassBackground(.panel, cornerRadius: 0)
                 .frame(minHeight: 100)
         } else if bottomViews.count > 1 {
             let selectedName = uiState.bottomPanelSelectedName
@@ -279,7 +279,7 @@ struct ContentView: View {
                 selectedView.makeView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .glassEffect(.regular, in: .rect(cornerRadius: 0))
+            .nativeGlassBackground(.panel, cornerRadius: 0)
             .frame(minHeight: 100)
         }
     }
@@ -292,7 +292,7 @@ struct ContentView: View {
 
             Picker(localized("bottom_panel.picker"), selection: $uiState.bottomPanelSelectedName) {
                 ForEach(bottomViews) { view in
-                    Text(view.name.replacingOccurrences(of: "Internal.", with: ""))
+                    Text(view.displayName)
                         .tag(view.name)
                 }
             }
@@ -307,14 +307,15 @@ struct ContentView: View {
 
             bottomPanelTrailingControls(selectedName: selectedName)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, AppConstants.Layout.spacingSm)
+        .padding(.vertical, AppConstants.Layout.spacingXS)
         .frame(height: AppConstants.Layout.headerHeight)
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(.separator.opacity(0.25), lineWidth: 1)
-        )
+        .nativeGlassBackground(.header, cornerRadius: 0)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(AppConstants.Color.separatorDefault)
+                .frame(height: 1)
+        }
     }
 
     @ViewBuilder
@@ -557,71 +558,6 @@ private struct WindowResolver: NSViewRepresentable {
             guard let window = nsView.window else { return }
             onResolve(window)
         }
-    }
-}
-
-// MARK: - Private: OverlayHostView
-
-private struct OverlayHostView: View {
-    @ObservedObject var appState: AppState
-
-    var body: some View {
-        ZStack {
-            OverlayContainer(
-                isPresented: $appState.isGlobalSearchPresented,
-                onDismiss: { appState.isGlobalSearchPresented = false },
-                content: {
-                    GlobalSearchOverlayView(appState: appState, isPresented: $appState.isGlobalSearchPresented)
-                }
-            )
-
-            OverlayContainer(
-                isPresented: $appState.isQuickOpenPresented,
-                onDismiss: { appState.isQuickOpenPresented = false },
-                content: {
-                    QuickOpenOverlayView(appState: appState, isPresented: $appState.isQuickOpenPresented)
-                }
-            )
-
-            OverlayContainer(
-                isPresented: $appState.isCommandPalettePresented,
-                onDismiss: { appState.isCommandPalettePresented = false },
-                content: {
-                    CommandPaletteOverlayView(
-                        commandRegistry: appState.commandRegistry,
-                        isPresented: $appState.isCommandPalettePresented
-                    )
-                }
-            )
-
-            OverlayContainer(
-                isPresented: $appState.isGoToSymbolPresented,
-                onDismiss: { appState.isGoToSymbolPresented = false },
-                content: {
-                    GoToSymbolOverlayView(appState: appState, isPresented: $appState.isGoToSymbolPresented)
-                }
-            )
-
-            OverlayContainer(
-                isPresented: $appState.isNavigationLocationsPresented,
-                onDismiss: { appState.isNavigationLocationsPresented = false },
-                content: {
-                    NavigationLocationsOverlayView(
-                        appState: appState,
-                        isPresented: $appState.isNavigationLocationsPresented
-                    )
-                }
-            )
-
-            OverlayContainer(
-                isPresented: $appState.isRenameSymbolPresented,
-                onDismiss: { appState.isRenameSymbolPresented = false },
-                content: {
-                    RenameSymbolOverlayView(appState: appState, isPresented: $appState.isRenameSymbolPresented)
-                }
-            )
-        }
-        .glassEffect(.regular, in: .rect(cornerRadius: 0))
     }
 }
 

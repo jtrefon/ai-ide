@@ -107,7 +107,7 @@ struct IndexStatusBarView: View {
     private func tooltip(for text: String) -> String {
         if text.hasPrefix("IDX") { return "Code symbol index — files indexed / total project files" }
         if text.hasPrefix("VS") { return "Vector Store — FAISS-based conversation history RAG" }
-        if text.hasPrefix("AC") { return "Auto Complete — inline code completion via local FIM model" }
+        if text.hasPrefix("AC") { return "Auto Complete — inline code completion via local FIM model. OK = model loaded and ready, WIP = generating, - = not installed" }
         if text.hasPrefix("C ") || text.hasPrefix("C\t") { return "Class count in symbol index" }
         if text.hasPrefix("F ") { return "Function count in symbol index" }
         if text.hasPrefix("S ") { return "Total symbol count in index" }

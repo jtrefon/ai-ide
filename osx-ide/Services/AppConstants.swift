@@ -16,4 +16,5 @@ enum AppConstants {
     typealias Settings = AppConstantsSettings
     typealias Indexing = AppConstantsIndexing
     typealias Storage = AppConstantsStorage
+    typealias Color = AppConstantsColor
 }
