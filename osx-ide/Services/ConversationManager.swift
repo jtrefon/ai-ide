@@ -436,7 +436,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     }
 
     private func initializeLogging(root: URL) {
-        conversationLogger.initializeProjectRoot(root)
+        conversationLogger.initializeProjectRoot(root, eventBus: eventBus)
     }
 
     private func startTraceLogging() {
@@ -511,7 +511,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             mode: &currentMode
         )
 
-        conversationLogger.initializeProjectRoot(newRoot)
+        conversationLogger.initializeProjectRoot(newRoot, eventBus: eventBus)
         startTraceLogging()
         conversationLogger.logConversationStart(
             conversationId: self.conversationId,

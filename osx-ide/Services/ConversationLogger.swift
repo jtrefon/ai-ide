@@ -140,8 +140,9 @@ struct ConversationLogger {
     }
 
     /// Initializes logging stores for a project root
-    func initializeProjectRoot(_ root: URL) {
+    func initializeProjectRoot(_ root: URL, eventBus: EventBusProtocol? = nil) {
         let projectRoot = root
+        let bus = eventBus
         Task.detached(priority: .utility) {
             // CRITICAL: Set project root for all loggers including AI trace
             await AIToolTraceLogger.shared.setProjectRoot(projectRoot)
@@ -149,6 +150,9 @@ struct ConversationLogger {
             await VectorStoreIngestionTracker.shared.setProjectRoot(projectRoot)
             await AppLogger.shared.setProjectRoot(projectRoot)
             await CrashReporter.shared.setProjectRoot(projectRoot)
+            if let bus {
+                await ConversationLogStore.shared.setEventBus(bus)
+            }
             await ConversationLogStore.shared.setProjectRoot(projectRoot)
             await ExecutionLogStore.shared.setProjectRoot(projectRoot)
             await ConversationIndexStore.shared.setProjectRoot(projectRoot)

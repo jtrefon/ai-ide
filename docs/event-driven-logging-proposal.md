@@ -110,16 +110,19 @@ LLM responds "I found the login page at /auth"
 
 ## Implementation Phases
 
-### Phase 1 — Core Event Types + LogCoordinator (next)
+### Phase 1 — Core Event Types + LogCoordinator ✅
 
-| File | Change |
-|---|---|
-| `Core/ContextLogEvent.swift` | New — single generic event for contextual data |
-| `Core/ToolResultEvent.swift` | New — typed event for tool execution results |
-| `Services/Logging/LogCoordinator.swift` | New — subscribes to events, writes NDJSON |
-| `AIToolExecutor+Logging.swift` | Replace direct log store calls with `eventBus.publish()` |
-| `ConversationLogger.swift` | Replace direct log store calls with `eventBus.publish()` |
-| `FinalResponseHandler.swift` | Replace direct log store calls with `eventBus.publish()` |
+| File | Change | Status |
+|---|---|---|
+| `Core/ContextLogEvent.swift` | New — single generic event for contextual data | ✅ |
+| `Core/ToolResultEvent.swift` | New — typed event for tool execution results | ✅ |
+| `Services/Logging/LogCoordinator.swift` | New — subscribes to events, writes NDJSON | ✅ |
+| `Services/Logging/ConversationLogStore.swift` | Added `setEventBus()` — publishes `ContextLogEvent` in `append()` | ✅ |
+| `AIToolExecutor+Logging.swift` | Publish `ToolResultEvent` alongside existing log calls | ✅ |
+| `ConversationManager.swift` | Thread `eventBus` through to `initializeProjectRoot` → `ConversationLogStore.setEventBus()` | ✅ |
+| `ConversationLogger.swift` | Accept optional `eventBus` parameter, wire to `ConversationLogStore` | ✅ |
+
+All callers of `ConversationLogStore.shared.append()` (FinalResponseHandler, ToolLoopHandler, QAReviewHandler, ConversationLogger) **automatically** produce `ContextLogEvent` via the instrumented log store. No per-file migration needed.
 
 ### Phase 2 — Event-Driven Embedding (next + 1)
 

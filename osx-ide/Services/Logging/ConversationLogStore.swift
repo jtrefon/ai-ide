@@ -4,11 +4,15 @@ public actor ConversationLogStore {
     public static let shared = ConversationLogStore()
 
     private let iso = ISO8601DateFormatter()
-
     private var projectRoot: URL?
+    private var eventBus: EventBusProtocol?
 
     public func setProjectRoot(_ root: URL) {
         self.projectRoot = root
+    }
+
+    public func setEventBus(_ bus: EventBusProtocol) {
+        self.eventBus = bus
     }
 
     public func append(
@@ -24,6 +28,16 @@ public actor ConversationLogStore {
             type: type,
             data: data?.mapValues { LogValue.from($0) }
         )
+
+        let content = data?["content"] as? String ?? ""
+        if !content.isEmpty || type.hasPrefix("tool.") || type.hasPrefix("chat.") {
+            eventBus?.publish(ContextLogEvent(
+                conversationId: conversationId,
+                source: type,
+                content: content,
+                metadata: data?.mapValues { "\($0)" } ?? [:]
+            ))
+        }
 
         do {
             let json = try JSONEncoder().encode(event)
