@@ -31,7 +31,12 @@ public actor VectorStoreService {
     ) {
         self.index = index
         self.config = config
-        self.metadata = VectorStoreMetadata(fileURL: config.metadataFileURL)
+        self.metadata = VectorStoreMetadata(
+            fileURL: config.metadataFileURL,
+            logsBaseURL: config.storePath
+                .deletingLastPathComponent()
+                .appendingPathComponent("logs")
+        )
         self.idMapping = [:]
         self.reverseMapping = [:]
         self.nextId = 1
@@ -85,11 +90,12 @@ public actor VectorStoreService {
 
     @discardableResult
     public func addEntry(
-        text: String,
+        text: String?,
         vector: [Float],
         source: String,
         category: String? = nil,
-        id: String? = nil
+        id: String? = nil,
+        sourceReference: SourceReference? = nil
     ) throws -> String {
         let entryId = id ?? UUID().uuidString
         let faissId = nextId
@@ -102,7 +108,8 @@ public actor VectorStoreService {
             text: text,
             source: source,
             category: category,
-            embeddingModel: config.embeddingModel
+            embeddingModel: config.embeddingModel,
+            sourceReference: sourceReference
         )
         metadata.add(entry)
         idMapping[entryId] = faissId
@@ -112,7 +119,7 @@ public actor VectorStoreService {
             await RAGTraceLogger.shared.log(type: "store.add_entry", data: [
                 "entryId": entryId,
                 "source": source,
-                "textLength": text.count
+                "textLength": text?.count ?? 0
             ])
         }
         return entryId
@@ -120,8 +127,7 @@ public actor VectorStoreService {
 
     @discardableResult
     public func addBatch(
-        // swiftlint:disable:next large_tuple
-        entries: [(text: String, vector: [Float], source: String, category: String?)]
+        entries: [(text: String?, vector: [Float], source: String, category: String?)]
     ) throws -> [String] {
         guard !entries.isEmpty else { return [] }
 
@@ -176,7 +182,20 @@ public actor VectorStoreService {
         return results.map { faissId, score in
             let entryId = reverseMapping[faissId] ?? "\(faissId)"
             let meta = metadata.entry(for: entryId)
-            return VectorSearchResult(id: entryId, score: score, metadata: meta)
+            let resolved: VectorStoreMetadata.Entry? = {
+                guard let m = meta else { return nil }
+                let resolvedText = metadata.resolvedText(for: m) ?? m.text
+                return VectorStoreMetadata.Entry(
+                    id: m.id,
+                    text: resolvedText,
+                    source: m.source,
+                    timestamp: m.timestamp,
+                    category: m.category,
+                    embeddingModel: m.embeddingModel,
+                    sourceReference: m.sourceReference
+                )
+            }()
+            return VectorSearchResult(id: entryId, score: score, metadata: resolved)
         }
     }
 

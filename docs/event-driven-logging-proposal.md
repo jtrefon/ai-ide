@@ -142,12 +142,13 @@ The coordinator now receives content in-memory: buffers `chat.user_message`, pai
 | `FileContentEvent` | FileEditorService — publish on open | Already exists as `FileOpenedEvent`, not yet consumed |
 | `WebSearchResultEvent` | GoogleWebSearchTool — publish structured results | Not yet implemented |
 
-### Phase 4 — Deprecate Direct Log Stores (future)
+### Phase 4 — Deprecate Direct Log Stores / SQLite Migration (future)
 
 - Remove `ConversationLogStore.append()` calls (keep the actor for backward compat)
 - Remove `ExecutionLogStore.append()` calls (same)
 - Remove `AIToolTraceLogger.log()` calls (same)
 - The LogCoordinator becomes the single writer
+- **Consideration**: NDJSON files under `.ide/logs/` grow unbounded and may become slow to read/write at scale. A future migration to **SQLite** (one DB per conversation or per project) would provide O(1) lookups, atomic appends, and efficient pruning of old data. The LogCoordinator abstraction makes this swap straightforward — only the writer implementation changes.
 
 ## Migration Strategy
 

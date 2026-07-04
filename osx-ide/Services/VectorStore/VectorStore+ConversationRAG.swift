@@ -55,10 +55,10 @@ public extension VectorStoreService {
     ) throws -> [ConversationHistoryResult] {
         let results = try search(queryVector: queryVector, limit: limit)
         return results.compactMap { result in
-            guard let meta = result.metadata else { return nil }
+            guard let meta = result.metadata, let text = meta.text else { return nil }
             return ConversationHistoryResult(
-                query: meta.text,
-                response: meta.text,
+                query: text,
+                response: text,
                 score: result.score,
                 timestamp: meta.timestamp
             )

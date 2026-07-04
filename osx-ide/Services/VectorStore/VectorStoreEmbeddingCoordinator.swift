@@ -49,16 +49,19 @@ public actor VectorStoreEmbeddingCoordinator {
             let rVec = (try? await embedder.generateEmbedding(for: event.content)) ?? []
             guard !qVec.isEmpty, !rVec.isEmpty else { return }
 
-            let turn = VectorStoreService.ConversationTurn(
-                query: queryText,
-                response: String(event.content.prefix(500)),
+            try? await vectorStoreService?.addEntry(
+                text: nil,
+                vector: qVec,
                 source: "conversation",
-                category: convId
+                category: convId,
+                sourceReference: SourceReference(conversationId: convId, messageIndex: 0)
             )
-            try? await vectorStoreService?.storeConversationTurn(
-                turn: turn,
-                queryVector: qVec,
-                responseVector: rVec
+            try? await vectorStoreService?.addEntry(
+                text: nil,
+                vector: rVec,
+                source: "conversation",
+                category: convId,
+                sourceReference: SourceReference(conversationId: convId, messageIndex: 1)
             )
         }
     }

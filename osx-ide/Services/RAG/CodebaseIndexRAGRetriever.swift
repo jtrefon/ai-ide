@@ -172,7 +172,7 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
         return results.map { result in
             if let meta = result.metadata {
                 let category = meta.category ?? "?"
-                return "- [\(category)] \(meta.text)"
+                return "- [\(category)] \(meta.text ?? "")"
             }
             return "- \(result.id): score=\(String(format: "%.2f", result.score))"
         }
