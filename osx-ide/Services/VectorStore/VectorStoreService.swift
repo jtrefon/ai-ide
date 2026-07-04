@@ -58,12 +58,18 @@ public actor VectorStoreService {
             at: config.storePath,
             withIntermediateDirectories: true
         )
+        Swift.print("[VS] load: storePath=\(config.storePath.path)")
         if FileManager.default.fileExists(atPath: config.indexFileURL.path) {
             try index.load(from: config.indexFileURL.path)
+            Swift.print("[VS] load: FAISS index loaded, count=\(index.count)")
+        } else {
+            Swift.print("[VS] load: no FAISS index file at \(config.indexFileURL.path)")
         }
         try metadata.load()
+        Swift.print("[VS] load: metadata loaded, entries=\(metadata.count)")
         rebuildIDMappings()
         isLoaded = true
+        Swift.print("[VS] load: complete, nextId=\(nextId)")
         Task.detached(priority: .utility) {
             await RAGTraceLogger.shared.log(type: "store.load", data: [
                 "entryCount": self.entryCount,

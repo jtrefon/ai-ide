@@ -218,15 +218,16 @@ class DependencyContainer: ObservableObject {
 
             // Initialize vector store for RAG
             let eventBus = await MainActor.run { _eventBus }
+            Swift.print("[DIAG] VectorStore: creating service...")
             let cfg = VectorStoreConfiguration.default(basePath: root)
             let service = VectorStoreService.create(with: cfg)
             do {
                 try await service.load()
                 let count = await service.entryCount
-                Swift.print("[DIAG] VectorStore loaded: \(count) entries")
+                Swift.print("[DIAG] VectorStore loaded: \(count) entries — publishing status event")
                 eventBus.publish(VectorStoreStatusChangedEvent(entryCount: count, isLoaded: true))
             } catch {
-                Swift.print("[DIAG] VectorStore init (first launch - OK): \(error.localizedDescription)")
+                Swift.print("[DIAG] VectorStore init ERROR: \(error.localizedDescription)")
                 eventBus.publish(VectorStoreStatusChangedEvent(entryCount: 0, isLoaded: true))
             }
             await MainActor.run {

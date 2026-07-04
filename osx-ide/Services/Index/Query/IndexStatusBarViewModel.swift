@@ -150,6 +150,7 @@ final class IndexStatusBarViewModel: ObservableObject {
 
         eventBus.subscribe(to: VectorStoreStatusChangedEvent.self) { [weak self] event in
             guard let self else { return }
+            Swift.print("[SB] VectorStoreStatusChangedEvent received: entryCount=\(event.entryCount) isLoaded=\(event.isLoaded)")
             self.vectorStoreEntryCount = event.entryCount
             self.vectorStoreIsLoaded = event.isLoaded
             self.isIngesting = false
@@ -309,9 +310,15 @@ final class IndexStatusBarViewModel: ObservableObject {
     }
 
     private func refreshVectorStoreState() {
-        guard !vectorStoreIsLoaded, let vs = vectorStoreProvider() else { return }
+        guard !vectorStoreIsLoaded, let vs = vectorStoreProvider() else {
+            if vectorStoreIsLoaded == false {
+                Swift.print("[SB] poll: vectorStoreIsLoaded=false, provider=\(vectorStoreProvider() != nil ? "valid" : "nil")")
+            }
+            return
+        }
         Task { @MainActor in
             let count = await vs.entryCount
+            Swift.print("[SB] poll: vectorStore loaded via poll, entryCount=\(count)")
             self.vectorStoreEntryCount = count
             self.vectorStoreIsLoaded = true
         }
