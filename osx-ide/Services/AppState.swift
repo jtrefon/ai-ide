@@ -210,6 +210,13 @@ class AppState: ObservableObject, IDEContext {
             showHiddenFilesInFileTreePublisher: $showHiddenFilesInFileTree
         )
 
+        // Seed the project-root registry synchronously so that views (terminal,
+        // file tree, etc.) see the correct path even before the Combine-based
+        // observation pipeline fires on the next run-loop tick.
+        if let currentDir = workspace.currentDirectory {
+            ProjectRootRegistry.shared.set(currentDir)
+        }
+
         setupFileTreeRefreshSubscription()
 
         if !AppRuntimeEnvironment.launchContext.isTesting {

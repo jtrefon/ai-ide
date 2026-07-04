@@ -39,6 +39,9 @@ public struct SwiftTermView: NSViewRepresentable {
         )
 
         context.coordinator.term = term
+        context.coordinator.shellPath = shellPath
+        context.coordinator.shellArgs = shellArgs
+        context.coordinator.spawnedInDirectory = projectDirectory
         context.coordinator.subscribeToClear()
 
         return term
@@ -46,6 +49,17 @@ public struct SwiftTermView: NSViewRepresentable {
 
     public func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
         nsView.font = font
+
+        // Restart the process if the working directory changed (e.g. the
+        // project root became available after the initial spawn).
+        if context.coordinator.spawnedInDirectory != projectDirectory {
+            context.coordinator.spawnedInDirectory = projectDirectory
+            nsView.startProcess(
+                executable: context.coordinator.shellPath ?? shellPath,
+                args: context.coordinator.shellArgs ?? shellArgs,
+                currentDirectory: projectDirectory
+            )
+        }
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -59,6 +73,9 @@ public struct SwiftTermView: NSViewRepresentable {
         @Binding var currentDirectory: URL?
         let onClear: AnyPublisher<Void, Never>
         var term: LocalProcessTerminalView?
+        var shellPath: String?
+        var shellArgs: [String]?
+        var spawnedInDirectory: String?
         private var cancellables = Set<AnyCancellable>()
 
         init(currentDirectory: Binding<URL?>, onClear: AnyPublisher<Void, Never>) {
