@@ -3,7 +3,7 @@ import AppKit
 @MainActor
 final class CodeEditorTextView: NSTextView {
     let foldingManager = CodeFoldingManager()
-    private lazy var foldingDelegate = FoldingLayoutManagerDelegate(manager: foldingManager)
+    private lazy var foldingDelegate = FoldingLayoutManagerDelegate(manager: foldingManager, textView: self)
     private let ghostTextView = CodeEditorTextView.makeGhostTextView()
     private var ghostPresentation: InlineSuggestionPresentation?
     private var scrollObs: NSKeyValueObservation?
@@ -181,6 +181,18 @@ final class CodeEditorTextView: NSTextView {
         layoutManager.ensureLayout(for: textContainer)
 
         enclosingScrollView?.verticalRulerView?.needsDisplay = true
+    }
+
+    // MARK: - Current Line Highlight
+
+    override func setSelectedRange(_ charRange: NSRange, affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRange(charRange, affinity: affinity, stillSelecting: stillSelecting)
+        needsDisplay = true
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        needsDisplay = true
     }
 
     // MARK: - Multi-cursor (VS Code style)

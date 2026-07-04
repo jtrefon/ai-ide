@@ -40,6 +40,7 @@ public final class CodeFoldingManager: NSObject {
 
 public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelegate {
     private let manager: CodeFoldingManager
+    weak var textView: NSTextView?
 
     private struct GlyphGenerationOutput {
         let glyphs: [CGGlyph]
@@ -47,8 +48,9 @@ public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelega
         let characterIndexes: [Int]
     }
 
-    public init(manager: CodeFoldingManager) {
+    public init(manager: CodeFoldingManager, textView: NSTextView? = nil) {
         self.manager = manager
+        self.textView = textView
     }
 
     public func layoutManager(
@@ -118,5 +120,32 @@ public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelega
                 }
             }
         }
+    }
+
+    public func layoutManager(_ layoutManager: NSLayoutManager, drawBackgroundForGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard let textView else { return }
+        let cursor = textView.selectedRange.location
+        let length = (textView.string as NSString).length
+        guard cursor >= 0, cursor < length else { return }
+
+        guard let textContainer = textView.textContainer else { return }
+
+        var lineStart = 0, lineEnd = 0
+        (textView.string as NSString).getLineStart(&lineStart, end: &lineEnd, contentsEnd: nil, for: NSRange(location: cursor, length: 0))
+
+        let lineCharRange = NSRange(location: lineStart, length: lineEnd - lineStart)
+        let lineGlyphRange = layoutManager.glyphRange(forCharacterRange: lineCharRange, actualCharacterRange: nil)
+
+        let drawnGlyphRange = NSIntersectionRange(lineGlyphRange, glyphsToShow)
+        guard drawnGlyphRange.length > 0 else { return }
+
+        var lineRect = layoutManager.boundingRect(forGlyphRange: drawnGlyphRange, in: textContainer)
+        lineRect.origin.x += origin.x
+        lineRect.origin.y += origin.y
+
+        lineRect.size.width = max(textView.bounds.width - lineRect.origin.x, lineRect.width)
+
+        NSColor.selectedTextBackgroundColor.withAlphaComponent(0.2).setFill()
+        lineRect.fill()
     }
 }

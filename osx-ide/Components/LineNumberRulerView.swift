@@ -10,7 +10,7 @@ final class ModernLineNumberRulerView: NSRulerView {
         self.textView = textView
         self.font = textView.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         self.textColor = NSColor.secondaryLabelColor
-        self.selectionColor = NSColor.systemBlue.withAlphaComponent(0.1)
+        self.selectionColor = NSColor.systemBlue.withAlphaComponent(0.2)
 
         super.init(scrollView: scrollView, orientation: .verticalRuler)
         self.clientView = textView
@@ -24,9 +24,20 @@ final class ModernLineNumberRulerView: NSRulerView {
             name: NSView.boundsDidChangeNotification,
             object: scrollView.contentView
         )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(selectionDidChange),
+            name: NSTextView.didChangeSelectionNotification,
+            object: textView
+        )
     }
 
     @objc private func scrollViewDidScroll() {
+        needsDisplay = true
+    }
+
+    @objc private func selectionDidChange() {
         needsDisplay = true
     }
 
@@ -121,7 +132,8 @@ final class ModernLineNumberRulerView: NSRulerView {
                 drawContext: DrawLineNumberContext(
                     attrs: attrs,
                     context: context,
-                    charIndex: charIndex
+                    charIndex: charIndex,
+                    lineCharRange: charRange
                 )
             )
 
@@ -142,15 +154,17 @@ final class ModernLineNumberRulerView: NSRulerView {
         let attrs: [NSAttributedString.Key: Any]
         let context: DrawLineNumbersContext
         let charIndex: Int
+        let lineCharRange: NSRange
     }
 
     private func drawLineNumber(_ lineNumber: Int, at lineRect: NSRect, drawContext: DrawLineNumberContext) {
         let label = "\(lineNumber)" as NSString
-        let isCurrentLine = drawContext.charIndex == drawContext.context.textView.selectedRange.location
+        let cursor = drawContext.context.textView.selectedRange.location
+        let isCurrentLine = cursor >= drawContext.lineCharRange.location && cursor < NSMaxRange(drawContext.lineCharRange)
 
         var attrs = drawContext.attrs
         if isCurrentLine {
-            attrs[.foregroundColor] = NSColor.secondaryLabelColor.blended(withFraction: 0.15, of: .labelColor) ?? NSColor.labelColor
+            attrs[.foregroundColor] = NSColor.secondaryLabelColor.blended(withFraction: 0.4, of: .labelColor) ?? NSColor.labelColor
 
             let highlightRect = NSRect(x: 0, y: lineRect.minY, width: ruleThickness, height: lineRect.height)
             selectionColor.setFill()

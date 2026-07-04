@@ -46,7 +46,15 @@ public final class TreeSitterHighlightService {
             languageConfiguration: langConfig,
             attributeProvider: Self.attributeProvider,
             languageProvider: { _ in nil },
-            locationTransformer: { _ in nil }
+            locationTransformer: { [weak textView] offset in
+                guard let textView else { return nil }
+                let nsString = textView.string as NSString
+                let safeOffset = min(max(0, offset), nsString.length)
+                var lineStart = 0
+                nsString.getLineStart(&lineStart, end: nil, contentsEnd: nil, for: NSRange(location: safeOffset, length: 0))
+                let row = nsString.substring(to: safeOffset).reduce(0) { $0 + ($1 == "\n" ? 1 : 0) }
+                return Point(row: UInt32(row), column: UInt32(safeOffset - lineStart))
+            }
         )
 
         do {
