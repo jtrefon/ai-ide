@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct EditorTabBar: View {
     let tabs: [EditorPaneStateManager.EditorTab]
@@ -9,8 +10,8 @@ struct EditorTabBar: View {
 
     @State private var hoveredTabID: UUID?
 
-    private let minTabWidth: CGFloat = 80
-    private let spacing: CGFloat = 4
+    private let minTabWidth: CGFloat = 100
+    private let spacing: CGFloat = 8
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,39 +24,32 @@ struct EditorTabBar: View {
                         .padding(.vertical, 6)
                     Spacer(minLength: 0)
                 }
-                .frame(height: 32)
+                .frame(height: 34)
                 .background(.thinMaterial)
             } else {
-                GeometryReader { geometry in
-                    let tabCount = max(tabs.count, 1)
-                    let tabWidth = max(
-                        minTabWidth,
-                        (geometry.size.width - 8 - spacing * CGFloat(tabCount - 1)) / CGFloat(tabCount)
-                    )
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: spacing) {
-                            ForEach(tabs) { tab in
-                                TabBarButton(
-                                    tab: tab,
-                                    isActive: tab.id == activeTabID,
-                                    isHovered: hoveredTabID == tab.id,
-                                    onActivate: { onActivate(tab.id); onFocus() },
-                                    onClose: { onClose(tab.id) }
-                                )
-                                .frame(width: tabWidth)
-                                .onHover { hovering in
-                                    hoveredTabID = hovering ? tab.id : nil
-                                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: spacing) {
+                        ForEach(tabs) { tab in
+                            TabBarButton(
+                                tab: tab,
+                                isActive: tab.id == activeTabID,
+                                isHovered: hoveredTabID == tab.id,
+                                onActivate: { onActivate(tab.id); onFocus() },
+                                onClose: { onClose(tab.id) }
+                            )
+                            .frame(minWidth: minTabWidth)
+                            .frame(maxWidth: .infinity)
+                            .onHover { hovering in
+                                hoveredTabID = hovering ? tab.id : nil
                             }
                         }
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .frame(minWidth: geometry.size.width)
                     }
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 3)
                 }
-                .frame(height: 32)
+                .frame(height: 34)
                 .background(.thinMaterial)
+                .scrollDisabled(tabs.count <= 3)
             }
 
             Rectangle()
@@ -72,54 +66,84 @@ private struct TabBarButton: View {
     let onActivate: () -> Void
     let onClose: () -> Void
 
-    @State private var closeHovered = false
-
     private var displayName: String {
         URL(fileURLWithPath: tab.filePath).lastPathComponent
-            + (tab.isDirty ? " \u{2022}" : "")
     }
 
     var body: some View {
-        HStack(spacing: 4) {
+        ZStack(alignment: .leading) {
+            Button(action: onActivate) {
+                HStack(spacing: 5) {
+                    Color.clear.frame(width: 20)
+                    FileTabIcon(filePath: tab.filePath)
+                        .frame(width: 14, height: 14)
+                    Text(displayName)
+                        .lineLimit(1)
+                        .font(.system(size: 11))
+                        .foregroundColor(isActive ? .primary : .secondary)
+                    if tab.isDirty {
+                        Circle()
+                            .fill(.secondary)
+                            .frame(width: 6, height: 6)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, 4)
+                .padding(.trailing, 10)
+                .padding(.vertical, 5)
+            }
+            .buttonStyle(.plain)
+
             Button(action: onClose) {
                 Image(systemName: "xmark")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .opacity((closeHovered || isHovered || isActive) ? 1 : 0)
+            .opacity((isHovered || isActive) ? 1 : 0)
             .frame(width: 16, height: 16)
-            .onHover { hovering in
-                closeHovered = hovering
-            }
-
-            Text(displayName)
-                .lineLimit(1)
-                .font(.system(size: 11))
-                .foregroundColor(isActive ? .primary : .secondary)
+            .padding(.leading, 4)
         }
-        .padding(.leading, 4)
-        .padding(.trailing, 8)
-        .padding(.vertical, 4)
         .background {
             if isActive {
                 Capsule()
-                    .fill(.regularMaterial)
                     .glassEffect(.regular, in: Capsule())
             } else {
                 Capsule()
-                    .fill(isHovered ? Color(nsColor: .controlBackgroundColor).opacity(0.25) : .clear)
+                    .fill(.thickMaterial)
                     .overlay(
                         Capsule()
-                            .stroke(.separator.opacity(isHovered ? 0.25 : 0.1), lineWidth: 0.5)
+                            .stroke(.separator.opacity(isHovered ? 0.3 : 0.12), lineWidth: 0.5)
                     )
             }
         }
-        .contentShape(Capsule())
-        .onTapGesture { onActivate() }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .animation(.easeInOut(duration: 0.15), value: isActive)
         .overlay(MiddleClickView(action: onClose))
+    }
+}
+
+private struct FileTabIcon: View {
+    let filePath: String
+
+    var body: some View {
+        let ext = URL(fileURLWithPath: filePath).pathExtension
+        let image: NSImage? = ext.isEmpty ? nil : {
+            if let utType = UTType(filenameExtension: ext) {
+                return NSWorkspace.shared.icon(for: utType)
+            }
+            return nil
+        }()
+
+        if let image {
+            Image(nsImage: image)
+                .resizable()
+                .frame(width: 14, height: 14)
+        } else {
+            Image(systemName: "doc")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

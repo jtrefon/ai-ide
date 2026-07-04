@@ -86,7 +86,30 @@ struct AIChatPanel: View {
                         ForEach(displayedTabs) { tab in
                             let isActive = tab.id == conversationManager.currentConversationId
                             let isHovered = hoveredTabId == tab.id
-                            HStack(spacing: 4) {
+                            ZStack(alignment: .leading) {
+                                Button {
+                                    conversationManager.switchConversation(to: tab.id)
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        if displayedTabs.count > 1 {
+                                            Color.clear.frame(width: 20)
+                                        }
+                                        Image(systemName: "bubble.left.and.text")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 14, height: 14)
+                                        Text(tab.title)
+                                            .lineLimit(1)
+                                            .font(.system(size: 11))
+                                            .foregroundColor(isActive ? .primary : .secondary)
+                                        Spacer(minLength: 0)
+                                    }
+                                    .padding(.leading, 4)
+                                    .padding(.trailing, 10)
+                                    .padding(.vertical, 5)
+                                }
+                                .buttonStyle(.plain)
+
                                 if displayedTabs.count > 1 {
                                     Button {
                                         conversationManager.closeConversation(id: tab.id)
@@ -98,34 +121,22 @@ struct AIChatPanel: View {
                                     .buttonStyle(.plain)
                                     .opacity(isHovered ? 1 : 0)
                                     .frame(width: 16, height: 16)
+                                    .padding(.leading, 4)
                                     .help("Close conversation")
                                 }
-                                Text(tab.title)
-                                    .lineLimit(1)
-                                    .font(.body)
-                                    .foregroundColor(isActive ? .primary : .secondary)
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
                             .background {
                                 if isActive {
                                     Capsule()
-                                        .fill(AppConstants.Color.surfaceCard)
                                         .glassEffect(.regular, in: Capsule())
                                 } else {
                                     Capsule()
-                                        .fill(isHovered
-                                            ? AppConstants.Color.surfaceCard.opacity(0.15)
-                                            : Color.clear)
-                                        .strokeBorder(
-                                            Color(nsColor: .separatorColor).opacity(isHovered ? 0.35 : 0.2),
-                                            lineWidth: 1
+                                        .fill(.thickMaterial)
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(.separator.opacity(isHovered ? 0.3 : 0.12), lineWidth: 0.5)
                                         )
                                 }
-                            }
-                            .contentShape(Capsule())
-                            .onTapGesture {
-                                conversationManager.switchConversation(to: tab.id)
                             }
                             .onHover { hovering in
                                 if hovering { hoveredTabId = tab.id }
