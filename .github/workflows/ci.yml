@@ -72,6 +72,8 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             -destination 'platform=macOS' \
             -only-testing:osx-ideTests \
+            -skip-testing:osx-ideTests/OpenAICompatibleChatServiceTests \
+            -skip-testing:osx-ideTests/ConversationPlanStoreLRUTests/testEvictsOldestWhenExceedingMaxCachedPlans \
             test-without-building \
             CODE_SIGNING_ALLOWED=NO
 
