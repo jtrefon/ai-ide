@@ -16,6 +16,9 @@ jobs:
       - name: Xcode Version
         run: xcodebuild -version
 
+      - name: Install libomp (OpenMP)
+        run: brew install libomp
+
       - name: Resolve Package Dependencies
         run: >
           xcodebuild

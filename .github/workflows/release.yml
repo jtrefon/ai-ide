@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-release:
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       APP_PATH: build/Build/Products/Release/osx-ide.app
       APP_ZIP: osx-ide.app.zip
@@ -25,6 +25,9 @@ jobs:
         uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd
         with:
           xcode-version: "26.1.1"
+
+      - name: Install libomp (OpenMP)
+        run: brew install libomp
 
       - name: Require Tag Commit On Main
         run: |
