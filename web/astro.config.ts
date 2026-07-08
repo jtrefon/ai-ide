@@ -4,8 +4,11 @@ import sitemap from "@astrojs/sitemap";
 export default defineConfig({
   site: "https://jtrefon.github.io/ai-ide/",
   base: "/ai-ide",
-  outDir: "../site",
+  outDir: "../docs",
   publicDir: "public",
   integrations: [sitemap()],
   trailingSlash: "ignore",
+  vite: {
+    build: { emptyOutDir: false },
+  },
 });

@@ -1,0 +1,20 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630">
+      <stop stop-color="#06080d"/>
+      <stop offset="1" stop-color="#0b0e15"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#a78bfa"/>
+      <stop offset=".5" stop-color="#7b7bff"/>
+      <stop offset="1" stop-color="#2dd4bf"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="100" cy="530" r="400" fill="rgba(123,123,255,.04)"/>
+  <circle cx="1100" cy="100" r="350" fill="rgba(45,212,191,.03)"/>
+  <rect x="0" y="0" width="1200" height="630" fill="url(#g)" opacity=".02"/>
+  <text x="90" y="300" font-family="'Inter',-apple-system,sans-serif" font-size="72" font-weight="800" fill="url(#accent)" letter-spacing="-3">osx-ide</text>
+  <text x="90" y="370" font-family="'Inter',-apple-system,sans-serif" font-size="32" font-weight="500" fill="#6b7280" letter-spacing="-0.5">The native AI IDE for macOS</text>
+  <text x="90" y="420" font-family="'JetBrains Mono',monospace" font-size="18" font-weight="400" fill="#4b5563" letter-spacing="-0.2">Local-first speed · Cloud-scale power · One editor</text>
+</svg>
