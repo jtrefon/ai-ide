@@ -20,20 +20,22 @@ jobs:
       - name: Install libomp (OpenMP)
         run: brew install libomp
 
-      - name: Build for Testing
+      - name: Resolve Packages
         run: |
           xcodebuild \
             -resolvePackageDependencies \
             -project osx-ide.xcodeproj \
             -scheme osx-ide \
             -derivedDataPath "$DERIVED_DATA"
+
+      - name: Build App
+        run: |
           xcodebuild \
             -project osx-ide.xcodeproj \
             -scheme osx-ide \
             -configuration Debug \
             -derivedDataPath "$DERIVED_DATA" \
-            -destination 'platform=macOS' \
-            build-for-testing \
+            build \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Copy Embedding Models
@@ -42,24 +44,25 @@ jobs:
           mkdir -p "$dest"
           rsync -aq --delete osx-ide/Resources/EmbeddingModels/ "$dest/"
 
-      - name: Upload Derived Data
-        uses: actions/upload-artifact@v4
+      - name: Cache Derived Data
+        uses: actions/cache@v4
         with:
-          name: derived-data
           path: ${{ env.DERIVED_DATA }}
-          retention-days: 1
+          key: derived-${{ github.sha }}
 
   unit-tests:
     needs: build
     runs-on: macos-26
+    env:
+      DERIVED_DATA: .build-ci
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Derived Data
-        uses: actions/download-artifact@v4
+      - name: Restore Derived Data
+        uses: actions/cache@v4
         with:
-          name: derived-data
           path: ${{ env.DERIVED_DATA }}
+          key: derived-${{ github.sha }}
 
       - name: Run Unit Tests
         run: |
@@ -70,20 +73,23 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             -destination 'platform=macOS' \
             -only-testing:osx-ideTests \
-            test-without-building \
-            CODE_SIGNING_ALLOWED=NO
+            test \
+            CODE_SIGNING_ALLOWED=NO \
+            TEST_AFTER_BUILD=YES
 
   ui-tests:
     needs: build
     runs-on: macos-26
+    env:
+      DERIVED_DATA: .build-ci
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Derived Data
-        uses: actions/download-artifact@v4
+      - name: Restore Derived Data
+        uses: actions/cache@v4
         with:
-          name: derived-data
           path: ${{ env.DERIVED_DATA }}
+          key: derived-${{ github.sha }}
 
       - name: Run UI Tests
         run: |
@@ -94,23 +100,24 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             -destination 'platform=macOS' \
             -only-testing:osx-ideUITests \
-            test-without-building \
-            CODE_SIGNING_ALLOWED=NO
+            test \
+            CODE_SIGNING_ALLOWED=NO \
+            TEST_AFTER_BUILD=YES
 
   publish-artifact:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [unit-tests, ui-tests]
     runs-on: macos-26
     steps:
-      - name: Download Derived Data
-        uses: actions/download-artifact@v4
+      - name: Restore Derived Data
+        uses: actions/cache@v4
         with:
-          name: derived-data
           path: ${{ env.DERIVED_DATA }}
+          key: derived-${{ github.sha }}
 
       - name: Upload App Bundle
         uses: actions/upload-artifact@v4
         with:
           name: osx-ide-app
-          path: ${{ env.DERIVED_DATA }}/Build/Products/Debug/osx-ide.app
+          path: .build-ci/Build/Products/Debug/osx-ide.app
           retention-days: 7
