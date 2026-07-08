@@ -40,6 +40,14 @@ final class ToolLoopHandler {
 
         var currentResponse = response
         var currentTurnTools = availableTools
+
+        // Surface tool calls whose arguments failed to parse as failed tool
+        // results so the model can self-correct instead of the engine dispatching
+        // a call with corrupted/missing arguments.
+        if let malformed = response.malformedToolCalls, !malformed.isEmpty {
+            await handleMalformedToolCalls(malformed, runId: runId, conversationId: conversationId)
+        }
+
         var toolIteration = 0
         var lastToolCalls: [AIToolCall] = []
         var lastToolResults: [ChatMessage] = []
@@ -55,6 +63,10 @@ final class ToolLoopHandler {
         var repeatedWriteTargetCount = 0
         var previousAssistantUpdateSignature: String?
         var previousToolCallSignatures: Set<String> = []
+        /// Within a single tool loop, cache completed read-only results by their
+        /// tool-call signature. Re-reading an identical file is wasted work and
+        /// feeds the repeated-signature stall; reuse the prior result instead.
+        var readResultCache: [String: ChatMessage] = [:]
         var previouslyFailedToolCallSignatures: Set<String> = []
         var previouslyCompletedToolCallSignatures: Set<String> = []
         var repeatedCompletedSignatureCount = 0
@@ -621,8 +633,21 @@ final class ToolLoopHandler {
                 previousAssistantUpdateSignature = statusSignature
             }
 
-            let toolResults = await toolExecutionCoordinator.executeToolCalls(
-                uniqueToolCalls,
+            // Reuse cached results for read-only calls repeated within this loop
+            // (e.g. the model re-reading the same file), and only execute the rest.
+            var cachedResults: [ChatMessage] = []
+            var toExecute: [AIToolCall] = []
+            for call in uniqueToolCalls {
+                if readOnlyLoopToolNames.contains(call.name),
+                   let cached = readResultCache[toolCallSignature(call)] {
+                    cachedResults.append(cached)
+                } else {
+                    toExecute.append(call)
+                }
+            }
+
+            let executedResults = await toolExecutionCoordinator.executeToolCalls(
+                toExecute,
                 availableTools: currentTurnTools,
                 conversationId: conversationId
             ) { [weak self] progressMsg in
@@ -633,6 +658,16 @@ final class ToolLoopHandler {
                     self.historyCoordinator.append(progressMsg)
                 }
             }
+
+            // Populate the cache with completed read-only results for reuse.
+            for msg in executedResults where msg.isToolExecution && msg.toolStatus == .completed {
+                if let call = toExecute.first(where: { $0.id == msg.toolCallId }),
+                   readOnlyLoopToolNames.contains(call.name) {
+                    readResultCache[toolCallSignature(call)] = msg
+                }
+            }
+
+            let toolResults = cachedResults + executedResults
 
             for msg in toolResults {
                 if msg.isToolExecution {
@@ -1804,9 +1839,7 @@ final class ToolLoopHandler {
             "index_list_symbols",
             "index_search_text",
             "index_search_symbols",
-            "index_list_memories",
-            "checkpoint_list",
-            "conversation_fold"
+            "index_list_memories"
         ]
     }
 
@@ -2223,18 +2256,34 @@ final class ToolLoopHandler {
                     historyMessages: historyCoordinator.messages
                 )
 
-                let executionResponse = try await aiInteractionCoordinator
-                    .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                        messages: executionMessages,
-                        explicitContext: explicitContext,
-                        tools: executionTools,
-                        mode: mode,
-                        projectRoot: projectRoot,
-                        runId: runId,
-                        stage: AIRequestStage.tool_loop,
-                        conversationId: conversationId
-                    ))
-                    .get()
+                // An empty/error execution-transition response must not abort the
+                // whole run. Degrade gracefully to the deterministic finalization
+                // fallback below instead of throwing.
+                let executionResponse: AIServiceResponse
+                do {
+                    executionResponse = try await aiInteractionCoordinator
+                        .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                            messages: executionMessages,
+                            explicitContext: explicitContext,
+                            tools: executionTools,
+                            mode: mode,
+                            projectRoot: projectRoot,
+                            runId: runId,
+                            stage: AIRequestStage.tool_loop,
+                            conversationId: conversationId
+                        ))
+                        .get()
+                } catch {
+                    await AIToolTraceLogger.shared.log(type: "chat.tool_loop_finalization_fallback", data: [
+                        "runId": runId,
+                        "reason": "execution_transition_failed",
+                        "error": "\(error)"
+                    ])
+                    return AIServiceResponse(
+                        content: deterministicSummary(from: toolResults),
+                        toolCalls: nil
+                    )
+                }
 
                 if let toolCalls = executionResponse.toolCalls, !toolCalls.isEmpty {
                     let hasExecutionTool = toolCalls.contains { !readOnlyLoopToolNames.contains($0.name) }
@@ -2268,29 +2317,93 @@ final class ToolLoopHandler {
         )
 
         let followupMode: AIMode = (mode == .agent) ? .agent : .chat
-        let followup = try await aiInteractionCoordinator
-            .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: finalResponseMessages,
-                explicitContext: explicitContext,
-                tools: [],
-                mode: followupMode,
-                projectRoot: projectRoot,
-                runId: runId,
-                stage: AIRequestStage.final_response
-            ))
-            .get()
+        // Guard against the finalization request throwing (e.g. the model
+        // returns an empty response and retries are exhausted). Without this,
+        // the whole run fails with no answer. Degrade to the deterministic
+        // summary instead.
+        let followup: AIServiceResponse
+        do {
+            followup = try await aiInteractionCoordinator
+                .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
+                    messages: finalResponseMessages,
+                    explicitContext: explicitContext,
+                    tools: [],
+                    mode: followupMode,
+                    projectRoot: projectRoot,
+                    runId: runId,
+                    stage: AIRequestStage.final_response
+                ))
+                .get()
+        } catch {
+            await AIToolTraceLogger.shared.log(type: "chat.tool_loop_finalization_fallback", data: [
+                "runId": runId,
+                "reason": "final_response_failed",
+                "error": "\(error)"
+            ])
+            return AIServiceResponse(
+                content: deterministicSummary(from: toolResults),
+                toolCalls: nil
+            )
+        }
 
         let split = ChatPromptBuilder.splitReasoning(from: followup.content ?? "")
         let visibleContent = split.content.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalContent: String
-        if !visibleContent.isEmpty {
+        if !visibleContent.isEmpty, !ChatPromptBuilder.containsTextualToolCallMarkup(visibleContent) {
             finalContent = split.content
-        } else if let reasoning = split.reasoning, !reasoning.isEmpty {
+        } else if let reasoning = split.reasoning,
+                  !reasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !ChatPromptBuilder.containsTextualToolCallMarkup(reasoning) {
             finalContent = reasoning
         } else {
-            finalContent = "I attempted to gather context via tools but did not receive a complete response. Please retry."
+            // The model returned nothing usable (or only textual tool-call markup
+            // such as a malformed `<tool_call ...>` block). Guarantee a non-empty,
+            // grounded answer derived from the tool activity instead of ending the
+            // run silently or delivering garbage. This is a safety net, not the
+            // primary path.
+            finalContent = deterministicSummary(from: toolResults)
         }
         return AIServiceResponse(content: finalContent, toolCalls: nil)
+    }
+
+    /// Builds a non-LLM summary of tool activity so a stalled/empty finalization
+    /// still yields a grounded answer to the user.
+    private func deterministicSummary(from toolResults: [ChatMessage]) -> String {
+        let summary = ToolLoopUtilities.toolResultsSummaryText(toolResults)
+        if summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "I gathered context using tools but the final summary could not be generated. Please retry."
+        }
+        return "Summary of tool activity:\n\(summary)"
+    }
+
+    // MARK: - Malformed Tool Calls
+
+    /// Converts tool calls whose arguments failed to parse into failed tool
+    /// results in history, so the model sees a real error and can re-issue the
+    /// call with valid arguments. This is the primary recovery for the
+    /// streaming argument-corruption defect (no `_raw_args_chunk` is ever dispatched).
+    private func handleMalformedToolCalls(_ malformed: [MalformedToolCall], runId: String, conversationId: String) async {
+        for call in malformed {
+            await AIToolTraceLogger.shared.log(type: "chat.tool_call_malformed", data: [
+                "runId": runId,
+                "conversationId": conversationId,
+                "toolCallId": call.id,
+                "tool": call.name,
+                "error": call.error,
+                "rawArguments": call.rawArguments
+            ])
+
+            let message = ChatMessage(
+                role: .tool,
+                content: "Tool call \"\(call.name)\" had malformed arguments and could not be executed: \(call.error). Raw arguments: \(call.rawArguments). Please re-issue the tool call with valid JSON arguments.",
+                tool: ChatMessageToolContext(
+                    toolName: call.name,
+                    toolStatus: .failed,
+                    target: ToolInvocationTarget(targetFile: nil, toolCallId: call.id)
+                )
+            )
+            historyCoordinator.append(message)
+        }
     }
 
     private func shouldPreserveNoToolHandoffWithoutIncompletePlan(

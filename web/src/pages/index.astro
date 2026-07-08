@@ -1,6 +1,6 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { BASE_URL, REPO, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE, ROADMAP, PIPELINE_LOCAL, PIPELINE_CLOUD, SITE_TITLE, SITE_DESCRIPTION } from "../consts";
+import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE, ROADMAP, PIPELINE_LOCAL, PIPELINE_CLOUD, SITE_TITLE, SITE_DESCRIPTION } from "../consts";
 ---
 
 <BaseLayout title={SITE_TITLE} description={SITE_DESCRIPTION} canonical={`${BASE_URL}/`}>
@@ -13,7 +13,7 @@ import { BASE_URL, REPO, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE, ROADMAP,
       </h1>
       <p class="hero-tagline reveal">Local-first speed. Cloud-scale power. One editor.</p>
       <p class="hero-lede reveal">
-        Compass is a Swift-native IDE that gives you <strong>&lt;100ms inline completion</strong> from an on-device 4B model,
+        Compass is a Swift-native IDE that gives you <strong>&lt;100ms inline completion</strong> from an on-device local model,
         deep codebase intelligence that works <strong>100% offline</strong>, and a <strong>cloud agent pipeline</strong> for
         serious multi-file work - on your terms.
       </p>
@@ -66,7 +66,7 @@ import { BASE_URL, REPO, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE, ROADMAP,
             <li>Inline AI popover - cursor-anchored Q&A</li>
             <li>Semantic search - HNSW ANN, 10–50× faster</li>
             <li>Direct local model chat (offline mode)</li>
-            <li>Model: <strong>Gemma 4 E4B IT 4-bit</strong> via MLX</li>
+            <li>Model: on-device LLM via MLX</li>
           </ul>
         </div>
         <div class="pipeline-card cloud reveal">
@@ -162,8 +162,8 @@ import { BASE_URL, REPO, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE, ROADMAP,
       <h2 class="section-title reveal">Engineered for performance</h2>
       <div class="grid-3" style="margin-top:28px">
         <div class="card reveal">
-          <h3 style="font-size:.95rem;margin-bottom:4px;font-family:var(--font-mono);color:var(--accent)">MLX - Gemma 4 E4B</h3>
-          <p style="font-size:.85rem;color:var(--text-dim)">Apple MLX framework running a 4-bit quantized 4B model on the Neural Engine. 128K context window. <strong>&lt;100ms</strong> end-to-end.</p>
+          <h3 style="font-size:.95rem;margin-bottom:4px;font-family:var(--font-mono);color:var(--accent)">On-device LLM</h3>
+          <p style="font-size:.85rem;color:var(--text-dim)">Apple MLX framework running a quantized local model on the Neural Engine. <strong>&lt;100ms</strong> end-to-end. Models are swappable - swap models anytime without waiting for a website update.</p>
         </div>
         <div class="card reveal">
           <h3 style="font-size:.95rem;margin-bottom:4px;font-family:var(--font-mono);color:var(--accent)">HNSW - FAISS</h3>
@@ -212,6 +212,31 @@ import { BASE_URL, REPO, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE, ROADMAP,
               <div class="comparison-cell" style="color:var(--accent)">{row.us}</div>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Download -->
+  <section id="download" class="section section-alt">
+    <div class="container">
+      <p class="section-kicker reveal">Download</p>
+      <h2 class="section-title reveal">Install Compass today</h2>
+      <p class="section-sub reveal" style="margin-bottom:28px">
+        Open source and free. Requires Apple Silicon and macOS 26+.
+      </p>
+      <div class="grid-2" style="margin-top:20px">
+        <div class="card reveal" style="text-align:center">
+          <h3 style="font-size:1rem;margin-bottom:8px">GitHub Releases</h3>
+          <p style="font-size:.85rem;color:var(--text-dim);margin-bottom:16px">Download the latest DMG or ZIP directly from GitHub.</p>
+          <a class="btn btn-primary" href={`${RELEASES}`} target="_blank" rel="noreferrer">Download latest</a>
+          <p style="font-size:.78rem;color:var(--text-faint);margin-top:12px">Ad-hoc signed. See README for Gatekeeper instructions.</p>
+        </div>
+        <div class="card reveal" style="text-align:center">
+          <h3 style="font-size:1rem;margin-bottom:8px">Homebrew</h3>
+          <p style="font-size:.85rem;color:var(--text-dim);margin-bottom:16px">Install via the community cask for easy updates.</p>
+          <pre style="font-family:var(--font-mono);font-size:.82rem;background:var(--bg);padding:12px;border-radius:8px;text-align:left;overflow-x:auto;color:var(--text-dim);line-height:1.7">brew install --cask https://raw.githubusercontent.com/jtrefon/ai-ide/main/Casks/compass.rb</pre>
+          <p style="font-size:.78rem;color:var(--text-faint);margin-top:12px">Homebrew does not bypass macOS Gatekeeper checks on unsigned builds.</p>
         </div>
       </div>
     </div>

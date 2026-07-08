@@ -134,7 +134,11 @@ actor OpenAICompatibleChatService: AIService {
             lastReasoningContent = reasoning
         }
 
-        return AIServiceResponse(content: sanitizedContent, toolCalls: resolvedToolCalls, reasoning: effectiveReasoning)
+        return AIServiceResponse(
+            content: sanitizedContent,
+            toolCalls: resolvedToolCalls,
+            reasoning: effectiveReasoning
+        )
     }
 
     // MARK: - Streaming Chat
@@ -198,28 +202,34 @@ actor OpenAICompatibleChatService: AIService {
                 }
             }
 
-            let results = collector.getResults()
-            if let reasoning = results.reasoning, !reasoning.isEmpty {
-                lastReasoningContent = reasoning
-            }
         } catch {
             try await handlePotentialRateLimit(error, requestId: preparation.requestId)
             throw error
         }
 
-        let results = collector.getResults()
-        let recoveredToolCalls = recoverFallbackToolCalls(from: results.content, structuredToolCalls: results.toolCalls, toolsWereProvided: preparation.toolDefinitions?.isEmpty == false)
-        let displayContent = contentExcludingRecoveredToolCalls(from: results.content, recoveredToolCalls: recoveredToolCalls)
+        let assembled = collector.getResults()
+        let reasoning = collector.getReasoning()
+        let content = collector.getContent()
+        if let reasoning, !reasoning.isEmpty {
+            lastReasoningContent = reasoning
+        }
+        let recoveredToolCalls = recoverFallbackToolCalls(from: content, structuredToolCalls: assembled.valid, toolsWereProvided: preparation.toolDefinitions?.isEmpty == false)
+        let displayContent = contentExcludingRecoveredToolCalls(from: content, recoveredToolCalls: recoveredToolCalls)
         let fullContent = sanitizeAssistantContent(displayContent)
 
-        if let usage = results.usage {
+        if let usage = collector.getUsage() {
             try await usageTracker.publishUsageUpdate(usage: usage, modelId: preparation.settings.model, apiKey: preparation.settings.apiKey, baseURL: preparation.settings.baseURL, providerName: providerName, runId: request.runId)
         }
 
         await rateLimiter.registerSuccess()
         publishProviderIssueResolved()
 
-        return AIServiceResponse(content: fullContent, toolCalls: recoveredToolCalls, reasoning: results.reasoning)
+        return AIServiceResponse(
+            content: fullContent,
+            toolCalls: recoveredToolCalls,
+            reasoning: reasoning,
+            malformedToolCalls: assembled.malformed.isEmpty ? nil : assembled.malformed
+        )
     }
 
     // MARK: - Chat Preparation (delegates to shared logic via OpenRouterAIService+ChatPreparation)
@@ -533,9 +543,24 @@ actor OpenAICompatibleChatService: AIService {
     // MARK: - Tool Call Recovery
 
     private func recoverFallbackToolCalls(from content: String?, structuredToolCalls: [AIToolCall]?, toolsWereProvided: Bool) -> [AIToolCall]? {
-        if let structuredToolCalls, !structuredToolCalls.isEmpty { return structuredToolCalls }
-        guard toolsWereProvided, let content, !content.isEmpty else { return nil }
-        return toolCallParser.decodeAll(from: content)
+        let calls: [AIToolCall]?
+        if let structuredToolCalls, !structuredToolCalls.isEmpty {
+            calls = structuredToolCalls
+        } else if toolsWereProvided, let content, !content.isEmpty {
+            calls = toolCallParser.decodeAll(from: content)
+        } else {
+            calls = nil
+        }
+        guard let calls else { return nil }
+        // Normalize names through the alias registry so every downstream consumer
+        // (loop logic, unavailable-tool detection, execution) sees canonical names.
+        // The fallback parser already normalizes; applying it again is idempotent.
+        let normalized = calls.map { normalizeToolCall($0) }
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func normalizeToolCall(_ call: AIToolCall) -> AIToolCall {
+        AIToolCall(id: call.id, name: ParserHelper.normalizeName(call.name), arguments: call.arguments)
     }
 
     private func contentExcludingRecoveredToolCalls(from content: String?, recoveredToolCalls: [AIToolCall]?) -> String? {
@@ -628,35 +653,27 @@ private final class ChunkCollector: @unchecked Sendable {
         lock.unlock()
     }
 
-    func getResults() -> (content: String, reasoning: String?, toolCalls: [AIToolCall]?, usage: OpenRouterChatUsage?) {
+    func getResults() -> AssembledToolCalls {
         lock.lock()
         defer { lock.unlock() }
-        let content = chunks.joined()
-        let reasoning = reasoningChunks.joined()
-        let toolCalls = toolCallsDrafts.sorted(by: { $0.key < $1.key }).compactMap { (_, draft) -> AIToolCall? in
-            var argsDict = Self.parseToolArguments(from: draft.arguments) ?? [:]
-            if argsDict.isEmpty, !draft.arguments.isEmpty {
-                let trimmed = draft.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed != "{}" { argsDict = ["_raw_args_chunk": draft.arguments] }
-            }
-            return AIToolCall(id: draft.id, name: draft.name, arguments: argsDict)
+        let drafts: [ToolArgumentDraft] = toolCallsDrafts.sorted(by: { $0.key < $1.key }).map { (_, draft) in
+            ToolArgumentDraft(id: draft.id, name: draft.name, arguments: draft.arguments)
         }
-        return (content: content, reasoning: reasoning.isEmpty ? nil : reasoning, toolCalls: toolCalls.isEmpty ? nil : toolCalls, usage: usage)
+        return ToolArgumentParser.assemble(drafts)
     }
 
-    private static func parseToolArguments(from raw: String) -> [String: Any]? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        if let direct = parseJSONObject(trimmed) { return direct }
-        if let start = trimmed.firstIndex(of: "{"), let end = trimmed.lastIndex(of: "}"), start < end,
-           let bounded = parseJSONObject(String(trimmed[start...end])) { return bounded }
-        return parseJSONObject("{\(trimmed)}")
+    func getUsage() -> OpenRouterChatUsage? {
+        lock.lock(); defer { lock.unlock() }
+        return usage
     }
 
-    private static func parseJSONObject(_ candidate: String) -> [String: Any]? {
-        guard let data = candidate.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let dictionary = object as? [String: Any] else { return nil }
-        return dictionary
+    func getReasoning() -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return reasoningChunks.joined().isEmpty ? nil : reasoningChunks.joined()
+    }
+
+    func getContent() -> String {
+        lock.lock(); defer { lock.unlock() }
+        return chunks.joined()
     }
 }

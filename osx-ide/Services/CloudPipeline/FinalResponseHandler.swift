@@ -256,70 +256,69 @@ final class FinalResponseHandler {
         let checklist = PlanChecklistTracker.progress(in: planMarkdown)
         let hasIncompletePlan = checklist.total > 0 && !checklist.isComplete
         let completedTools = toolResults.filter { $0.isToolExecution && $0.toolStatus == .completed }
+        let failedTools = toolResults.filter { $0.isToolExecution && $0.toolStatus == .failed }
         let completedToolNames = completedTools.compactMap(\.toolName)
-        let hasOnlyReadOnlyInspection = !completedToolNames.isEmpty
-            && completedToolNames.allSatisfy(isReadOnlyInspectionToolName(_:))
         let touchedFiles = summarizeTouchedFiles(from: completedTools)
-        let filePhrase = joinedList(touchedFiles)
-        let hasReadVerification = completedToolNames.contains("read_file") || completedToolNames.contains("index_read_file")
         let mutationTools = completedToolNames.filter(isMutationToolName(_:))
 
+        var parts: [String] = []
+
+        // Describe the work that was done
         if !mutationTools.isEmpty {
-            let actionSentence: String
-            if touchedFiles.isEmpty {
-                actionSentence = "I completed the recorded file changes for this run."
-            } else if mutationTools.allSatisfy({ $0 == "create_file" || $0 == "write_file" || $0 == "write_files" }) {
-                actionSentence = "I updated \(filePhrase)."
+            let filePhrase = joinedList(touchedFiles)
+            if filePhrase.isEmpty {
+                parts.append("Modified files and completed work.")
             } else {
-                actionSentence = "I changed \(filePhrase)."
+                parts.append("Modified: \(filePhrase).")
             }
-
-            if hasIncompletePlan {
-                return "\(actionSentence) The task is still incomplete (\(planProgress))."
-            }
-
-            if hasReadVerification {
-                return "\(actionSentence) I also re-read the relevant files during the run to verify the recorded result."
-            }
-
-            return actionSentence
-        }
-
-        if mode == .chat {
-            if hasOnlyReadOnlyInspection {
-                if touchedFiles.isEmpty {
-                    return "I inspected the relevant files, but this run did not produce a dependable review or implementation summary."
-                }
-                return "I inspected \(filePhrase), but this run did not produce a dependable review or implementation summary."
-            }
-
-            if hasIncompletePlan {
-                return "I made some progress, but the work is still incomplete (\(planProgress))."
-            }
-
-            if toolSummary.isEmpty {
-                return "I couldn't produce a dependable final answer for this request from the current run."
-            }
-
-            return "I completed some tool work, but I don't want to invent details that were not confirmed in the run output."
+        } else if !touchedFiles.isEmpty {
+            parts.append("Inspected and analyzed: \(joinedList(touchedFiles)).")
+        } else if !completedToolNames.isEmpty {
+            let toolCounts = Dictionary(grouping: completedToolNames, by: { $0 }).map { "\($0.key) × \($0.value.count)" }.sorted().joined(separator: ", ")
+            parts.append("Completed tools: \(toolCounts).")
         }
 
         if hasIncompletePlan {
-            return "I completed part of the task, but work is still remaining (\(planProgress))."
+            parts.append("Work is still incomplete (\(planProgress)).")
         }
 
-        if toolSummary.isEmpty {
-            return "I couldn't produce a dependable final answer for this task from the current run."
+        if !failedTools.isEmpty {
+            let failedNames = Set(failedTools.compactMap(\.toolName)).sorted().joined(separator: ", ")
+            parts.append("Tool failures: \(failedNames).")
         }
 
-        if hasOnlyReadOnlyInspection {
-            if touchedFiles.isEmpty {
-                return "I inspected the relevant files, but I didn't reach a dependable final answer."
+        let lines = compactToolSummaryLines(toolResults)
+        if !lines.isEmpty {
+            parts.append(lines)
+        }
+
+        if parts.isEmpty {
+            return "I could not complete this task. Please try again with more specific instructions."
+        }
+
+        return parts.joined(separator: "\n\n")
+    }
+
+    /// Produces a compact, scan-friendly tool-activity summary for the user.
+    /// Groups consecutive read_file results by file path and lists other
+    /// tools with a short result preview.
+    private func compactToolSummaryLines(_ toolResults: [ChatMessage]) -> String {
+        let completed = toolResults.filter { $0.isToolExecution && $0.toolStatus == .completed }
+        guard !completed.isEmpty else { return "" }
+
+        var lines: [String] = ["Tools run:"]
+        for result in completed {
+            let tool = result.toolName ?? "unknown"
+            let file = result.targetFile ?? ""
+            let output = ToolLoopUtilities.toolOutputText(from: result).trimmingCharacters(in: .whitespacesAndNewlines)
+            let preview = output.isEmpty ? "" : " → \(output.prefix(120))"
+            if !file.isEmpty {
+                lines.append("  • \(tool): \(file)\(preview)")
+            } else {
+                lines.append("  • \(tool)\(preview)")
             }
-            return "I inspected \(filePhrase), but I didn't reach a dependable final answer."
         }
-
-        return "I completed tool work in this run, but I don't want to invent a final summary that the recorded outputs do not support."
+        return lines.joined(separator: "\n")
     }
 
     private func isReadOnlyInspectionToolName(_ toolName: String) -> Bool {
@@ -332,9 +331,7 @@ final class FinalResponseHandler {
             "search_files",
             "index_search_text",
             "index_search_symbols",
-            "index_list_symbols",
-            "checkpoint_list",
-            "conversation_fold"
+            "index_list_symbols"
         ].contains(toolName)
     }
 

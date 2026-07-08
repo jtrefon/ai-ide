@@ -116,7 +116,7 @@ struct StallDetector {
 
 enum MutationTools {
     static let mutationNames: Set<String> = ["write_file", "write_files", "create_file", "delete_file", "replace_in_file", "patch_file"]
-    static let readOnlyNames: Set<String> = ["list_files", "read_file", "index_read_file", "index_find_files", "index_list_files", "index_list_symbols", "index_search_text", "index_search_symbols", "index_list_memories", "checkpoint_list", "conversation_fold"]
+    static let readOnlyNames: Set<String> = ["list_files", "read_file", "index_read_file", "index_find_files", "index_list_files", "index_list_symbols", "index_search_text", "index_search_symbols", "index_list_memories"]
     static let contentWriteNames: Set<String> = ["read_file", "index_read_file", "create_file", "write_file", "write_files", "replace_in_file", "delete_file", "patch_file"]
     static let directReadNames: Set<String> = ["read_file", "index_read_file"]
 

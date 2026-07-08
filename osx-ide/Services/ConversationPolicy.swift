@@ -16,8 +16,7 @@ final class ConversationPolicy: ConversationPolicyProtocol {
         "index_read_file",
         "index_search_symbols",
         "read_file",
-        "list_dir",
-        "conversation_fold"
+        "list_dir"
     ]
 private let toolLoopExecutionToolNames: Set<String> = [
         "index_find_files",

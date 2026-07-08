@@ -109,4 +109,42 @@ final class TextualToolCallRecoveryTests: XCTestCase {
             )
         )
     }
+
+    func testChatPromptBuilderDetectsMalformedInlineAttributeToolCall() {
+        // The model emitted a `<tool_call name args>` opening tag (space, not `>`)
+        // with a tool-name closing tag (`</read_file>`), which the engine must
+        // recognize as textual tool-call markup so recovery fires instead of
+        // delivering the pasted file contents as the answer.
+        let raw = """
+        Let me read the full Login component.
+        <tool_call read_file tale-path="/Users/jack/Projects/osx/osx-ide/sandbox/todo-app/src/components/Login.tsx">
+        </read_file>
+        /Users/jack/Projects/osx/osx-ide/sandbox/todo-app/src/components/Login.tsx
+        1
+        300
+        """
+
+        XCTAssertTrue(
+            ChatPromptBuilder.shouldForceToolFollowup(content: raw),
+            "Malformed `<tool_call name=...>` opening tag must be detected"
+        )
+        XCTAssertTrue(
+            ChatPromptBuilder.containsTextualToolCallMarkup(raw),
+            "containsTextualToolCallMarkup must match the malformed opening tag"
+        )
+        let display = ChatPromptBuilder.contentForDisplay(from: raw)
+        XCTAssertFalse(display.contains("<tool_call"), "Malformed tool-call markup must be stripped from display")
+        XCTAssertFalse(display.contains("</read_file>"), "Malformed closing tag must be stripped from display")
+    }
+
+    func testToolLoopUtilitiesDetectsMalformedInlineAttributeToolCall() {
+        let raw = """
+        <tool_call read_file tale-path="/tmp/App.tsx">
+        </read_file>
+        """
+        XCTAssertTrue(
+            ToolLoopUtilities.containsLiteralToolCallMarkup(raw),
+            "ToolLoopUtilities must detect the malformed `<tool_call name=...>` opening tag"
+        )
+    }
 }

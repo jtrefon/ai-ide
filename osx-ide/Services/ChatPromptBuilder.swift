@@ -214,9 +214,13 @@ class ChatPromptBuilder {
         var output = text
         let patterns = [
             #"(?is)<tool_call>\s*.*?\s*</tool_call>"#,
+            // Malformed opening tag with inline attributes: <tool_call name args>
+            #"(?is)<tool_call[^>]*>.*?(?:</tool_call>|</[a-z_]+>)"#,
             // <tool_call> without closing tag (file path on first line, content follows)
             #"(?is)<tool_call>(?:(?!</tool_call>).)*\z"#,
             #"(?is)<tool_code>\s*.*?\s*</tool_code>"#,
+            // Malformed tool_code opening tag with inline attributes
+            #"(?is)<tool_code[^>]*>.*?(?:</tool_code>|</[a-z_]+>)"#,
             #"(?is)<arg_key>\s*.*?\s*</arg_key>"#,
             #"(?is)<arg_value>\s*.*?\s*</arg_value>"#,
             #"(?is)<minimax:tool_call>\s*.*?\s*</minimax:tool_call>"#,
@@ -624,8 +628,10 @@ class ChatPromptBuilder {
 
     static func containsTextualToolCallMarkup(_ content: String) -> Bool {
         let lower = content.lowercased()
-        return lower.contains("<tool_call>")
-            || lower.contains("<tool_code>")
+        return lower.contains("<tool_call")   // opening tag, with or without trailing `>` (malformed `<tool_call name=...>`)
+            || lower.contains("</tool_call")
+            || lower.contains("<tool_code")    // opening tag, with or without trailing `>`
+            || lower.contains("</tool_code")
             || lower.contains("<minimax:tool_call>")
             || lower.contains("<invoke name=")
             || lower.contains("<param name=")

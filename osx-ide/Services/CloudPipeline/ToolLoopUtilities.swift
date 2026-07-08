@@ -466,6 +466,8 @@ extension ToolLoopUtilities {
         guard let content, !content.isEmpty else { return false }
         let text = content.lowercased()
         return text.contains("[tool_call]")
+            || text.contains("<tool_call")   // opening tag, with or without trailing `>` (malformed `<tool_call name=...>`)
+            || text.contains("</tool_call")
             || text.contains("<tool_name>")
             || text.contains("tool calls:")
             || text.contains("tool call:")

@@ -39,7 +39,7 @@ final class ToolAliasRegistry: @unchecked Sendable {
         ("run_shell_command", "run_command"), ("cli-mcp-server_run_command", "run_command"),
         ("get_project_structure", "list_files"),
         ("index_find_files", "find_file"), ("index_list_files", "list_files"),
-        ("index_read_file", "read_file"), ("index_search_text", "grep"),
+        ("index_read_file", "read_file"), ("index_search_text", "search_project"),
     ]
 
     static let shared: ToolAliasRegistry = {

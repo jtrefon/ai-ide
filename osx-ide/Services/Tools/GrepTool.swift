@@ -2,7 +2,7 @@ import Foundation
 
 struct GrepTool: AITool {
     let name = "grep"
-let description = "Search file contents using regex or plain text matching."
+let description = "Search file contents using regex or plain text matching in a specific directory (requires absolute 'path'). For project-wide code search, use search_project instead."
     var parameters: [String: Any] {
         [
             "type": "object",
