@@ -8,7 +8,7 @@ public struct VectorStoreConfiguration: Sendable {
 
     public init(
         storePath: URL,
-        dimensions: Int = 512,
+        dimensions: Int = 384,
         factoryString: String = "IDMap,Flat",
         embeddingModel: String = "bge-small-en-v1.5"
     ) {

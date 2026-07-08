@@ -207,6 +207,18 @@ show_help() {
     echo "  help   Show this help message"
 }
 
+copy_embedding_models() {
+    local dest="$DERIVED_DATA_PATH_APP/Build/Products/Debug/$PROJECT_NAME.app/Contents/Resources/EmbeddingModels"
+    mkdir -p "$dest"
+    local src="$(pwd)/osx-ide/Resources/EmbeddingModels"
+    if [ -d "$src/bge-small-en-v1.5.mlmodelc" ]; then
+        rsync -aq --delete "$src/" "$dest/"
+        echo "[EMB] Copied embedding models to bundle"
+    else
+        echo "[EMB] WARNING: No embedding models found at $src — RAG embeddings disabled"
+    fi
+}
+
 build_app() {
     echo "Building $PROJECT_NAME..."
     xcodebuild -quiet -project "$PROJECT_NAME.xcodeproj" \
@@ -214,6 +226,7 @@ build_app() {
                -configuration Debug \
                -derivedDataPath "$DERIVED_DATA_PATH_APP" \
                build
+    copy_embedding_models
 }
 
 launch_app() {

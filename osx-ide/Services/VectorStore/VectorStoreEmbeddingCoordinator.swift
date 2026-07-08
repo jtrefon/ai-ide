@@ -7,7 +7,7 @@ import Combine
 public actor VectorStoreEmbeddingCoordinator {
     private weak var vectorStoreService: VectorStoreService?
     private let eventBus: EventBusProtocol
-    private let embedder: HashingMemoryEmbeddingGenerator
+    private let embedder: any MemoryEmbeddingGenerating
     private var bag: Set<AnyCancellable> = []
 
     /// Buffers the last user message per conversation for pairing with assistant responses.
@@ -16,11 +16,11 @@ public actor VectorStoreEmbeddingCoordinator {
     public init(
         vectorStoreService: VectorStoreService,
         eventBus: EventBusProtocol,
-        dimensions: Int = 512
+        embedder: any MemoryEmbeddingGenerating
     ) {
         self.vectorStoreService = vectorStoreService
         self.eventBus = eventBus
-        self.embedder = HashingMemoryEmbeddingGenerator(dimensions: dimensions)
+        self.embedder = embedder
     }
 
     public func start() {

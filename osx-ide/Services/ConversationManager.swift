@@ -480,6 +480,10 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         aiInteractionCoordinator.updateVectorStoreService(service)
     }
 
+    func updateEmbedder(_ embedder: (any MemoryEmbeddingGenerating)?) {
+        aiInteractionCoordinator.updateEmbedder(embedder)
+    }
+
     func updateProjectRoot(_ newRoot: URL) {
         if projectRoot.standardizedFileURL == newRoot.standardizedFileURL {
             return

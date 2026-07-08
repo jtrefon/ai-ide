@@ -70,8 +70,8 @@ osx-ide is engineered for the future of software development, where AI and human
 
 ## Requirements
 
-- macOS 14+
-- Xcode 17+
+- macOS 26+ (Apple Silicon only)
+- Xcode 26+
 
 ## Development
 

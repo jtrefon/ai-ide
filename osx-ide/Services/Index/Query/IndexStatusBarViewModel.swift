@@ -14,6 +14,7 @@ final class IndexStatusBarViewModel: ObservableObject {
 
     @Published private(set) var vectorStoreEntryCount: Int = 0
     @Published private(set) var vectorStoreIsLoaded: Bool = false
+    @Published private(set) var vectorStoreError: Bool = false
     @Published private(set) var isIngesting: Bool = false
     @Published private(set) var ingestionProgress: Int = 0
     @Published private(set) var ingestionTotal: Int = 0
@@ -82,7 +83,9 @@ final class IndexStatusBarViewModel: ObservableObject {
 
         if let stats {
             let vsInfo: String
-            if isIngesting {
+            if vectorStoreError {
+                vsInfo = "VS Err"
+            } else if isIngesting {
                 vsInfo = "VS embedding \(ingestionProgress)/\(ingestionTotal)"
             } else if vectorStoreIsLoaded {
                 vsInfo = "VS OK"
@@ -113,7 +116,7 @@ final class IndexStatusBarViewModel: ObservableObject {
             return ""
         }
 
-        let vsCount = vectorStoreIsLoaded ? "\(vectorStoreEntryCount)" : "-"
+        let vsCount = vectorStoreError ? "ERR" : (vectorStoreIsLoaded ? "\(vectorStoreEntryCount)" : "-")
         let size = formatBytes(stats.databaseSizeBytes)
         let score = stats.aiEnrichedResourceCount > 0 && stats.averageAIQualityScore > 0
             ? stats.averageAIQualityScore
@@ -151,9 +154,10 @@ final class IndexStatusBarViewModel: ObservableObject {
 
         eventBus.subscribe(to: VectorStoreStatusChangedEvent.self) { [weak self] event in
             guard let self else { return }
-            Swift.print("[SB] VectorStoreStatusChangedEvent received: entryCount=\(event.entryCount) isLoaded=\(event.isLoaded)")
+            Swift.print("[SB] VectorStoreStatusChangedEvent received: entryCount=\(event.entryCount) isLoaded=\(event.isLoaded) isError=\(event.isError)")
             self.vectorStoreEntryCount = event.entryCount
             self.vectorStoreIsLoaded = event.isLoaded
+            self.vectorStoreError = event.isError
             self.isIngesting = false
         }
         .store(in: &cancellables)
@@ -311,8 +315,9 @@ final class IndexStatusBarViewModel: ObservableObject {
     }
 
     private func refreshVectorStoreState() {
+        if vectorStoreError { return }
         guard !vectorStoreIsLoaded, let vs = vectorStoreProvider() else {
-            if vectorStoreIsLoaded == false {
+            if !vectorStoreIsLoaded {
                 Swift.print("[SB] poll: vectorStoreIsLoaded=false, provider=\(vectorStoreProvider() != nil ? "valid" : "nil")")
             }
             return

@@ -6,12 +6,18 @@ import Foundation
 public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable {
     private let index: CodebaseIndexProtocol
     private let vectorStoreService: VectorStoreService?
+    private let embedder: (any MemoryEmbeddingGenerating)?
     private let intentClassifier: RetrievalIntentClassifier
     private let ranker: RAGEvidenceFusionRanker
 
-    public init(index: CodebaseIndexProtocol, vectorStoreService: VectorStoreService? = nil) {
+    public init(
+        index: CodebaseIndexProtocol,
+        vectorStoreService: VectorStoreService? = nil,
+        embedder: (any MemoryEmbeddingGenerating)? = nil
+    ) {
         self.index = index
         self.vectorStoreService = vectorStoreService
+        self.embedder = embedder
         self.intentClassifier = RetrievalIntentClassifier()
         self.ranker = RAGEvidenceFusionRanker()
     }
@@ -161,8 +167,7 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
     }
 
     private func retrieveConversationHistory(userInput: String) async -> [String] {
-        guard let vectorStore = vectorStoreService else { return [] }
-        let embedder = HashingMemoryEmbeddingGenerator(dimensions: 512)
+        guard let vectorStore = vectorStoreService, let embedder else { return [] }
         guard let results = try? await vectorStore.searchByText(
             query: userInput,
             embeddingGenerator: { try await embedder.generateEmbedding(for: $0) },
