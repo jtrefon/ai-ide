@@ -28,8 +28,8 @@ export const FEATURES_SHIPPING = [
   { title: "On-device FIM autocomplete", desc: `<100ms ghost-text completion via local 4B MLX model, tuned for cancellation and compact prompts.` },
   { title: "Native local inference", desc: `MLX-backed models supporting offline chat, local quick actions, configurable context length and 4-bit KV cache.` },
   { title: "Codebase intelligence", desc: `SQLite FTS5 index tracking files, symbols, chunks, and HNSW-backed embedding retrieval for grounded answers.` },
-  { title: "Provider choice", desc: `Route heavy work through any provider — OpenRouter, Alibaba Cloud, DeepSeek, Kilo Code, or your own local model.` },
-  { title: "Inline AI popover", desc: `Cursor-anchored Q&A panel for instant explain, refactor, or ask — without switching context.` },
+  { title: "Provider choice", desc: `Route heavy work through any provider - OpenRouter, Alibaba Cloud, DeepSeek, Kilo Code, or your own local model.` },
+  { title: "Inline AI popover", desc: `Cursor-anchored Q&A panel for instant explain, refactor, or ask - without switching context.` },
   { title: "Semantic search", desc: `HNSW ANN vector index with CoreML embeddings, 10–50× faster than brute-force with ~95–99% recall.` },
 ] as const;
 

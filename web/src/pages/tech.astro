@@ -4,14 +4,14 @@ import { BASE_URL, REPO, PIPELINE_LOCAL, PIPELINE_CLOUD, COMPETITIVE, LOCAL_MODE
 ---
 
 <BaseLayout
-  title="Architecture — osx-ide"
+  title="Architecture - osx-ide"
   description="Deep dive into the osx-ide architecture: dual-pipeline AI, MLX local inference, HNSW semantic search, tree-sitter syntax highlighting, and more."
   canonical={`${BASE_URL}/tech`}
 >
   <section class="page-hero" style="text-align:center">
     <div class="container container-narrow">
       <p class="section-kicker reveal">Architecture</p>
-      <h1 class="reveal text-gradient">How osx-ide works</h1>
+      <h1 class="reveal">How osx-ide works</h1>
       <p class="reveal" style="font-size:1.05rem;color:var(--text-dim);max-width:600px;margin:0 auto;line-height:1.7">
         Two completely separate AI pipelines. Shared infrastructure. No compromises.
       </p>
@@ -113,7 +113,7 @@ import { BASE_URL, REPO, PIPELINE_LOCAL, PIPELINE_CLOUD, COMPETITIVE, LOCAL_MODE
           <h3 style="font-size:1rem;margin-bottom:6px;font-family:var(--font-mono);color:var(--accent)">CodebaseIndex</h3>
           <p style="font-size:.85rem;color:var(--text-dim);line-height:1.6">
             SQLite-backed index with <strong>FTS5 full-text search</strong>, symbol extraction, file watching, and chunk management.
-            The vector index uses <strong>HNSW</strong> over FAISS for embedding-based semantic search — <strong>10–50× faster</strong>
+            The vector index uses <strong>HNSW</strong> over FAISS for embedding-based semantic search - <strong>10–50× faster</strong>
             than the original brute-force approach with ~95–99% recall.
           </p>
           <code style="margin-top:8px;display:inline-block">Services/Index/DatabaseManager.swift</code>
@@ -123,7 +123,7 @@ import { BASE_URL, REPO, PIPELINE_LOCAL, PIPELINE_CLOUD, COMPETITIVE, LOCAL_MODE
           <p style="font-size:.85rem;color:var(--text-dim);line-height:1.6">
             Local FIM completion subsystem with ghost-text rendering (Tab accept, Esc dismiss), debounced triggers,
             language-scoped context assembly, completion caching, duplicate filtering, and ranking. The tightest
-            latency loop in the app — <strong>target: &lt;100ms</strong> end-to-end.
+            latency loop in the app - <strong>target: &lt;100ms</strong> end-to-end.
           </p>
           <code style="margin-top:8px;display:inline-block">Services/LocalPipeline/</code>
         </div>
@@ -174,7 +174,7 @@ import { BASE_URL, REPO, PIPELINE_LOCAL, PIPELINE_CLOUD, COMPETITIVE, LOCAL_MODE
         <div class="card reveal">
           <h3 style="font-size:1rem;margin-bottom:6px">Syntax highlighting</h3>
           <p style="font-size:.85rem;color:var(--text-dim)">
-            Powered by <strong>tree-sitter</strong> AST parsing with the <strong>Neon runtime</strong> — not regex-based
+            Powered by <strong>tree-sitter</strong> AST parsing with the <strong>Neon runtime</strong> - not regex-based
             tokenization. Supports 20+ languages with accurate, incremental, and fast highlighting.
             Customizable color schemes per-language via the settings UI.
           </p>
@@ -185,7 +185,7 @@ import { BASE_URL, REPO, PIPELINE_LOCAL, PIPELINE_CLOUD, COMPETITIVE, LOCAL_MODE
           <p style="font-size:.85rem;color:var(--text-dim)">
             Embedded terminal with the system shell (<code>/bin/zsh</code> or <code>/bin/bash</code>),
             build error parsing, and clickable links to editor locations. Build error diagnostics
-            are parsed for file/line references — click to navigate directly to the issue.
+            are parsed for file/line references - click to navigate directly to the issue.
           </p>
           <code style="display:inline-block;margin-top:8px">Packages/Terminal/</code>
         </div>
