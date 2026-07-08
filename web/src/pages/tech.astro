@@ -1,66 +1,29 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { BASE_URL, REPO, PIPELINE_LOCAL, PIPELINE_CLOUD, COMPETITIVE, LOCAL_MODEL, CLOUD_MODELS, FEATURES_SHIPPING } from "../consts";
+import ArchitectureDiagram from "../components/ArchitectureDiagram.astro";
+import { BASE_URL, REPO, PIPELINE_LOCAL, PIPELINE_CLOUD, REMOTE_PROVIDERS } from "../consts";
 ---
 
 <BaseLayout
-  title="Architecture - osx-ide"
-  description="Deep dive into the osx-ide architecture: dual-pipeline AI, MLX local inference, HNSW semantic search, tree-sitter syntax highlighting, and more."
+  title="Architecture - Compass"
+  description="Deep dive into the Compass architecture: dual-pipeline AI, MLX local inference, HNSW semantic search, tree-sitter syntax highlighting, and more."
   canonical={`${BASE_URL}/tech`}
 >
   <section class="page-hero" style="text-align:center">
     <div class="container container-narrow">
       <p class="section-kicker reveal">Architecture</p>
-      <h1 class="reveal">How osx-ide works</h1>
+      <h1 class="reveal">How Compass works</h1>
       <p class="reveal" style="font-size:1.05rem;color:var(--text-dim);max-width:600px;margin:0 auto;line-height:1.7">
         Two completely separate AI pipelines. Shared infrastructure. No compromises.
       </p>
     </div>
   </section>
 
-  <!-- Pipeline diagram: text-based + CSS -->
+  <!-- Pipeline diagram: SVG architecture -->
   <section class="section section-alt" style="padding-top:0">
     <div class="container">
-      <div class="reveal glass" style="padding:32px;overflow-x:auto;font-family:var(--font-mono);font-size:.78rem;line-height:1.6">
-        <pre style="color:var(--text-dim)">┌──────────────────────────────────────────────────────────────────┐
-│                        UI LAYER                                  │
-│  SwiftUI Views · AppKit Components · NSTextView · Terminal      │
-│  File Tree · Command Palette · Panels · Settings                 │
-├──────────────────────────────────────────────────────────────────┤
-│                        CORE LAYER                                │
-│  EventBus · CommandRegistry · DependencyContainer · Models       │
-├──────────────────────────────────────────────────────────────────┤
-│                     SHARED SERVICES                              │
-│  CodebaseIndex (SQLite FTS5 + symbols + HNSW) · Tool Impls      │
-│  FileSystem · Terminal · Session · Settings                      │
-├──────────────────────┬───────────────────────────────────────────┤
-│   LOCAL AI PIPELINE  │           CLOUD AI PIPELINE               │
-│                      │                                           │
-│ ┌──────────────────┐ │ ┌──────────────────────────────────────┐ │
-│ │ LocalInteraction │ │ │ ConversationOrchestrator             │ │
-│ │ Service          │ │ │ ┌──────────┐                         │ │
-│ │ ─ Direct LLM     │ │ │ │ Planner  │                         │ │
-│ │   call to 4B MLX │ │ │ └────┬─────┘                         │ │
-│ │ ─ No orchestrate │ │ │      v                               │ │
-│ │ ─ No tool loop   │ │ │ ┌──────────┐  ┌──────────────┐     │ │
-│ │ ─ No RAG injection│ │ │ │ Worker   │→│ Tool Executor│     │ │
-│ │ ─ Simpler context │ │ │ │(ToolLoop)│  │ (AITool impls)│     │ │
-│ └──────────────────┘ │ │ └────┬─────┘  └──────────────┘     │ │
-│                      │ │      v                               │ │
-│ ┌──────────────────┐ │ │ ┌──────────┐                         │ │
-│ │ InlineCompletion │ │ │ │ QAReview │                         │ │
-│ │ Engine            │ │ │ └────┬─────┘                         │ │
-│ │ ─ 4B MLX <100ms  │ │ │      v                               │ │
-│ │ ─ Ghost text      │ │ │ ┌──────────┐                         │ │
-│ │ ─ Cache + rank    │ │ │ │ Final    │                         │ │
-│ └──────────────────┘ │ │ └──────────┘                         │ │
-│                      │ │                                       │ │
-│ ┌──────────────────┐ │ │ ┌──────────────────────────────────────┐│
-│ │ InlinePopover    │ │ │ │ RAGEngine                             ││
-│ │ ─ Cursor-anchored│ │ │ │ ─ Retrieval + ranking                ││
-│ │ ─ File-scoped QA │ │ │ │ ─ Context injection (cloud only)     ││
-│ └──────────────────┘ │ │ └──────────────────────────────────────┘│
-└──────────────────────┴───────────────────────────────────────────┘</pre>
+      <div class="reveal glass" style="padding:24px;text-align:center">
+        <ArchitectureDiagram />
       </div>
     </div>
   </section>

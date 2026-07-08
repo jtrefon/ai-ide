@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#101417"/>
-  <text x="16" y="22" text-anchor="middle" fill="#9be7d9" font-family="Inter,system-ui,sans-serif" font-weight="800" font-size="17">O</text>
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="16" cy="16" r="14" stroke="#c4943e" stroke-width="2" fill="none"/>
+  <polygon points="16,4 19,14 16,12 13,14" fill="#c4943e"/>
+  <polygon points="16,28 13,18 16,20 19,18" fill="#bba586"/>
 </svg>

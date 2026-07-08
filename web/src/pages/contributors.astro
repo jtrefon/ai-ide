@@ -4,8 +4,8 @@ import { BASE_URL, REPO } from "../consts";
 ---
 
 <BaseLayout
-  title="Contributors - osx-ide"
-  description="Build the future of native macOS AI development. osx-ide is open source - contribute to Swift, MLX, or tooling."
+  title="Contributors - Compass"
+  description="Build the future of native macOS AI development. Compass is open source - contribute to Swift, MLX, or tooling."
   canonical={`${BASE_URL}/contributors`}
 >
   <section class="page-hero" style="text-align:center">
@@ -13,7 +13,7 @@ import { BASE_URL, REPO } from "../consts";
       <p class="section-kicker reveal">Open source</p>
       <h1 class="reveal">For contributors</h1>
       <p class="reveal" style="font-size:1.05rem;color:var(--text-dim);max-width:560px;margin:0 auto;line-height:1.7">
-        osx-ide is MIT-licensed and built entirely in Swift. If you want to shape how native AI development works on macOS, this is the place.
+        Compass is MIT-licensed and built entirely in Swift. If you want to shape how native AI development works on macOS, this is the place.
       </p>
       <div class="reveal" style="margin-top:20px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
         <a class="btn btn-primary" href={`${REPO}/blob/main/CONTRIBUTING.md`} target="_blank" rel="noreferrer">Contribution guide</a>
@@ -29,7 +29,7 @@ import { BASE_URL, REPO } from "../consts";
         <div class="card reveal">
           <h3 style="font-size:1rem;margin-bottom:8px;color:var(--cyan)">Codebase</h3>
           <p style="font-size:.88rem;color:var(--text-dim);line-height:1.7">
-            ~40,000 lines of Swift across <code>osx-ide/</code>, the test harness, and the UI layer.
+            ~40,000 lines of Swift across <code>Compass/</code>, the test harness, and the UI layer.
             Build with Xcode 26+ and Apple Silicon. The project uses <code>xcodebuild</code> (not SwiftPM) for the main target,
             with SPM packages for <code>SyntaxHighlighting</code> (tree-sitter) and <code>Terminal</code>.
           </p>
@@ -47,7 +47,7 @@ import { BASE_URL, REPO } from "../consts";
           <pre style="font-family:var(--font-mono);font-size:.82rem;background:var(--bg);padding:16px;border-radius:8px;overflow-x:auto;color:var(--text-dim);line-height:1.8">./run.sh build
 ./run.sh test
 ./run.sh harness
-xcodebuild test -scheme osx-ide</pre>
+xcodebuild test -scheme Compass</pre>
           <p style="font-size:.85rem;color:var(--text-faint);margin-top:8px">
             See <code>AGENTS.md</code> and <code>ARCHITECTURE.md</code> in the repo.
           </p>
