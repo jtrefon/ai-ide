@@ -20,22 +20,20 @@ jobs:
       - name: Install libomp (OpenMP)
         run: brew install libomp
 
-      - name: Resolve Packages
+      - name: Resolve + Build for Testing
         run: |
           xcodebuild \
             -resolvePackageDependencies \
             -project osx-ide.xcodeproj \
             -scheme osx-ide \
             -derivedDataPath "$DERIVED_DATA"
-
-      - name: Build App
-        run: |
           xcodebuild \
             -project osx-ide.xcodeproj \
             -scheme osx-ide \
             -configuration Debug \
             -derivedDataPath "$DERIVED_DATA" \
-            build \
+            -destination 'platform=macOS' \
+            build-for-testing \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Copy Embedding Models
@@ -47,21 +45,22 @@ jobs:
       - name: Cache Derived Data
         uses: actions/cache@v4
         with:
-          path: ${{ env.DERIVED_DATA }}
+          path: ${{ github.workspace }}/${{ env.DERIVED_DATA }}
           key: derived-${{ github.sha }}
 
   unit-tests:
     needs: build
     runs-on: macos-26
-    env:
-      DERIVED_DATA: .build-ci
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install libomp (OpenMP)
+        run: brew install libomp
 
       - name: Restore Derived Data
         uses: actions/cache@v4
         with:
-          path: ${{ env.DERIVED_DATA }}
+          path: ${{ github.workspace }}/.build-ci
           key: derived-${{ github.sha }}
 
       - name: Run Unit Tests
@@ -73,22 +72,22 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             -destination 'platform=macOS' \
             -only-testing:osx-ideTests \
-            test \
-            CODE_SIGNING_ALLOWED=NO \
-            TEST_AFTER_BUILD=YES
+            test-without-building \
+            CODE_SIGNING_ALLOWED=NO
 
   ui-tests:
     needs: build
     runs-on: macos-26
-    env:
-      DERIVED_DATA: .build-ci
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install libomp (OpenMP)
+        run: brew install libomp
 
       - name: Restore Derived Data
         uses: actions/cache@v4
         with:
-          path: ${{ env.DERIVED_DATA }}
+          path: ${{ github.workspace }}/.build-ci
           key: derived-${{ github.sha }}
 
       - name: Run UI Tests
@@ -100,9 +99,8 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             -destination 'platform=macOS' \
             -only-testing:osx-ideUITests \
-            test \
-            CODE_SIGNING_ALLOWED=NO \
-            TEST_AFTER_BUILD=YES
+            test-without-building \
+            CODE_SIGNING_ALLOWED=NO
 
   publish-artifact:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -112,7 +110,7 @@ jobs:
       - name: Restore Derived Data
         uses: actions/cache@v4
         with:
-          path: ${{ env.DERIVED_DATA }}
+          path: ${{ github.workspace }}/.build-ci
           key: derived-${{ github.sha }}
 
       - name: Upload App Bundle
