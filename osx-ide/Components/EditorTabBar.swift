@@ -10,7 +10,6 @@ struct EditorTabBar: View {
 
     @State private var hoveredTabID: UUID?
 
-    private let minTabWidth: CGFloat = 100
     private let spacing: CGFloat = 8
 
     var body: some View {
@@ -27,29 +26,26 @@ struct EditorTabBar: View {
                 .frame(height: 34)
                 .background(.thinMaterial)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: spacing) {
-                        ForEach(tabs) { tab in
-                            TabBarButton(
-                                tab: tab,
-                                isActive: tab.id == activeTabID,
-                                isHovered: hoveredTabID == tab.id,
-                                onActivate: { onActivate(tab.id); onFocus() },
-                                onClose: { onClose(tab.id) }
-                            )
-                            .frame(minWidth: minTabWidth)
-                            .frame(maxWidth: .infinity)
-                            .onHover { hovering in
-                                hoveredTabID = hovering ? tab.id : nil
-                            }
+                HStack(spacing: spacing) {
+                    ForEach(tabs) { tab in
+                        TabBarButton(
+                            tab: tab,
+                            isActive: tab.id == activeTabID,
+                            isHovered: hoveredTabID == tab.id,
+                            onActivate: { onActivate(tab.id); onFocus() },
+                            onClose: { onClose(tab.id) }
+                        )
+                        .frame(minWidth: 80)
+                        .frame(maxWidth: .infinity)
+                        .onHover { hovering in
+                            hoveredTabID = hovering ? tab.id : nil
                         }
                     }
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 3)
                 }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 3)
                 .frame(height: 34)
                 .background(.thinMaterial)
-                .scrollDisabled(tabs.count <= 3)
             }
 
             Rectangle()
@@ -71,29 +67,46 @@ private struct TabBarButton: View {
     }
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            Button(action: onActivate) {
-                HStack(spacing: 5) {
-                    Color.clear.frame(width: 20)
-                    FileTabIcon(filePath: tab.filePath)
-                        .frame(width: 14, height: 14)
-                    Text(displayName)
-                        .lineLimit(1)
-                        .font(.system(size: 11))
-                        .foregroundColor(isActive ? .primary : .secondary)
-                    if tab.isDirty {
-                        Circle()
-                            .fill(.secondary)
-                            .frame(width: 6, height: 6)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.leading, 4)
-                .padding(.trailing, 10)
-                .padding(.vertical, 5)
-            }
-            .buttonStyle(.plain)
+        Button(action: onActivate) {
+            HStack(spacing: 5) {
+                Spacer(minLength: 4)
 
+                FileTabIcon(filePath: tab.filePath)
+                    .frame(width: 14, height: 14)
+
+                Text(displayName)
+                    .lineLimit(1)
+                    .font(.system(size: 11))
+                    .foregroundColor(isActive ? .primary : .secondary)
+
+                if tab.isDirty {
+                    Circle()
+                        .fill(.secondary)
+                        .frame(width: 6, height: 6)
+                }
+
+                Spacer(minLength: 4)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background {
+                if isActive {
+                    Capsule()
+                        .glassEffect(.regular, in: Capsule())
+                } else {
+                    Capsule()
+                        .fill(isHovered
+                            ? Color(nsColor: .windowBackgroundColor).opacity(0.5)
+                            : Color(nsColor: .windowBackgroundColor).opacity(0.35))
+                        .overlay(
+                            Capsule()
+                                .stroke(Color(nsColor: .separatorColor).opacity(isHovered ? 0.3 : 0.15), lineWidth: 1)
+                        )
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .leading) {
             Button(action: onClose) {
                 Image(systemName: "xmark")
                     .font(.caption2.weight(.semibold))
@@ -101,25 +114,12 @@ private struct TabBarButton: View {
             }
             .buttonStyle(.plain)
             .opacity((isHovered || isActive) ? 1 : 0)
-            .frame(width: 16, height: 16)
+            .frame(width: 24, height: 24)
             .padding(.leading, 4)
         }
-        .background {
-            if isActive {
-                Capsule()
-                    .glassEffect(.regular, in: Capsule())
-            } else {
-                Capsule()
-                    .fill(.thickMaterial)
-                    .overlay(
-                        Capsule()
-                            .stroke(.separator.opacity(isHovered ? 0.3 : 0.12), lineWidth: 0.5)
-                    )
-            }
-        }
+        .overlay(MiddleClickView(action: onClose))
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .animation(.easeInOut(duration: 0.15), value: isActive)
-        .overlay(MiddleClickView(action: onClose))
     }
 }
 
@@ -166,5 +166,13 @@ private class MiddleClickNSView: NSView {
 
     override func otherMouseDown(with event: NSEvent) {
         action?()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let event = NSApplication.shared.currentEvent else { return nil }
+        if event.type == .otherMouseDown || event.type == .otherMouseUp {
+            return event.buttonNumber == 2 ? self : nil
+        }
+        return nil
     }
 }

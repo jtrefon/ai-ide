@@ -151,9 +151,9 @@ struct SearchProjectTool: AITool {
             for (i, line) in lines.enumerated() {
                 if results.count >= maxResults { break }
                 if line.lowercased().contains(query) {
-                    let relPath = relativePath(fileURL)
+                    let absPath = absolutePath(fileURL)
                     let ctx = line.trimmingCharacters(in: .whitespaces)
-                    results.append(SearchEntry(file: relPath, line: i + 1, matchType: "reference", context: ctx))
+                    results.append(SearchEntry(file: absPath, line: i + 1, matchType: "reference", context: ctx))
                 }
             }
         }
@@ -179,12 +179,12 @@ struct SearchProjectTool: AITool {
             }
             let name = fileURL.lastPathComponent.lowercased()
             if name.contains(query) {
-                results.append(SearchEntry(
-                    file: relativePath(fileURL),
-                    line: 0,
-                    matchType: "filename",
-                    context: fileURL.lastPathComponent
-                ))
+                    results.append(SearchEntry(
+                        file: absolutePath(fileURL),
+                        line: 0,
+                        matchType: "filename",
+                        context: fileURL.lastPathComponent
+                    ))
             }
         }
         return results
@@ -213,13 +213,8 @@ struct SearchProjectTool: AITool {
 
     // MARK: - Helpers
 
-    private func relativePath(_ url: URL) -> String {
-        let root = projectRoot.standardizedFileURL.path
-        let full = url.standardizedFileURL.path
-        if full.hasPrefix(root + "/") {
-            return String(full.dropFirst(root.count + 1))
-        }
-        return full
+    private func absolutePath(_ url: URL) -> String {
+        url.standardizedFileURL.path
     }
 
     private func classifySymbolKind(_ kind: SymbolKind) -> String {

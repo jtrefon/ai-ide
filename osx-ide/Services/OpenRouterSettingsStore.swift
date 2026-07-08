@@ -1,6 +1,6 @@
 import Foundation
 
-protocol OpenRouterSettingsLoading {
+protocol OpenRouterSettingsLoading: Sendable {
     func load(includeApiKey: Bool) -> OpenRouterSettings
 }
 

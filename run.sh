@@ -209,7 +209,7 @@ show_help() {
 
 build_app() {
     echo "Building $PROJECT_NAME..."
-    xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+    xcodebuild -quiet -project "$PROJECT_NAME.xcodeproj" \
                -scheme "$SCHEME" \
                -configuration Debug \
                -derivedDataPath "$DERIVED_DATA_PATH_APP" \
@@ -237,12 +237,8 @@ run_tests() {
     # UI components (NSTextView, NSOutlineView, CodeEditorTextView) and
     # are not XCUITest style.
     local skip_ui_tests=(
-        "-skip-testing:osx-ideTests/CodeEditorTextViewInlineCompletionTests"
-        "-skip-testing:osx-ideTests/CodeEditorViewHelpersTests"
-        "-skip-testing:osx-ideTests/TextViewInlineCompletionCoordinatorTests"
-        "-skip-testing:osx-ideTests/LineNumberRulerViewTests"
-        "-skip-testing:osx-ideTests/FileTreeIsolationTests"
-        "-skip-testing:osx-ideTests/UILayoutNormalizerTests"
+        # No UI import files remain in unit test target — all removed.
+        # If you add a test that imports SwiftUI or AppKit, add it here.
     )
     echo "Running unit tests..."
     prepare_derived_data_packages "$DERIVED_DATA_PATH_TEST"
@@ -251,7 +247,7 @@ run_tests() {
             suite="JSONHighlighterTests"
         fi
         echo "Filtering by suite: $suite"
-        xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+        xcodebuild -quiet -project "$PROJECT_NAME.xcodeproj" \
                    -scheme "$SCHEME" \
                    -configuration Debug \
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \
@@ -261,7 +257,7 @@ run_tests() {
                    "${skip_ui_tests[@]}" \
                    test -only-testing:osx-ideTests/"$suite" -skip-testing:osx-ideUITests -skip-testing:osx-ideHarnessTests
     else
-        xcodebuild -project "$PROJECT_NAME.xcodeproj" \
+        xcodebuild -quiet -project "$PROJECT_NAME.xcodeproj" \
                    -scheme "$SCHEME" \
                    -configuration Debug \
                    -derivedDataPath "$DERIVED_DATA_PATH_TEST" \

@@ -1,5 +1,4 @@
 import XCTest
-import SwiftUI
 import Combine
 @testable import osx_ide
 

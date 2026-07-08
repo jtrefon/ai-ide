@@ -54,6 +54,10 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             return "Fixed"
         }
 
+        func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
+            try await sendMessage(request)
+        }
+
         private func dequeueResponse() -> AIServiceResponse {
             lock.withLock {
                 guard !responses.isEmpty else {

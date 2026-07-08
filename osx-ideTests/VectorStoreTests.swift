@@ -1,14 +1,15 @@
 import Foundation
-import Testing
+import XCTest
 @testable import osx_ide
 
-struct VectorStoreTests {
-    let tempDir: URL
+final class VectorStoreTests: XCTestCase {
+    var tempDir: URL!
 
-    init() throws {
+    override func setUp() {
+        super.setUp()
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("vectorstore_test_\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        try! FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     }
 
     func makeService() -> VectorStoreService {
@@ -20,7 +21,6 @@ struct VectorStoreTests {
         return VectorStoreService.create(with: config)
     }
 
-    @Test
     func testAddAndSearch() async throws {
         let service = makeService()
         try await service.load()
@@ -32,11 +32,10 @@ struct VectorStoreTests {
         )
 
         let results = try await service.search(queryVector: [1.0, 0.0, 0.0, 0.0], limit: 5)
-        #expect(results.count == 1)
-        #expect(results[0].score > 0.9)
+        XCTAssertEqual(results.count, 1)
+        XCTAssertGreaterThan(results[0].score, 0.9)
     }
 
-    @Test
     func testPersistence() async throws {
         let config = VectorStoreConfiguration(
             storePath: tempDir,
@@ -59,12 +58,11 @@ struct VectorStoreTests {
             let service = VectorStoreService.create(with: config)
             try await service.load()
             let results = try await service.search(queryVector: [0.0, 1.0, 0.0, 0.0], limit: 5)
-            #expect(results.count == 1)
-            #expect(results[0].metadata?.text == "persist me")
+            XCTAssertEqual(results.count, 1)
+            XCTAssertEqual(results[0].metadata?.text, "persist me")
         }
     }
 
-    @Test
     func testBatchAdd() async throws {
         let service = makeService()
         try await service.load()
@@ -77,14 +75,13 @@ struct VectorStoreTests {
             (text: "b", vector: [0, 1, 0, 0], source: "test", category: catB),
             (text: "c", vector: [0, 0, 1, 0], source: "test", category: catC),
         ])
-        #expect(ids.count == 3)
+        XCTAssertEqual(ids.count, 3)
 
         let results = try await service.search(queryVector: [1, 0, 0, 0], limit: 5)
-        #expect(results.count == 3)
-        #expect(results[0].metadata?.text == "a")
+        XCTAssertEqual(results.count, 3)
+        XCTAssertEqual(results[0].metadata?.text, "a")
     }
 
-    @Test
     func testRemove() async throws {
         let service = makeService()
         try await service.load()
@@ -94,13 +91,14 @@ struct VectorStoreTests {
             vector: [1, 0, 0, 0],
             source: "test"
         )
-        #expect(await service.indexCount == 1)
+        let count1 = await service.indexCount
+        XCTAssertEqual(count1, 1)
 
         try await service.removeEntry(id: id)
-        #expect(await service.indexCount == 0)
+        let count2 = await service.indexCount
+        XCTAssertEqual(count2, 0)
     }
 
-    @Test
     func testRemoveAll() async throws {
         let service = makeService()
         try await service.load()
@@ -112,11 +110,12 @@ struct VectorStoreTests {
             (text: "y", vector: [0, 1, 0, 0], source: "test", category: catY),
         ])
         try await service.removeAll()
-        #expect(await service.indexCount == 0)
-        #expect(await service.entryCount == 0)
+        let indexCount3 = await service.indexCount
+        let entryCount = await service.entryCount
+        XCTAssertEqual(indexCount3, 0)
+        XCTAssertEqual(entryCount, 0)
     }
 
-    @Test
     func testCosineSimilarity() async throws {
         let service = makeService()
         try await service.load()
@@ -133,48 +132,45 @@ struct VectorStoreTests {
         )
 
         let results = try await service.search(queryVector: [1.0, 0.0, 0.0, 0.0], limit: 5)
-        #expect(results.count == 2)
-        #expect(results[0].metadata?.text == "similar")
-        #expect(results[0].score > results[1].score)
+        XCTAssertEqual(results.count, 2)
+        XCTAssertEqual(results[0].metadata?.text, "similar")
+        XCTAssertGreaterThan(results[0].score, results[1].score)
     }
 }
 
-struct FAISSVectorIndexTests {
-    @Test
+final class FAISSVectorIndexTests: XCTestCase {
+
     func testFAISSIndexLifecycle() throws {
         let idx = FAISSVectorIndex(dimensions: 4)
         try idx.add(id: 1, vector: [1, 0, 0, 0])
         try idx.add(id: 2, vector: [0, 1, 0, 0])
-        #expect(idx.count == 2)
+        XCTAssertEqual(idx.count, 2)
 
         let results = try idx.search(query: [1, 0, 0, 0], limit: 5)
-        #expect(results.count == 2)
-        #expect(results[0].id == 1)
+        XCTAssertEqual(results.count, 2)
+        XCTAssertEqual(results[0].id, 1)
     }
 
-    @Test
     func testFAISSRemove() throws {
         let idx = FAISSVectorIndex(dimensions: 4)
         try idx.add(id: 1, vector: [1, 0, 0, 0])
         try idx.add(id: 2, vector: [0, 1, 0, 0])
 
         try idx.remove(ids: [1])
-        #expect(idx.count == 1)
+        XCTAssertEqual(idx.count, 1)
 
         let results = try idx.search(query: [1, 0, 0, 0], limit: 5)
-        #expect(results.count == 1)
-        #expect(results[0].id == 2)
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].id, 2)
     }
 
-    @Test
     func testFAISSReset() throws {
         let idx = FAISSVectorIndex(dimensions: 4)
         try idx.add(id: 1, vector: [1, 0, 0, 0])
         try idx.reset()
-        #expect(idx.count == 0)
+        XCTAssertEqual(idx.count, 0)
     }
 
-    @Test
     func testFAISSBatch() throws {
         let idx = FAISSVectorIndex(dimensions: 4)
         try idx.addBatch(ids: [1, 2, 3], vectors: [
@@ -182,6 +178,6 @@ struct FAISSVectorIndexTests {
             [0, 1, 0, 0],
             [0, 0, 1, 0],
         ])
-        #expect(idx.count == 3)
+        XCTAssertEqual(idx.count, 3)
     }
 }

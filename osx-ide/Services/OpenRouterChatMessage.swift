@@ -1,6 +1,6 @@
 import Foundation
 
-internal struct OpenRouterChatMessage: Encodable {
+internal struct OpenRouterChatMessage: Encodable, Sendable {
     let role: String
     let content: String?
     let toolCallID: String?

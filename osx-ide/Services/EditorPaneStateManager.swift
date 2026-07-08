@@ -24,7 +24,6 @@ final class EditorPaneStateManager: ObservableObject {
 
     let languageDetector: EditorLanguageDetecting
     let editingStateManager: EditingStateManager
-    let tabManager: EditorTabManager
 
     init(
         fileEditorService: any FileEditorServiceProtocol,
@@ -38,7 +37,6 @@ final class EditorPaneStateManager: ObservableObject {
         let languageDetector = DefaultEditorLanguageDetector()
         self.languageDetector = languageDetector
         self.editingStateManager = EditingStateManager(languageDetector: languageDetector)
-        self.tabManager = EditorTabManager()
 
         if UserDefaults.standard.object(forKey: AppConstants.Storage.markdownViewModeKey) != nil {
             self.markdownViewMode = UserDefaults.standard.bool(forKey: AppConstants.Storage.markdownViewModeKey)

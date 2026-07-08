@@ -5,12 +5,10 @@
 //  Created by Jack Trefon on 25/08/2025.
 //
 
-import Testing
+import XCTest
 import Foundation
-import AppKit
-import SwiftUI
 import Combine
 @testable import osx_ide
 
 @MainActor
-struct OSXIDETests {}
+final class OSXIDETests: XCTestCase {}

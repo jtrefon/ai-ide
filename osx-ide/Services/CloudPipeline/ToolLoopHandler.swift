@@ -1885,8 +1885,8 @@ final class ToolLoopHandler {
             if availableToolNames.contains(toolCall.name) {
                 return nil
             }
-            let aliases = toolNameAliases[toolCall.name] ?? []
-            return aliases.contains(where: availableToolNames.contains) ? nil : toolCall.name
+            let canonical = ToolAliasRegistry.shared.canonicalName(for: toolCall.name)
+            return canonical != toolCall.name.lowercased() && availableToolNames.contains(canonical) ? nil : toolCall.name
         })).sorted()
     }
 
@@ -2058,29 +2058,6 @@ final class ToolLoopHandler {
             candidateURL = projectRoot.appendingPathComponent(path)
         }
         return candidateURL.standardizedFileURL.path
-    }
-
-    private var toolNameAliases: [String: [String]] {
-        [
-            "find_by_name": ["find_file", "index_find_files"],
-            "find": ["find_by_name"],
-            "grep_search": ["grep", "index_search_text"],
-            "grep": ["grep_search"],
-            "list_dir": ["list_files", "index_list_files", "list_all_files"],
-            "list_directory": ["list_files", "index_list_files", "list_all_files"],
-            "get_project_structure": ["list_all_files", "list_files"],
-            "read": ["read_file"],
-            "view_file": ["read_file", "index_read_file"],
-            "write": ["write_file", "write_files"],
-            "write_files": ["write_file"],
-            "write_to_file": ["write_file", "write_files"],
-            "create_file": ["write_file", "write_files"],
-            "edit_file": ["replace_in_file", "write_file"],
-            "apply_patch": ["replace_in_file", "write_file"],
-            "cli-mcp-server_run_command": ["run_command"],
-            "run_terminal_command": ["run_command"],
-            "run_shell_command": ["run_command"]
-        ]
     }
 
     private func contentWriteRecoveryTools(from availableTools: [AITool]) -> [AITool] {

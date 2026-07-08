@@ -1,79 +1,77 @@
-import Testing
+import XCTest
 import Foundation
-import AppKit
-import SwiftUI
 @testable import osx_ide
 
 @MainActor
-struct AppStateEditorTests {
+final class AppStateEditorTests: XCTestCase {
 
-    @Test func testAppStateInitialization() async throws {
+    func testAppStateInitialization() async throws {
         let appState = DependencyContainer().makeAppState()
 
-        #expect(appState.fileEditor.selectedFile == nil, "Selected file should be nil initially")
-        #expect(appState.fileEditor.editorContent.isEmpty, "Editor content should be empty initially")
-        #expect(appState.fileEditor.editorLanguage == "swift", "Default language should be swift")
-        #expect(appState.fileEditor.isDirty == false, "Should not be dirty initially")
-        #expect(appState.lastError == nil, "Should have no errors initially")
+        XCTAssertNil(appState.fileEditor.selectedFile, "Selected file should be nil initially")
+        XCTAssertTrue(appState.fileEditor.editorContent.isEmpty, "Editor content should be empty initially")
+        XCTAssertEqual(appState.fileEditor.editorLanguage, "swift", "Default language should be swift")
+        XCTAssertFalse(appState.fileEditor.isDirty, "Should not be dirty initially")
+        XCTAssertNil(appState.lastError, "Should have no errors initially")
 
         // Workspace can be nil until the user explicitly selects a folder.
         if let dir = appState.workspace.currentDirectory {
             var isDir: ObjCBool = false
-            #expect(
+            XCTAssertTrue(
                 FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir) && isDir.boolValue,
                 "If set, currentDirectory must exist and be a directory"
             )
         }
     }
 
-    @Test func testLanguageDetection() async throws {
-        #expect(
-            FileEditorStateManager.languageForFileExtension("swift") == "swift",
+    func testLanguageDetection() async throws {
+        XCTAssertEqual(
+            FileEditorStateManager.languageForFileExtension("swift"), "swift",
             "Swift files should detect as swift"
         )
-        #expect(
-            FileEditorStateManager.languageForFileExtension("js") == "javascript",
+        XCTAssertEqual(
+            FileEditorStateManager.languageForFileExtension("js"), "javascript",
             "JS files should detect as javascript"
         )
-        #expect(
-            FileEditorStateManager.languageForFileExtension("jsx") == "javascript",
+        XCTAssertEqual(
+            FileEditorStateManager.languageForFileExtension("jsx"), "javascript",
             "JSX files should detect as javascript"
         )
-        #expect(
-            FileEditorStateManager.languageForFileExtension("ts") == "typescript",
+        XCTAssertEqual(
+            FileEditorStateManager.languageForFileExtension("ts"), "typescript",
             "TS files should detect as typescript"
         )
-        #expect(
-            FileEditorStateManager.languageForFileExtension("tsx") == "tsx",
+        XCTAssertEqual(
+            FileEditorStateManager.languageForFileExtension("tsx"), "tsx",
             "TSX files should detect as tsx"
         )
-        #expect(
-            FileEditorStateManager.languageForFileExtension("py") == "python",
+        XCTAssertEqual(
+            FileEditorStateManager.languageForFileExtension("py"), "python",
             "Python files should detect as python"
         )
-        #expect(
-            FileEditorStateManager.languageForFileExtension("html") == "html",
+        XCTAssertEqual(
+            FileEditorStateManager.languageForFileExtension("html"), "html",
             "HTML files should detect as html"
         )
-        #expect(
-            FileEditorStateManager.languageForFileExtension("css") == "css",
+        XCTAssertEqual(
+            FileEditorStateManager.languageForFileExtension("css"), "css",
             "CSS files should detect as css"
         )
-        #expect(
-            FileEditorStateManager.languageForFileExtension("json") == "json",
+        XCTAssertEqual(
+            FileEditorStateManager.languageForFileExtension("json"), "json",
             "JSON files should detect as json"
         )
-        #expect(
-            FileEditorStateManager.languageForFileExtension("unknown") == "text",
+        XCTAssertEqual(
+            FileEditorStateManager.languageForFileExtension("unknown"), "text",
             "Unknown files should default to text"
         )
-        #expect(
-            FileEditorStateManager.languageForFileExtension("") == "text",
+        XCTAssertEqual(
+            FileEditorStateManager.languageForFileExtension(""), "text",
             "Empty extension should default to text"
         )
     }
 
-    @Test func testNewFileFunctionality() async throws {
+    func testNewFileFunctionality() async throws {
         let appState = DependencyContainer().makeAppState()
 
         appState.fileEditor.editorContent = "some content"
@@ -81,13 +79,13 @@ struct AppStateEditorTests {
 
         appState.fileEditor.newFile()
 
-        #expect(appState.fileEditor.selectedFile == nil, "Selected file should be nil after new")
-        #expect(appState.fileEditor.editorContent.isEmpty, "Editor content should be empty after new")
-        #expect(appState.fileEditor.isDirty == false, "Should not be dirty after new")
-        #expect(appState.lastError == nil, "Should have no errors after new")
+        XCTAssertNil(appState.fileEditor.selectedFile, "Selected file should be nil after new")
+        XCTAssertTrue(appState.fileEditor.editorContent.isEmpty, "Editor content should be empty after new")
+        XCTAssertFalse(appState.fileEditor.isDirty, "Should not be dirty after new")
+        XCTAssertNil(appState.lastError, "Should have no errors after new")
     }
 
-    @Test func testEditorTabsNoDuplicatesOnRepeatedOpen() async throws {
+    func testEditorTabsNoDuplicatesOnRepeatedOpen() async throws {
         let appState = DependencyContainer().makeAppState()
 
         let tempRoot = FileManager.default.temporaryDirectory
@@ -101,14 +99,14 @@ struct AppStateEditorTests {
         appState.fileEditor.loadFile(from: file)
         appState.fileEditor.loadFile(from: file)
 
-        #expect(
-            appState.fileEditor.tabs.count == 1,
+        XCTAssertEqual(
+            appState.fileEditor.tabs.count, 1,
             "Opening same file twice should not create duplicate tabs"
         )
-        #expect(appState.fileEditor.selectedFile == file.path, "Expected selectedFile to be the opened file")
+        XCTAssertEqual(appState.fileEditor.selectedFile, file.path, "Expected selectedFile to be the opened file")
     }
 
-    @Test func testOpenJSONFileSetsEditorLanguageToJSON() async throws {
+    func testOpenJSONFileSetsEditorLanguageToJSON() async throws {
         let appState = DependencyContainer().makeAppState()
 
         let tempRoot = FileManager.default.temporaryDirectory
@@ -121,19 +119,19 @@ struct AppStateEditorTests {
 
         appState.fileEditor.loadFile(from: file)
 
-        #expect(appState.fileEditor.selectedFile == file.path)
-        #expect(
-            appState.fileEditor.editorLanguage == "json",
+        XCTAssertEqual(appState.fileEditor.selectedFile, file.path)
+        XCTAssertEqual(
+            appState.fileEditor.editorLanguage, "json",
             "Expected .json files to set editorLanguage=json"
         )
     }
 
-    @Test func testUntitledBufferAutoDetectsJSONLanguageOnPaste() async throws {
+    func testUntitledBufferAutoDetectsJSONLanguageOnPaste() async throws {
         let appState = DependencyContainer().makeAppState()
 
         appState.fileEditor.newFile()
-        #expect(appState.fileEditor.selectedFile == nil)
-        #expect(appState.fileEditor.editorLanguage == "swift")
+        XCTAssertNil(appState.fileEditor.selectedFile)
+        XCTAssertEqual(appState.fileEditor.editorLanguage, "swift")
 
         let pasted = """
         {
@@ -145,13 +143,13 @@ struct AppStateEditorTests {
         """
 
         appState.fileEditor.editorContent = pasted
-        #expect(
-            appState.fileEditor.editorLanguage == "json",
+        XCTAssertEqual(
+            appState.fileEditor.editorLanguage, "json",
             "Expected pasted JSON in untitled buffer to auto-switch editorLanguage to json"
         )
     }
 
-    @Test func testEditorCloseActiveTabClearsStateWhenLastTab() async throws {
+    func testEditorCloseActiveTabClearsStateWhenLastTab() async throws {
         let appState = DependencyContainer().makeAppState()
 
         let tempRoot = FileManager.default.temporaryDirectory
@@ -163,18 +161,18 @@ struct AppStateEditorTests {
         try "print(\"hello\")".write(to: file, atomically: true, encoding: .utf8)
 
         appState.fileEditor.loadFile(from: file)
-        #expect(appState.fileEditor.tabs.count == 1)
+        XCTAssertEqual(appState.fileEditor.tabs.count, 1)
 
         appState.fileEditor.closeActiveTab()
 
-        #expect(appState.fileEditor.tabs.isEmpty, "Expected no tabs after closing last tab")
-        #expect(
-            appState.fileEditor.selectedFile == nil,
+        XCTAssertTrue(appState.fileEditor.tabs.isEmpty, "Expected no tabs after closing last tab")
+        XCTAssertNil(
+            appState.fileEditor.selectedFile,
             "Expected selectedFile to be nil after closing last tab"
         )
     }
 
-    @Test func testSplitEditorOpenTargetsFocusedPane() async throws {
+    func testSplitEditorOpenTargetsFocusedPane() async throws {
         let appState = DependencyContainer().makeAppState()
 
         let tempRoot = FileManager.default.temporaryDirectory
@@ -192,13 +190,13 @@ struct AppStateEditorTests {
 
         appState.fileEditor.loadFile(from: fileB)
 
-        #expect(appState.fileEditor.isSplitEditor == true, "Expected split editor to be enabled")
-        #expect(
+        XCTAssertTrue(appState.fileEditor.isSplitEditor, "Expected split editor to be enabled")
+        XCTAssertTrue(
             appState.fileEditor.secondaryPane.tabs.contains(where: { $0.filePath == fileB.path }),
             "Expected file to open in secondary pane"
         )
-        #expect(
-            !appState.fileEditor.primaryPane.tabs.contains(where: { $0.filePath == fileB.path }),
+        XCTAssertFalse(
+            appState.fileEditor.primaryPane.tabs.contains(where: { $0.filePath == fileB.path }),
             "Expected file not to open in primary pane"
         )
     }

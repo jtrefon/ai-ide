@@ -5,7 +5,7 @@ final class AlibabaSettingsStore: ProviderOpenRouterSettingsStore, @unchecked Se
         super.init(
             settingsStore: settingsStore,
             keys: Keys(
-                apiKey: "AlibabaAPIKey",
+                apiKey: "AlibabaApiKey",
                 model: "AlibabaModel",
                 baseURL: "AlibabaBaseURL",
                 systemPrompt: "AlibabaSystemPrompt",

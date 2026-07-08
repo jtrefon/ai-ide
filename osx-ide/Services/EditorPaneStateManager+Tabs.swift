@@ -20,9 +20,8 @@ extension EditorPaneStateManager {
     }
 
     func closeTab(filePath: String) {
-        tabManager.closeTab(filePath: filePath, tabs: tabs) { [weak self] id in
-            self?.closeTab(id: id)
-        }
+        guard let idx = tabs.firstIndex(where: { $0.filePath == filePath }) else { return }
+        closeTab(id: tabs[idx].id)
     }
 
     func renameTab(oldPath: String, newPath: String) {
@@ -51,9 +50,8 @@ extension EditorPaneStateManager {
     }
 
     func activateTab(filePath: String) {
-        tabManager.activateTabByFilePath(filePath: filePath, tabs: tabs) { [weak self] id in
-            self?.activateTab(id: id)
-        }
+        guard let idx = tabs.firstIndex(where: { $0.filePath == filePath }) else { return }
+        activateTab(id: tabs[idx].id)
     }
 
     func closeTab(id: UUID) {
@@ -74,21 +72,18 @@ extension EditorPaneStateManager {
         closeTab(id: id)
     }
 
-    func closeOtherTabs(keeping id: UUID) {
-        guard let keepIdx = tabs.firstIndex(where: { $0.id == id }) else { return }
-        let keep = tabs[keepIdx]
-        tabs = [keep]
-        activateTab(id: keep.id)
-    }
-
     func activateNextTab() {
-        guard let nextID = tabManager.nextTabID(activeTabID: activeTabID, tabs: tabs) else { return }
-        activateTab(id: nextID)
+        guard !tabs.isEmpty else { return }
+        guard let activeTabID else { activateTab(id: tabs[0].id); return }
+        guard let idx = tabs.firstIndex(where: { $0.id == activeTabID }) else { activateTab(id: tabs[0].id); return }
+        activateTab(id: tabs[(idx + 1) % tabs.count].id)
     }
 
     func activatePreviousTab() {
-        guard let prevID = tabManager.previousTabID(activeTabID: activeTabID, tabs: tabs) else { return }
-        activateTab(id: prevID)
+        guard !tabs.isEmpty else { return }
+        guard let activeTabID else { activateTab(id: tabs[0].id); return }
+        guard let idx = tabs.firstIndex(where: { $0.id == activeTabID }) else { activateTab(id: tabs[0].id); return }
+        activateTab(id: tabs[(idx - 1 + tabs.count) % tabs.count].id)
     }
 
     func persistActiveEditorStateToTab() {
@@ -97,20 +92,6 @@ extension EditorPaneStateManager {
         tabs[idx].content = editorContent
         tabs[idx].language = editorLanguage
         tabs[idx].isDirty = isDirty
-        tabs[idx].selectedRange = selectedRange
-    }
-
-    func updateActiveTabFromEditor() {
-        guard let activeID = activeTabID else { return }
-        guard let idx = tabs.firstIndex(where: { $0.id == activeID }) else { return }
-        tabs[idx].content = editorContent
-        tabs[idx].language = editorLanguage
-        tabs[idx].isDirty = true
-    }
-
-    func updateActiveTabSelectionFromEditor() {
-        guard let activeID = activeTabID else { return }
-        guard let idx = tabs.firstIndex(where: { $0.id == activeID }) else { return }
         tabs[idx].selectedRange = selectedRange
     }
 }

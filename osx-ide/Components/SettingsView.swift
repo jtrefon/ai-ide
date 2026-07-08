@@ -22,6 +22,14 @@ struct SettingsView: View {
         store: DeepSeekSettingsStore(),
         providerDisplayName: "DeepSeek"
     )
+    @StateObject private var openCodeGoViewModel = OpenRouterSettingsViewModel(
+        store: OpenCodeGoSettingsStore(),
+        providerDisplayName: "OpenCode Go"
+    )
+    @StateObject private var openCodeGoSubscriptionViewModel = OpenRouterSettingsViewModel(
+        store: OpenCodeGoSubscriptionSettingsStore(),
+        providerDisplayName: "OpenCode Go (Subscription)"
+    )
     @StateObject private var providerSelectionViewModel = AIProviderSelectionViewModel()
     @StateObject private var localModelViewModel = LocalModelSettingsViewModel()
 
@@ -42,14 +50,16 @@ struct SettingsView: View {
                             Label(localized("settings.tabs.general"), systemImage: "gearshape")
                         }
 
-                    AISettingsTab(
-                        openRouterViewModel: openRouterViewModel,
-                        alibabaViewModel: alibabaViewModel,
-                        kiloCodeViewModel: kiloCodeViewModel,
-                        deepSeekViewModel: deepSeekViewModel,
-                        providerSelectionViewModel: providerSelectionViewModel,
-                        localModelViewModel: localModelViewModel
-                    )
+                        AISettingsTab(
+                            openRouterViewModel: openRouterViewModel,
+                            alibabaViewModel: alibabaViewModel,
+                            kiloCodeViewModel: kiloCodeViewModel,
+                            deepSeekViewModel: deepSeekViewModel,
+                            openCodeGoViewModel: openCodeGoViewModel,
+                            openCodeGoSubscriptionViewModel: openCodeGoSubscriptionViewModel,
+                            providerSelectionViewModel: providerSelectionViewModel,
+                            localModelViewModel: localModelViewModel
+                        )
                         .tabItem {
                             Label(localized("settings.tabs.ai"), systemImage: "sparkles")
                         }

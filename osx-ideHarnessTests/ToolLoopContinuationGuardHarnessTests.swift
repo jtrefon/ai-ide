@@ -58,6 +58,10 @@ final class ToolLoopContinuationGuardHarnessTests: XCTestCase {
             return "Fixed"
         }
 
+        func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
+            try await sendMessage(request)
+        }
+
         func capturedHistoryRequests() -> [AIServiceHistoryRequest] {
             lock.withLock { historyRequests }
         }

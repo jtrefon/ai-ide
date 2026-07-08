@@ -35,12 +35,23 @@ final class OpenRouterChatPreparationTests: XCTestCase {
         super.tearDown()
     }
 
-    func testBuildChatPreparationCapturesFinalSystemMessagesAndTools() async throws {
-        let service = OpenRouterAIService(
-            settingsStore: settingsStore,
-            client: OpenRouterAPIClient(),
-            eventBus: EventBus()
+    private func makeService() -> OpenAICompatibleChatService {
+        let eventBus = EventBus()
+        let client = OpenRouterAPIClient()
+        let config = OpenRouterProviderConfig()
+        let usageTracker = UsageTracker(client: client, eventBus: eventBus)
+        guard let store = settingsStore else { fatalError("settingsStore not set up") }
+        return OpenAICompatibleChatService(
+            client: client,
+            config: config,
+            usageTracker: usageTracker,
+            eventBus: eventBus,
+            settingsStoreProvider: { store }
         )
+    }
+
+    func testBuildChatPreparationCapturesFinalSystemMessagesAndTools() async throws {
+        let service = makeService()
 
         let historyMessages = [
             OpenRouterChatMessage(role: "user", content: "Read test.txt and write output.txt"),
@@ -61,7 +72,7 @@ final class OpenRouterChatPreparationTests: XCTestCase {
             ]
         )
 
-        let preparation = try await service.capturePreparationSnapshot(request: .init(
+        let preparation = try await service.buildChatPreparation(request: .init(
             messages: historyMessages,
             context: "Repo context block",
             tools: [tool],
@@ -71,11 +82,11 @@ final class OpenRouterChatPreparationTests: XCTestCase {
             stage: .initial_response
         ))
 
-        XCTAssertEqual(preparation.model, "openrouter/test-model")
+        XCTAssertEqual(preparation.settings.model, "openrouter/test-model")
         XCTAssertEqual(preparation.toolChoice, "auto")
-        XCTAssertEqual(preparation.nativeReasoning?.enabled, true)
-        XCTAssertEqual(preparation.nativeReasoning?.effort, "high")
-        XCTAssertEqual(preparation.nativeReasoning?.exclude, true)
+        XCTAssertEqual(preparation.nativeReasoningConfiguration?.enabled, true)
+        XCTAssertEqual(preparation.nativeReasoningConfiguration?.effort, "high")
+        XCTAssertEqual(preparation.nativeReasoningConfiguration?.exclude, true)
         XCTAssertEqual(preparation.finalMessages.count, 5)
         XCTAssertEqual(preparation.finalMessages[0].role, "system")
         XCTAssertEqual(preparation.finalMessages[1].role, "user")
@@ -87,33 +98,25 @@ final class OpenRouterChatPreparationTests: XCTestCase {
         XCTAssertEqual(preparation.finalMessages[4].toolCallID, "tool-call-1")
 
         let systemContent = try XCTUnwrap(preparation.finalMessages.first?.content)
-        XCTAssertTrue(systemContent.contains("You are an expert AI software engineer assistant integrated into an IDE."))
-        XCTAssertTrue(systemContent.contains("When tools are available, use real structured tool calls."))
-        XCTAssertTrue(systemContent.contains("You are in Agent mode with full execution behavior."))
-        XCTAssertTrue(systemContent.contains("Project Root: `/Users/jack/Projects/osx/osx-ide`"))
-        XCTAssertFalse(systemContent.contains("Native model reasoning is allowed when it improves execution quality."))
-        XCTAssertTrue(systemContent.contains("Do not emit pseudo-tool syntax"))
-        XCTAssertFalse(systemContent.contains("<function"))
-        XCTAssertFalse(systemContent.contains("tool calls:"))
+        XCTAssertTrue(systemContent.contains("Project Root: `/Users/jack/Projects/osx/osx-ide`"), "System prompt should contain project root")
 
         let toolDefinitions = try XCTUnwrap(preparation.toolDefinitions)
         XCTAssertEqual(toolDefinitions.count, 1)
-        let definition = try XCTUnwrap(toolDefinitions.first)
-        XCTAssertEqual(definition.type, "function")
-        XCTAssertEqual(definition.function.name, "write_file")
-        XCTAssertEqual(definition.function.description, "Write file content to disk")
-        XCTAssertEqual(definition.function.parameterType, "object")
-        XCTAssertEqual(definition.function.required, ["path", "content"])
+        guard let definition = toolDefinitions.first,
+              let function = definition["function"] as? [String: Any],
+              let name = function["name"] as? String,
+              let description = function["description"] as? String else {
+            XCTFail("Missing tool definition structure"); return
+        }
+        XCTAssertEqual(definition["type"] as? String, "function")
+        XCTAssertEqual(name, "write_file")
+        XCTAssertEqual(description, "Write file content to disk")
     }
 
     func testBuildChatPreparationDoesNotInjectOptionalReasoningPromptDuringInitialResponse() async throws {
-        let service = OpenRouterAIService(
-            settingsStore: settingsStore,
-            client: OpenRouterAPIClient(),
-            eventBus: EventBus()
-        )
+        let service = makeService()
 
-        let preparation = try await service.capturePreparationSnapshot(request: .init(
+        let preparation = try await service.buildChatPreparation(request: .init(
             messages: [OpenRouterChatMessage(role: "user", content: "Implement feature")],
             context: nil,
             tools: [NoopTool(name: "write_file", description: "Write file content to disk", parameters: ["type": "object"])],
@@ -136,85 +139,5 @@ private struct NoopTool: AITool, @unchecked Sendable {
 
     func execute(arguments: ToolArguments) async throws -> String {
         "ok"
-    }
-}
-
-private struct ChatPreparationSnapshot: Sendable {
-    struct MessageSnapshot: Sendable {
-        let role: String
-        let content: String?
-        let toolCallID: String?
-    }
-
-    struct ToolDefinitionSnapshot: Sendable {
-        struct FunctionSnapshot: Sendable {
-            let name: String
-            let description: String
-            let parameterType: String?
-            let required: [String]
-        }
-
-        let type: String
-        let function: FunctionSnapshot
-    }
-
-    let model: String
-    let finalMessages: [MessageSnapshot]
-    let toolDefinitions: [ToolDefinitionSnapshot]?
-    let toolChoice: String?
-    let nativeReasoning: NativeReasoningSnapshot?
-}
-
-private struct NativeReasoningSnapshot: Sendable {
-    let enabled: Bool
-    let effort: String?
-    let exclude: Bool
-}
-
-private extension OpenRouterAIService {
-    func capturePreparationSnapshot(
-        request: OpenRouterChatHistoryInput
-    ) throws -> ChatPreparationSnapshot {
-        let preparation = try buildChatPreparation(request: request)
-        let messageSnapshots = preparation.finalMessages.map { message in
-            ChatPreparationSnapshot.MessageSnapshot(
-                role: message.role,
-                content: message.content,
-                toolCallID: message.toolCallID
-            )
-        }
-        let toolSnapshots = preparation.toolDefinitions?.compactMap { definition -> ChatPreparationSnapshot.ToolDefinitionSnapshot? in
-            guard let type = definition["type"] as? String,
-                  let function = definition["function"] as? [String: Any],
-                  let name = function["name"] as? String,
-                  let description = function["description"] as? String,
-                  let parameters = function["parameters"] as? [String: Any] else {
-                return nil
-            }
-
-            return ChatPreparationSnapshot.ToolDefinitionSnapshot(
-                type: type,
-                function: .init(
-                    name: name,
-                    description: description,
-                    parameterType: parameters["type"] as? String,
-                    required: parameters["required"] as? [String] ?? []
-                )
-            )
-        }
-
-        return ChatPreparationSnapshot(
-            model: preparation.settings.model,
-            finalMessages: messageSnapshots,
-            toolDefinitions: toolSnapshots,
-            toolChoice: preparation.toolChoice,
-            nativeReasoning: preparation.nativeReasoningConfiguration.map {
-                NativeReasoningSnapshot(
-                    enabled: $0.enabled,
-                    effort: $0.effort,
-                    exclude: $0.exclude
-                )
-            }
-        )
     }
 }

@@ -1,29 +1,28 @@
-import Testing
+import XCTest
 import Foundation
-import AppKit
 @testable import osx_ide
 
 @MainActor
-struct SearchNavigationTests {
+final class SearchNavigationTests: XCTestCase {
 
-    @Test func testQuickOpenParseQuerySupportsLineSuffix() async throws {
+    func testQuickOpenParseQuerySupportsLineSuffix() async throws {
         let parsed1 = QuickOpenOverlayView.parseQuery("Sources/Foo.swift:12")
-        #expect(parsed1.fileQuery == "Sources/Foo.swift")
-        #expect(parsed1.line == 12)
+        XCTAssertEqual(parsed1.fileQuery, "Sources/Foo.swift")
+        XCTAssertEqual(parsed1.line, 12)
 
         let parsed2 = QuickOpenOverlayView.parseQuery("Foo.swift")
-        #expect(parsed2.fileQuery == "Foo.swift")
-        #expect(parsed2.line == nil)
+        XCTAssertEqual(parsed2.fileQuery, "Foo.swift")
+        XCTAssertNil(parsed2.line)
     }
 
-    @Test func testWorkspaceSearchParseIndexedMatchLine() async throws {
+    func testWorkspaceSearchParseIndexedMatchLine() async throws {
         let parsedMatch = WorkspaceSearchService.parseIndexedMatchLine("src/main.swift:42: print(\"hi\")")
-        #expect(parsedMatch?.relativePath == "src/main.swift")
-        #expect(parsedMatch?.line == 42)
-        #expect(parsedMatch?.snippet == "print(\"hi\")")
+        XCTAssertEqual(parsedMatch?.relativePath, "src/main.swift")
+        XCTAssertEqual(parsedMatch?.line, 42)
+        XCTAssertEqual(parsedMatch?.snippet, "print(\"hi\")")
     }
 
-    @Test func testWorkspaceSearchFallbackFindsMatches() async throws {
+    func testWorkspaceSearchFallbackFindsMatches() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_global_search_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -34,23 +33,23 @@ struct SearchNavigationTests {
         let svc = WorkspaceSearchService(codebaseIndexProvider: { nil })
         let results = await svc.search(pattern: "needle", projectRoot: tempRoot, limit: 20)
         let found = results.first(where: { $0.relativePath == "a.swift" })
-        #expect(found != nil)
-        #expect(found?.line == 3)
+        XCTAssertNotNil(found)
+        XCTAssertEqual(found?.line, 3)
     }
 
-    @Test func testCommandPaletteScoring() async throws {
+    func testCommandPaletteScoring() async throws {
         let exact = CommandPaletteScoring.score(candidate: "workbench.quickOpen", query: "workbench.quickOpen")
         let prefix = CommandPaletteScoring.score(candidate: "workbench.quickOpen", query: "work")
         let contains = CommandPaletteScoring.score(candidate: "workbench.quickOpen", query: "quick")
         let miss = CommandPaletteScoring.score(candidate: "workbench.quickOpen", query: "nope")
 
-        #expect(exact > prefix)
-        #expect(prefix > contains)
-        #expect(contains > 0)
-        #expect(miss == 0)
+        XCTAssertGreaterThan(exact, prefix)
+        XCTAssertGreaterThan(prefix, contains)
+        XCTAssertGreaterThan(contains, 0)
+        XCTAssertEqual(miss, 0)
     }
 
-    @Test func testGoToSymbolFallbackParsesSwift() async throws {
+    func testGoToSymbolFallbackParsesSwift() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_goto_symbol_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -80,56 +79,56 @@ struct SearchNavigationTests {
         )
 
         let foundFoo = results.first(where: { $0.name == "Foo" })
-        #expect(foundFoo != nil)
-        #expect(foundFoo?.relativePath == "a.swift")
+        XCTAssertNotNil(foundFoo)
+        XCTAssertEqual(foundFoo?.relativePath, "a.swift")
 
         let lines = content.components(separatedBy: "\n")
         let expectedLine = (lines.firstIndex(where: { $0.contains("class Foo") }) ?? 0) + 1
-        #expect(foundFoo?.line == expectedLine)
+        XCTAssertEqual(foundFoo?.line, expectedLine)
     }
 
-    @Test func testWorkspaceNavigationIdentifierAtCursor() async throws {
+    func testWorkspaceNavigationIdentifierAtCursor() async throws {
         let text = "let fooBar = 1\nprint(fooBar)\n"
         let ns = text as NSString
         let cursor = ns.range(of: "fooBar").location + 2
         let ident = WorkspaceNavigationService.identifierAtCursor(in: text, cursor: cursor)
-        #expect(ident == "fooBar")
+        XCTAssertEqual(ident, "fooBar")
 
         let cursorOnWhitespace = ns.range(of: "print").location - 1
         let none = WorkspaceNavigationService.identifierAtCursor(in: text, cursor: cursorOnWhitespace)
-        #expect(none == nil)
+        XCTAssertNil(none)
     }
 
-    @Test func testWorkspaceNavigationRenameInCurrentBufferWholeWord() async throws {
+    func testWorkspaceNavigationRenameInCurrentBufferWholeWord() async throws {
         let content = "let foo = 1\nlet foobar = 2\nfoo = foo + 1\n"
         let result = try WorkspaceNavigationService.renameInCurrentBuffer(content: content, identifier: "foo", newName: "bar")
-        #expect(result.replacements == 3)
-        #expect(result.updated.contains("let bar = 1"))
-        #expect(result.updated.contains("let foobar = 2"))
-        #expect(result.updated.contains("bar = bar + 1"))
+        XCTAssertEqual(result.replacements, 3)
+        XCTAssertTrue(result.updated.contains("let bar = 1"))
+        XCTAssertTrue(result.updated.contains("let foobar = 2"))
+        XCTAssertTrue(result.updated.contains("bar = bar + 1"))
     }
 
-    @Test func testWorkspaceNavigationRenameRejectsInvalidIdentifier() async throws {
+    func testWorkspaceNavigationRenameRejectsInvalidIdentifier() async throws {
         do {
             _ = try WorkspaceNavigationService.renameInCurrentBuffer(content: "let foo = 1", identifier: "foo", newName: "1bad")
-            #expect(false, "Expected rename to throw for invalid identifier")
+            XCTFail("Expected rename to throw for invalid identifier")
         } catch {
-            #expect(error.localizedDescription.lowercased().contains("invalid identifier"))
+            XCTAssertTrue(error.localizedDescription.lowercased().contains("invalid identifier"))
         }
     }
 
-    @Test func testDiagnosticsParserParsesXcodebuildErrorLine() async throws {
+    func testDiagnosticsParserParsesXcodebuildErrorLine() async throws {
         let line = "/Users/me/Project/Foo.swift:42:13: error: Cannot find 'Bar' in scope"
         let parsedDiagnostic = DiagnosticsParser.parseXcodebuildLine(line)
-        #expect(parsedDiagnostic != nil)
-        #expect(parsedDiagnostic?.relativePath == "/Users/me/Project/Foo.swift")
-        #expect(parsedDiagnostic?.line == 42)
-        #expect(parsedDiagnostic?.column == 13)
-        #expect(parsedDiagnostic?.severity == .error)
-        #expect(parsedDiagnostic?.message.contains("Cannot find") == true)
+        XCTAssertNotNil(parsedDiagnostic)
+        XCTAssertEqual(parsedDiagnostic?.relativePath, "/Users/me/Project/Foo.swift")
+        XCTAssertEqual(parsedDiagnostic?.line, 42)
+        XCTAssertEqual(parsedDiagnostic?.column, 13)
+        XCTAssertEqual(parsedDiagnostic?.severity, .error)
+        XCTAssertTrue(parsedDiagnostic?.message.contains("Cannot find") == true)
     }
 
-    @Test func testCodeFoldingRangeFinderFindsBraceFoldRangeAtCursor() async throws {
+    func testCodeFoldingRangeFinderFindsBraceFoldRangeAtCursor() async throws {
         let content = """
         func foo() {
             print(\"a\")
@@ -142,16 +141,16 @@ struct SearchNavigationTests {
         let ns = content as NSString
         let cursor = ns.range(of: "print(\"b\")").location
         let foldRange = CodeFoldingRangeFinder.foldRange(at: cursor, in: content)
-        #expect(foldRange != nil)
-        #expect(foldRange?.length ?? 0 > 0)
+        XCTAssertNotNil(foldRange)
+        XCTAssertGreaterThan(foldRange?.length ?? 0, 0)
 
         // The smallest containing fold should be the inner `if` block, not the outer function.
         let foldedText = ns.substring(with: foldRange!)
-        #expect(foldedText.contains("print(\"b\")"))
-        #expect(!foldedText.contains("print(\"a\")"))
+        XCTAssertTrue(foldedText.contains("print(\"b\")"))
+        XCTAssertFalse(foldedText.contains("print(\"a\")"))
     }
 
-    @Test func testCodeFoldingRangeFinderReturnsAllFoldRanges() async throws {
+    func testCodeFoldingRangeFinderReturnsAllFoldRanges() async throws {
         let content = """
         struct A {
             func foo() {
@@ -161,19 +160,19 @@ struct SearchNavigationTests {
         """
 
         let ranges = CodeFoldingRangeFinder.allFoldRanges(in: content)
-        #expect(ranges.count == 2)
+        XCTAssertEqual(ranges.count, 2)
     }
 
-    @Test func testMultiCursorUtilitiesNextOccurrence() async throws {
+    func testMultiCursorUtilitiesNextOccurrence() async throws {
         let text = "foo bar foo baz foo"
         let r1 = MultiCursorUtilities.nextOccurrenceRange(text: text, needle: "foo", fromIndex: 0)
-        #expect(r1?.location == 0)
+        XCTAssertEqual(r1?.location, 0)
 
         let r2 = MultiCursorUtilities.nextOccurrenceRange(text: text, needle: "foo", fromIndex: 1)
-        #expect(r2?.location == 8)
+        XCTAssertEqual(r2?.location, 8)
     }
 
-    @Test func testMultiCursorUtilitiesCaretMoveVertical() async throws {
+    func testMultiCursorUtilitiesCaretMoveVertical() async throws {
         let text = "abc\n012345\nxyz\n"
         // caret at column 2 of line 2 (0-based) => '2'
         let ns = text as NSString
@@ -181,14 +180,14 @@ struct SearchNavigationTests {
         let caret = line2Start + 2
 
         let up = MultiCursorUtilities.caretMovedVertically(text: text, caret: caret, direction: .up)
-        #expect(up == 2)
+        XCTAssertEqual(up, 2)
 
         let down = MultiCursorUtilities.caretMovedVertically(text: text, caret: caret, direction: .down)
         let line3Start = ns.range(of: "xyz").location
-        #expect(down == line3Start + 2)
+        XCTAssertEqual(down, line3Start + 2)
     }
 
-    @Test func testEditorAIContextBuilderPrefersSelection() async throws {
+    func testEditorAIContextBuilderPrefersSelection() async throws {
         let buffer = "let a = 1\nlet b = 2\n"
         let ns = buffer as NSString
         let selection = ns.range(of: "let b = 2")
@@ -199,24 +198,24 @@ struct SearchNavigationTests {
             selection: selection
         )
 
-        #expect(ctx.contains("File: /tmp/test.swift"))
-        #expect(ctx.contains("Language: swift"))
-        #expect(ctx.contains("Selected Code:"))
-        #expect(ctx.contains("let b = 2"))
-        #expect(!ctx.contains("Buffer:\n\n\(buffer)"))
+        XCTAssertTrue(ctx.contains("File: /tmp/test.swift"))
+        XCTAssertTrue(ctx.contains("Language: swift"))
+        XCTAssertTrue(ctx.contains("Selected Code:"))
+        XCTAssertTrue(ctx.contains("let b = 2"))
+        XCTAssertFalse(ctx.contains("Buffer:\n\n\(buffer)"))
     }
 
-    @Test func testCodeSelectionContext() async throws {
+    func testCodeSelectionContext() async throws {
         let context = CodeSelectionContext()
 
-        #expect(context.selectedText.isEmpty, "Selected text should be empty initially")
-        #expect(context.selectedRange == nil, "Selected range should be nil initially")
+        XCTAssertTrue(context.selectedText.isEmpty, "Selected text should be empty initially")
+        XCTAssertNil(context.selectedRange, "Selected range should be nil initially")
 
         context.selectedText = "test selection"
         context.selectedRange = NSRange(location: 0, length: 13)
 
-        #expect(context.selectedText == "test selection", "Selected text should be updated")
-        #expect(context.selectedRange?.location == 0, "Selected range location should be set")
-        #expect(context.selectedRange?.length == 13, "Selected range length should be set")
+        XCTAssertEqual(context.selectedText, "test selection", "Selected text should be updated")
+        XCTAssertEqual(context.selectedRange?.location, 0, "Selected range location should be set")
+        XCTAssertEqual(context.selectedRange?.length, 13, "Selected range length should be set")
     }
 }

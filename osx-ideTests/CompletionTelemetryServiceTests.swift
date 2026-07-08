@@ -5,24 +5,18 @@ final class CompletionTelemetryServiceTests: XCTestCase {
     func testTelemetryRequestsReducedWorkloadAfterSlowSuggestions() async {
         let telemetry = CompletionTelemetryService()
 
-        await telemetry.recordShown(
-            InlineSuggestionPresentation(
-                requestId: UUID(),
-                suggestionText: "value",
-                source: .local,
-                confidenceScore: 0.9,
-                latencyMs: 450
+        // Record 6 completions where 4 are slow (>=500ms) — triggers workload reduction
+        for latencyMs in [450.0, 510.0, 300.0, 550.0, 600.0, 520.0] {
+            await telemetry.recordShown(
+                InlineSuggestionPresentation(
+                    requestId: UUID(),
+                    suggestionText: "test",
+                    source: .local,
+                    confidenceScore: 0.8,
+                    latencyMs: latencyMs
+                )
             )
-        )
-        await telemetry.recordShown(
-            InlineSuggestionPresentation(
-                requestId: UUID(),
-                suggestionText: "otherValue",
-                source: .local,
-                confidenceScore: 0.8,
-                latencyMs: 510
-            )
-        )
+        }
 
         let shouldReduceWorkload = await telemetry.shouldReduceWorkload()
 

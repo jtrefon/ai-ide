@@ -58,9 +58,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     @Published private(set) var providerIssue: ConversationProviderIssueState?
     @Published private(set) var messages: [ChatMessage] = []
 
-    /// The new Phase 1 tooling stack. Set during initialization.
-    /// Used by Coder mode to route through CoderOrchestrator instead of ToolLoopHandler.
-    var toolingStack: ToolingStack?
+    /// Tooling stack (reserved for future use)
 
     // MARK: - Dependencies
 

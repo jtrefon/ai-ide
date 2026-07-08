@@ -1337,19 +1337,17 @@ actor LocalModelProcessAIService: AIService {
         let allVideos = budgetedMessages.flatMap { message in
             videoInputs(from: message.mediaAttachments)
         }
-        let userInput = UserInput(
-            messages: rawMessages, images: allImages, videos: allVideos,
-            tools: toolSpecs, additionalContext: additionalContext
-        )
-        
         // Wrap MLX inference with power management to prevent sleep during long generations
         let response: AIServiceResponse
         if let coordinator = activityCoordinator {
             response = try await coordinator.withActivity(type: .mlxInference) {
-                try await generator.generate(
+                try await self.generator.generate(
                     modelId: model.id,
                     modelDirectory: modelDirectory,
-                    userInput: userInput,
+                    userInput: UserInput(
+                        messages: rawMessages, images: allImages, videos: allVideos,
+                        tools: toolSpecs, additionalContext: additionalContext
+                    ),
                     tools: toolSpecs,
                     toolCallFormat: model.toolCallFormat,
                     runId: request.runId,
@@ -1361,7 +1359,10 @@ actor LocalModelProcessAIService: AIService {
             response = try await generator.generate(
                 modelId: model.id,
                 modelDirectory: modelDirectory,
-                userInput: userInput,
+                userInput: UserInput(
+                    messages: rawMessages, images: allImages, videos: allVideos,
+                    tools: toolSpecs, additionalContext: additionalContext
+                ),
                 tools: toolSpecs,
                 toolCallFormat: model.toolCallFormat,
                 runId: request.runId,
@@ -1391,6 +1392,10 @@ actor LocalModelProcessAIService: AIService {
         }
         
         return response
+    }
+
+    func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
+        try await sendMessage(request)
     }
 
     func preloadSelectedModelIfNeeded() async {

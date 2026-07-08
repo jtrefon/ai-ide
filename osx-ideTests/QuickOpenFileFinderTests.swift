@@ -1,11 +1,11 @@
-import Testing
+import XCTest
 import Foundation
 @testable import osx_ide
 
 @MainActor
-struct QuickOpenFileFinderTests {
+final class QuickOpenFileFinderTests: XCTestCase {
 
-    @Test func testFindFilesRanksExactNameFirst() async throws {
+    func testFindFilesRanksExactNameFirst() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -21,10 +21,10 @@ struct QuickOpenFileFinderTests {
         let finder = QuickOpenFileFinder()
         let results = finder.findFiles(query: "README.md", root: root, limit: 10)
 
-        #expect(results.first == "README.md")
+        XCTAssertEqual(results.first, "README.md")
     }
 
-    @Test func testFindFilesSkipsNodeModulesAndGit() async throws {
+    func testFindFilesSkipsNodeModulesAndGit() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -42,6 +42,6 @@ struct QuickOpenFileFinderTests {
         let finder = QuickOpenFileFinder()
         let results = finder.findFiles(query: "needle", root: root, limit: 10)
 
-        #expect(results == ["needle.txt"])
+        XCTAssertEqual(results, ["needle.txt"])
     }
 }

@@ -170,15 +170,15 @@ private actor TestAIService: AIService {
     }
 
     func sendMessage(_ request: AIServiceMessageWithProjectRootRequest) async throws -> AIServiceResponse {
-        fatalError("unused")
+        AIServiceResponse(content: result, toolCalls: nil)
     }
 
     func sendMessage(_ request: AIServiceHistoryRequest) async throws -> AIServiceResponse {
-        fatalError("unused")
+        AIServiceResponse(content: result, toolCalls: nil)
     }
 
     func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
-        fatalError("unused")
+        AIServiceResponse(content: result, toolCalls: nil)
     }
 
     func explainCode(_ code: String) async throws -> String {

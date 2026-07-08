@@ -12,6 +12,8 @@ struct AISettingsTab: View {
     @ObservedObject var alibabaViewModel: OpenRouterSettingsViewModel
     @ObservedObject var kiloCodeViewModel: OpenRouterSettingsViewModel
     @ObservedObject var deepSeekViewModel: OpenRouterSettingsViewModel
+    @ObservedObject var openCodeGoViewModel: OpenRouterSettingsViewModel
+    @ObservedObject var openCodeGoSubscriptionViewModel: OpenRouterSettingsViewModel
     @ObservedObject var providerSelectionViewModel: AIProviderSelectionViewModel
     @ObservedObject var localModelViewModel: LocalModelSettingsViewModel
     @State private var showAdvanced = false
@@ -26,6 +28,10 @@ struct AISettingsTab: View {
             return kiloCodeViewModel
         case .deepSeek:
             return deepSeekViewModel
+        case .openCodeGo:
+            return openCodeGoViewModel
+        case .openCodeGoSubscription:
+            return openCodeGoSubscriptionViewModel
         }
     }
 
@@ -34,7 +40,9 @@ struct AISettingsTab: View {
             openRouterViewModel,
             alibabaViewModel,
             kiloCodeViewModel,
-            deepSeekViewModel
+            deepSeekViewModel,
+            openCodeGoViewModel,
+            openCodeGoSubscriptionViewModel
         ]
     }
 
@@ -55,6 +63,8 @@ struct AISettingsTab: View {
             return "Choose how much reasoning Kilo Code uses: none, model-only, agent-only, or both."
         case .deepSeek:
             return "DeepSeek supports native reasoning. Toggle to enable thinking mode."
+        case .openCodeGo, .openCodeGoSubscription:
+            return "OpenCode Go supports native reasoning on compatible models."
         case .openRouter, .alibabaCloud:
             return localized("settings.ai.reasoning_card.subtitle")
         }
@@ -66,6 +76,8 @@ struct AISettingsTab: View {
             return "None disables thinking, Model uses internal-only thinking, Agent uses app-side reasoning, and Model + Agent enables both."
         case .deepSeek:
             return "Enable native reasoning for DeepSeek-R1 style chain-of-thought."
+        case .openCodeGo, .openCodeGoSubscription:
+            return "Enable native reasoning for compatible OpenCode Go models (DeepSeek, Qwen, etc.)."
         case .openRouter, .alibabaCloud:
             return localized("settings.ai.reasoning.subtitle")
         }

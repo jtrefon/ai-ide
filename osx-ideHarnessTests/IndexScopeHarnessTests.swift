@@ -14,10 +14,9 @@ final class IndexScopeHarnessTests: XCTestCase {
             return AIServiceResponse(content: nil, toolCalls: nil)
         }
 
-        func explainCode(_ code: String) async throws -> String { _ = code; return "" }
-        func refactorCode(_ code: String, instructions: String) async throws -> String { _ = code; _ = instructions; return "" }
-        func generateCode(_ prompt: String) async throws -> String { _ = prompt; return "" }
-        func fixCode(_ code: String, error: String) async throws -> String { _ = code; _ = error; return "" }
+        func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
+            try await sendMessage(request)
+        }
     }
 
     func testIndexIgnoresOutOfProjectFileEvents() async throws {

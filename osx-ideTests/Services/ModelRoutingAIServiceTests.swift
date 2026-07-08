@@ -30,34 +30,13 @@ final class ModelRoutingAIServiceTests: XCTestCase {
             lastHistoryRequest = request
             return streamingResponse
         }
-
-        func explainCode(_ code: String) async throws -> String {
-            _ = code
-            return ""
-        }
-
-        func refactorCode(_ code: String, instructions: String) async throws -> String {
-            _ = code
-            _ = instructions
-            return ""
-        }
-
-        func generateCode(_ prompt: String) async throws -> String {
-            _ = prompt
-            return ""
-        }
-
-        func fixCode(_ code: String, error: String) async throws -> String {
-            _ = code
-            _ = error
-            return ""
-        }
     }
 
     private var defaultsSuiteName: String!
     private var settingsStore: SettingsStore!
     private var selectionStore: LocalModelSelectionStore!
     private var providerSelectionStore: AIProviderSelectionStore!
+    private var registry: AIServiceRegistry!
 
     override func setUp() {
         super.setUp()
@@ -67,12 +46,17 @@ final class ModelRoutingAIServiceTests: XCTestCase {
         settingsStore = SettingsStore(userDefaults: defaults)
         selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
         providerSelectionStore = AIProviderSelectionStore(settingsStore: settingsStore)
+        registry = AIServiceRegistry(
+            providerSelectionStore: providerSelectionStore,
+            localSelectionStore: selectionStore
+        )
     }
 
     override func tearDown() {
         if let defaultsSuiteName {
             UserDefaults(suiteName: defaultsSuiteName)?.removePersistentDomain(forName: defaultsSuiteName)
         }
+        registry = nil
         selectionStore = nil
         providerSelectionStore = nil
         settingsStore = nil
@@ -82,22 +66,13 @@ final class ModelRoutingAIServiceTests: XCTestCase {
 
     func testOfflineAgentHistoryRequestRoutesToLocalService() async throws {
         let openRouterService = SpyAIService()
-        let alibabaService = SpyAIService()
-        let kiloCodeService = SpyAIService()
-        let deepSeekService = SpyAIService()
         let localService = SpyAIService()
+        registry.register(provider: .openRouter, service: openRouterService)
+        registry.register(provider: .local, service: localService)
         await selectionStore.setOfflineModeEnabled(true)
         await providerSelectionStore.setSelectedRemoteProvider(.openRouter)
 
-        let service = ModelRoutingAIService(
-            openRouterService: openRouterService,
-            alibabaService: alibabaService,
-            kiloCodeService: kiloCodeService,
-            deepSeekService: deepSeekService,
-            localService: localService,
-            selectionStore: selectionStore,
-            providerSelectionStore: providerSelectionStore
-        )
+        let service = ModelRoutingAIService(registry: registry)
 
         let response = try await service.sendMessage(AIServiceHistoryRequest(
             messages: [ChatMessage(role: .user, content: "Create file")],
@@ -120,23 +95,14 @@ final class ModelRoutingAIServiceTests: XCTestCase {
 
     func testOfflineAgentStreamingRequestRoutesToLocalService() async throws {
         let openRouterService = SpyAIService()
-        let alibabaService = SpyAIService()
-        let kiloCodeService = SpyAIService()
-        let deepSeekService = SpyAIService()
         let localService = SpyAIService()
         localService.streamingResponse = AIServiceResponse(content: "local-stream", toolCalls: nil)
+        registry.register(provider: .openRouter, service: openRouterService)
+        registry.register(provider: .local, service: localService)
         await selectionStore.setOfflineModeEnabled(true)
         await providerSelectionStore.setSelectedRemoteProvider(.openRouter)
 
-        let service = ModelRoutingAIService(
-            openRouterService: openRouterService,
-            alibabaService: alibabaService,
-            kiloCodeService: kiloCodeService,
-            deepSeekService: deepSeekService,
-            localService: localService,
-            selectionStore: selectionStore,
-            providerSelectionStore: providerSelectionStore
-        )
+        let service = ModelRoutingAIService(registry: registry)
 
         let response = try await service.sendMessageStreaming(AIServiceHistoryRequest(
             messages: [ChatMessage(role: .user, content: "Do work")],
@@ -155,24 +121,15 @@ final class ModelRoutingAIServiceTests: XCTestCase {
         XCTAssertEqual(localService.lastHistoryRequest?.mode, .agent)
     }
 
-    func testOnlineAgentHistoryRequestStillRoutesToOpenRouter() async throws {
+    func testOnlineAgentHistoryRequestRoutesToOpenRouter() async throws {
         let openRouterService = SpyAIService()
-        let alibabaService = SpyAIService()
-        let kiloCodeService = SpyAIService()
-        let deepSeekService = SpyAIService()
         let localService = SpyAIService()
+        registry.register(provider: .openRouter, service: openRouterService)
+        registry.register(provider: .local, service: localService)
         await selectionStore.setOfflineModeEnabled(false)
         await providerSelectionStore.setSelectedRemoteProvider(.openRouter)
 
-        let service = ModelRoutingAIService(
-            openRouterService: openRouterService,
-            alibabaService: alibabaService,
-            kiloCodeService: kiloCodeService,
-            deepSeekService: deepSeekService,
-            localService: localService,
-            selectionStore: selectionStore,
-            providerSelectionStore: providerSelectionStore
-        )
+        let service = ModelRoutingAIService(registry: registry)
 
         let response = try await service.sendMessage(AIServiceHistoryRequest(
             messages: [ChatMessage(role: .user, content: "Create file")],
@@ -191,21 +148,14 @@ final class ModelRoutingAIServiceTests: XCTestCase {
     func testOnlineAgentHistoryRequestRoutesToAlibabaWhenSelected() async throws {
         let openRouterService = SpyAIService()
         let alibabaService = SpyAIService()
-        let kiloCodeService = SpyAIService()
-        let deepSeekService = SpyAIService()
         let localService = SpyAIService()
+        registry.register(provider: .openRouter, service: openRouterService)
+        registry.register(provider: .alibabaCloud, service: alibabaService)
+        registry.register(provider: .local, service: localService)
         await selectionStore.setOfflineModeEnabled(false)
         await providerSelectionStore.setSelectedRemoteProvider(.alibabaCloud)
 
-        let service = ModelRoutingAIService(
-            openRouterService: openRouterService,
-            alibabaService: alibabaService,
-            kiloCodeService: kiloCodeService,
-            deepSeekService: deepSeekService,
-            localService: localService,
-            selectionStore: selectionStore,
-            providerSelectionStore: providerSelectionStore
-        )
+        let service = ModelRoutingAIService(registry: registry)
 
         let response = try await service.sendMessage(AIServiceHistoryRequest(
             messages: [ChatMessage(role: .user, content: "Create file")],

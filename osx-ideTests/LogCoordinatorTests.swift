@@ -1,22 +1,24 @@
-import Testing
+import XCTest
 import Foundation
 @testable import osx_ide
 
-final class LogCoordinatorWritesTests {
-    let tempDir: URL
+final class LogCoordinatorWritesTests: XCTestCase {
+    var tempDir: URL!
 
-    init() {
+    override func setUp() {
+        super.setUp()
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("log-coordinator-tests-\(UUID().uuidString)")
         try! FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     }
 
-    deinit {
+    override func tearDown() {
         try? FileManager.default.removeItem(at: tempDir)
+        tempDir = nil
+        super.tearDown()
     }
 
-    @Test("writeContextLog creates conversation.ndjson with correct content")
-    func writeContextLog() async throws {
+    func testWriteContextLog() async throws {
         let event = ContextLogEvent(
             conversationId: "test-conv",
             source: "chat.user_message",
@@ -31,15 +33,14 @@ final class LogCoordinatorWritesTests {
             .appendingPathComponent("conversations")
             .appendingPathComponent("test-conv")
             .appendingPathComponent("conversation.ndjson")
-        #expect(FileManager.default.fileExists(atPath: fileURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
 
         let content = try String(contentsOf: fileURL, encoding: .utf8)
-        #expect(content.contains("chat.user_message"))
-        #expect(content.contains("Hello from test"))
+        XCTAssertTrue(content.contains("chat.user_message"))
+        XCTAssertTrue(content.contains("Hello from test"))
     }
 
-    @Test("writeToolResult creates executions.ndjson and conversation.ndjson")
-    func writeToolResult() async throws {
+    func testWriteToolResult() async throws {
         let event = ToolResultEvent(
             conversationId: "test-conv-2",
             toolCallId: "call-1",
@@ -59,18 +60,17 @@ final class LogCoordinatorWritesTests {
             .appendingPathComponent("test-conv-2")
 
         let execFile = convDir.appendingPathComponent("executions.ndjson")
-        #expect(FileManager.default.fileExists(atPath: execFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: execFile.path))
         let execContent = try String(contentsOf: execFile, encoding: .utf8)
-        #expect(execContent.contains("execute_success"))
+        XCTAssertTrue(execContent.contains("execute_success"))
 
         let convFile = convDir.appendingPathComponent("conversation.ndjson")
-        #expect(FileManager.default.fileExists(atPath: convFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: convFile.path))
         let convContent = try String(contentsOf: convFile, encoding: .utf8)
-        #expect(convContent.contains("tool.execute_success"))
+        XCTAssertTrue(convContent.contains("tool.execute_success"))
     }
 
-    @Test("ContextLogEvent and ToolResultEvent conform to Event")
-    func eventConformance() {
+    func testEventConformance() {
         let bus = EventBus()
         let ctx = ContextLogEvent(conversationId: "id", source: "x", content: "x")
         bus.publish(ctx)

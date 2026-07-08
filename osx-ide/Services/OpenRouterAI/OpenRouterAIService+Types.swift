@@ -50,7 +50,7 @@ extension OpenRouterAIService {
         let stage: AIRequestStage?
     }
 
-    struct SettingsSnapshot {
+    struct SettingsSnapshot: Sendable {
         let apiKey: String
         let model: String
         let systemPrompt: String
@@ -59,7 +59,7 @@ extension OpenRouterAIService {
         let toolPromptMode: ToolPromptMode
     }
 
-    struct ChatPreparation {
+    struct ChatPreparation: @unchecked Sendable {
         let requestId: String
         let settings: SettingsSnapshot
         let finalMessages: [OpenRouterChatMessage]

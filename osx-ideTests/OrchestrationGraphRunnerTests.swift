@@ -657,6 +657,10 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
             _ = error
             return "ok"
         }
+
+        func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
+            try await sendMessage(request)
+        }
     }
 
     private final class MockEventBus: EventBusProtocol {

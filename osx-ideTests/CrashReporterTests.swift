@@ -1,11 +1,11 @@
-import Testing
+import XCTest
 import Foundation
 @testable import osx_ide
 
 @MainActor
-struct CrashReporterTests {
+final class CrashReporterTests: XCTestCase {
 
-    @Test func testCrashReporterWritesProjectCrashLog() async throws {
+    func testCrashReporterWritesProjectCrashLog() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("osx-ide-crash-reporter-tests", isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -32,9 +32,9 @@ struct CrashReporterTests {
         let data = try Data(contentsOf: crashLogURL)
         let content = String(decoding: data, as: UTF8.self)
 
-        #expect(content.contains("crash.ndjson") == false, "Expected log to contain JSON events, not paths")
-        #expect(content.contains("CrashReporterTests.testCrashReporterWritesProjectCrashLog"), "Expected operation to be present")
-        #expect(content.contains("boom"), "Expected error description to be present")
-        #expect(content.contains("\"key\""), "Expected metadata keys to be present")
+        XCTAssertFalse(content.contains("crash.ndjson"), "Expected log to contain JSON events, not paths")
+        XCTAssertTrue(content.contains("CrashReporterTests.testCrashReporterWritesProjectCrashLog"), "Expected operation to be present")
+        XCTAssertTrue(content.contains("boom"), "Expected error description to be present")
+        XCTAssertTrue(content.contains("\"key\""), "Expected metadata keys to be present")
     }
 }

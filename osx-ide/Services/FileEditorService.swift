@@ -52,7 +52,7 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
         case .success(let content):
             self.selectedFile = url.path
             self.editorContent = content
-            self.editorLanguage = Self.languageForFileExtension(url.pathExtension)
+            self.editorLanguage = DefaultEditorLanguageDetector().languageForFileExtension(url.pathExtension)
             self.isDirty = false
             eventBus.publish(FileOpenedEvent(url: url, languageIdentifier: editorLanguage, content: content))
         case .failure(let error):
@@ -80,7 +80,7 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
         switch fileSystemService.writeFileResult(content: editorContent, to: url) {
         case .success:
             selectedFile = url.path
-            editorLanguage = Self.languageForFileExtension(url.pathExtension)
+            editorLanguage = DefaultEditorLanguageDetector().languageForFileExtension(url.pathExtension)
             isDirty = false
             if let oldPath, oldPath != url.path {
                 eventBus.publish(FileRenamedEvent(oldUrl: URL(fileURLWithPath: oldPath), newUrl: url))
@@ -98,11 +98,6 @@ class FileEditorService: ObservableObject, FileEditorServiceProtocol {
         selectedFile = nil
         editorContent = ""
         isDirty = false
-    }
-
-    /// Get language identifier for file extension
-    static func languageForFileExtension(_ extension: String) -> String {
-        DefaultEditorLanguageDetector().languageForFileExtension(`extension`)
     }
 
     /// Check if file can be saved

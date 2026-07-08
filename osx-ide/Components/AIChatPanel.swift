@@ -7,6 +7,8 @@ private func settingsStore(for provider: RemoteAIProvider) -> ProviderOpenRouter
     case .alibabaCloud: return AlibabaSettingsStore()
     case .kiloCode: return KiloCodeSettingsStore()
     case .deepSeek: return DeepSeekSettingsStore()
+    case .openCodeGo: return OpenCodeGoSettingsStore()
+    case .openCodeGoSubscription: return OpenCodeGoSubscriptionSettingsStore()
     }
 }
 
@@ -81,75 +83,76 @@ struct AIChatPanel: View {
         VStack(alignment: .leading, spacing: 0) {
             // Tabs header
             HStack(spacing: 6) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 2) {
-                        ForEach(displayedTabs) { tab in
-                            let isActive = tab.id == conversationManager.currentConversationId
-                            let isHovered = hoveredTabId == tab.id
-                            ZStack(alignment: .leading) {
-                                Button {
-                                    conversationManager.switchConversation(to: tab.id)
-                                } label: {
-                                    HStack(spacing: 5) {
-                                        if displayedTabs.count > 1 {
-                                            Color.clear.frame(width: 20)
-                                        }
-                                        Image(systemName: "bubble.left.and.text")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .frame(width: 14, height: 14)
-                                        Text(tab.title)
-                                            .lineLimit(1)
-                                            .font(.system(size: 11))
-                                            .foregroundColor(isActive ? .primary : .secondary)
-                                        Spacer(minLength: 0)
-                                    }
-                                    .padding(.leading, 4)
-                                    .padding(.trailing, 10)
-                                    .padding(.vertical, 5)
-                                }
-                                .buttonStyle(.plain)
+                HStack(spacing: 8) {
+                    ForEach(displayedTabs) { tab in
+                        let isActive = tab.id == conversationManager.currentConversationId
+                        let isHovered = hoveredTabId == tab.id
+                        Button {
+                            conversationManager.switchConversation(to: tab.id)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Spacer(minLength: 4)
 
-                                if displayedTabs.count > 1 {
-                                    Button {
-                                        conversationManager.closeConversation(id: tab.id)
-                                    } label: {
-                                        Image(systemName: "xmark")
-                                            .font(.caption2.weight(.semibold))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .opacity(isHovered ? 1 : 0)
-                                    .frame(width: 16, height: 16)
-                                    .padding(.leading, 4)
-                                    .help("Close conversation")
-                                }
+                                Image(systemName: "bubble.left.and.text")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 14, height: 14)
+
+                                Text(tab.title)
+                                    .lineLimit(1)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(isActive ? .primary : .secondary)
+
+                                Spacer(minLength: 4)
                             }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
                             .background {
                                 if isActive {
                                     Capsule()
                                         .glassEffect(.regular, in: Capsule())
                                 } else {
                                     Capsule()
-                                        .fill(.thickMaterial)
+                                        .fill(isHovered
+                                            ? Color(nsColor: .windowBackgroundColor).opacity(0.5)
+                                            : Color(nsColor: .windowBackgroundColor).opacity(0.35))
                                         .overlay(
                                             Capsule()
-                                                .stroke(.separator.opacity(isHovered ? 0.3 : 0.12), lineWidth: 0.5)
+                                                .stroke(Color(nsColor: .separatorColor).opacity(isHovered ? 0.3 : 0.15), lineWidth: 1)
                                         )
                                 }
                             }
-                            .onHover { hovering in
-                                if hovering { hoveredTabId = tab.id }
-                                else if hoveredTabId == tab.id { hoveredTabId = nil }
-                            }
-                            .animation(.easeInOut(duration: 0.15), value: isHovered)
-                            .animation(.easeInOut(duration: 0.15), value: isActive)
-                            .accessibilityIdentifier("ConversationTab_\(tab.id)")
                         }
+                        .buttonStyle(.plain)
+                        .frame(minWidth: 80)
+                        .frame(maxWidth: .infinity)
+                        .overlay(alignment: .leading) {
+                            if displayedTabs.count > 1 {
+                                Button {
+                                    conversationManager.closeConversation(id: tab.id)
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .opacity(isHovered ? 1 : 0)
+                                .frame(width: 24, height: 24)
+                                .padding(.leading, 4)
+                                .help("Close conversation")
+                            }
+                        }
+                        .onHover { hovering in
+                            if hovering { hoveredTabId = tab.id }
+                            else if hoveredTabId == tab.id { hoveredTabId = nil }
+                        }
+                        .animation(.easeInOut(duration: 0.15), value: isHovered)
+                        .animation(.easeInOut(duration: 0.15), value: isActive)
+                        .accessibilityIdentifier("ConversationTab_\(tab.id)")
                     }
-                    .padding(.leading, 4)
-                    .padding(.vertical, 2)
                 }
+                .padding(.leading, 4)
+                .padding(.vertical, 2)
 
                 Button(action: {
                     conversationManager.startNewConversation()

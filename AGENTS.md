@@ -72,6 +72,41 @@ ContextLogEvent / ToolResultEvent → EventBus
 - Online harnesses (`AgenticHarnessTests` etc.) require `OSX_IDE_RUN_ONLINE_HARNESS=1` and **must not run in parallel** (provider rate limits).
 - Test config env vars: `ALLOW_EXTERNAL_APIS`, `USE_MOCK_SERVICES`, `SWIFT_ENABLE_EXPLICIT_MODULES`.
 
+## Pill Tab Implementation (DO NOT ALTER)
+
+`EditorTabBar.swift` and the tab section of `AIChatPanel.swift` use a hard-won architecture that took many iterations to get right on macOS 26. Changes to this pattern WILL break tab functionality.
+
+### The working pattern (mandatory):
+
+```
+Button(onActivate)                          ← single button, fills entire pill
+  HStack
+    Spacer(minLength: 4)                    ← pushes content to center
+    FileTabIcon / Image                     ← file type icon (left of label)
+    Text                                    ← tab name
+    if isDirty { Circle() }                 ← dirty indicator
+    Spacer(minLength: 4)                    ← pushes content to center
+  .padding(.horizontal, 10)
+  .padding(.vertical, 6)
+  .background { Capsule()... }             ← entire pill is clickable via Button
+.buttonStyle(.plain)
+.frame(minWidth: 80)
+.frame(maxWidth: .infinity)                ← fills bar width equally
+.overlay(alignment: .leading) {            ← close button on top of pill
+  Button(onClose) { Image("xmark") }
+}
+.overlay(MiddleClickView...)               ← middle-click close (AppKit hitTest override)
+```
+
+### Rules:
+1. **Single `Button` wrapping the entire pill** — the Button's hit area is the entire pill. Do NOT use sibling Buttons, ZStack with Buttons, or onTapGesture.
+2. **Close button as `.overlay(alignment: .leading)`** — sits on top, intercepts taps in its zone. Never nest it inside the main Button.
+3. **`Spacer` on both sides** — centers the content. A single trailing Spacer left-aligns.
+4. **No `ScrollView`** — prevents gesture interference. Use plain `HStack` + `.frame(maxWidth: .infinity)` for equal width distribution.
+5. **No `GeometryReader`** — can interfere with child gesture recognizers.
+6. **Inactive tabs** use `Color(nsColor: .windowBackgroundColor).opacity(0.35)` with hover at `0.5`. Active tabs use `.glassEffect(.regular, in: Capsule())`.
+7. **Hover** handled via `.onHover` on the tab + conditional in background fill/stroke.
+
 ## Gotchas
 
 - **LSP false positives**: sourcekit-lsp frequently reports "Cannot find type 'X' in scope" for cross-module types. The actual build (`./run.sh build`) is the source of truth.

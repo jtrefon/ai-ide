@@ -1,11 +1,11 @@
-import Testing
+import XCTest
 import Foundation
 @testable import osx_ide
 
 @MainActor
-struct WorkspaceFallbackSearcherTests {
+final class WorkspaceFallbackSearcherTests: XCTestCase {
 
-    @Test func testSearchSkipsNodeModulesAndGitAndIdeDirectories() async throws {
+    func testSearchSkipsNodeModulesAndGitAndIdeDirectories() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -49,11 +49,11 @@ struct WorkspaceFallbackSearcherTests {
         let searcher = WorkspaceFallbackSearcher()
         let results = await searcher.search(pattern: "needle", projectRoot: root, limit: 50)
 
-        #expect(results.count == 1)
-        #expect(results.first?.relativePath == "src.swift")
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results.first?.relativePath, "src.swift")
     }
 
-    @Test func testSearchTrimsAndCapsSnippet() async throws {
+    func testSearchTrimsAndCapsSnippet() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -66,13 +66,13 @@ struct WorkspaceFallbackSearcherTests {
         let searcher = WorkspaceFallbackSearcher()
         let results = await searcher.search(pattern: "needle", projectRoot: root, limit: 10)
 
-        #expect(results.count == 1)
-        #expect(results[0].line == 1)
-        #expect(results[0].snippet.hasPrefix("needle"))
-        #expect(results[0].snippet.count <= 241)
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].line, 1)
+        XCTAssertTrue(results[0].snippet.hasPrefix("needle"))
+        XCTAssertLessThanOrEqual(results[0].snippet.count, 241)
     }
 
-    @Test func testSearchRespectsAllowedExtensions() async throws {
+    func testSearchRespectsAllowedExtensions() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -84,6 +84,6 @@ struct WorkspaceFallbackSearcherTests {
         let searcher = WorkspaceFallbackSearcher(allowedExtensions: ["swift"])
         let results = await searcher.search(pattern: "needle", projectRoot: root, limit: 10)
 
-        #expect(results.map(\.relativePath) == ["a.swift"])
+        XCTAssertEqual(results.map(\.relativePath), ["a.swift"])
     }
 }

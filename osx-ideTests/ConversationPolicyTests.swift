@@ -51,11 +51,16 @@ final class ConversationPolicyTests: XCTestCase {
 
     // MARK: - Chat mode
 
-    func testChatModeReturnsNoToolsRegardlessOfStage() {
+    func testChatModeReturnsReadOnlyToolsRegardlessOfStage() {
         let stages: [AIRequestStage?] = [nil, .initial_response, .tool_loop, .final_response, .qa_tool_output_review, .qa_quality_review]
+        let mutationTools: Set<String> = ["write_file", "replace_in_file", "run_command", "write_files", "create_file", "delete_file", "patch_file"]
         for stage in stages {
             let result = policy.allowedTools(for: stage, mode: .chat, from: allTools)
-            XCTAssertTrue(result.isEmpty, "Chat mode should return no tools for stage=\(String(describing: stage))")
+            XCTAssertFalse(result.isEmpty, "Chat mode should return read-only tools for stage=\(String(describing: stage))")
+            // Chat mode excludes mutation tools
+            for tool in result {
+                XCTAssertFalse(mutationTools.contains(tool.name), "Chat mode should not include mutation tool: \(tool.name)")
+            }
         }
     }
 

@@ -14,6 +14,8 @@ struct AIServiceBundle {
     let alibabaService: OpenRouterAIService
     let kiloCodeService: OpenRouterAIService
     let deepSeekService: OpenRouterAIService
+    let openCodeGoService: OpenRouterAIService
+    let openCodeGoSubscriptionService: OpenRouterAIService
     let localModelService: LocalModelProcessAIService
     let selectionStore: LocalModelSelectionStore
     let providerSelectionStore: AIProviderSelectionStore
@@ -56,9 +58,23 @@ enum AIServicesFactory {
             eventBus: eventBus,
             providerName: "DeepSeek",
             supportsStreamingWithTools: true,
-            // DeepSeek thinking mode is model-dependent (deepseek-reasoner vs deepseek-chat),
-            // not controlled by a reasoning parameter. The API ignores or errors on it.
             supportsNativeReasoning: false,
+            testConfigurationProvider: TestConfigurationProvider.shared
+        )
+        let openCodeGoService = OpenRouterAIService(
+            settingsStore: OpenCodeGoSettingsStore(settingsStore: settingsStore),
+            eventBus: eventBus,
+            providerName: "OpenCode Go",
+            supportsStreamingWithTools: true,
+            supportsNativeReasoning: true,
+            testConfigurationProvider: TestConfigurationProvider.shared
+        )
+        let openCodeGoSubscriptionService = OpenRouterAIService(
+            settingsStore: OpenCodeGoSubscriptionSettingsStore(settingsStore: settingsStore),
+            eventBus: eventBus,
+            providerName: "OpenCode Go (Subscription)",
+            supportsStreamingWithTools: true,
+            supportsNativeReasoning: true,
             testConfigurationProvider: TestConfigurationProvider.shared
         )
         let selectionStore = LocalModelSelectionStore(settingsStore: settingsStore)
@@ -74,20 +90,25 @@ enum AIServicesFactory {
             activityCoordinator: activityCoordinator,
             launchContext: launchContext
         )
-        let router = ModelRoutingAIService(
-            openRouterService: openRouterService,
-            alibabaService: alibabaService,
-            kiloCodeService: kiloCodeService,
-            deepSeekService: deepSeekService,
-            localService: localModelService,
-            selectionStore: selectionStore,
-            providerSelectionStore: providerSelectionStore
+        let registry = AIServiceRegistry(
+            providerSelectionStore: providerSelectionStore,
+            localSelectionStore: selectionStore
         )
+        registry.register(provider: .openRouter, service: openRouterService)
+        registry.register(provider: .alibabaCloud, service: alibabaService)
+        registry.register(provider: .kiloCode, service: kiloCodeService)
+        registry.register(provider: .deepSeek, service: deepSeekService)
+        registry.register(provider: .openCodeGo, service: openCodeGoService)
+        registry.register(provider: .openCodeGoSubscription, service: openCodeGoSubscriptionService)
+        registry.register(provider: .local, service: localModelService)
+        let router = ModelRoutingAIService(registry: registry)
         return AIServiceBundle(
             openRouterService: openRouterService,
             alibabaService: alibabaService,
             kiloCodeService: kiloCodeService,
             deepSeekService: deepSeekService,
+            openCodeGoService: openCodeGoService,
+            openCodeGoSubscriptionService: openCodeGoSubscriptionService,
             localModelService: localModelService,
             selectionStore: selectionStore,
             providerSelectionStore: providerSelectionStore,
@@ -121,6 +142,10 @@ enum AIServicesFactory {
                             return aiServices.kiloCodeService
                         case .deepSeek:
                             return aiServices.deepSeekService
+                        case .openCodeGo:
+                            return aiServices.openCodeGoService
+                        case .openCodeGoSubscription:
+                            return aiServices.openCodeGoSubscriptionService
                         }
                     },
                     localServiceProvider: { aiServices.localModelService },
@@ -150,6 +175,10 @@ enum AIServicesFactory {
                             return aiServices.kiloCodeService
                         case .deepSeek:
                             return aiServices.deepSeekService
+                        case .openCodeGo:
+                            return aiServices.openCodeGoService
+                        case .openCodeGoSubscription:
+                            return aiServices.openCodeGoSubscriptionService
                         }
                     },
                     localServiceProvider: { aiServices.localModelService },

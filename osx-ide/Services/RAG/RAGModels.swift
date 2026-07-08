@@ -158,28 +158,5 @@ public struct RAGRetrievalResult: Sendable {
     )
 }
 
-public struct CodeChunkSimilarityResult: Sendable {
-    public let filePath: String
-    public let lineStart: Int
-    public let lineEnd: Int
-    public let snippet: String
-    public let similarityScore: Double
-
-    public init(
-        filePath: String,
-        lineStart: Int,
-        lineEnd: Int,
-        snippet: String,
-        similarityScore: Double
-    ) {
-        self.filePath = filePath
-        self.lineStart = lineStart
-        self.lineEnd = lineEnd
-        self.snippet = snippet
-        self.similarityScore = similarityScore
-    }
-}
-
-public protocol CodeChunkEmbeddingSearchProviding: Sendable {
-    func getRelevantCodeChunks(userInput: String, limit: Int) async throws -> [CodeChunkSimilarityResult]
-}
+// CodeChunkSimilarityResult and CodeChunkEmbeddingSearchProviding were removed
+// as they were dead code — no implementations or call sites existed.

@@ -1,5 +1,4 @@
 import XCTest
-import AppKit
 @testable import osx_ide
 
 @MainActor

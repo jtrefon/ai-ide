@@ -21,6 +21,9 @@ public actor IndexCoordinator {
     private var recentFileChanges: [Date] = []
     private var bulkIndexTask: Task<Void, Never>?
     
+    // Collector for URLs during debounce window — prevents dropping intermediate values
+    private var pendingIndexURLs: Set<String> = []
+    
     // Combine subscriptions must be managed on MainActor
     @MainActor private var cancellables = Set<AnyCancellable>()
     @MainActor private var debounceSubject = PassthroughSubject<URL, Never>()
@@ -263,13 +266,22 @@ public actor IndexCoordinator {
 
     @MainActor
     private func setupDebounceSubscription() {
-        // Regular debounce for single file changes
+        // Collect all URLs into pendingIndexURLs as they arrive, then drain on debounce
         debounceSubject
             .debounce(for: .milliseconds(config.debounceMs), scheduler: DispatchQueue.main)
             .removeDuplicates()
+            .sink { [weak self] _ in
+                Task { [weak self] in
+                    await self?.drainPendingIndexURLs()
+                }
+            }
+            .store(in: &cancellables)
+        
+        // Also add each URL to pending set immediately (before debounce fires)
+        debounceSubject
             .sink { [weak self] url in
                 Task { [weak self] in
-                    await self?.indexFile(url)
+                    await self?.addPendingIndexURL(url)
                 }
             }
             .store(in: &cancellables)
@@ -282,6 +294,18 @@ public actor IndexCoordinator {
                 }
             }
             .store(in: &cancellables)
+    }
+    
+    private func addPendingIndexURL(_ url: URL) {
+        pendingIndexURLs.insert(url.standardizedFileURL.path)
+    }
+    
+    private func drainPendingIndexURLs() async {
+        let paths = pendingIndexURLs
+        pendingIndexURLs.removeAll()
+        for path in paths {
+            await indexFile(URL(fileURLWithPath: path))
+        }
     }
     
     private func trackFileChange() async {

@@ -478,10 +478,9 @@ final class MockAIService: AIService, @unchecked Sendable {
         return nextHistoryResponse
     }
 
-    func explainCode(_ code: String) async throws -> String { return "Explanation" }
-    func refactorCode(_ code: String, instructions: String) async throws -> String { return "Refactored" }
-    func generateCode(_ prompt: String) async throws -> String { return "Generated" }
-    func fixCode(_ code: String, error: String) async throws -> String { return "Fixed" }
+    func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
+        try await sendMessage(request)
+    }
 }
 
 final class MockErrorManager: ObservableObject, ErrorManagerProtocol {

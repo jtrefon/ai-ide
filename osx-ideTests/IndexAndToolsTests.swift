@@ -1,11 +1,11 @@
-import Testing
+import XCTest
 import Foundation
 @testable import osx_ide
 
 @MainActor
-struct IndexAndToolsTests {
+final class IndexAndToolsTests: XCTestCase {
 
-    @Test func testIndexExcludesSkipNodeModules() async throws {
+    func testIndexExcludesSkipNodeModules() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_index_excludes_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -25,21 +25,21 @@ struct IndexAndToolsTests {
 
         let patterns = IndexExcludePatternManager.loadExcludePatterns(projectRoot: tempRoot, defaultPatterns: IndexConfiguration.default.excludePatterns)
         let excludeFile = tempRoot.appendingPathComponent(AppConstantsFileSystem.projectDirName).appendingPathComponent("index_exclude")
-        #expect(FileManager.default.fileExists(atPath: excludeFile.path), "Expected \(AppConstantsFileSystem.projectDirName)/index_exclude to be created")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: excludeFile.path), "Expected \(AppConstantsFileSystem.projectDirName)/index_exclude to be created")
 
         let files = IndexFileEnumerator.enumerateProjectFiles(rootURL: tempRoot, excludePatterns: patterns)
 
-        #expect(
+        XCTAssertTrue(
             files.contains(where: { $0.standardizedFileURL.path == srcFile.standardizedFileURL.path }),
             "Expected src file to be enumerated"
         )
-        #expect(
-            !files.contains(where: { $0.path.contains("node_modules") }),
+        XCTAssertFalse(
+            files.contains(where: { $0.path.contains("node_modules") }),
             "Expected node_modules tree to be excluded from enumeration"
         )
     }
 
-    @Test func testIndexEnumeratesTSX() async throws {
+    func testIndexEnumeratesTSX() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_index_tsx_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -53,13 +53,13 @@ struct IndexAndToolsTests {
         let patterns = IndexExcludePatternManager.loadExcludePatterns(projectRoot: tempRoot, defaultPatterns: IndexConfiguration.default.excludePatterns)
         let files = IndexFileEnumerator.enumerateProjectFiles(rootURL: tempRoot, excludePatterns: patterns)
 
-        #expect(
+        XCTAssertTrue(
             files.contains(where: { $0.standardizedFileURL.path == tsxFile.standardizedFileURL.path }),
             "Expected .tsx file to be enumerated"
         )
     }
 
-    @Test func testIndexReadFileFallsBackToDiskWhenNotIndexed() async throws {
+    func testIndexReadFileFallsBackToDiskWhenNotIndexed() async throws {
         struct LocalMockAIService: AIService, @unchecked Sendable {
             func sendMessage(
                 _ request: AIServiceMessageWithProjectRootRequest
@@ -74,10 +74,9 @@ struct IndexAndToolsTests {
                 _ = request
                 return AIServiceResponse(content: nil, toolCalls: nil)
             }
-            func explainCode(_: String) async throws -> String { "" }
-            func refactorCode(_: String, instructions _: String) async throws -> String { "" }
-            func generateCode(_: String) async throws -> String { "" }
-            func fixCode(_: String, error _: String) async throws -> String { "" }
+            func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
+                try await sendMessage(request)
+            }
         }
 
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_index_read_fallback_\(UUID().uuidString)")
@@ -92,11 +91,11 @@ struct IndexAndToolsTests {
 
         // File is on disk but not in DB yet; should still be readable.
         let output = try index.readIndexedFile(path: "src/NewFile.tsx", startLine: 1, endLine: 2)
-        #expect(output.contains("1 | line1"), "Expected line-numbered output")
-        #expect(output.contains("2 | line2"), "Expected line-numbered output")
+        XCTAssertTrue(output.contains("1 | line1"), "Expected line-numbered output")
+        XCTAssertTrue(output.contains("2 | line2"), "Expected line-numbered output")
     }
 
-    @Test func testFileOperationsWithCleanup() async throws {
+    func testFileOperationsWithCleanup() async throws {
         let tempDir = FileManager.default.temporaryDirectory
         let testFile = tempDir.appendingPathComponent("test_file_\(UUID().uuidString).swift")
 
@@ -107,16 +106,16 @@ struct IndexAndToolsTests {
         let testContent = "func testFunction() { print(\"Test\") }"
         try testContent.write(to: testFile, atomically: true, encoding: .utf8)
 
-        #expect(FileManager.default.fileExists(atPath: testFile.path), "Test file should be created")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: testFile.path), "Test file should be created")
 
         // Clean up test file
         try? FileManager.default.removeItem(at: testFile)
         TestSupport.testFiles.removeAll { $0 == testFile }
 
-        #expect(!FileManager.default.fileExists(atPath: testFile.path), "Test file should be cleaned up")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: testFile.path), "Test file should be cleaned up")
     }
 
-    @Test func testFileToolsSupportNestedPaths() async throws {
+    func testFileToolsSupportNestedPaths() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_file_tools_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
 
@@ -145,11 +144,11 @@ struct IndexAndToolsTests {
         let registerURL = tempRoot.appendingPathComponent("src/pages/Register.tsx")
         let buttonURL = tempRoot.appendingPathComponent("src/components/Button.tsx")
 
-        #expect(FileManager.default.fileExists(atPath: registerURL.path), "Register.tsx should be written")
-        #expect(FileManager.default.fileExists(atPath: buttonURL.path), "Button.tsx should be written")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: registerURL.path), "Register.tsx should be written")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: buttonURL.path), "Button.tsx should be written")
 
         let registerContent = try fileSystemService.readFile(at: registerURL)
-        #expect(registerContent.contains("function Register"), "Register.tsx content should match")
+        XCTAssertTrue(registerContent.contains("function Register"), "Register.tsx content should match")
 
         let writeFileTool3 = WriteFileTool(fileSystemService: fileSystemService, pathValidator: validator, eventBus: eventBus)
         _ = try await writeFileTool3.execute(arguments: ToolArguments([
@@ -160,11 +159,11 @@ struct IndexAndToolsTests {
 
         let cssURL = tempRoot.appendingPathComponent("src/styles/app.css")
         let cssDirectoryURL = tempRoot.appendingPathComponent("src/styles", isDirectory: true)
-        #expect(FileManager.default.fileExists(atPath: cssDirectoryURL.path), "Nested write_file should prepare parent directories")
-        #expect(FileManager.default.fileExists(atPath: cssURL.path), "write_file should materialize the file")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cssDirectoryURL.path), "Nested write_file should prepare parent directories")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cssURL.path), "write_file should materialize the file")
     }
 
-    @Test func testFileToolsNormalizeProjectPseudoRootPaths() async throws {
+    func testFileToolsNormalizeProjectPseudoRootPaths() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_project_pseudoroot_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -185,8 +184,8 @@ struct IndexAndToolsTests {
 
         let rootIndexURL = tempRoot.appendingPathComponent("index.html")
         let nestedProjectIndexURL = tempRoot.appendingPathComponent("project/index.html")
-        #expect(FileManager.default.fileExists(atPath: rootIndexURL.path), "Pseudo-root /project/index.html should resolve to the real project root")
-        #expect(!FileManager.default.fileExists(atPath: nestedProjectIndexURL.path), "Pseudo-root /project/index.html must not create a nested project directory")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: rootIndexURL.path), "Pseudo-root /project/index.html should resolve to the real project root")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: nestedProjectIndexURL.path), "Pseudo-root /project/index.html must not create a nested project directory")
 
         let writeFileTool3 = WriteFileTool(
             fileSystemService: fileSystemService,
@@ -201,11 +200,11 @@ struct IndexAndToolsTests {
 
         let appDirectoryURL = tempRoot.appendingPathComponent("src", isDirectory: true)
         let nestedProjectAppURL = tempRoot.appendingPathComponent("project/src/App.jsx")
-        #expect(FileManager.default.fileExists(atPath: appDirectoryURL.path), "project/src/App.jsx should resolve to src/App.jsx under the real root")
-        #expect(!FileManager.default.fileExists(atPath: nestedProjectAppURL.path), "project/src/App.jsx must not create a nested project directory")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: appDirectoryURL.path), "project/src/App.jsx should resolve to src/App.jsx under the real root")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: nestedProjectAppURL.path), "project/src/App.jsx must not create a nested project directory")
     }
 
-    @Test func testListFilesReturnsEmptyForMissingProjectRelativeDirectory() async throws {
+    func testListFilesReturnsEmptyForMissingProjectRelativeDirectory() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_missing_dir_list_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -217,10 +216,10 @@ struct IndexAndToolsTests {
             "path": "src"
         ]))
 
-        #expect(result.isEmpty, "Missing project-relative directories should return an empty listing instead of failing")
+        XCTAssertTrue(result.isEmpty, "Missing project-relative directories should return an empty listing instead of failing")
     }
 
-    @Test func testWriteFileRejectsOverwritingExistingFile() async throws {
+    func testWriteFileRejectsOverwritingExistingFile() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_existing_write_file_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -238,13 +237,13 @@ struct IndexAndToolsTests {
                 "path": "package.json",
                 "content": "new content"
             ]))
-            #expect(false, "Expected write_file to reject overwriting existing files")
+            XCTFail("Expected write_file to reject overwriting existing files")
         } catch {
-            #expect(error.localizedDescription.localizedCaseInsensitiveContains("Refused full-file overwrite"))
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("Refused full-file overwrite"))
         }
     }
 
-    @Test func testWriteFileWritesContentImmediately() async throws {
+    func testWriteFileWritesContentImmediately() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_write_file_content_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -262,11 +261,11 @@ struct IndexAndToolsTests {
         let createdURL = tempRoot.appendingPathComponent("src/App.jsx")
         let persisted = try String(contentsOf: createdURL, encoding: .utf8)
 
-        #expect(result.localizedCaseInsensitiveContains("successfully wrote"))
-        #expect(persisted.contains("function App"))
+        XCTAssertTrue(result.localizedCaseInsensitiveContains("successfully wrote"))
+        XCTAssertTrue(persisted.contains("function App"))
     }
 
-    @Test func testWriteFileNoOpWithMatchingContent() async throws {
+    func testWriteFileNoOpWithMatchingContent() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_write_file_noop2_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -285,10 +284,10 @@ struct IndexAndToolsTests {
             "_conversation_id": "write-file-noop-test2"
         ]))
 
-        #expect(result.localizedCaseInsensitiveContains("already matches"))
+        XCTAssertTrue(result.localizedCaseInsensitiveContains("already matches"))
     }
 
-    @Test func testReplaceInFileThrowsWhenOldTextDoesNotMatch() async throws {
+    func testReplaceInFileThrowsWhenOldTextDoesNotMatch() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_replace_error_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -308,13 +307,13 @@ struct IndexAndToolsTests {
                 "old_text": "name=missing",
                 "new_text": "name=new"
             ]))
-            #expect(false, "Expected replace_in_file to throw when old_text does not match")
+            XCTFail("Expected replace_in_file to throw when old_text does not match")
         } catch {
-            #expect(error.localizedDescription.localizedCaseInsensitiveContains("could not find old_text"))
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("could not find old_text"))
         }
     }
 
-    @Test func testWriteFileThrowsWhenPathAlreadyExists() async throws {
+    func testWriteFileThrowsWhenPathAlreadyExists() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_write_error_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -333,13 +332,13 @@ struct IndexAndToolsTests {
                 "path": "existing.txt",
                 "content": "world"
             ]))
-            #expect(false, "Expected write_file to throw when file already exists")
+            XCTFail("Expected write_file to throw when file already exists")
         } catch {
-            #expect(error.localizedDescription.localizedCaseInsensitiveContains("Refused full-file overwrite"))
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("Refused full-file overwrite"))
         }
     }
 
-    @Test func testWriteFileBlocksBlindFullOverwriteOfExistingFile() async throws {
+    func testWriteFileBlocksBlindFullOverwriteOfExistingFile() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_blind_overwrite_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -359,13 +358,13 @@ struct IndexAndToolsTests {
                 "content": "import express from 'express'\nconst app = express()\n",
                 "_conversation_id": "blind-overwrite-conversation"
             ]))
-            #expect(false, "Expected blind overwrite of existing file to be rejected")
+            XCTFail("Expected blind overwrite of existing file to be rejected")
         } catch {
-            #expect(error.localizedDescription.localizedCaseInsensitiveContains("refused full-file overwrite"))
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("refused full-file overwrite"))
         }
     }
 
-    @Test func testWriteFileAllowsFullRewriteAfterReadInSameConversation() async throws {
+    func testWriteFileAllowsFullRewriteAfterReadInSameConversation() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_read_then_rewrite_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -395,10 +394,10 @@ struct IndexAndToolsTests {
         ]))
 
         let rewrittenContent = try String(contentsOf: fileURL)
-        #expect(rewrittenContent.contains("import express from 'express'"), "Expected full rewrite to succeed after a same-conversation read")
+        XCTAssertTrue(rewrittenContent.contains("import express from 'express'"), "Expected full rewrite to succeed after a same-conversation read")
     }
 
-    @Test func testWriteFileReturnsNoOpWhenContentAlreadyMatches() async throws {
+    func testWriteFileReturnsNoOpWhenContentAlreadyMatches() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_write_file_noop_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -419,10 +418,10 @@ struct IndexAndToolsTests {
             "_conversation_id": "same-content-noop"
         ]))
 
-        #expect(result.localizedCaseInsensitiveContains("no-op"))
+        XCTAssertTrue(result.localizedCaseInsensitiveContains("no-op"))
     }
 
-    @Test func testWriteFileRejectsAbsolutePathFromSiblingTemporaryRoot() async throws {
+    func testWriteFileRejectsAbsolutePathFromSiblingTemporaryRoot() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_path_root_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -443,15 +442,15 @@ struct IndexAndToolsTests {
                 "path": siblingFile.path,
                 "content": "export function add(a: number, b: number): number { return a + b }"
             ]))
-            #expect(false, "Expected sibling absolute path to be rejected as outside project root")
+            XCTFail("Expected sibling absolute path to be rejected as outside project root")
         } catch {
-            #expect(error.localizedDescription.localizedCaseInsensitiveContains("outside the project directory"))
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("outside the project directory"))
         }
 
-        #expect(!FileManager.default.fileExists(atPath: tempRoot.appendingPathComponent(String(siblingFile.path.dropFirst())).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tempRoot.appendingPathComponent(String(siblingFile.path.dropFirst())).path))
     }
 
-    @Test func testReplaceInFileTreatsAlreadyAppliedStateAsNoOp() async throws {
+    func testReplaceInFileTreatsAlreadyAppliedStateAsNoOp() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_replace_noop_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -471,12 +470,12 @@ struct IndexAndToolsTests {
             "new_text": "name=new"
         ]))
 
-        #expect(result.localizedCaseInsensitiveContains("No-op"))
+        XCTAssertTrue(result.localizedCaseInsensitiveContains("No-op"))
         let persisted = try String(contentsOf: fileURL, encoding: .utf8)
-        #expect(persisted.contains("name=new"))
+        XCTAssertTrue(persisted.contains("name=new"))
     }
 
-    @Test func testDeleteFileThrowsWhenPathDoesNotExist() async throws {
+    func testDeleteFileThrowsWhenPathDoesNotExist() async throws {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("osx_ide_delete_error_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true, attributes: nil)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
@@ -490,9 +489,9 @@ struct IndexAndToolsTests {
             _ = try await tool.execute(arguments: ToolArguments([
                 "path": "missing.txt"
             ]))
-            #expect(false, "Expected delete_file to throw when file does not exist")
+            XCTFail("Expected delete_file to throw when file does not exist")
         } catch {
-            #expect(error.localizedDescription.localizedCaseInsensitiveContains("does not exist"))
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("does not exist"))
         }
     }
 }

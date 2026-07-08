@@ -1,6 +1,5 @@
 import Combine
 import Foundation
-import SwiftUI
 @testable import osx_ide
 
 @MainActor

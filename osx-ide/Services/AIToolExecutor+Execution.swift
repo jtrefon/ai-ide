@@ -409,45 +409,23 @@ extension AIToolExecutor {
             return directMatch
         }
 
-        let aliases: [String: [String]] = [
-            "find_by_name": ["find_file", "index_find_files"],
-            "find": ["find_by_name"],
-            "grep_search": ["grep", "index_search_text"],
-            "grep": ["grep_search"],
-            "list_dir": ["list_files", "index_list_files", "list_all_files"],
-            "list_directory": ["list_files", "index_list_files", "list_all_files"],
-            "get_project_structure": ["list_all_files", "list_files"],
-            "read": ["read_file"],
-            "view_file": ["read_file", "index_read_file"],
-            "write": ["write_file", "write_files"],
-            "write_files": ["write_file"],
-            "write_to_file": ["write_file", "write_files"],
-            "create_file": ["write_file", "write_files"],
-            "edit_file": ["replace_in_file", "write_file"],
-            "apply_patch": ["replace_in_file", "write_file"],
-            "cli-mcp-server_run_command": ["run_command"],
-            "run_terminal_command": ["run_command"],
-            "run_shell_command": ["run_command"],
-            "browse": ["web_browse"],
-            "web_browse": ["browse"],
-            "web": ["web_search", "web_browse"],
-            "search_web": ["web_search"]
-        ]
+        let canonical = ToolAliasRegistry.shared.canonicalName(for: toolCall.name)
+        guard canonical != toolCall.name.lowercased() else { return nil }
 
-        guard let candidates = aliases[toolCall.name] else {
-            return nil
-        }
+        // Try exact canonical match first, then fallback chain
+        let fallbacks: [String: [String]] = [
+            "write_file": ["write_files", "create_file", "replace_in_file"],
+            "replace_in_file": ["write_file"],
+            "web_search": ["web_browse"],
+        ]
+        let candidates = [canonical] + (fallbacks[canonical] ?? [])
 
         for candidate in candidates {
             if let resolved = availableTools.first(where: { $0.name == candidate }) {
                 Task {
                     await AIToolTraceLogger.shared.log(
                         type: "tool.alias_resolved",
-                        data: [
-                            "requested": toolCall.name,
-                            "resolved": candidate,
-                            "toolCallId": toolCall.id
-                        ]
+                        data: ["requested": toolCall.name, "resolved": candidate, "toolCallId": toolCall.id]
                     )
                 }
                 return resolved
