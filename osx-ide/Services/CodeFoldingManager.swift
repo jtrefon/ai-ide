@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-public final class CodeFoldingManager: NSObject {
+public final class CodeFoldingManager: NSObject, @unchecked Sendable {
     private(set) var foldedRanges: [NSRange] = []
 
     public func isFolded(_ range: NSRange) -> Bool {
@@ -38,8 +38,9 @@ public final class CodeFoldingManager: NSObject {
     }
 }
 
+@MainActor
 public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelegate {
-    private let manager: CodeFoldingManager
+    nonisolated private let manager: CodeFoldingManager
     weak var textView: NSTextView?
 
     private struct GlyphGenerationOutput {
@@ -53,7 +54,7 @@ public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelega
         self.textView = textView
     }
 
-    public func layoutManager(
+    nonisolated public func layoutManager(
         _ layoutManager: NSLayoutManager,
         shouldGenerateGlyphs glyphs: UnsafePointer<CGGlyph>,
         properties props: UnsafePointer<NSLayoutManager.GlyphProperty>,
@@ -89,7 +90,7 @@ public final class FoldingLayoutManagerDelegate: NSObject, NSLayoutManagerDelega
         return count
     }
 
-    private func setGlyphs(
+    nonisolated private func setGlyphs(
         layoutManager: NSLayoutManager,
         output: GlyphGenerationOutput,
         font: NSFont,

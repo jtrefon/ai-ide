@@ -7,6 +7,10 @@ import MLXVLM
 import Tokenizers
 import Darwin
 
+private struct UnsafeValue<T>: @unchecked Sendable {
+    let value: T
+}
+
 protocol MemoryPressureObserving: Sendable {}
 
 private struct LocalModelTestBudget {
@@ -327,10 +331,11 @@ actor LocalModelProcessAIService: AIService {
                         "rssBeforeLoadMB": rssBeforeLoadMB,
                         "rssAfterLoadMB": rssAfterLoadMB
                     ])
+                    let capturedInput = UnsafeValue(value: preparedUserInput)
                     return try await container.perform { context in
                         try Self.throwIfProcessRSSExceeded(limitMB: rssLimitMB, phase: "before_generation")
 
-                        let input = try await context.processor.prepare(input: preparedUserInput)
+                        let input = try await context.processor.prepare(input: capturedInput.value)
                         let promptTokenCount = input.text.tokens.size
                         let promptTokenIds = input.text.tokens.asArray(Int.self)
                         print("[LOCAL-MLX] prompt prepared prompt_tokens=\(promptTokenCount)")
@@ -1339,15 +1344,17 @@ actor LocalModelProcessAIService: AIService {
         }
         // Wrap MLX inference with power management to prevent sleep during long generations
         let response: AIServiceResponse
+        let capturedGenerator = self.generator
+        let capturedUserInput = UnsafeValue(value: UserInput(
+            messages: rawMessages, images: allImages, videos: allVideos,
+            tools: toolSpecs, additionalContext: additionalContext
+        ))
         if let coordinator = activityCoordinator {
             response = try await coordinator.withActivity(type: .mlxInference) {
-                try await self.generator.generate(
+                try await capturedGenerator.generate(
                     modelId: model.id,
                     modelDirectory: modelDirectory,
-                    userInput: UserInput(
-                        messages: rawMessages, images: allImages, videos: allVideos,
-                        tools: toolSpecs, additionalContext: additionalContext
-                    ),
+                    userInput: capturedUserInput.value,
                     tools: toolSpecs,
                     toolCallFormat: model.toolCallFormat,
                     runId: request.runId,
@@ -1356,13 +1363,10 @@ actor LocalModelProcessAIService: AIService {
                 )
             }
         } else {
-            response = try await generator.generate(
+            response = try await capturedGenerator.generate(
                 modelId: model.id,
                 modelDirectory: modelDirectory,
-                userInput: UserInput(
-                    messages: rawMessages, images: allImages, videos: allVideos,
-                    tools: toolSpecs, additionalContext: additionalContext
-                ),
+                userInput: capturedUserInput.value,
                 tools: toolSpecs,
                 toolCallFormat: model.toolCallFormat,
                 runId: request.runId,

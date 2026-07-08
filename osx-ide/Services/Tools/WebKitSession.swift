@@ -271,26 +271,34 @@ final class WebKitSession: NSObject, WKNavigationDelegate, WKScriptMessageHandle
     // MARK: - WKNavigationDelegate
 
     nonisolated public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        injectContentWatcher()
+        MainActor.assumeIsolated {
+            injectContentWatcher()
+        }
     }
 
     nonisolated public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        pendingResult?.resolve(error: error)
-        pendingResult = nil
+        MainActor.assumeIsolated {
+            pendingResult?.resolve(error: error)
+            pendingResult = nil
+        }
     }
 
     nonisolated public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        pendingResult?.resolve(error: error)
-        pendingResult = nil
+        MainActor.assumeIsolated {
+            pendingResult?.resolve(error: error)
+            pendingResult = nil
+        }
     }
 
     // MARK: - WKScriptMessageHandler
 
     nonisolated public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "contentReady" else { return }
-        let bodyValue = message.body as? String ?? ""
-        pendingResult?.resolve(text: bodyValue.isEmpty ? "(empty page)" : bodyValue)
-        pendingResult = nil
+        MainActor.assumeIsolated {
+            guard message.name == "contentReady" else { return }
+            let bodyValue = message.body as? String ?? ""
+            pendingResult?.resolve(text: bodyValue.isEmpty ? "(empty page)" : bodyValue)
+            pendingResult = nil
+        }
     }
 
     // MARK: - Internal navigation

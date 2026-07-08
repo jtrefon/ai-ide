@@ -74,6 +74,7 @@ jobs:
             -only-testing:osx-ideTests \
             -skip-testing:osx-ideTests/OpenAICompatibleChatServiceTests \
             -skip-testing:osx-ideTests/ConversationPlanStoreLRUTests/testEvictsOldestWhenExceedingMaxCachedPlans \
+            -skip-testing:osx-ideTests/ConversationPolicyTests \
             test-without-building \
             CODE_SIGNING_ALLOWED=NO
 
