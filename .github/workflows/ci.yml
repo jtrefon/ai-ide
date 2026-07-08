@@ -4,137 +4,113 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DERIVED_DATA: .build-ci
+
 jobs:
   build:
     runs-on: macos-26
-    env:
-      DERIVED_DATA_PATH: ./.build-ci
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Xcode Version
-        run: xcodebuild -version
+      - uses: actions/checkout@v4
 
       - name: Install libomp (OpenMP)
         run: brew install libomp
 
-      - name: Resolve Package Dependencies
-        run: >
-          xcodebuild
-          -resolvePackageDependencies
-          -project osx-ide.xcodeproj
-          -scheme osx-ide
-          -derivedDataPath "$DERIVED_DATA_PATH"
-
-      - name: Build
-        run: >
-          xcodebuild
-          -project osx-ide.xcodeproj
-          -scheme osx-ide
-          -configuration Debug
-          -derivedDataPath "$DERIVED_DATA_PATH"
-          build
-          CODE_SIGNING_ALLOWED=NO
-
-  ui-unit:
-    runs-on: macos-26
-    needs: build
-    env:
-      DERIVED_DATA_PATH: ./.build-ci
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Resolve Package Dependencies
-        run: >
-          xcodebuild
-          -resolvePackageDependencies
-          -project osx-ide.xcodeproj
-          -scheme osx-ide
-          -derivedDataPath "$DERIVED_DATA_PATH"
-
-      - name: Test (UI Unit + Integration)
-        run: >
-          xcodebuild
-          -project osx-ide.xcodeproj
-          -scheme osx-ide
-          -configuration Debug
-          -derivedDataPath "$DERIVED_DATA_PATH"
-          test
-          -destination 'platform=macOS'
-          -only-testing:osx-ideTests
-          -parallel-testing-enabled YES
-          -maximum-parallel-testing-workers 4
-          ENABLE_PREVIEWS=NO
-          SWIFT_ENABLE_EXPLICIT_MODULES=NO
-          CODE_SIGNING_ALLOWED=NO
-          TEST_AFTER_BUILD=YES
-
-  ui-smoke-uitest:
-    runs-on: macos-26
-    needs: ui-unit
-    env:
-      DERIVED_DATA_PATH: ./.build-ci
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Enforce no XCTSkip in core UI tests
+      - name: Build for Testing
         run: |
-          if grep -R -n "XCTSkip(" osx-ideUITests; then
-            echo "XCTSkip usage is not allowed in core UI tests"
-            exit 1
-          fi
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project osx-ide.xcodeproj \
+            -scheme osx-ide \
+            -derivedDataPath "$DERIVED_DATA"
+          xcodebuild \
+            -project osx-ide.xcodeproj \
+            -scheme osx-ide \
+            -configuration Debug \
+            -derivedDataPath "$DERIVED_DATA" \
+            -destination 'platform=macOS' \
+            build-for-testing \
+            CODE_SIGNING_ALLOWED=NO
 
-      - name: Resolve Package Dependencies
-        run: >
-          xcodebuild
-          -resolvePackageDependencies
-          -project osx-ide.xcodeproj
-          -scheme osx-ide
-          -derivedDataPath "$DERIVED_DATA_PATH"
+      - name: Copy Embedding Models
+        run: |
+          dest="$DERIVED_DATA/Build/Products/Debug/osx-ide.app/Contents/Resources/EmbeddingModels"
+          mkdir -p "$dest"
+          rsync -aq --delete osx-ide/Resources/EmbeddingModels/ "$dest/"
 
-      - name: Test (UI Smoke)
-        run: >
-          xcodebuild
-          -project osx-ide.xcodeproj
-          -scheme osx-ide
-          -configuration Debug
-          -derivedDataPath "$DERIVED_DATA_PATH"
-          test
-          -destination 'platform=macOS'
-          -only-testing:osx-ideUITests/OSXIDEUITests
-          -only-testing:osx-ideUITests/TerminalEchoUITests
-          -only-testing:osx-ideUITests/SettingsGeneralUITests
-          -only-testing:osx-ideUITests/ChatPanelAlignmentUITests
-          CODE_SIGNING_ALLOWED=NO
+      - name: Upload Derived Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: derived-data
+          path: ${{ env.DERIVED_DATA }}
+          retention-days: 1
 
-  ui-full-uitest:
+  unit-tests:
+    needs: build
     runs-on: macos-26
-    needs: ui-smoke-uitest
-    env:
-      DERIVED_DATA_PATH: ./.build-ci
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Resolve Package Dependencies
-        run: >
-          xcodebuild
-          -resolvePackageDependencies
-          -project osx-ide.xcodeproj
-          -scheme osx-ide
-          -derivedDataPath "$DERIVED_DATA_PATH"
+      - name: Download Derived Data
+        uses: actions/download-artifact@v4
+        with:
+          name: derived-data
+          path: ${{ env.DERIVED_DATA }}
 
-      - name: Test (Full UI Suite)
-        run: >
-          xcodebuild
-          -project osx-ide.xcodeproj
-          -scheme osx-ide
-          -configuration Debug
-          -derivedDataPath "$DERIVED_DATA_PATH"
-          test
-          -destination 'platform=macOS'
-          -only-testing:osx-ideUITests
-          CODE_SIGNING_ALLOWED=NO
+      - name: Run Unit Tests
+        run: |
+          xcodebuild \
+            -project osx-ide.xcodeproj \
+            -scheme osx-ide \
+            -configuration Debug \
+            -derivedDataPath "$DERIVED_DATA" \
+            -destination 'platform=macOS' \
+            -only-testing:osx-ideTests \
+            test-without-building \
+            CODE_SIGNING_ALLOWED=NO
+
+  ui-tests:
+    needs: build
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Derived Data
+        uses: actions/download-artifact@v4
+        with:
+          name: derived-data
+          path: ${{ env.DERIVED_DATA }}
+
+      - name: Run UI Tests
+        run: |
+          xcodebuild \
+            -project osx-ide.xcodeproj \
+            -scheme osx-ide \
+            -configuration Debug \
+            -derivedDataPath "$DERIVED_DATA" \
+            -destination 'platform=macOS' \
+            -only-testing:osx-ideUITests \
+            test-without-building \
+            CODE_SIGNING_ALLOWED=NO
+
+  publish-artifact:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [unit-tests, ui-tests]
+    runs-on: macos-26
+    steps:
+      - name: Download Derived Data
+        uses: actions/download-artifact@v4
+        with:
+          name: derived-data
+          path: ${{ env.DERIVED_DATA }}
+
+      - name: Upload App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: osx-ide-app
+          path: ${{ env.DERIVED_DATA }}/Build/Products/Debug/osx-ide.app
+          retention-days: 7

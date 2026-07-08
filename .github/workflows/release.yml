@@ -104,6 +104,12 @@ jobs:
           CODE_SIGN_IDENTITY="-"
           CODE_SIGNING_REQUIRED=YES
 
+      - name: Copy Embedding Models
+        run: |
+          dest="build/Build/Products/Release/osx-ide.app/Contents/Resources/EmbeddingModels"
+          mkdir -p "$dest"
+          rsync -aq --delete osx-ide/Resources/EmbeddingModels/ "$dest/"
+
       - name: Sign Release App
         if: steps.signing.outputs.enabled == 'true'
         env:
