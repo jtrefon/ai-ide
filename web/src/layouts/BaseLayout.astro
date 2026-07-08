@@ -1,0 +1,99 @@
+---
+import "../styles/global.css";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import { SITE_TITLE, SITE_DESCRIPTION, BASE_URL, REPO } from "../consts";
+
+export interface Props {
+  title?: string;
+  description?: string;
+  canonical?: string;
+  ogImage?: string;
+}
+
+const { title, description, canonical, ogImage } = Astro.props;
+const pageTitle = title || SITE_TITLE;
+const pageDesc = description || SITE_DESCRIPTION;
+const pageUrl = canonical || `${BASE_URL}/`;
+const ogImg = ogImage || `https://jtrefon.github.io/ai-ide/images/og-image.svg`;
+
+const ldJSON = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "osx-ide",
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "macOS",
+  description:
+    "Native macOS AI IDE with local inference, inline completion, codebase retrieval, and cloud model orchestration.",
+  softwareRequirements: "macOS on Apple Silicon",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  codeRepository: REPO,
+});
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{pageTitle}</title>
+  <meta name="description" content={pageDesc} />
+  <meta name="theme-color" content="#06080d" />
+  <meta property="og:title" content={pageTitle} />
+  <meta property="og:description" content={pageDesc} />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content={pageUrl} />
+  <meta property="og:image" content={ogImg} />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="icon" type="image/svg+xml" href={`${BASE_URL}/images/favicon.svg`} />
+  <link rel="canonical" href={pageUrl} />
+
+  <script type="application/ld+json" set:html={ldJSON}></script>
+</head>
+<body>
+  <div class="grid-bg" aria-hidden="true"></div>
+  <div class="bg-fx" aria-hidden="true"></div>
+
+  <Header />
+
+  <main>
+    <slot />
+  </main>
+
+  <Footer />
+
+  <script>
+    // Mobile menu toggle
+    const toggle = document.querySelector(".menu-toggle");
+    const menu = document.getElementById("mobile-menu");
+    if (toggle && menu) {
+      toggle.addEventListener("click", () => {
+        const open = menu.classList.toggle("open");
+        toggle.setAttribute("aria-expanded", open);
+      });
+    }
+
+    // IntersectionObserver for reveal animations
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) e.target.classList.add("visible");
+        });
+      },
+      { threshold: 0.1 }
+    );
+    document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
+
+    // Update year in footer
+    const yearEl = document.getElementById("year");
+    if (yearEl) yearEl.textContent = new Date().getFullYear().toString();
+  </script>
+</body>
+</html>

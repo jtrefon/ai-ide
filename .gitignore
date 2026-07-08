@@ -82,3 +82,9 @@ venv*/
 .windsurf/*
 .windsurf/**
 .windsurfignore
+
+# Website build
+/node_modules
+/web/node_modules
+/web/dist
+/site

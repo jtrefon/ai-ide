@@ -1,0 +1,210 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { BASE_URL, REPO, PIPELINE_LOCAL, PIPELINE_CLOUD, COMPETITIVE, LOCAL_MODEL, CLOUD_MODELS, FEATURES_SHIPPING } from "../consts";
+---
+
+<BaseLayout
+  title="Architecture — osx-ide"
+  description="Deep dive into the osx-ide architecture: dual-pipeline AI, MLX local inference, HNSW semantic search, tree-sitter syntax highlighting, and more."
+  canonical={`${BASE_URL}/tech`}
+>
+  <section class="page-hero" style="text-align:center">
+    <div class="container container-narrow">
+      <p class="section-kicker reveal">Architecture</p>
+      <h1 class="reveal text-gradient">How osx-ide works</h1>
+      <p class="reveal" style="font-size:1.05rem;color:var(--text-dim);max-width:600px;margin:0 auto;line-height:1.7">
+        Two completely separate AI pipelines. Shared infrastructure. No compromises.
+      </p>
+    </div>
+  </section>
+
+  <!-- Pipeline diagram: text-based + CSS -->
+  <section class="section section-alt" style="padding-top:0">
+    <div class="container">
+      <div class="reveal glass" style="padding:32px;overflow-x:auto;font-family:var(--font-mono);font-size:.78rem;line-height:1.6">
+        <pre style="color:var(--text-dim)">┌──────────────────────────────────────────────────────────────────┐
+│                        UI LAYER                                  │
+│  SwiftUI Views · AppKit Components · NSTextView · Terminal      │
+│  File Tree · Command Palette · Panels · Settings                 │
+├──────────────────────────────────────────────────────────────────┤
+│                        CORE LAYER                                │
+│  EventBus · CommandRegistry · DependencyContainer · Models       │
+├──────────────────────────────────────────────────────────────────┤
+│                     SHARED SERVICES                              │
+│  CodebaseIndex (SQLite FTS5 + symbols + HNSW) · Tool Impls      │
+│  FileSystem · Terminal · Session · Settings                      │
+├──────────────────────┬───────────────────────────────────────────┤
+│   LOCAL AI PIPELINE  │           CLOUD AI PIPELINE               │
+│                      │                                           │
+│ ┌──────────────────┐ │ ┌──────────────────────────────────────┐ │
+│ │ LocalInteraction │ │ │ ConversationOrchestrator             │ │
+│ │ Service          │ │ │ ┌──────────┐                         │ │
+│ │ ─ Direct LLM     │ │ │ │ Planner  │                         │ │
+│ │   call to 4B MLX │ │ │ └────┬─────┘                         │ │
+│ │ ─ No orchestrate │ │ │      v                               │ │
+│ │ ─ No tool loop   │ │ │ ┌──────────┐  ┌──────────────┐     │ │
+│ │ ─ No RAG injection│ │ │ │ Worker   │→│ Tool Executor│     │ │
+│ │ ─ Simpler context │ │ │ │(ToolLoop)│  │ (AITool impls)│     │ │
+│ └──────────────────┘ │ │ └────┬─────┘  └──────────────┘     │ │
+│                      │ │      v                               │ │
+│ ┌──────────────────┐ │ │ ┌──────────┐                         │ │
+│ │ InlineCompletion │ │ │ │ QAReview │                         │ │
+│ │ Engine            │ │ │ └────┬─────┘                         │ │
+│ │ ─ 4B MLX <100ms  │ │ │      v                               │ │
+│ │ ─ Ghost text      │ │ │ ┌──────────┐                         │ │
+│ │ ─ Cache + rank    │ │ │ │ Final    │                         │ │
+│ └──────────────────┘ │ │ └──────────┘                         │ │
+│                      │ │                                       │ │
+│ ┌──────────────────┐ │ │ ┌──────────────────────────────────────┐│
+│ │ InlinePopover    │ │ │ │ RAGEngine                             ││
+│ │ ─ Cursor-anchored│ │ │ │ ─ Retrieval + ranking                ││
+│ │ ─ File-scoped QA │ │ │ │ ─ Context injection (cloud only)     ││
+│ └──────────────────┘ │ │ └──────────────────────────────────────┘│
+└──────────────────────┴───────────────────────────────────────────┘</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pipeline specs side by side -->
+  <section class="section">
+    <div class="container">
+      <p class="section-kicker reveal">Pipeline comparison</p>
+      <h2 class="section-title reveal">Two independently optimized AI paths</h2>
+      <div class="grid-2" style="margin-top:24px">
+        <div class="glass reveal" style="padding:28px;border-color:rgba(45,212,191,.2)">
+          <h3 style="font-size:.9rem;margin-bottom:16px;display:flex;align-items:center;gap:8px">
+            <span class="badge badge-live">Local</span>
+            Always on, always private
+          </h3>
+          <dl style="display:grid;grid-template-columns:1fr 1.8fr;gap:8px 12px;font-size:.85rem">
+            {PIPELINE_LOCAL.map((r) => (
+              <>
+                <dt style="color:var(--text-faint);font-weight:500">{r.feature}</dt>
+                <dd style="color:var(--text-dim)">{r.value}</dd>
+              </>
+            ))}
+          </dl>
+        </div>
+        <div class="glass reveal" style="padding:28px;border-color:rgba(167,139,250,.2)">
+          <h3 style="font-size:.9rem;margin-bottom:16px;display:flex;align-items:center;gap:8px">
+            <span class="badge badge-beta">Cloud</span>
+            On demand, full reasoning
+          </h3>
+          <dl style="display:grid;grid-template-columns:1fr 1.8fr;gap:8px 12px;font-size:.85rem">
+            {PIPELINE_CLOUD.map((r) => (
+              <>
+                <dt style="color:var(--text-faint);font-weight:500">{r.feature}</dt>
+                <dd style="color:var(--text-dim)">{r.value}</dd>
+              </>
+            ))}
+          </dl>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Infrastructure details -->
+  <section class="section section-alt">
+    <div class="container">
+      <p class="section-kicker reveal">Infrastructure</p>
+      <h2 class="section-title reveal">Shared services powering both pipelines</h2>
+      <div class="grid-3" style="margin-top:28px">
+        <div class="card reveal">
+          <h3 style="font-size:1rem;margin-bottom:6px;font-family:var(--font-mono);color:var(--accent)">CodebaseIndex</h3>
+          <p style="font-size:.85rem;color:var(--text-dim);line-height:1.6">
+            SQLite-backed index with <strong>FTS5 full-text search</strong>, symbol extraction, file watching, and chunk management.
+            The vector index uses <strong>HNSW</strong> over FAISS for embedding-based semantic search — <strong>10–50× faster</strong>
+            than the original brute-force approach with ~95–99% recall.
+          </p>
+          <code style="margin-top:8px;display:inline-block">Services/Index/DatabaseManager.swift</code>
+        </div>
+        <div class="card reveal">
+          <h3 style="font-size:1rem;margin-bottom:6px;font-family:var(--font-mono);color:var(--accent)">InlineCompletionEngine</h3>
+          <p style="font-size:.85rem;color:var(--text-dim);line-height:1.6">
+            Local FIM completion subsystem with ghost-text rendering (Tab accept, Esc dismiss), debounced triggers,
+            language-scoped context assembly, completion caching, duplicate filtering, and ranking. The tightest
+            latency loop in the app — <strong>target: &lt;100ms</strong> end-to-end.
+          </p>
+          <code style="margin-top:8px;display:inline-block">Services/LocalPipeline/</code>
+        </div>
+        <div class="card reveal">
+          <h3 style="font-size:1rem;margin-bottom:6px;font-family:var(--font-mono);color:var(--accent)">AITool System</h3>
+          <p style="font-size:.85rem;color:var(--text-dim);line-height:1.6">
+            <strong>20+ tools</strong> implementing the <code>AITool</code> protocol, executed by <code>ToolLoopHandler</code>
+            in the cloud pipeline. Includes file I/O, terminal commands, search, project management, and diagnostic tools.
+            Stall detection prevents runaway loops. Results are QA-reviewed before final application.
+          </p>
+          <code style="margin-top:8px;display:inline-block">Services/Tools/ · Services/CloudPipeline/</code>
+        </div>
+        <div class="card reveal">
+          <h3 style="font-size:1rem;margin-bottom:6px;font-family:var(--font-mono);color:var(--accent)">ConversationOrchestrator</h3>
+          <p style="font-size:.85rem;color:var(--text-dim);line-height:1.6">
+            Multi-role orchestration graph: <strong>Planner → Worker → QA → Final</strong>. The planner synthesizes a plan,
+            the worker executes tool loops, QA reviews the output, and the finalizer applies the change.
+            Supports streaming responses, conversation folding, and history persistence.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3 style="font-size:1rem;margin-bottom:6px;font-family:var(--font-mono);color:var(--accent)">RAG Engine</h3>
+          <p style="font-size:.85rem;color:var(--text-dim);line-height:1.6">
+            Cloud-only retrieval pipeline with <strong>intent classification</strong>, evidence fusion ranking,
+            code segment retrieval (HNSW-backed), symbol search, and project overview. Designed to inject
+            relevant context without overloading the model.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3 style="font-size:1rem;margin-bottom:6px;font-family:var(--font-mono);color:var(--accent)">EventBus</h3>
+          <p style="font-size:.85rem;color:var(--text-dim);line-height:1.6">
+            Central typed event system using Combine <code>PassthroughSubject</code>. Every pipeline, service, and UI
+            component communicates through the bus. Events are dispatched by type name. Subscribers receive on
+            <code>DispatchQueue.main</code>. Loose coupling by design.
+          </p>
+          <code style="margin-top:8px;display:inline-block">Core/EventBus.swift</code>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Syntax highlighting + more -->
+  <section class="section">
+    <div class="container">
+      <p class="section-kicker reveal">Developer experience</p>
+      <h2 class="section-title reveal">Built for the Mac</h2>
+      <div class="grid-2" style="margin-top:28px">
+        <div class="card reveal">
+          <h3 style="font-size:1rem;margin-bottom:6px">Syntax highlighting</h3>
+          <p style="font-size:.85rem;color:var(--text-dim)">
+            Powered by <strong>tree-sitter</strong> AST parsing with the <strong>Neon runtime</strong> — not regex-based
+            tokenization. Supports 20+ languages with accurate, incremental, and fast highlighting.
+            Customizable color schemes per-language via the settings UI.
+          </p>
+          <code style="display:inline-block;margin-top:8px">Packages/SyntaxHighlighting/</code>
+        </div>
+        <div class="card reveal">
+          <h3 style="font-size:1rem;margin-bottom:6px">Terminal integration</h3>
+          <p style="font-size:.85rem;color:var(--text-dim)">
+            Embedded terminal with the system shell (<code>/bin/zsh</code> or <code>/bin/bash</code>),
+            build error parsing, and clickable links to editor locations. Build error diagnostics
+            are parsed for file/line references — click to navigate directly to the issue.
+          </p>
+          <code style="display:inline-block;margin-top:8px">Packages/Terminal/</code>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section section-alt" style="text-align:center">
+    <div class="container container-narrow">
+      <div class="reveal">
+        <p class="section-kicker">Read the source</p>
+        <h2 class="section-title" style="font-size:1.5rem">The full architecture is documented in the repo</h2>
+        <div style="margin-top:20px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+          <a class="btn btn-primary" href={`${REPO}/blob/main/ARCHITECTURE.md`} target="_blank" rel="noreferrer">ARCHITECTURE.md</a>
+          <a class="btn btn-secondary" href={`${REPO}/blob/main/VISION.md`} target="_blank" rel="noreferrer">VISION.md</a>
+          <a class="btn btn-secondary" href={REPO} target="_blank" rel="noreferrer">GitHub</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

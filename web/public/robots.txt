@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://jtrefon.github.io/ai-ide/sitemap-index.xml

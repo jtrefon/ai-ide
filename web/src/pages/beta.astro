@@ -1,0 +1,117 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { BASE_URL, BETA_FORM_ACTION } from "../consts";
+---
+
+<BaseLayout
+  title="Join the closed beta — osx-ide"
+  description="Sign up for the osx-ide closed beta. Early access to the commercial hosted tier with bundled inference, priority support, and enterprise features."
+  canonical={`${BASE_URL}/beta`}
+>
+  <section class="page-hero" style="text-align:center">
+    <div class="container container-narrow">
+      <p class="section-kicker reveal">Closed beta</p>
+      <h1 class="reveal text-gradient">Join the waitlist</h1>
+      <p class="reveal" style="font-size:1.05rem;color:var(--text-dim);max-width:560px;margin:0 auto;line-height:1.7">
+        osx-ide is open source and free to use. The closed beta gives you early access to the upcoming
+        commercial hosted tier — bundled inference, priority updates, and enterprise features.
+      </p>
+    </div>
+  </section>
+
+  <section class="section section-alt" style="padding-top:0">
+    <div class="container container-narrow">
+      <div class="glass" style="padding:40px;text-align:center">
+        <form
+          id="beta-form"
+          class="reveal"
+          style="display:flex;flex-direction:column;gap:16px;max-width:440px;margin:0 auto"
+        >
+          <input
+            type="email"
+            name="email"
+            placeholder="your@email.com"
+            required
+            class="form-input"
+            aria-label="Email address"
+          />
+          <input type="text" name="name" placeholder="Your name (optional)" class="form-input" aria-label="Your name" />
+          <input type="hidden" name="_subject" value="osx-ide closed beta signup" />
+          <button type="submit" class="btn btn-primary" style="justify-content:center;width:100%">
+            Join the closed beta
+          </button>
+          <p style="font-size:.8rem;color:var(--text-faint)">
+            No spam. We'll notify you when beta slots open. Your email is never shared.
+          </p>
+          <div class="form-status" id="form-status"></div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container container-narrow">
+      <h2 class="reveal" style="font-size:1.3rem;margin-bottom:24px;font-weight:600">Frequently asked questions</h2>
+      <div style="display:flex;flex-direction:column;gap:24px">
+        <div class="reveal">
+          <h3 style="font-size:.95rem;margin-bottom:4px;color:var(--text)">What does the closed beta include?</h3>
+          <p style="font-size:.88rem;color:var(--text-dim)">Early access to the commercial hosted tier — bundled inference (no separate API keys needed), priority support, early feature access (remote sessions, multi-file orchestration, project memory), and a say in the roadmap.</p>
+        </div>
+        <div class="reveal">
+          <h3 style="font-size:.95rem;margin-bottom:4px;color:var(--text)">Is osx-ide still open source?</h3>
+          <p style="font-size:.88rem;color:var(--text-dim)">Yes. The core IDE remains open source under the MIT license. The beta enrolls you in the <strong>commercial hosted tier</strong> — a paid service that bundles inference, removes the need to manage your own API keys, and adds enterprise features.</p>
+        </div>
+        <div class="reveal">
+          <h3 style="font-size:.95rem;margin-bottom:4px;color:var(--text)">How much will it cost?</h3>
+          <p style="font-size:.88rem;color:var(--text-dim)">Pricing TBD. We're exploring a usage-based model — not per-seat. Local AI stays free. You only pay for cloud inference and managed features. Beta participants will get a discounted founder rate.</p>
+        </div>
+        <div class="reveal">
+          <h3 style="font-size:.95rem;margin-bottom:4px;color:var(--text)">Do I need Apple Silicon?</h3>
+          <p style="font-size:.88rem;color:var(--text-dim)">Yes. osx-ide requires an Apple Silicon Mac running macOS 26+. The local pipeline uses MLX, the Metal-backed framework designed for Apple's unified memory architecture.</p>
+        </div>
+        <div class="reveal">
+          <h3 style="font-size:.95rem;margin-bottom:4px;color:var(--text)">Can I just use the open source build?</h3>
+          <p style="font-size:.88rem;color:var(--text-dim)">Absolutely. Download the latest build from GitHub Releases. You'll need your own API keys for cloud models, but local completion and Q&A work completely offline and free.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const form = document.getElementById("beta-form");
+    const status = document.getElementById("form-status");
+    if (form) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        status.textContent = "Submitting...";
+        status.className = "form-status";
+        try {
+          // Fallback: if no Formspree ID is configured, show message
+          const action = form.getAttribute("action") || form.action;
+          if (!action || action.includes("formspree.io/f/") && action.endsWith("/")) {
+            status.textContent = "⚠️ Form backend not configured. Please set BETA_FORM_ACTION in src/consts.ts. For now, email jack@example.com directly.";
+            status.className = "form-status error";
+            return;
+          }
+          const res = await fetch(action, {
+            method: "POST",
+            body: new FormData(form),
+            headers: { Accept: "application/json" },
+          });
+          if (res.ok) {
+            status.textContent = "✅ You're on the list. We'll be in touch when beta slots open.";
+            status.className = "form-status success";
+            form.reset();
+          } else {
+            const data = await res.json();
+            status.textContent = data.error || "Something went wrong. Please try again.";
+            status.className = "form-status error";
+          }
+        } catch {
+          status.textContent = "Network error. Please try again.";
+          status.className = "form-status error";
+        }
+      });
+    }
+  </script>
+</BaseLayout>

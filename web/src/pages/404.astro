@@ -1,0 +1,18 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { BASE_URL, REPO } from "../consts";
+---
+
+<BaseLayout title="404 — osx-ide" description="Page not found">
+  <section class="hero" style="padding-top:120px">
+    <div class="container" style="text-align:center">
+      <p class="section-kicker reveal">404</p>
+      <h1 class="reveal" style="font-size:clamp(2rem,5vw,3rem)">Page not found</h1>
+      <p class="hero-lede reveal" style="margin-bottom:28px">The page you're looking for doesn't exist or has moved.</p>
+      <div class="reveal" style="display:flex;gap:12px;justify-content:center">
+        <a class="btn btn-primary" href={`${BASE_URL}/`}>Go home</a>
+        <a class="btn btn-secondary" href={REPO} target="_blank" rel="noreferrer">GitHub</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
