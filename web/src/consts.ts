@@ -1,6 +1,6 @@
 export const SITE_TITLE = "Compass | The native AI IDE for macOS";
 export const SITE_DESCRIPTION =
-  "Compass is a Swift-native AI IDE that runs real AI — completion, RAG, and agentic coding — entirely on your Apple Silicon. 200MB. No Electron. Your code never leaves your Mac.";
+  "Compass is a Swift-native AI IDE that runs real AI for completion, RAG, and agentic coding, entirely on your Apple Silicon. 200MB. No Electron. Your code never leaves your Mac.";
 
 export const BASE_URL = "/ai-ide";
 export const SITE_URL = "https://jtrefon.github.io/ai-ide";
