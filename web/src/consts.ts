@@ -6,8 +6,8 @@ export const BASE_URL = "/ai-ide";
 export const REPO = "https://github.com/jtrefon/ai-ide";
 export const RELEASES = `${REPO}/releases`;
 
-/** Optional contact email. If set, the beta form also offers a mailto fallback. Leave empty to use the GitHub-issue flow only. */
-export const BETA_CONTACT_EMAIL = "";
+/** Replace this with your Formspree form ID (or other static-form backend URL) */
+export const BETA_FORM_ACTION = "https://formspree.io/f/";
 
 export const NAV = [
   { label: "Developers", href: "/developers" },
