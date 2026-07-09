@@ -1,6 +1,6 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { BASE_URL, BETA_FORM_ACTION } from "../consts";
+import { BASE_URL, REPO, BETA_CONTACT_EMAIL } from "../consts";
 ---
 
 <BaseLayout
@@ -25,6 +25,7 @@ import { BASE_URL, BETA_FORM_ACTION } from "../consts";
         <form
           id="beta-form"
           class="reveal"
+          data-repo={REPO}
           style="display:flex;flex-direction:column;gap:16px;max-width:440px;margin:0 auto"
         >
           <input
@@ -36,13 +37,25 @@ import { BASE_URL, BETA_FORM_ACTION } from "../consts";
             aria-label="Email address"
           />
           <input type="text" name="name" placeholder="Your name (optional)" class="form-input" aria-label="Your name" />
-          <input type="hidden" name="_subject" value="Compass closed beta signup" />
+          <textarea
+            name="message"
+            placeholder="Anything you'd like us to know? (optional)"
+            rows="3"
+            class="form-input"
+            aria-label="Message"
+            style="font-family:var(--font-sans);resize:vertical"
+          ></textarea>
           <button type="submit" class="btn btn-primary" style="justify-content:center;width:100%">
             Join the closed beta
           </button>
           <p style="font-size:.8rem;color:var(--text-faint)">
-            No spam. We'll notify you when beta slots open. Your email is never shared.
+            No spam. Submitting opens a pre-filled GitHub issue so we can follow up when beta slots open. Your email is never shared.
           </p>
+          {BETA_CONTACT_EMAIL && (
+            <p style="font-size:.8rem;color:var(--text-faint)">
+              Prefer email? <a href={`mailto:${BETA_CONTACT_EMAIL}?subject=${encodeURIComponent("Compass beta signup")}`}>Email us directly</a>.
+            </p>
+          )}
           <div class="form-status" id="form-status"></div>
         </form>
       </div>
@@ -81,35 +94,31 @@ import { BASE_URL, BETA_FORM_ACTION } from "../consts";
     const form = document.getElementById("beta-form");
     const status = document.getElementById("form-status");
     if (form) {
-      form.addEventListener("submit", async (e) => {
+      form.addEventListener("submit", (e) => {
         e.preventDefault();
-        status.textContent = "Submitting...";
-        status.className = "form-status";
-        try {
-          // Fallback: if no Formspree ID is configured, show message
-          const action = form.getAttribute("action") || form.action;
-          if (!action || action.includes("formspree.io/f/") && action.endsWith("/")) {
-            status.textContent = "⚠️ Form backend not configured. Please set BETA_FORM_ACTION in src/consts.ts. For now, email jack@example.com directly.";
-            status.className = "form-status error";
-            return;
-          }
-          const res = await fetch(action, {
-            method: "POST",
-            body: new FormData(form),
-            headers: { Accept: "application/json" },
-          });
-          if (res.ok) {
-            status.textContent = "✅ You're on the list. We'll be in touch when beta slots open.";
-            status.className = "form-status success";
-            form.reset();
-          } else {
-            const data = await res.json();
-            status.textContent = data.error || "Something went wrong. Please try again.";
-            status.className = "form-status error";
-          }
-        } catch {
-          status.textContent = "Network error. Please try again.";
+        const email = (form.elements.email.value || "").trim();
+        const name = (form.elements.name.value || "").trim();
+        const message = (form.elements.message.value || "").trim();
+        if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+          status.textContent = "⚠️ Please enter a valid email so we can reach you.";
           status.className = "form-status error";
+          form.elements.email.focus();
+          return;
+        }
+        const repo = form.dataset.repo || "https://github.com/jtrefon/ai-ide";
+        const title = encodeURIComponent(`Beta signup — ${email}`);
+        const body = encodeURIComponent(
+          `**Email:** ${email}\n**Name:** ${name || "—"}\n\n${message || "Excited to try Compass!"}\n\n_Submitted from the Compass website._`
+        );
+        const url = `${repo}/issues/new?title=${title}&body=${body}&labels=beta`;
+        status.textContent = "✅ Opening GitHub to complete your signup…";
+        status.className = "form-status success";
+        form.reset();
+        const win = window.open(url, "_blank", "noopener");
+        if (!win) {
+          status.textContent =
+            "✅ Signup ready — if the tab didn't open, visit the Issues tab on GitHub and we'll be in touch.";
+          status.className = "form-status success";
         }
       });
     }
