@@ -1,6 +1,6 @@
-export const SITE_TITLE = "Compass | Native AI IDE for macOS";
+export const SITE_TITLE = "Compass | The native AI IDE for macOS";
 export const SITE_DESCRIPTION =
-  "A Swift-native AI IDE for developers who want local speed, private context, and serious agentic coding without giving up control.";
+  "Compass is a Swift-native AI IDE that runs real AI — completion, RAG, and agentic coding — entirely on your Apple Silicon. 200MB. No Electron. Your code never leaves your Mac.";
 
 export const BASE_URL = "/ai-ide";
 export const REPO = "https://github.com/jtrefon/ai-ide";
@@ -10,6 +10,9 @@ export const RELEASES = `${REPO}/releases`;
 export const BETA_FORM_ACTION = "https://formspree.io/f/";
 
 export const NAV = [
+  { label: "Developers", href: "/developers" },
+  { label: "Teams", href: "/teams" },
+  { label: "Enterprise", href: "/enterprise" },
   { label: "Tech", href: "/tech" },
   { label: "Beta", href: "/beta" },
   { label: "Contributors", href: "/contributors" },
@@ -25,15 +28,18 @@ export const REMOTE_PROVIDERS =
   "OpenRouter, Alibaba Cloud, Kilo Code, DeepSeek, and any OpenAI-compatible endpoint";
 
 export const FEATURES_SHIPPING = [
-  { title: "On-device FIM autocomplete", desc: `<100ms ghost-text completion via local model, tuned for cancellation and compact prompts.` },
-  { title: "Native local inference", desc: `MLX-backed models supporting offline chat, local quick actions, configurable context length and quantised KV cache.` },
-  { title: "Codebase intelligence", desc: `SQLite FTS5 index tracking files, symbols, chunks, and HNSW-backed embedding retrieval for grounded answers.` },
+  { title: "Real FIM completion", desc: `Genuine on-device intelligence - ghost-text completion in <100ms from a 1.5B model, not a fake heuristic. Tuned for instant cancellation and tight prompts.` },
+  { title: "Built-in local inference", desc: `MLX-backed models run chat, quick actions, and full agentic workflows on your Mac. Offline. Private. No API key required.` },
+  { title: "ANE-accelerated RAG", desc: `Embeddings and retrieval run on the Apple Neural Engine - indexing and search stay silent and painless, never hogging your CPU.` },
+  { title: "Codebase intelligence", desc: `SQLite FTS5 plus HNSW vector retrieval over files, symbols, and chunks - grounded answers drawn from your own code.` },
+  { title: "Built-in web browser", desc: `Read docs and references without leaving the editor. One app, zero context-switching to a browser.` },
   { title: "Provider choice", desc: `Route heavy work through any provider - OpenRouter, Alibaba Cloud, DeepSeek, Kilo Code, or your own local model.` },
-  { title: "Inline AI popover", desc: `Cursor-anchored Q&A panel for instant explain, refactor, or ask - without switching context.` },
+  { title: "Inline AI popover", desc: `Cursor-anchored Q&A for instant explain, refactor, or ask - without losing your place in the code.` },
   { title: "Semantic search", desc: `HNSW ANN vector index with CoreML embeddings, 10-50x faster than brute-force with ~95-99% recall.` },
 ] as const;
 
 export const FEATURES_BETA = [
+  { title: "Local agentic execution", desc: `The agent runs on-device for maximum security - your most sensitive refactors never touch a cloud.` },
   { title: "Agentic tool execution", desc: `Orchestration graph (Planner > Worker > QA > Final) with 20+ tools, stall detection, and recovery.` },
   { title: "Multi-file refactoring", desc: `Autonomous execution of complex multi-file changes with diff-preview and checkpoint rollback.` },
   { title: "Remote sessions", desc: `SSH and SFTP integration so the agent works in your infrastructure.` },
@@ -59,9 +65,11 @@ export const PIPELINE_CLOUD = [
 export const COMPETITIVE = [
   { need: "Autocomplete latency", cloud: "500-2000 ms (network-bound)", us: "<100 ms (local)" },
   { need: "Private / offline work", cloud: "Limited without connection", us: "Full offline mode, AI still works" },
-  { need: "Agentic tasks", cloud: "Strong but one-size-fits-all", us: "Dedicated cloud pipeline with RAG + tool loops" },
-  { need: "Mac integration", cloud: "Electron-based, browser-like", us: "Native SwiftUI + AppKit, Apple Silicon optimised" },
-  { need: "Privacy", cloud: "All code sent to cloud", us: "Local-by-default; cloud is opt-in" },
+  { need: "Where your code goes", cloud: "Sent to a cloud server every keystroke", us: "Local-by-default; cloud is opt-in" },
+  { need: "Embeddings / RAG", cloud: "Cloud-bound, ships code out", us: "On-device, Apple Neural Engine" },
+  { need: "Agentic tasks", cloud: "Strong but one-size-fits-all", us: "Dedicated pipeline, runs locally for privacy" },
+  { need: "Mac integration", cloud: "Electron-based, browser-like", us: "Native AppKit + Liquid Glass, Apple Silicon" },
+  { need: "Memory footprint", cloud: "Electron - 1GB+ and climbing", us: "~200MB with all AI on" },
   { need: "Cost", cloud: "$15-20/mo+ per seat", us: "Local is free; cloud is usage-based" },
 ] as const;
 

@@ -1,8 +1,0 @@
-<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="630" fill="#0a0704"/>
-  <circle cx="100" cy="530" r="400" fill="rgba(196,148,62,.04)"/>
-  <circle cx="1100" cy="100" r="350" fill="rgba(255,255,255,.02)"/>
-  <text x="90" y="300" font-family="'Inter',-apple-system,sans-serif" font-size="80" font-weight="800" fill="#e6d7bf" letter-spacing="-3">Compass</text>
-  <text x="90" y="370" font-family="'Inter',-apple-system,sans-serif" font-size="32" font-weight="500" fill="#bba586" letter-spacing="-0.5">Native AI IDE for macOS</text>
-  <text x="90" y="420" font-family="'JetBrains Mono',monospace" font-size="18" font-weight="400" fill="#8a785e">Local-first speed  ·  Cloud-scale power  ·  One editor</text>
-</svg>

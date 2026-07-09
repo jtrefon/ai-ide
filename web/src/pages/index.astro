@@ -1,21 +1,22 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import ProductShot from "../components/ProductShot.astro";
 import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE, ROADMAP, PIPELINE_LOCAL, PIPELINE_CLOUD, SITE_TITLE, SITE_DESCRIPTION } from "../consts";
 ---
 
 <BaseLayout title={SITE_TITLE} description={SITE_DESCRIPTION} canonical={`${BASE_URL}/`}>
   <section class="hero">
     <div class="container">
-      <p class="section-kicker reveal">Swift-native · Apple Silicon · Dual-pipeline AI</p>
+      <p class="section-kicker reveal">Swift-native · Apple Neural Engine · Real on-device AI</p>
       <h1 class="reveal">
-        The native AI IDE<br />
-        for macOS
+        Your code. Your Mac.<br />
+        Real AI — nowhere else.
       </h1>
-      <p class="hero-tagline reveal">Local-first speed. Cloud-scale power. One editor.</p>
+      <p class="hero-tagline reveal">Native speed. On-device intelligence. A 200&nbsp;MB footprint.</p>
       <p class="hero-lede reveal">
-        Compass is a Swift-native IDE that gives you <strong>&lt;100ms inline completion</strong> from an on-device local model,
-        deep codebase intelligence that works <strong>100% offline</strong>, and a <strong>cloud agent pipeline</strong> for
-        serious multi-file work - on your terms.
+        Compass is a Swift-native IDE that runs <strong>genuine</strong> AI — completion, retrieval, and
+        agentic coding — entirely on your Apple Silicon. No Electron. No JavaScript bloat. No code shipped to
+        the cloud. The fastest, most private coding assistant ever built for macOS, and years ahead of everything else.
       </p>
       <div class="hero-actions reveal">
         <a class="btn btn-primary" href={`${BASE_URL}/beta`}>Join closed beta</a>
@@ -28,17 +29,32 @@ import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE
           <div class="hero-stat-label">Local completion latency</div>
         </div>
         <div>
+          <div class="hero-stat-value">200MB</div>
+          <div class="hero-stat-label">Full app, every AI on</div>
+        </div>
+        <div>
           <div class="hero-stat-value">100%</div>
           <div class="hero-stat-label">Offline-capable AI</div>
+        </div>
+        <div>
+          <div class="hero-stat-value">ANE</div>
+          <div class="hero-stat-label">On-device embeddings</div>
         </div>
         <div>
           <div class="hero-stat-value">20+</div>
           <div class="hero-stat-label">Agent tools</div>
         </div>
-        <div>
-          <div class="hero-stat-value">5×</div>
-          <div class="hero-stat-label">Faster semantic search (HNSW)</div>
-        </div>
+      </div>
+
+      <div class="container" style="margin-top:56px">
+        <ProductShot
+          src={`${BASE_URL}/images/shot-ide.webp`}
+          alt="Compass IDE showing the file navigator, native editor, and agentic chat panel running on macOS"
+          width={1473}
+          height={1039}
+          eager={true}
+          caption="Compass running natively on macOS — file navigator, editor, and the agentic chat pipeline."
+        />
       </div>
     </div>
   </section>
@@ -47,10 +63,10 @@ import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE
   <section id="architecture" class="section section-alt">
     <div class="container">
       <p class="section-kicker reveal">Architecture</p>
-      <h2 class="section-title reveal">Two pipelines, one editor</h2>
+      <h2 class="section-title reveal">Two pipelines. One editor. Zero compromise.</h2>
       <p class="section-sub reveal">
-        Local and cloud are completely separate AI pipelines that share an editor.
-        Each is optimized for what it does best - no compromises, no blended latency.
+        Local and cloud are completely separate AI pipelines that share the same native editor.
+        Each is tuned for what it does best — so you get cloud-scale power without ever paying for it in latency.
       </p>
 
       <div class="pipeline-cards">
@@ -62,11 +78,11 @@ import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE
           </h3>
           <p style="font-size:.9rem;color:var(--text-dim)">Always on. Always private. No network required.</p>
           <ul>
-            <li>FIM inline completion - ghost text in <strong>&lt;100ms</strong></li>
-            <li>Inline AI popover - cursor-anchored Q&A</li>
-            <li>Semantic search - HNSW ANN, 10–50× faster</li>
-            <li>Direct local model chat (offline mode)</li>
-            <li>Model: on-device LLM via MLX</li>
+            <li>Real FIM completion — <strong>intelligent</strong> ghost text in <strong>&lt;100ms</strong></li>
+            <li>Inline AI popover — cursor-anchored Q&amp;A, on your machine</li>
+            <li>Semantic search — HNSW ANN, 10–50× faster, powered by the Neural Engine</li>
+            <li>Direct local model chat &amp; agentic work — fully offline</li>
+            <li>Model: on-device LLM via MLX, accelerated by Apple Silicon</li>
           </ul>
         </div>
         <div class="pipeline-card cloud reveal">
@@ -80,55 +96,151 @@ import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE
             <li>Orchestration graph: Planner → Worker → QA → Final</li>
             <li>Tool loop with <strong>stall detection + recovery</strong></li>
             <li>RAG context injection with evidence fusion ranking</li>
-            <li><strong>20+ tools</strong> - file I/O, terminal, search, project ops</li>
-            <li>Multi-provider: OpenRouter, DeepSeek, Alibaba, Kilo, local</li>
+            <li><strong>20+ tools</strong> — file I/O, terminal, search, project ops, built-in browser</li>
+            <li>Multi-provider: OpenRouter, DeepSeek, Alibaba, Kilo, local — Anthropic &amp; OpenAI next</li>
           </ul>
+        </div>
+      </div>
+
+      <div class="container" style="margin-top:32px">
+        <div class="model-stat reveal">
+          <span class="badge-strong">1.5B</span>
+          <p>
+            Our local completion model is <strong>1.5 billion parameters</strong> — roughly
+            <strong>15× larger</strong> than the ~100MB models some competitors ship for the same job.
+            Real intelligence, still running on-device at sub-100ms.
+          </p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Why dual audience -->
-  <section id="why" class="section">
+  <!-- Built for the work you can't talk about -->
+  <section id="private" class="section">
     <div class="container container-narrow" style="text-align:center">
-      <p class="section-kicker reveal">For developers and teams</p>
-      <h2 class="section-title reveal">Local-by-default is a business advantage</h2>
+      <p class="section-kicker reveal">Privacy by architecture</p>
+      <h2 class="section-title reveal">Built for the work you can't talk about</h2>
       <p class="section-sub reveal" style="margin:0 auto">
-        Every AI IDE today sends your code to a cloud server before showing a suggestion.
-        Compass reverses that assumption. The result is better for developers <em>and</em> the organizations they work for.
+        Working on something you're not allowed to utter out loud? Most "AI" editors silently ship your
+        source to someone else's servers before they'll autocomplete a single line. Compass never does.
+        Every suggestion, every retrieval, every agent step runs locally on your Mac.
       </p>
     </div>
     <div class="container" style="margin-top:40px">
       <div class="grid-2">
         <div class="card reveal">
-          <h3 style="margin-bottom:6px;color:var(--accent)">For developers</h3>
+          <h3 style="margin-bottom:6px;color:var(--accent)">Your IP stays put</h3>
           <ul style="list-style:none;color:var(--text-dim);line-height:1.8">
-            <li style="padding:4px 0">✧ Completions in <strong>&lt;100ms</strong> - no network jitter</li>
-            <li style="padding:4px 0">✧ Full offline mode - code on a plane, in a tunnel, anywhere</li>
-            <li style="padding:4px 0">✧ Your code never leaves your Mac unless you choose</li>
-            <li style="padding:4px 0">✧ Native SwiftUI - feels like macOS, not a browser</li>
-            <li style="padding:4px 0">✧ Open source - inspect, fork, trust the binary</li>
+            <li style="padding:4px 0">✧ Code on a plane, in a tunnel, inside an air-gapped lab — AI still works</li>
+            <li style="padding:4px 0">✧ Nothing leaves the endpoint without your explicit say-so</li>
+            <li style="padding:4px 0">✧ Compliance by design, not by a checkbox buried in a policy</li>
+            <li style="padding:4px 0">✧ Built-in local inference for agentic work — maximum security, zero exposure</li>
           </ul>
         </div>
         <div class="card reveal">
-          <h3 style="margin-bottom:6px;color:var(--text-dim)">For teams and executives</h3>
+          <h3 style="margin-bottom:6px;color:var(--accent)">The agent never forgets</h3>
           <ul style="list-style:none;color:var(--text-dim);line-height:1.8">
-            <li style="padding:4px 0">✧ IP never leaves the endpoint without consent - <strong>compliance by design</strong></li>
-            <li style="padding:4px 0">✧ No per-seat cloud AI markup for daily coding - local is free</li>
-            <li style="padding:4px 0">✧ Cloud AI only when the task needs it - usage-based, not per-seat</li>
-            <li style="padding:4px 0">✧ Apple Silicon efficiency = better battery, less thermal throttling</li>
-            <li style="padding:4px 0">✧ Enterprise roadmap: SSO, compliance, custom models</li>
+            <li style="padding:4px 0">✧ On-device RAG embeds your entire work history</li>
+            <li style="padding:4px 0">✧ Months of context survive — no dropped memory, no re-explaining</li>
+            <li style="padding:4px 0">✧ Retrieval runs on the Apple Neural Engine — silent, private, instant</li>
+            <li style="padding:4px 0">✧ Ask about code you wrote last quarter; it's all still there</li>
           </ul>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- Native means something here -->
+  <section id="native" class="section section-alt">
+    <div class="container">
+      <p class="section-kicker reveal">Why native wins</p>
+      <h2 class="section-title reveal">Native means something here</h2>
+      <p class="section-sub reveal" style="margin-bottom:32px">
+        Compass is a real macOS binary — compiled in Swift and accelerated by the Metal and Neural Engine
+        frameworks. No Chromium. No Electron event loop burning your CPU. No gigabytes of JavaScript parked
+        in RAM. Just an editor that feels like part of the OS.
+      </p>
+      <div class="grid-3">
+        <div class="card reveal">
+          <h3 style="margin-bottom:8px;color:var(--accent)">~200 MB, AI included</h3>
+          <p style="font-size:.9rem;color:var(--text-dim)">The entire app — with every AI capability switched on — fits in roughly 200&nbsp;MB. Smaller than most editors manage with AI turned <em>off</em>.</p>
+        </div>
+        <div class="card reveal">
+          <h3 style="margin-bottom:8px;color:var(--accent)">No Electron tax</h3>
+          <p style="font-size:.9rem;color:var(--text-dim)">Tired of an IDE eating 80% of your RAM and slowing to a crawl? No JS loops, no listeners, no unaccelerated UI rendering. Just native performance.</p>
+        </div>
+        <div class="card reveal">
+          <h3 style="margin-bottom:8px;color:var(--accent)">Liquid Glass &amp; deep OS access</h3>
+          <p style="font-size:.9rem;color:var(--text-dim)">Full access to low-level Apple OS features, including the latest Liquid Glass framework — something a web wrapper can never touch.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Who it's for -->
+  <section id="audiences" class="section">
+    <div class="container">
+      <p class="section-kicker reveal">Who Compass is for</p>
+      <h2 class="section-title reveal">One IDE. Every kind of builder.</h2>
+      <p class="section-sub reveal" style="margin-bottom:8px">
+        Same product, same on-device AI — pitched to the people who actually care.
+      </p>
+      <div class="grid-3" style="margin-top:28px">
+        <div class="card reveal">
+          <h3 style="color:var(--accent);margin-bottom:10px">For developers</h3>
+          <p style="font-size:.9rem;color:var(--text-dim);line-height:1.75">
+            Real AI that runs where you type — <strong>&lt;100ms local FIM</strong> from a 1.5B model, not a fake
+            heuristic. A <strong>200&nbsp;MB native binary</strong>: no Electron, no RAM tax, Liquid Glass and
+            low-level macOS included. Works offline. Built-in browser, built-in inference — your machine, your rules.
+          </p>
+          <a href={`${BASE_URL}/developers`} class="badge badge-live" style="margin-top:12px;text-decoration:none">Learn more →</a>
+        </div>
+        <div class="card reveal">
+          <h3 style="color:var(--accent);margin-bottom:10px">For teams &amp; companies</h3>
+          <p style="font-size:.9rem;color:var(--text-dim);line-height:1.75">
+            IP never leaves the endpoint without consent — <strong>compliance by design</strong>, not a policy checkbox.
+            Local AI is free; cloud is opt-in and <strong>usage-based, not per-seat</strong>. Apple Silicon efficiency means
+            happier engineers and longer battery. On-device RAG keeps institutional knowledge in-house.
+          </p>
+          <a href={`${BASE_URL}/teams`} class="badge badge-live" style="margin-top:12px;text-decoration:none">Learn more →</a>
+        </div>
+        <div class="card reveal" style="border-color:rgba(196,148,62,.35)">
+          <h3 style="color:var(--accent);margin-bottom:10px">For enterprises</h3>
+          <p style="font-size:.9rem;color:var(--text-dim);line-height:1.75">
+            <strong>Total privacy by architecture.</strong> Compass runs fully air-gapped — inference, RAG, and agentic
+            work all on-device, nothing egresses. Clears the bar for defense, finance, healthcare, and government where
+            data residency is non-negotiable. No third-party model vendor in your supply chain.
+          </p>
+          <a href={`${BASE_URL}/enterprise`} class="badge badge-live" style="margin-top:12px;text-decoration:none">Learn more →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Enterprise: total privacy -->
+  <section class="section section-alt" style="text-align:center">
+    <div class="container container-narrow">
+      <p class="section-kicker reveal">The enterprise difference</p>
+      <h2 class="section-title reveal">The only AI IDE you can deploy where data cannot leave the building.</h2>
+      <p class="section-sub reveal" style="margin:0 auto 24px">
+        Because it never does. Every suggestion, retrieval, and agent step stays on the endpoint. No telemetry
+        exfiltration, no prompt in someone else's training set, no vendor in your supply chain. Audit the binary —
+        it's open source.
+      </p>
+      <div class="reveal" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <span class="badge badge-live">Air-gapped capable</span>
+        <span class="badge badge-live">Zero network egress</span>
+        <span class="badge badge-live">Open source &amp; auditable</span>
+        <span class="badge badge-live">Clears defense / finance / health bars</span>
+      </div>
+    </div>
+  </section>
+
   <!-- Capabilities -->
-  <section id="capabilities" class="section section-alt">
+  <section id="capabilities" class="section">
     <div class="container">
       <p class="section-kicker reveal">Capabilities</p>
-      <h2 class="section-title reveal">Shipping today</h2>
+      <h2 class="section-title reveal">Packed. And shipping.</h2>
       <p class="section-sub reveal" style="margin-bottom:32px">
         These features ship in the current open-source build. No waitlist needed for local AI.
       </p>
@@ -156,14 +268,18 @@ import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE
   </section>
 
   <!-- Tech under the hood compact -->
-  <section class="section">
+  <section class="section section-alt">
     <div class="container">
       <p class="section-kicker reveal">Under the hood</p>
-      <h2 class="section-title reveal">Engineered for performance</h2>
+      <h2 class="section-title reveal">Engineered for the silicon it runs on</h2>
       <div class="grid-3" style="margin-top:28px">
         <div class="card reveal">
+          <h3 style="font-size:.95rem;margin-bottom:4px;font-family:var(--font-mono);color:var(--accent)">Apple Neural Engine</h3>
+          <p style="font-size:.85rem;color:var(--text-dim)">Embeddings and retrieval run on the ANE — indexing and search stay silent and painless, never stealing cycles from your build.</p>
+        </div>
+        <div class="card reveal">
           <h3 style="font-size:.95rem;margin-bottom:4px;font-family:var(--font-mono);color:var(--accent)">On-device LLM</h3>
-          <p style="font-size:.85rem;color:var(--text-dim)">Apple MLX framework running a quantized local model on the Neural Engine. <strong>&lt;100ms</strong> end-to-end. Models are swappable - swap models anytime without waiting for a website update.</p>
+          <p style="font-size:.85rem;color:var(--text-dim)">Apple MLX running a quantized 1.5B model on the Neural Engine. <strong>&lt;100ms</strong> end-to-end. Swap models anytime without a website update.</p>
         </div>
         <div class="card reveal">
           <h3 style="font-size:.95rem;margin-bottom:4px;font-family:var(--font-mono);color:var(--accent)">HNSW - FAISS</h3>
@@ -178,13 +294,43 @@ import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE
           <p style="font-size:.85rem;color:var(--text-dim)">Tree-sitter AST parsing with the Neon runtime for fast, accurate syntax highlighting across 20+ languages.</p>
         </div>
         <div class="card reveal">
-          <h3 style="font-size:.95rem;margin-bottom:4px;font-family:var(--font-mono);color:var(--accent)">EventBus</h3>
-          <p style="font-size:.85rem;color:var(--text-dim)">Typed, publisher-driven event system. Every pipeline, service, and UI component communicates through a shared bus - no tight coupling.</p>
-        </div>
-        <div class="card reveal">
           <h3 style="font-size:.95rem;margin-bottom:4px;font-family:var(--font-mono);color:var(--accent)">SwiftUI AppKit</h3>
-          <p style="font-size:.85rem;color:var(--text-dim)">Native <code>NSTextView</code> editor with SwiftUI overlays. No Chromium. No web view. Just native macOS, optimized for Apple Silicon.</p>
+          <p style="font-size:.85rem;color:var(--text-dim)">Native <code>NSTextView</code> editor with SwiftUI overlays and Liquid Glass. No Chromium. No web view. Just macOS.</p>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- In action -->
+  <section id="gallery" class="section">
+    <div class="container">
+      <p class="section-kicker reveal">In action</p>
+      <h2 class="section-title reveal">The real Compass</h2>
+      <p class="section-sub reveal" style="margin-bottom:8px">
+        Captured from the shipping app — no mockups, no stock UI.
+      </p>
+      <div class="showcase">
+        <ProductShot
+          src={`${BASE_URL}/images/shot-completion.webp`}
+          alt="Inline ghost-text completion appearing as you type"
+          width={856}
+          height={336}
+          caption="Sub-100ms ghost-text completion from the on-device model."
+        />
+        <ProductShot
+          src={`${BASE_URL}/images/shot-systemprompt.webp`}
+          alt="Per-project system-prompt override editor"
+          width={671}
+          height={227}
+          caption="Override the system prompt per project."
+        />
+        <ProductShot
+          src={`${BASE_URL}/images/shot-providers.webp`}
+          alt="Supported model providers in settings"
+          width={967}
+          height={715}
+          caption="Bring your own provider — or stay fully local. Anthropic &amp; OpenAI support lands in the next iteration."
+        />
       </div>
     </div>
   </section>
@@ -195,8 +341,8 @@ import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE
       <p class="section-kicker reveal">Positioning</p>
       <h2 class="section-title reveal">A Mac-first answer to cloud-only AI editors</h2>
       <p class="section-sub reveal" style="margin-bottom:24px">
-        Every other AI IDE is a browser wrapper that sends your code to a cloud server for every keystroke.
-        Compass is built from the ground up on a different premise.
+        Every other AI IDE is a browser wrapper that ships your code to a cloud server for every keystroke.
+        Compass is built from the ground up on a different premise — and it shows.
       </p>
       <div class="reveal">
         <div class="comparison-table" role="table" aria-label="Comparison with cloud-only editors">
@@ -218,12 +364,12 @@ import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE
   </section>
 
   <!-- Download -->
-  <section id="download" class="section section-alt">
+  <section id="download" class="section">
     <div class="container">
       <p class="section-kicker reveal">Download</p>
       <h2 class="section-title reveal">Install Compass today</h2>
       <p class="section-sub reveal" style="margin-bottom:28px">
-        Open source and free. Requires Apple Silicon and macOS 26+.
+        Open source and free. Roughly 200&nbsp;MB. Requires Apple Silicon and macOS 26+.
       </p>
       <div class="grid-2" style="margin-top:20px">
         <div class="card reveal" style="text-align:center">
@@ -243,7 +389,7 @@ import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE
   </section>
 
   <!-- Roadmap -->
-  <section id="roadmap" class="section">
+  <section id="roadmap" class="section section-alt">
     <div class="container">
       <p class="section-kicker reveal">Roadmap</p>
       <h2 class="section-title reveal">Ambitious, grounded in shipping architecture</h2>
@@ -261,13 +407,14 @@ import { BASE_URL, REPO, RELEASES, FEATURES_SHIPPING, FEATURES_BETA, COMPETITIVE
   </section>
 
   <!-- CTA -->
-  <section id="beta-cta" class="section section-alt" style="text-align:center">
+  <section id="beta-cta" class="section" style="text-align:center">
     <div class="container container-narrow">
-      <p class="section-kicker reveal">Get started</p>
+      <p class="section-kicker reveal">The generation after</p>
       <h2 class="section-title reveal">Join the closed beta</h2>
       <p class="section-sub reveal" style="margin:0 auto 28px">
-        Compass is open source and free to use. The closed beta gives you early access to the commercial hosted tier
-        with bundled inference, priority support, and enterprise features.
+        Compass isn't the next AI editor. It's the one after — native, private, and years ahead of the
+        competition. The closed beta gives you early access to the commercial hosted tier with bundled
+        inference, priority support, and enterprise features.
       </p>
       <div class="reveal" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
         <a class="btn btn-primary" href={`${BASE_URL}/beta`}>Get beta access</a>

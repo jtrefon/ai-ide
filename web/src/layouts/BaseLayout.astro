@@ -15,7 +15,7 @@ const { title, description, canonical, ogImage } = Astro.props;
 const pageTitle = title || SITE_TITLE;
 const pageDesc = description || SITE_DESCRIPTION;
 const pageUrl = canonical || `${BASE_URL}/`;
-const ogImg = ogImage || `https://jtrefon.github.io/ai-ide/images/og-image.svg`;
+const ogImg = ogImage || `https://jtrefon.github.io/ai-ide/images/og-image.png`;
 
 const ldJSON = JSON.stringify({
   "@context": "https://schema.org",
@@ -45,7 +45,15 @@ const ldJSON = JSON.stringify({
   <meta property="og:type" content="website" />
   <meta property="og:url" content={pageUrl} />
   <meta property="og:image" content={ogImg} />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:site_name" content="Compass" />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content={pageTitle} />
+  <meta name="twitter:description" content={pageDesc} />
+  <meta name="robots" content="index,follow,max-image-preview:large" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -57,6 +65,27 @@ const ldJSON = JSON.stringify({
   <link rel="canonical" href={pageUrl} />
 
   <script type="application/ld+json" set:html={ldJSON}></script>
+
+  <script type="application/ld+json" set:html={JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "Compass",
+    url: "https://jtrefon.github.io/ai-ide/",
+    logo: "https://jtrefon.github.io/ai-ide/images/logo-compass.svg",
+    sameAs: ["https://github.com/jtrefon/ai-ide"],
+  })}></script>
+
+  <script type="application/ld+json" set:html={JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Compass",
+    url: "https://jtrefon.github.io/ai-ide/",
+    potentialAction: {
+      "@type": "SearchAction",
+      target: "https://jtrefon.github.io/ai-ide/tech",
+      "query-input": "required name=search",
+    },
+  })}></script>
 </head>
 <body>
   <div class="grid-bg" aria-hidden="true"></div>
