@@ -2,7 +2,7 @@
 import "../styles/global.css";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
-import { SITE_TITLE, SITE_DESCRIPTION, BASE_URL, REPO } from "../consts";
+import { SITE_TITLE, SITE_DESCRIPTION, BASE_URL, SITE_URL, REPO } from "../consts";
 
 export interface Props {
   title?: string;
@@ -14,8 +14,8 @@ export interface Props {
 const { title, description, canonical, ogImage } = Astro.props;
 const pageTitle = title || SITE_TITLE;
 const pageDesc = description || SITE_DESCRIPTION;
-const pageUrl = canonical || `${BASE_URL}/`;
-const ogImg = ogImage || `https://jtrefon.github.io/ai-ide/images/og-image.png`;
+const pageUrl = (canonical || `${BASE_URL}/`).replace(BASE_URL, SITE_URL);
+const ogImg = ogImage || `${SITE_URL}/images/og-image.png`;
 
 const ldJSON = JSON.stringify({
   "@context": "https://schema.org",
