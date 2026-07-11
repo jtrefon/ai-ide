@@ -15,7 +15,6 @@ final class FinalResponseHandler {
 
     func requestFinalResponseIfNeeded(
         response: AIServiceResponse,
-        explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
         toolResults: [ChatMessage],
@@ -49,7 +48,6 @@ final class FinalResponseHandler {
                 }
                 return try await requestFinalResponse(
                     response: response,
-                    explicitContext: explicitContext,
                     mode: mode,
                     projectRoot: projectRoot,
                     toolResults: toolResults,
@@ -64,7 +62,6 @@ final class FinalResponseHandler {
 
         return try await requestFinalResponse(
             response: response,
-            explicitContext: explicitContext,
             mode: mode,
             projectRoot: projectRoot,
             toolResults: toolResults,
@@ -128,7 +125,6 @@ final class FinalResponseHandler {
 
     private func requestFinalResponse(
         response: AIServiceResponse,
-        explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
         toolResults: [ChatMessage],
@@ -165,8 +161,7 @@ final class FinalResponseHandler {
             try await aiInteractionCoordinator
             .sendMessageWithRetry(
                 AIInteractionCoordinator.SendMessageWithRetryRequest(
-                    messages: historyCoordinator.messages.filter { !$0.isDraft } + [correctionSystem],
-                    explicitContext: explicitContext,
+                    messages: historyCoordinator.requestMessages + [correctionSystem],
                     tools: [],
                     mode: followupMode,
                     projectRoot: projectRoot,
@@ -194,8 +189,7 @@ final class FinalResponseHandler {
         let retryFollowup = try await aiInteractionCoordinator
             .sendMessageWithRetry(
                 AIInteractionCoordinator.SendMessageWithRetryRequest(
-                    messages: historyCoordinator.messages.filter { !$0.isDraft } + [ChatMessage(role: .system, content: retryPrompt)],
-                    explicitContext: explicitContext,
+                    messages: historyCoordinator.requestMessages + [ChatMessage(role: .system, content: retryPrompt)],
                     tools: [],
                     mode: followupMode,
                     projectRoot: projectRoot,
@@ -454,13 +448,18 @@ final class FinalResponseHandler {
             let isDraftAtEnd = (lastMessage?.id == draftId && lastMessage?.role == MessageRole.assistant)
 
             if isDraftAtEnd {
-                historyCoordinator.finalizeDraftMessage(
+                let finalDraft = ChatMessage(
                     id: draftId,
+                    role: MessageRole.assistant,
                     content: displayContent,
-                    reasoning: effectiveReasoning
+                    timestamp: draftMessage?.timestamp ?? Date(),
+                    context: ChatMessageContentContext(reasoning: effectiveReasoning),
+                    billing: draftMessage?.billing
                 )
+                historyCoordinator.setDraft(finalDraft)
+                historyCoordinator.commitDraft()
             } else {
-                historyCoordinator.removeDraftMessage(id: draftId)
+                historyCoordinator.clearDraft()
                 historyCoordinator.append(
                     ChatMessage(
                         role: MessageRole.assistant,

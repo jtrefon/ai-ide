@@ -21,6 +21,13 @@ actor ToolFileAccessLedger {
         return readPathsByConversationId[normalizedConversationId]?.contains(normalizedPath) == true
     }
 
+    func readPaths(conversationId: String?) -> [String] {
+        guard let normalizedConversationId = normalizedConversationId(conversationId) else {
+            return []
+        }
+        return readPathsByConversationId[normalizedConversationId]?.sorted() ?? []
+    }
+
     func reset(conversationId: String?) {
         guard let normalizedConversationId = normalizedConversationId(conversationId) else {
             return

@@ -35,13 +35,13 @@ struct ModelSuggestionList: View {
                         }
                         .buttonStyle(.plain)
                         .background(AppConstants.Color.surfaceCard.opacity(0.3))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: AppConstants.Layout.cornerMd, style: .continuous))
                     }
                 }
             }
             .frame(maxHeight: 220)
         }
         .padding(10)
-        .nativeGlassBackground(.popover, cornerRadius: 12)
+        .nativeGlassBackground(.popover, cornerRadius: AppConstants.Layout.cornerLg)
     }
 }

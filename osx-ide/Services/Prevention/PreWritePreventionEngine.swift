@@ -292,7 +292,7 @@ struct PreWritePreventionEngine {
 
     private func candidateWrites(toolName: String, arguments: [String: Any]) -> [CandidateWrite] {
         switch toolName {
-        case "write_file", "create_file":
+        case "write", "write_file", "create_file":
             guard let path = arguments["path"] as? String else { return [] }
             let resolvedURL = resolve(path: path)
             let content = arguments["content"] as? String
@@ -307,7 +307,7 @@ struct PreWritePreventionEngine {
                 let isNew = !FileManager.default.fileExists(atPath: resolvedURL.path)
                 return CandidateWrite(fileURL: resolvedURL, relativePath: relativePath(for: resolvedURL), content: content, isNewFile: isNew)
             }
-        case "replace_in_file":
+        case "edit", "replace_in_file":
             guard let path = arguments["path"] as? String else { return [] }
             let resolvedURL = resolve(path: path)
             guard let oldText = arguments["old_text"] as? String,

@@ -27,6 +27,8 @@ extension AIToolExecutor {
         let argumentKeys: [String]?
         let argumentPreview: String?
         let recoveryHint: String?
+        /// Normalized per-argument identity for the first-line envelope.
+        let params: [String: String]?
     }
 
     struct ToolExecutionContextError: LocalizedError {
@@ -71,6 +73,28 @@ extension AIToolExecutor {
         }
     }
 
+    /// Normalize a tool-call's arguments into a compact `[String: String]` identity
+    /// for the first-line execution envelope. Internal/bookkeeping keys (prefixed
+    /// with `_`) and empty values are dropped. Values are stringified and truncated.
+    nonisolated static func normalizedToolParams(_ arguments: [String: Any]?) -> [String: String]? {
+        guard let arguments, !arguments.isEmpty else { return nil }
+        var params: [String: String] = [:]
+        for (key, value) in arguments {
+            guard !key.hasPrefix("_") else { continue }
+            let stringValue: String
+            if let v = value as? String {
+                stringValue = v
+            } else if let v = value as? CustomStringConvertible {
+                stringValue = v.description
+            } else {
+                continue
+            }
+            guard !stringValue.isEmpty else { continue }
+            params[key] = stringValue
+        }
+        return params.isEmpty ? nil : params
+    }
+
     nonisolated static func makeToolExecutionMessage(
         content: String,
         context: ToolExecutionMessageContext
@@ -102,7 +126,8 @@ extension AIToolExecutor {
             targetFile: context.targetFile,
             argumentKeys: context.argumentKeys,
             argumentPreview: context.argumentPreview,
-            recoveryHint: context.recoveryHint
+            recoveryHint: context.recoveryHint,
+            params: context.params
         )
 
         return ChatMessage(
@@ -136,7 +161,8 @@ extension AIToolExecutor {
                         preview: nil,
                         argumentKeys: nil,
                         argumentPreview: nil,
-                        recoveryHint: nil
+                        recoveryHint: nil,
+                        params: nil
                     )
                 )
             )
@@ -174,7 +200,7 @@ extension AIToolExecutor {
         let filePath = targetFile ?? stringArg("path")
 
         switch toolName {
-        case "replace_in_file":
+        case "edit", "replace_in_file":
             guard let oldText = stringArg("old_text"), let newText = stringArg("new_text") else {
                 return filePath.map { "Edit file: \($0)" }
             }
@@ -190,7 +216,7 @@ extension AIToolExecutor {
             \(trim(newText, limit: 700))
             """
 
-        case "write_file", "create_file":
+        case "write", "write_file", "create_file":
             guard let content = stringArg("content") else {
                 return filePath.map { "Write file: \($0)" }
             }
@@ -201,13 +227,13 @@ extension AIToolExecutor {
             \(trim(content, limit: 1400))
             """
 
-        case "delete_file":
+        case "rm", "delete_file":
             if let filePath {
                 return "Delete file: \(filePath)"
             }
             return "Delete file request"
 
-        case "run_command":
+        case "bash", "run_command":
             let action = stringArg("action") ?? "start"
             let sessionId = stringArg("session_id")
             let command = stringArg("command") ?? "(missing command)"
@@ -230,7 +256,7 @@ extension AIToolExecutor {
             }
             return "Command: \(trim(command, limit: 280))"
 
-        case "read_file":
+        case "read", "read_file":
             let fileLabel = filePath ?? "(unspecified file)"
 
             let startLine = intArg("start_line") ?? intArg("offset")
@@ -336,7 +362,8 @@ extension AIToolExecutor {
                     preview: preview,
                     argumentKeys: nil,
                     argumentPreview: nil,
-                    recoveryHint: nil
+                    recoveryHint: nil,
+                    params: Self.normalizedToolParams(toolCall.arguments)
                 )
             )
         case .failure(let error):
@@ -352,7 +379,8 @@ extension AIToolExecutor {
                     preview: preview,
                     argumentKeys: contextError?.argumentKeys,
                     argumentPreview: contextError?.argumentPreview,
-                    recoveryHint: contextError?.recoveryHint
+                    recoveryHint: contextError?.recoveryHint,
+                    params: Self.normalizedToolParams(toolCall.arguments)
                 )
             )
         }
@@ -414,9 +442,9 @@ extension AIToolExecutor {
 
         // Try exact canonical match first, then fallback chain
         let fallbacks: [String: [String]] = [
-            "write_file": ["write_files", "create_file", "replace_in_file"],
-            "replace_in_file": ["write_file"],
-            "web_search": ["web_browse"],
+            "write": ["write_file", "write_files", "create_file", "edit", "replace_in_file"],
+            "edit": ["replace_in_file", "write_file"],
+            "web_search": ["web_browse", "web_fetch"],
         ]
         let candidates = [canonical] + (fallbacks[canonical] ?? [])
 
@@ -520,14 +548,14 @@ extension AIToolExecutor {
         guard mergedArguments["_raw_args_chunk"] != nil else { return }
 
         switch toolCall.name {
-        case "write_file", "create_file":
+        case "write", "write_file", "create_file":
             guard let path = mergedArguments["path"] as? String,
                   let content = mergedArguments["content"] as? String,
                   !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   !content.isEmpty else {
                 throw MalformedMutationArgumentsError(toolName: toolCall.name)
             }
-        case "replace_in_file":
+        case "edit", "replace_in_file":
             guard let path = mergedArguments["path"] as? String,
                   let oldText = mergedArguments["old_text"] as? String,
                   let newText = mergedArguments["new_text"] as? String,
@@ -557,19 +585,19 @@ extension AIToolExecutor {
         toolName: String,
         arguments: [String: Any]
     ) -> TimeInterval {
-        if toolName == "run_command" {
+        if toolName == "bash" || toolName == "run_command" {
             let explicitWait = parseRunCommandWaitSeconds(arguments)
             let effectiveWait = explicitWait ?? 30
             return max(effectiveWait + 5, 15)
         }
 
         // Web tools: bounded timeout to prevent indefinite hangs
-        if toolName == "web_search" || toolName == "web_browse" {
+        if toolName == "web_search" || toolName == "web_fetch" || toolName == "web_browse" {
             return 35
         }
 
         // Search project: bounded timeout — semantic/symbol/full-text should be fast
-        if toolName == "search_project" {
+        if toolName == "search" || toolName == "search_project" {
             return 30
         }
 
@@ -669,7 +697,7 @@ extension AIToolExecutor {
 
     private func supportsPreWritePrevention(toolName: String) -> Bool {
         switch toolName {
-        case "write_file", "write_files", "create_file", "replace_in_file":
+        case "write", "write_file", "write_files", "create_file", "edit", "replace_in_file":
             return true
         default:
             return false
@@ -690,8 +718,10 @@ extension AIToolExecutor {
     }
 
     private func candidateFileCountForPrevention(toolName: String, arguments: [String: Any]) -> Int {
-        if toolName == "write_files", let files = arguments["files"] as? [[String: Any]] {
-            return files.count
+        if toolName == "write" || toolName == "write_files" {
+            if let files = arguments["files"] as? [[String: Any]] {
+                return files.count
+            }
         }
 
         if let path = arguments["path"] as? String,
@@ -792,7 +822,8 @@ extension AIToolExecutor {
                 preview: nil,
                 argumentKeys: Array(request.toolCall.arguments.keys).sorted(),
                 argumentPreview: Self.argumentPreview(for: request.toolCall.arguments),
-                recoveryHint: "Available tools in this turn: \(availableToolsSummary). Choose one of those tools before retrying."
+                recoveryHint: "Available tools in this turn: \(availableToolsSummary). Choose one of those tools before retrying.",
+                params: Self.normalizedToolParams(request.toolCall.arguments)
             )
         )
     }

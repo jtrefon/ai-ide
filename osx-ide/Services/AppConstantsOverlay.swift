@@ -19,4 +19,8 @@ enum AppConstantsOverlay {
     static let searchFieldMinWidth: CGFloat = 420
 
     static let internalTerminalPanelName: String = "Internal.Terminal"
+
+    static let modelPopoverWidth: CGFloat = 320
+    static let modelPopoverHeight: CGFloat = 400
+    static let modePopoverWidth: CGFloat = 220
 }

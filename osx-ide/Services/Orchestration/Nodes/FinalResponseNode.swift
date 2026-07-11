@@ -20,7 +20,6 @@ struct FinalResponseNode: OrchestrationNode {
 
         let final = try await handler.requestFinalResponseIfNeeded(
             response: response,
-            explicitContext: state.effectiveExplicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
             toolResults: state.lastToolResults,

@@ -13,8 +13,7 @@ final class KiloCodeSettingsStore: ProviderOpenRouterSettingsStore, @unchecked S
                 baseURL: "KiloCodeBaseURL",
                 systemPrompt: "KiloCodeSystemPrompt",
                 reasoningMode: "KiloCodeReasoningMode",
-                toolPromptMode: "KiloCodeToolPromptMode",
-                ragEnabledDuringToolLoop: "KiloCodeRAGEnabledDuringToolLoop"
+                toolPromptMode: "KiloCodeToolPromptMode"
             ),
             harnessKeys: HarnessKeys(
                 apiKeyTestRunner: "TEST_RUNNER_ENV_HARNESS_KILOCODE_API_KEY",
@@ -27,8 +26,7 @@ final class KiloCodeSettingsStore: ProviderOpenRouterSettingsStore, @unchecked S
             defaultModel: "kilo-auto/balanced",
             defaultBaseURL: Self.currentBaseURL,
             defaultReasoningMode: .modelAndAgent,
-            defaultToolPromptMode: .fullStatic,
-            defaultRAGEnabledDuringToolLoop: false
+            defaultToolPromptMode: .fullStatic
         )
     }
 

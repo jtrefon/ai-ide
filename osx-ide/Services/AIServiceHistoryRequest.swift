@@ -22,18 +22,17 @@ public enum AIRequestStage: String, Codable, Sendable {
         stage?.reasoningPromptKey ?? AIRequestStage.other.reasoningPromptKey
     }
 
+    // Stage-independent on purpose: the system prompt must be byte-identical
+    // across every request stage so the provider's prefix cache stays warm.
+    // Varying this by stage was the primary cause of cache invalidation
+    // (and the 60s timeouts) — see Documentation/provider-context-caching-research.md.
     static func reasoningPromptKeyIfNeeded(
         reasoningMode: ReasoningMode,
         mode: AIMode?,
         stage: AIRequestStage?
     ) -> String? {
         guard reasoningMode.includesAgentReasoning, mode == .agent else { return nil }
-        switch stage {
-        case .initial_response, .tool_loop:
-            return nil
-        default:
-            return stage?.reasoningPromptKey ?? AIRequestStage.other.reasoningPromptKey
-        }
+        return AIRequestStage.other.reasoningPromptKey
     }
 
     static func reasoningPromptIfNeeded(
@@ -67,7 +66,7 @@ public struct AIServiceHistoryRequest: Sendable {
     public init(
         messages: [ChatMessage],
         mediaAttachments: [ChatMessageMediaAttachment] = [],
-        context: String?,
+        context: String? = nil,
         tools: [AITool]?,
         mode: AIMode?,
         projectRoot: URL?,

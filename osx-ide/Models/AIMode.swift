@@ -44,7 +44,8 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
             // Chat can use everything EXCEPT mutation tools (no writes to your project)
             return allTools.filter { tool in
                 switch tool.name {
-                case "write_file", "write_files", "create_file", "delete_file",
+                case "write", "rm", "edit", "bash",
+                     "write_file", "write_files", "create_file", "delete_file",
                      "patch_file", "replace_in_file", "run_command":
                     return false
                 default:

@@ -295,12 +295,12 @@ extension AIToolExecutor {
             return formatMissingArgumentError(error: error, toolName: toolName)
         }
 
-        if toolName == "index_read_file" {
+        if toolName == "read" || toolName == "index_read_file" {
             let msg = error.localizedDescription
             if msg.lowercased().hasPrefix("file not found") {
                 return "Error: \(msg)\n\nHint: do not guess filenames. " +
-                    "First use index_find_files(query: \"RegistrationPage\") or index_list_files(query: \"registration-app/src\") " +
-                    "to discover the correct path, then call index_read_file with that exact path."
+                    "First use glob(query: \"RegistrationPage\") or ls(query: \"registration-app/src\") " +
+                    "to discover the correct path, then call read with that exact path."
             }
         }
         return "Error: \(error.localizedDescription)"
@@ -311,21 +311,21 @@ extension AIToolExecutor {
         
         // Provide specific guidance based on the tool and missing argument
         switch toolName {
-        case "write_files":
+        case "write", "write_files":
             return [
                 "Error: \(errorMsg)",
                 "",
-                "The write_files tool requires a 'files' argument containing an array of file objects.",
+                "The write tool requires a 'path' and 'content' argument, or 'files' for multi-file writes.",
                 "Each file object should have:",
                 "  - 'path': The relative path of the file (e.g., 'src/App.js')",
                 "  - 'content': The file content as a string",
                 "",
                 "Example correct call:",
-                "{\"files\": [{\"path\": \"src/App.js\", \"content\": \"...\"}]}",
+                "{\"path\": \"src/App.js\", \"content\": \"...\"}",
+                "or {\"files\": [{\"path\": \"src/App.js\", \"content\": \"...\"}]}",
                 "",
                 "Common mistakes:",
-                "- Passing 'content' instead of 'files'",
-                "- Passing a single file object instead of an array",
+                "- Passing 'content' instead of 'files' for multi-file writes",
                 "- Missing the 'path' or 'content' fields in each file object"
             ].joined(separator: "\n")
             
@@ -341,11 +341,11 @@ extension AIToolExecutor {
                 "{\"path\": \"src/App.js\", \"content\": \"...\"}"
             ].joined(separator: "\n")
             
-        case "run_command":
+        case "bash", "run_command":
             return [
                 "Error: \(errorMsg)",
                 "",
-                "The run_command tool is session-based.",
+                "The bash tool is session-based.",
                 "",
                 "Start a command:",
                 "  - 'action': 'start'",
@@ -366,11 +366,11 @@ extension AIToolExecutor {
                 "{\"action\": \"stop\", \"session_id\": \"...\"}"
             ].joined(separator: "\n")
             
-        case "replace_in_file":
+        case "edit", "replace_in_file":
             return [
                 "Error: \(errorMsg)",
                 "",
-                "The replace_in_file tool requires:",
+                "The edit tool requires:",
                 "  - 'path': The file path to modify",
                 "  - 'old_text': The exact text to find and replace",
                 "  - 'new_text': The replacement text",

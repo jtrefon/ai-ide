@@ -5,7 +5,6 @@ import Foundation
 struct SendRequest {
     let userInput: String
     let mediaAttachments: [ChatMessageMediaAttachment]
-    let explicitContext: String?
     let mode: AIMode
     let projectRoot: URL
     let conversationId: String
@@ -19,7 +18,6 @@ struct SendRequest {
     init(
         userInput: String,
         mediaAttachments: [ChatMessageMediaAttachment] = [],
-        explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
         conversationId: String,
@@ -32,7 +30,6 @@ struct SendRequest {
     ) {
         self.userInput = userInput
         self.mediaAttachments = mediaAttachments
-        self.explicitContext = explicitContext
         self.mode = mode
         self.projectRoot = projectRoot
         self.conversationId = conversationId

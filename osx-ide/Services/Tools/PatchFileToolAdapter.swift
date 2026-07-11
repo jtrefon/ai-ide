@@ -6,7 +6,7 @@ import Foundation
 struct PatchFileToolAdapter: AITool {
     let projectRoot: URL
 
-    let name = "patch_file"
+    let name = "edit"
     let description = "Edit an existing file by line range. Preferred for all edits — surgical, precise, context-efficient. Read the file first for line numbers."
 
     var parameters: [String: Any] {

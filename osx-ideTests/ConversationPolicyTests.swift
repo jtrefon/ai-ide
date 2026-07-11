@@ -12,48 +12,40 @@ final class ConversationPolicyTests: XCTestCase {
 
     private var allTools: [AITool] {
         [
-            makeTool(name: "index_find_files"),
-            makeTool(name: "index_list_files"),
-            makeTool(name: "index_search_text"),
-            makeTool(name: "index_read_file"),
-            makeTool(name: "index_search_symbols"),
-            makeTool(name: "read_file"),
-            makeTool(name: "list_dir"),
-            makeTool(name: "conversation_fold"),
-            makeTool(name: "write_file"),
-            makeTool(name: "replace_in_file"),
-            makeTool(name: "run_command")
+            makeTool(name: "glob"),
+            makeTool(name: "ls"),
+            makeTool(name: "search"),
+            makeTool(name: "read"),
+            makeTool(name: "context"),
+            makeTool(name: "write"),
+            makeTool(name: "edit"),
+            makeTool(name: "bash")
         ]
     }
 
     private let expectedReadOnly: Set<String> = [
-        "index_find_files",
-        "index_list_files",
-        "index_search_text",
-        "index_read_file",
-        "index_search_symbols",
-        "read_file",
-        "list_dir",
-        "conversation_fold"
+        "glob",
+        "ls",
+        "search",
+        "read",
+        "context"
     ]
     private let expectedToolLoopExecution: Set<String> = [
-        "index_find_files",
-        "index_list_files",
-        "index_search_text",
-        "index_read_file",
-        "index_search_symbols",
-        "read_file",
-        "list_dir",
-        "write_file",
-        "replace_in_file",
-        "run_command"
+        "glob",
+        "ls",
+        "search",
+        "read",
+        "context",
+        "write",
+        "edit",
+        "bash"
     ]
 
     // MARK: - Chat mode
 
     func testChatModeReturnsReadOnlyToolsRegardlessOfStage() {
         let stages: [AIRequestStage?] = [nil, .initial_response, .tool_loop, .final_response, .qa_tool_output_review, .qa_quality_review]
-        let mutationTools: Set<String> = ["write_file", "replace_in_file", "run_command", "write_files", "create_file", "delete_file", "patch_file"]
+        let mutationTools: Set<String> = ["write", "edit", "bash", "rm"]
         for stage in stages {
             let result = policy.allowedTools(for: stage, mode: .chat, from: allTools)
             XCTAssertFalse(result.isEmpty, "Chat mode should return read-only tools for stage=\(String(describing: stage))")
@@ -104,12 +96,16 @@ final class ConversationPolicyTests: XCTestCase {
             AIRequestStage.reasoningPromptKey(for: nil),
             "ConversationFlow/Corrections/reasoning_optional_general"
         )
-        XCTAssertNil(
+        // Stage-independent by design: the system prompt must be byte-identical
+        // across stages so the provider prefix cache stays warm. Agent mode with
+        // agent reasoning now returns the general key for every stage (never nil).
+        XCTAssertEqual(
             AIRequestStage.reasoningPromptKeyIfNeeded(
                 reasoningMode: .modelAndAgent,
                 mode: .agent,
                 stage: .tool_loop
-            )
+            ),
+            "ConversationFlow/Corrections/reasoning_optional_general"
         )
         XCTAssertNil(
             AIRequestStage.reasoningPromptKeyIfNeeded(
@@ -125,12 +121,13 @@ final class ConversationPolicyTests: XCTestCase {
                 stage: .tool_loop
             )
         )
-        XCTAssertNil(
+        XCTAssertEqual(
             AIRequestStage.reasoningPromptKeyIfNeeded(
                 reasoningMode: .modelAndAgent,
                 mode: .agent,
                 stage: .initial_response
-            )
+            ),
+            "ConversationFlow/Corrections/reasoning_optional_general"
         )
         XCTAssertEqual(
             AIRequestStage.other.reasoningPromptKey,
@@ -162,9 +159,9 @@ final class ConversationPolicyTests: XCTestCase {
     func testAgentModeReadOnlyStageExcludesWriteTools() {
         let result = policy.allowedTools(for: .qa_tool_output_review, mode: .agent, from: allTools)
         let names = result.map(\.name)
-        XCTAssertFalse(names.contains("write_file"))
-        XCTAssertFalse(names.contains("replace_in_file"))
-        XCTAssertFalse(names.contains("run_command"))
+        XCTAssertFalse(names.contains("write"))
+        XCTAssertFalse(names.contains("edit"))
+        XCTAssertFalse(names.contains("bash"))
     }
 
     // MARK: - Edge cases
@@ -175,7 +172,7 @@ final class ConversationPolicyTests: XCTestCase {
     }
 
     func testQAStageWithNoReadOnlyToolsReturnsEmpty() {
-        let writeOnly: [AITool] = [makeTool(name: "write_file"), makeTool(name: "run_command")]
+        let writeOnly: [AITool] = [makeTool(name: "write"), makeTool(name: "bash")]
         let result = policy.allowedTools(for: .qa_tool_output_review, mode: .agent, from: writeOnly)
         XCTAssertTrue(result.isEmpty)
     }

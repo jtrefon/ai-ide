@@ -23,7 +23,7 @@ import Combine
 public final class EventPipeline: @unchecked Sendable {
     private let lock = NSLock()
     private var stages: [PipelineStage]
-    private var subscribers: [(PipelineEvent) -> Void] = []
+    private var subscriberBoxes: [HandlerBox] = []
     private var hasFinished = false
 
     /// Create a pipeline with an optional initial set of stages.
@@ -114,10 +114,10 @@ public final class EventPipeline: @unchecked Sendable {
     @discardableResult
     public func observe(_ handler: @escaping (PipelineEvent) -> Void) -> AnyCancellable {
         let box = HandlerBox(handler)
-        lock.withLock { subscribers.append(box.call) }
+        lock.withLock { subscriberBoxes.append(box) }
         return AnyCancellable { [weak self] in
             self?.lock.withLock {
-                self?.subscribers.removeAll { $0 as AnyObject === box as AnyObject }
+                self?.subscriberBoxes.removeAll { $0 === box }
             }
         }
     }
@@ -152,9 +152,9 @@ public final class EventPipeline: @unchecked Sendable {
     }
 
     private func notifySubscribers(_ event: PipelineEvent) {
-        let subs = lock.withLock { subscribers }
-        for sub in subs {
-            sub(event)
+        let boxes = lock.withLock { subscriberBoxes }
+        for box in boxes {
+            box.call(event)
         }
     }
 }

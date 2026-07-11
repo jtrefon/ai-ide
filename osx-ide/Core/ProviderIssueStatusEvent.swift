@@ -7,6 +7,7 @@ public struct ProviderIssueStatusEvent: Event {
         case unavailable
         case authentication
         case transport
+        case networkOffline
         case insufficientBalance
         case unknown
     }

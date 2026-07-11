@@ -11,8 +11,8 @@ protocol IDEContext: AnyObject {
     var commandRegistry: CommandRegistry { get }
     var uiRegistry: UIRegistry { get }
     var diagnosticsStore: DiagnosticsStore { get }
-    var inlineCompletionEngine: InlineCompletionEngine { get }
-    var snippetCompletionService: SnippetCompletionService { get }
+    var lineCompletionEngine: LineCompletionEngine { get }
+    var ghostCodeEngine: GhostCodeEngine { get }
 
     var codebaseIndex: CodebaseIndexProtocol? { get }
 

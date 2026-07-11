@@ -121,7 +121,6 @@ final class OfflineModeHarnessTests: XCTestCase {
         try await sendCoordinator.send(
             SendRequest(
                 userInput: "Create a file named \(fileName) using the create_file tool, then finish.",
-                explicitContext: nil,
                 mode: .agent,
                 projectRoot: projectRoot,
                 conversationId: conversationId,
@@ -401,7 +400,6 @@ final class OfflineModeHarnessTests: XCTestCase {
         let responseResult = await aiInteractionCoordinator.sendMessageWithRetry(
             AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: historyCoordinator.messages,
-                explicitContext: nil,
                 tools: minimalTools,
                 mode: .agent,
                 projectRoot: projectRoot,
@@ -421,7 +419,12 @@ final class OfflineModeHarnessTests: XCTestCase {
             availableTools: minimalTools,
             conversationId: historyCoordinator.currentConversationId
         ) { message in
-            historyCoordinator.upsertToolExecutionMessage(message)
+            if message.toolStatus == .executing {
+                historyCoordinator.setLiveToolMessage(message)
+            } else {
+                historyCoordinator.clearLiveToolMessage(message.toolCallId ?? "")
+                historyCoordinator.append(message)
+            }
         }
 
         let completedToolNames = toolMessages
@@ -1092,8 +1095,7 @@ final class OfflineModeHarnessTests: XCTestCase {
             baseURL: currentSettings.baseURL,
             systemPrompt: currentSettings.systemPrompt,
             reasoningMode: currentSettings.reasoningMode,
-            toolPromptMode: currentSettings.toolPromptMode,
-            ragEnabledDuringToolLoop: false
+            toolPromptMode: currentSettings.toolPromptMode
         ))
 
         let selectionStore = LocalModelSelectionStore(settingsStore: container.settingsStore)
@@ -1149,7 +1151,7 @@ final class OfflineModeHarnessTests: XCTestCase {
 
     private func makeHistoryCoordinator(projectRoot: URL, seedGreeting: Bool = true) -> ChatHistoryCoordinator {
         let historyCoordinator = ChatHistoryCoordinator(
-            historyManager: ChatHistoryManager(),
+            
             projectRoot: projectRoot
         )
         if seedGreeting {

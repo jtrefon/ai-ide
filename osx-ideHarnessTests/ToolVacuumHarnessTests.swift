@@ -72,11 +72,7 @@ final class ToolVacuumHarnessTests: XCTestCase {
             fileSystemService: fileSystemService,
             pathValidator: pathValidator
         )
-        let replaceInFileTool = ReplaceInFileTool(
-            fileSystemService: fileSystemService,
-            pathValidator: pathValidator,
-            eventBus: eventBus
-        )
+        let patchFileTool = PatchFileToolAdapter(projectRoot: projectRoot)
         let listFilesTool = ListFilesTool(pathValidator: pathValidator)
         let deleteFileTool = DeleteFileTool(pathValidator: pathValidator, eventBus: eventBus)
 
@@ -94,12 +90,13 @@ final class ToolVacuumHarnessTests: XCTestCase {
         XCTAssertTrue(readResult.contains("App"))
         XCTAssertTrue(readResult.contains("Todo"))
 
-        let replaceResult = try await replaceInFileTool.execute(arguments: ToolArguments([
+        let replaceResult = try await patchFileTool.execute(arguments: ToolArguments([
             "path": "src/App.jsx",
-            "old_text": "Todo",
-            "new_text": "Tasks"
+            "start_line": 1,
+            "end_line": 1,
+            "new_content": "export default function App() {\n    return <div>Tasks</div>\n}\n"
         ]))
-        XCTAssertTrue(replaceResult.localizedCaseInsensitiveContains("successfully"))
+        XCTAssertTrue(replaceResult.localizedCaseInsensitiveContains("success"))
 
         let listedFiles = try await listFilesTool.execute(arguments: ToolArguments([
             "path": "src"

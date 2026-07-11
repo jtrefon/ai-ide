@@ -12,6 +12,19 @@ func elapsedSince(_ start: Date) -> Int {
     Int(Date().timeIntervalSince(start) * 1000)
 }
 
+func withTimeout<T: Sendable>(seconds: UInt64, operation: @escaping @Sendable () async throws -> T) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask { try await operation() }
+        group.addTask {
+            try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+            throw CancellationError()
+        }
+        let result = try await group.next()!
+        group.cancelAll()
+        return result
+    }
+}
+
 /// Dependency injection container for managing service instances
 @MainActor
 class DependencyContainer: ObservableObject {
@@ -116,12 +129,10 @@ class DependencyContainer: ObservableObject {
             conversationManager: _conversationManager
         )
         _projectCoordinator = projectCoordinator
-        _inlineCompletionEngine = AIServicesFactory.makeInlineCompletionEngine(
-            aiServices: aiServices,
-            projectRootProvider: { [weak projectCoordinator] in projectCoordinator?.currentProjectRoot },
-            codebaseIndexProvider: { [weak projectCoordinator] in projectCoordinator?.codebaseIndex }
+        _lineCompletionEngine = AIServicesFactory.makeLineCompletionEngine(
+            aiServices: aiServices
         )
-        _snippetCompletionService = AIServicesFactory.makeSnippetCompletionService(
+        _ghostCodeEngine = AIServicesFactory.makeGhostCodeEngine(
             aiServices: aiServices,
             projectRootProvider: { [weak projectCoordinator] in projectCoordinator?.currentProjectRoot },
             codebaseIndexProvider: { [weak projectCoordinator] in projectCoordinator?.codebaseIndex }
@@ -227,26 +238,44 @@ class DependencyContainer: ObservableObject {
             let eventBus = await MainActor.run { _eventBus }
             Swift.print("[DIAG] VectorStore: creating service...")
             let cfg = VectorStoreConfiguration.default(basePath: root)
-            let service = VectorStoreService.create(with: cfg)
-            var vsLoadError: String? = nil
+            let service: VectorStoreService?
             do {
-                try await service.load()
+                service = try await withTimeout(seconds: 15) {
+                    await Task { VectorStoreService.create(with: cfg) }.value
+                }
+                Swift.print("[DIAG] VectorStore: created service successfully")
             } catch {
-                vsLoadError = error.localizedDescription
-                Swift.print("[DIAG] VectorStore init ERROR: \(error.localizedDescription)")
+                Swift.print("[DIAG] VectorStore creation timed out, continuing without RAG")
+                service = nil
             }
-            // Set service reference first so polling fallback can find it immediately
-            await MainActor.run {
-                _vectorStoreService = service
-                _conversationManager.updateVectorStoreService(service)
-            }
-            // Then publish status — polling will catch it even if event is lost
-            if vsLoadError != nil {
-                eventBus.publish(VectorStoreStatusChangedEvent(entryCount: 0, isLoaded: true, isError: true))
+            if let service {
+                var vsLoadError: String? = nil
+                do {
+                    try await withTimeout(seconds: 15) {
+                        try await service.load()
+                    }
+                } catch {
+                    vsLoadError = error.localizedDescription
+                    Swift.print("[DIAG] VectorStore init ERROR: \(error.localizedDescription)")
+                }
+                // Set service reference so polling fallback can find it immediately
+                await MainActor.run {
+                    _vectorStoreService = service
+                    _conversationManager.updateVectorStoreService(service)
+                }
+                // Then publish status — polling will catch it even if event is lost
+                if vsLoadError != nil {
+                    eventBus.publish(VectorStoreStatusChangedEvent(entryCount: 0, isLoaded: true, isError: true))
+                } else {
+                    let count = await service.entryCount
+                    Swift.print("[DIAG] VectorStore loaded: \(count) entries — publishing status event")
+                    eventBus.publish(VectorStoreStatusChangedEvent(entryCount: count, isLoaded: true))
+                }
             } else {
-                let count = await service.entryCount
-                Swift.print("[DIAG] VectorStore loaded: \(count) entries — publishing status event")
-                eventBus.publish(VectorStoreStatusChangedEvent(entryCount: count, isLoaded: true))
+                Swift.print("[DIAG] VectorStore: RAG unavailable — continuing without vector store")
+                await MainActor.run {
+                    _vectorStoreService = nil
+                }
             }
 
             // Create CoreML-based embedding generator (NPU accelerated)
@@ -258,13 +287,15 @@ class DependencyContainer: ObservableObject {
                 Swift.print("[DIAG] WARNING: No CoreML embedding model found — RAG embeddings disabled")
             }
 
-            // Wire continuous embedding via .ide FS events
-            let embeddingCoordinator = VectorStoreEmbeddingCoordinator(
-                vectorStoreService: service,
-                eventBus: eventBus,
-                embedder: embedder ?? NullEmbeddingGenerator()
-            )
-            await embeddingCoordinator.start()
+            // Wire continuous embedding via .ide FS events (only if vector store is available)
+            if let service {
+                let embeddingCoordinator = VectorStoreEmbeddingCoordinator(
+                    vectorStoreService: service,
+                    eventBus: eventBus,
+                    embedder: embedder ?? NullEmbeddingGenerator()
+                )
+                await embeddingCoordinator.start()
+            }
 
             // Inject embedder into conversation manager for RAG
             await MainActor.run {
@@ -415,10 +446,6 @@ class DependencyContainer: ObservableObject {
         return _diagnosticsStore
     }
 
-    var inlineCompletionEngine: InlineCompletionEngine {
-        return _inlineCompletionEngine
-    }
-
     /// File editor service instance
     var fileEditorService: any FileEditorServiceProtocol {
         return _fileEditorService
@@ -473,18 +500,28 @@ class DependencyContainer: ObservableObject {
 
     func rebuildVectorStore() {
         Task.detached(priority: .userInitiated) { [weak self] in
-            guard let service = await MainActor.run(body: { self?._vectorStoreService }) else { return }
+            let (service, projectRoot, eventBus, embedder) = await MainActor.run { () -> (VectorStoreService?, URL?, EventBusProtocol?, (any MemoryEmbeddingGenerating)?) in
+                guard let self else { return (nil, nil, nil, nil) }
+                if let existing = self._vectorStoreService { return (existing, self._workspaceService.currentDirectory, self._eventBus, self._embedder) }
+                guard let root = self._workspaceService.currentDirectory else { return (nil, nil, nil, nil) }
+                let cfg = VectorStoreConfiguration.default(basePath: root)
+                let freshService = VectorStoreService.create(with: cfg)
+                self._vectorStoreService = freshService
+                self._conversationManager.updateVectorStoreService(freshService)
+                return (freshService, root, self._eventBus, self._embedder)
+            }
+            guard let service, let projectRoot, let eventBus else {
+                Swift.print("[DIAG] VectorStore rebuild skipped: no project root")
+                return
+            }
             await RAGTraceLogger.shared.log(type: "store.rebuild_start", data: [:])
             do {
                 try await service.removeAll()
                 try await service.save()
                 await VectorStoreIngestionTracker.shared.clear()
+                eventBus.publish(VectorStoreStatusChangedEvent(entryCount: 0, isLoaded: true, isError: false))
                 Swift.print("[DIAG] VectorStore cleared, re-ingesting conversations...")
-                if let eventBus = await MainActor.run(body: { self?._eventBus }),
-                   let projectRoot = await MainActor.run(body: { self?._workspaceService.currentDirectory }) {
-                    let embedder = await MainActor.run { self?._embedder }
-                    await self?.ingestConversations(service: service, projectRoot: projectRoot, eventBus: eventBus, embedder: embedder)
-                }
+                await self?.ingestConversations(service: service, projectRoot: projectRoot, eventBus: eventBus, embedder: embedder)
                 await RAGTraceLogger.shared.log(type: "store.rebuild_complete", data: ["entries": await service.entryCount])
             } catch {
                 Swift.print("[DIAG] VectorStore rebuild failed: \(error)")
@@ -515,8 +552,8 @@ class DependencyContainer: ObservableObject {
             commandRegistry: commandRegistry,
             uiRegistry: uiRegistry,
             diagnosticsStore: diagnosticsStore,
-            inlineCompletionEngine: inlineCompletionEngine,
-            snippetCompletionService: snippetCompletionService,
+            lineCompletionEngine: _lineCompletionEngine,
+            ghostCodeEngine: _ghostCodeEngine,
             windowProvider: windowProvider,
             codebaseIndexProvider: { [weak self] in
                 self?.codebaseIndex
@@ -551,7 +588,11 @@ class DependencyContainer: ObservableObject {
         _conversationManager.updateAIService(newService)
     }
 
-    private nonisolated func ingestConversations(service: VectorStoreService, projectRoot: URL, eventBus: EventBusProtocol, embedder: (any MemoryEmbeddingGenerating)?) async {
+    private nonisolated func ingestConversations(service: VectorStoreService?, projectRoot: URL, eventBus: EventBusProtocol, embedder: (any MemoryEmbeddingGenerating)?) async {
+        guard let service else {
+            Swift.print("[DIAG] Ingest: no vector store — skipping conversation ingestion")
+            return
+        }
         let tracker = VectorStoreIngestionTracker.shared
         let convDir = projectRoot
             .appendingPathComponent(AppConstantsFileSystem.projectDirName, isDirectory: true)
@@ -661,8 +702,8 @@ class DependencyContainer: ObservableObject {
     private var _aiService: any AIService
     private var _conversationManager: ConversationManager
     private var _projectCoordinator: ProjectCoordinator
-    private let _inlineCompletionEngine: InlineCompletionEngine
-    private let _snippetCompletionService: SnippetCompletionService
+    private let _lineCompletionEngine: LineCompletionEngine
+    private let _ghostCodeEngine: GhostCodeEngine
     private let _activityCoordinator: any AgentActivityCoordinating
     private var _vectorStoreService: VectorStoreService?
     private var _embedder: (any MemoryEmbeddingGenerating)?
@@ -672,9 +713,14 @@ class DependencyContainer: ObservableObject {
         return _activityCoordinator
     }
     
-    /// Accessor for snippet completion service (Cmd+Shift+I, multiline)
-    var snippetCompletionService: SnippetCompletionService {
-        return _snippetCompletionService
+    /// Accessor for line completion engine (automatic single-line ghost)
+    var lineCompletionEngine: LineCompletionEngine {
+        return _lineCompletionEngine
+    }
+
+    /// Accessor for ghost code engine (multi-line snippet/manual)
+    var ghostCodeEngine: GhostCodeEngine {
+        return _ghostCodeEngine
     }
 
     /// Vector store service for RAG-based retrieval

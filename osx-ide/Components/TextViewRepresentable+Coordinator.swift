@@ -22,6 +22,7 @@ extension TextViewRepresentable {
 
         let mutationSubject = PassthroughSubject<TextMutationEvent, Never>()
         private var cancellables = Set<AnyCancellable>()
+        private var enterHandledByShouldChange = false
 
         init(_ parent: TextViewRepresentable) {
             self.parent = parent
@@ -29,7 +30,7 @@ extension TextViewRepresentable {
             self.currentFilePath = parent.filePath
             self.signalBridge = EditorSignalBridge(
                 paneID: parent.paneID,
-                engine: parent.inlineCompletionEngine
+                lineEngine: parent.lineCompletionEngine
             )
             super.init()
         }
@@ -78,11 +79,10 @@ extension TextViewRepresentable {
         }
 
         deinit {
-            let inlineCompletionEngine = parent.inlineCompletionEngine
+            let engine = parent.lineCompletionEngine
             let paneID = parent.paneID
             Task { @MainActor in
-                inlineCompletionEngine.unregisterSuggestionHandler(for: paneID)
-                inlineCompletionEngine.unregisterManualTriggerHandler(for: paneID)
+                engine.unregisterSuggestionHandler(for: paneID)
                 InlineCompletionDebugStore.shared.update(paneID: paneID, presentation: nil)
             }
         }
@@ -118,7 +118,9 @@ extension TextViewRepresentable {
             ]
 
             if character == "\n" || character == "\r" {
-                return handleContextualNewline(in: textView)
+                enterHandledByShouldChange = true
+                let result = handleContextualNewline(in: textView)
+                return result
             }
 
             if let close = openToClose[character] {
@@ -139,6 +141,10 @@ extension TextViewRepresentable {
             }
 
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                if enterHandledByShouldChange {
+                    enterHandledByShouldChange = false
+                    return true
+                }
                 let shouldAllowDefault = handleContextualNewline(in: textView)
                 return !shouldAllowDefault
             }
@@ -147,7 +153,7 @@ extension TextViewRepresentable {
                 let acceptedSuggestion = codeEditorTextView.inlineSuggestionText
                 let accepted = codeEditorTextView.acceptInlineSuggestion()
                 if accepted {
-                    parent.inlineCompletionEngine.markAccepted(
+                    parent.lineCompletionEngine.markAccepted(
                         on: parent.paneID,
                         suggestionText: acceptedSuggestion
                     )
@@ -160,7 +166,7 @@ extension TextViewRepresentable {
 
             if commandSelector == #selector(NSResponder.cancelOperation(_:)), codeEditorTextView.hasInlineSuggestion {
                 codeEditorTextView.clearInlineSuggestion()
-                parent.inlineCompletionEngine.markDismissed()
+                parent.lineCompletionEngine.markDismissed()
                 invalidateInlineCompletion()
                 return true
             }

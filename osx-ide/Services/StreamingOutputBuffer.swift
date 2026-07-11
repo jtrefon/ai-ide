@@ -3,6 +3,7 @@
 //  osx-ide
 //
 //  Created by AI Assistant on 25/06/2026.
+// PHASE 2+ — Heuristic classification replaced by `Segment.kind` + pipeline stages.
 //
 
 import Foundation

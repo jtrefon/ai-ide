@@ -31,8 +31,12 @@ struct ChatInputView: View {
         return .system(size: CGFloat(size), weight: .regular, design: .monospaced)
     }
 
+    private var inputShape: some Shape {
+        RoundedRectangle(cornerRadius: AppConstants.Layout.cornerLg, style: .continuous)
+    }
+
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .bottom, spacing: AppConstants.Layout.spacingSm) {
             TextField(localized("chat_input.placeholder"), text: $text, axis: .vertical)
                 .font(resolveFont(size: fontSize, family: fontFamily))
                 .textFieldStyle(.plain)
@@ -40,15 +44,15 @@ struct ChatInputView: View {
                 .lineLimit(1...6)
                 .fixedSize(horizontal: false, vertical: true)
                 .onSubmit(sendIfPossible)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.horizontal, AppConstants.Layout.spacingMd)
+                .padding(.vertical, AppConstants.Layout.spacingSm)
                 .background {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    inputShape
                         .fill(AppConstants.Color.surfaceCard)
-                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .glassEffect(.regular, in: inputShape)
                 }
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    inputShape
                         .stroke(
                             isInputFocused ? Color.accentColor.opacity(0.5) : AppConstants.Color.separatorSubtle,
                             lineWidth: isInputFocused ? 1.5 : 0.5
@@ -83,9 +87,9 @@ struct ChatInputView: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .padding(.horizontal, 10)
-        .padding(.top, 8)
-        .padding(.bottom, 10)
+        .padding(.horizontal, AppConstants.Layout.spacingSm)
+        .padding(.top, AppConstants.Layout.spacingSm)
+        .padding(.bottom, AppConstants.Layout.spacingSm)
     }
 
     private func sendIfPossible() {

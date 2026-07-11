@@ -10,8 +10,7 @@ final class AlibabaSettingsStore: ProviderOpenRouterSettingsStore, @unchecked Se
                 baseURL: "AlibabaBaseURL",
                 systemPrompt: "AlibabaSystemPrompt",
                 reasoningMode: "AlibabaReasoningMode",
-                toolPromptMode: "AlibabaToolPromptMode",
-                ragEnabledDuringToolLoop: "AlibabaRAGEnabledDuringToolLoop"
+                toolPromptMode: "AlibabaToolPromptMode"
             ),
             harnessKeys: HarnessKeys(
                 apiKeyTestRunner: "TEST_RUNNER_ENV_HARNESS_ALIBABA_API_KEY",
@@ -24,8 +23,7 @@ final class AlibabaSettingsStore: ProviderOpenRouterSettingsStore, @unchecked Se
             defaultModel: "qwen-plus",
             defaultBaseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
             defaultReasoningMode: .modelAndAgent,
-            defaultToolPromptMode: .fullStatic,
-            defaultRAGEnabledDuringToolLoop: false
+            defaultToolPromptMode: .fullStatic
         )
     }
 }

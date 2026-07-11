@@ -51,7 +51,6 @@ actor OpenAICompatibleChatService: AIService {
     func sendMessage(_ request: AIServiceMessageWithProjectRootRequest) async throws -> AIServiceResponse {
         let historyInput = OpenRouterAIService.OpenRouterChatHistoryInput(
             messages: [OpenRouterChatMessage(role: "user", content: request.message)],
-            context: request.context,
             tools: request.tools,
             mode: request.mode,
             projectRoot: request.projectRoot,
@@ -62,10 +61,9 @@ actor OpenAICompatibleChatService: AIService {
     }
 
     func sendMessage(_ request: AIServiceHistoryRequest) async throws -> AIServiceResponse {
-        let openRouterMessages = buildOpenRouterMessages(from: request.messages)
+        let openRouterMessages = buildOpenRouterMessages(from: request.messages, projectRoot: request.projectRoot)
         let historyInput = OpenRouterAIService.OpenRouterChatHistoryInput(
             messages: openRouterMessages,
-            context: request.context,
             tools: request.tools,
             mode: request.mode,
             projectRoot: request.projectRoot,
@@ -76,10 +74,9 @@ actor OpenAICompatibleChatService: AIService {
     }
 
     func sendMessageStreaming(_ request: AIServiceHistoryRequest, runId: String) async throws -> AIServiceResponse {
-        let openRouterMessages = buildOpenRouterMessages(from: request.messages)
+        let openRouterMessages = buildOpenRouterMessages(from: request.messages, projectRoot: request.projectRoot)
         let historyInput = OpenRouterAIService.OpenRouterChatHistoryInput(
             messages: openRouterMessages,
-            context: request.context,
             tools: request.tools,
             mode: request.mode,
             projectRoot: request.projectRoot,
@@ -248,7 +245,11 @@ actor OpenAICompatibleChatService: AIService {
             stage: request.stage,
             useNativeReasoning: supportsNativeReasoning
         ))
-        let finalMessages = buildFinalMessages(systemContent: systemContent, context: request.context, messages: request.messages)
+        let finalMessages = buildFinalMessages(
+            systemContent: systemContent,
+            messages: request.messages,
+            emitCacheControl: Self.isAnthropicModel(settings.model)
+        )
         let toolDefinitions = buildToolDefinitions(tools: request.tools)
         let toolChoice = toolDefinitions?.isEmpty == false ? "auto" : nil
         return OpenRouterAIService.ChatPreparation(
@@ -313,13 +314,35 @@ actor OpenAICompatibleChatService: AIService {
         }
     }
 
-    private func buildFinalMessages(systemContent: String, context: String?, messages: [OpenRouterChatMessage]) -> [OpenRouterChatMessage] {
-        var finalMessages = [OpenRouterChatMessage(role: "system", content: systemContent)]
-        if let context, !context.isEmpty {
-            finalMessages.append(OpenRouterChatMessage(role: "user", content: "Context:\n\(context)"))
-        }
+    private func buildFinalMessages(
+        systemContent: String?,
+        messages: [OpenRouterChatMessage],
+        emitCacheControl: Bool
+    ) -> [OpenRouterChatMessage] {
+        // The system block is the protected, stable prefix. Marking it with a
+        // cache breakpoint lets the provider reuse its prefix across turns
+        // (Anthropic/OpenRouter). The system content is made stage-independent
+        // in SystemPromptAssembler, so this prefix never changes -> cache hits.
+        //
+        // NOTE: `context` (auto-retrieved RAG) is intentionally NOT prepended.
+        // RAG is exposed as the ContextTool and invoked by the model on demand;
+        // force-injecting it here scrambles the stable prefix every turn.
+        let systemMessage = OpenRouterChatMessage(
+            role: "system",
+            content: systemContent,
+            cacheControl: emitCacheControl ? CacheControl() : nil
+        )
+        var finalMessages = [systemMessage]
         finalMessages.append(contentsOf: messages)
         return finalMessages
+    }
+
+    /// Anthropic-family models (routed directly or via OpenRouter) support
+    /// explicit `cache_control` breakpoints. Other providers cache the stable
+    /// prefix automatically, so no marker is needed there.
+    private static func isAnthropicModel(_ model: String) -> Bool {
+        let m = model.lowercased()
+        return m.contains("anthropic") || m.contains("claude")
     }
 
     private func buildToolDefinitions(tools: [AITool]?) -> [[String: Any]]? {
@@ -330,12 +353,13 @@ actor OpenAICompatibleChatService: AIService {
 
     // MARK: - Message Mapping
 
-    private func buildOpenRouterMessages(from messages: [ChatMessage]) -> [OpenRouterChatMessage] {
+    private func buildOpenRouterMessages(from messages: [ChatMessage], projectRoot: URL?) -> [OpenRouterChatMessage] {
+        let model = loadSettingsSnapshot().model
         let sanitizedMessages = ToolCallOrderingSanitizer().sanitize(messages)
         let validToolCallIds = buildValidToolCallIds(from: sanitizedMessages)
         let conversationReasoning = sanitizedMessages.last(where: { $0.role == .assistant && ($0.reasoning?.isEmpty == false) })?.reasoning ?? lastReasoningContent
         return sanitizedMessages.compactMap { message in
-            mapOpenRouterChatMessage(message, validToolCallIds: validToolCallIds, conversationReasoning: conversationReasoning)
+            mapOpenRouterChatMessage(message, validToolCallIds: validToolCallIds, conversationReasoning: conversationReasoning, model: model, projectRoot: projectRoot)
         }
     }
 
@@ -343,7 +367,7 @@ actor OpenAICompatibleChatService: AIService {
         Set(messages.compactMap { $0.toolCalls }.flatMap { $0 }.map { $0.id })
     }
 
-    private func mapOpenRouterChatMessage(_ message: ChatMessage, validToolCallIds: Set<String>, conversationReasoning: String? = nil) -> OpenRouterChatMessage? {
+    private func mapOpenRouterChatMessage(_ message: ChatMessage, validToolCallIds: Set<String>, conversationReasoning: String? = nil, model: String, projectRoot: URL?) -> OpenRouterChatMessage? {
         switch message.role {
         case .user:
             return OpenRouterChatMessage(role: "user", content: message.content)
@@ -356,36 +380,44 @@ actor OpenAICompatibleChatService: AIService {
         case .system:
             return OpenRouterChatMessage(role: "system", content: message.content)
         case .tool:
-            return mapToolMessage(message, validToolCallIds: validToolCallIds)
+            return mapToolMessage(message, validToolCallIds: validToolCallIds, model: model, projectRoot: projectRoot)
         }
     }
 
-    private func mapToolMessage(_ message: ChatMessage, validToolCallIds: Set<String>) -> OpenRouterChatMessage? {
+    private func mapToolMessage(_ message: ChatMessage, validToolCallIds: Set<String>, model: String, projectRoot: URL?) -> OpenRouterChatMessage? {
         guard message.toolStatus != .executing else { return nil }
         if let toolCallId = message.toolCallId {
-            return mapValidToolMessage(message, toolCallId: toolCallId, validToolCallIds: validToolCallIds)
+            return mapValidToolMessage(message, toolCallId: toolCallId, validToolCallIds: validToolCallIds, model: model, projectRoot: projectRoot)
         }
-        return mapFallbackToolMessage(message)
+        return mapFallbackToolMessage(message, model: model, projectRoot: projectRoot)
     }
 
-    private func mapValidToolMessage(_ message: ChatMessage, toolCallId: String, validToolCallIds: Set<String>) -> OpenRouterChatMessage? {
+    private func mapValidToolMessage(_ message: ChatMessage, toolCallId: String, validToolCallIds: Set<String>, model: String, projectRoot: URL?) -> OpenRouterChatMessage? {
         guard validToolCallIds.contains(toolCallId) else { return nil }
-        let content = truncate(message.content, limit: maxToolOutputCharsForModel)
+        let content = truncateToolOutput(message.content, model: model, projectRoot: projectRoot, toolCallId: toolCallId)
         return OpenRouterChatMessage(role: "tool", content: content, toolCallID: toolCallId)
     }
 
-    private func mapFallbackToolMessage(_ message: ChatMessage) -> OpenRouterChatMessage {
-        let content = truncate(message.content, limit: maxToolOutputCharsForModel)
+    private func mapFallbackToolMessage(_ message: ChatMessage, model: String, projectRoot: URL?) -> OpenRouterChatMessage {
+        let toolCallId = message.toolCallId ?? message.toolName ?? UUID().uuidString
+        let content = truncateToolOutput(message.content, model: model, projectRoot: projectRoot, toolCallId: toolCallId)
         return OpenRouterChatMessage(role: "user", content: "Tool Output: \(content)")
     }
 
-    private func truncate(_ text: String, limit: Int) -> String {
-        if text.count <= limit { return text }
-        return String(text.prefix(limit)) + "\n\n[TRUNCATED]"
+    /// Recoverable tool-output truncation (Context Access Layer L0/L1).
+    /// For large-window / sliding-window models the effective limit is generous, so
+    /// normal files are sent in full. When truncation is genuinely required, the
+    /// full text is offloaded to disk and the model gets a preview + an actionable
+    /// hint (path it can re-read, or delegate to the research subagent) instead of a
+    /// silent `[TRUNCATED]` that causes re-read storms.
+    private func truncateToolOutput(_ text: String, model: String, projectRoot: URL?, toolCallId: String) -> String {
+        let limit = ToolOutputArchive.effectiveToolOutputLimit(modelID: model)
+        guard text.count > limit else { return text }
+        let preview = String(text.prefix(limit))
+        let path = ToolOutputArchive.offload(toolCallId: toolCallId, full: text, projectRoot: projectRoot)
+        let hint = "[tool output truncated at \(limit) chars; full saved at \(path)]. Next: read with start_line/end_line, or delegate to the research subagent."
+        return preview + "\n\n" + hint
     }
-
-    private static let maxToolOutputChars = 12_000
-    private var maxToolOutputCharsForModel: Int { Self.maxToolOutputChars }
 
     // MARK: - Execution & Rate Limiting
 
@@ -578,12 +610,14 @@ actor OpenAICompatibleChatService: AIService {
     // MARK: - Token Budget
 
     private func outputTokenBudget(stage: AIRequestStage?, hasTools: Bool) -> Int {
+        // Qwen 3.5 4B supports up to 32K output tokens; budgets below are
+        // generous enough to avoid mid-generation truncation of tool calls.
         switch stage {
-        case .tool_loop: return hasTools ? 2048 : 420
-        case .final_response: return 500
-        case .initial_response: return hasTools ? 420 : 640
-        case .qa_tool_output_review, .qa_quality_review: return 520
-        case .warmup, .other, .none: return hasTools ? 420 : 640
+        case .tool_loop: return hasTools ? 4096 : 1024
+        case .final_response: return 2048
+        case .initial_response: return hasTools ? 1024 : 640
+        case .qa_tool_output_review, .qa_quality_review: return 1024
+        case .warmup, .other, .none: return hasTools ? 1024 : 640
         }
     }
 

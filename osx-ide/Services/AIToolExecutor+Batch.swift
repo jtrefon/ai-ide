@@ -116,7 +116,8 @@ extension AIToolExecutor {
                 preview: nil,
                 argumentKeys: nil,
                 argumentPreview: nil,
-                recoveryHint: nil
+                recoveryHint: nil,
+                params: Self.normalizedToolParams(toolCall.arguments)
             )
         )
     }
@@ -135,7 +136,8 @@ extension AIToolExecutor {
                 preview: nil,
                 argumentKeys: nil,
                 argumentPreview: nil,
-                recoveryHint: nil
+                recoveryHint: nil,
+                params: Self.normalizedToolParams(toolCall.arguments)
             )
         )
     }
@@ -160,7 +162,8 @@ extension AIToolExecutor {
                 preview: preview,
                 argumentKeys: nil,
                 argumentPreview: nil,
-                recoveryHint: nil
+                recoveryHint: nil,
+                params: Self.normalizedToolParams(toolCall.arguments)
             )
         )
         onProgress(executingMsg)

@@ -60,7 +60,6 @@ final class InlineAIPopoverManager: ObservableObject {
                     ChatMessage(role: .user, content: userQuestion)
                 ],
                 mediaAttachments: [],
-                context: context,
                 tools: [],
                 mode: .chat,
                 projectRoot: projectRoot,
@@ -104,7 +103,7 @@ struct InlineAIPopoverView: View {
                     .font(.body)
                     .padding(6)
                     .background(
-                        RoundedRectangle(cornerRadius: 6)
+                        RoundedRectangle(cornerRadius: AppConstants.Layout.cornerSm)
                             .fill(AppConstants.Color.surfaceCard)
                     )
                     .onSubmit {
@@ -151,7 +150,7 @@ struct InlineAIPopoverView: View {
         .padding(12)
         .frame(width: 320)
         .background {
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: AppConstants.Layout.cornerLg)
                 .fill(.regularMaterial)
                 .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
         }

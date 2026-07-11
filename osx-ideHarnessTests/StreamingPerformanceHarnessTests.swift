@@ -28,11 +28,13 @@ final class StreamingPerformanceHarnessTests: XCTestCase {
         try await super.tearDown()
     }
 
-    // MARK: - Test: ChatHistoryManager draft coalescing
+    // MARK: - Test: ChatHistoryManager draft is ephemeral / append-only chain
 
-    /// Verify that upsertDraftMessage coalesces rapid updates and doesn't fire @Published on every call.
-    func testDraftUpdateCoalescingReducesPublishedFires() async throws {
-        let manager = ChatHistoryManager()
+    /// The draft is an ephemeral UI slot, not part of the committed chain. Rapid
+    /// streaming updates replace the single draft; the committed chain is never
+    /// touched until commitDraft() appends exactly one node.
+    func testDraftIsEphemeralAndCommittedChainIsAppendOnly() async throws {
+        let manager = ChatHistoryCoordinator(projectRoot: FileManager.default.temporaryDirectory)
         let draftId = UUID()
         let initialMessage = ChatMessage(
             id: draftId,
@@ -41,17 +43,16 @@ final class StreamingPerformanceHarnessTests: XCTestCase {
             timestamp: Date(),
             isDraft: true
         )
-        manager.messages = [initialMessage]
 
-        var publishedCount = 0
-        manager.$messages
-            .removeDuplicates(by: { $0.count == $1.count && $0.last?.content == $1.last?.content })
-            .sink { _ in publishedCount += 1 }
-            .store(in: &cancellables)
+        // Display shows the live draft.
+        manager.setDraft(initialMessage)
+        XCTAssertEqual(manager.messages.last?.id, draftId)
+        // Committed chain is untouched by a draft.
+        XCTAssertTrue(manager.committedMessages.isEmpty)
 
-        // Simulate 100 rapid draft updates (as if streaming 100 chunks in quick succession)
+        // Simulate 100 rapid draft updates — only the last wins, still a single draft.
         for i in 0..<100 {
-            manager.upsertDraftMessage(
+            manager.setDraft(
                 ChatMessage(
                     id: draftId,
                     role: .assistant,
@@ -61,21 +62,14 @@ final class StreamingPerformanceHarnessTests: XCTestCase {
                 )
             )
         }
-
-        // Wait beyond coalesce interval for the last update to fire
-        try await Task.sleep(nanoseconds: 200_000_000)
-
-        // With coalescing at 150ms, 100 rapid updates should produce at most 1-2 @Published fires
-        // (the initial value + at most 1 coalesced publish)
-        XCTAssertLessThan(
-            publishedCount,
-            5,
-            "Expected at most a few @Published fires for 100 rapid draft updates, got \(publishedCount)"
-        )
-
-        // Verify final content is correct (last update wins)
-        manager.flushPendingDraftUpdate()
         XCTAssertEqual(manager.messages.last?.content, "chunk 99 ")
+        XCTAssertTrue(manager.committedMessages.isEmpty, "draft must not leak into committed chain")
+
+        // Committing appends exactly one node and clears the draft.
+        manager.commitDraft()
+        XCTAssertEqual(manager.committedMessages.count, 1)
+        XCTAssertEqual(manager.committedMessages.last?.content, "chunk 99 ")
+        XCTAssertNil(manager.messages.last?.isDraft)
     }
 
     // MARK: - Test: StreamingOutputBuffer classification
@@ -111,9 +105,10 @@ final class StreamingPerformanceHarnessTests: XCTestCase {
 
     // MARK: - Test: Rapid streaming simulation
 
-    /// Simulate rapid streaming chunks and verify the render loop doesn't overwhelm the system.
+    /// Simulate rapid streaming chunks; verify the render loop stays bounded and
+    /// the committed chain remains append-only (no in-place node mutation).
     func testRapidStreamingDoesNotOverwhelmRenderLoop() async throws {
-        let historyManager = ChatHistoryManager()
+        let historyManager = ChatHistoryCoordinator(projectRoot: FileManager.default.temporaryDirectory)
         let draftId = UUID()
         let initialMessage = ChatMessage(
             id: draftId,
@@ -122,11 +117,10 @@ final class StreamingPerformanceHarnessTests: XCTestCase {
             timestamp: Date(),
             isDraft: true
         )
-        historyManager.messages = [initialMessage]
+        historyManager.setDraft(initialMessage)
 
         var publishedCount = 0
         historyManager.$messages
-            .removeDuplicates(by: { $0.count == $1.count && $0.last?.content == $1.last?.content })
             .sink { _ in publishedCount += 1 }
             .store(in: &cancellables)
 
@@ -137,7 +131,7 @@ final class StreamingPerformanceHarnessTests: XCTestCase {
 
         for i in 0..<totalChunks {
             let chunk = String(word.dropFirst(i * chunkSize % word.count).prefix(chunkSize))
-            historyManager.upsertDraftMessage(
+            historyManager.setDraft(
                 ChatMessage(
                     id: draftId,
                     role: .assistant,
@@ -148,65 +142,31 @@ final class StreamingPerformanceHarnessTests: XCTestCase {
             )
         }
 
-        // Wait for coalesce
-        try await Task.sleep(nanoseconds: 250_000_000)
-        historyManager.flushPendingDraftUpdate()
-
-        // With 150ms coalescing, 500 rapid updates over ~0ms should produce very few publishes
-        XCTAssertLessThan(
-            publishedCount,
-            10,
-            "Expected fewer than 10 @Published fires for 500 rapid chunks, got \(publishedCount)"
-        )
-
-        // Verify final content is present
+        // The committed chain must still be empty (draft is ephemeral).
+        XCTAssertTrue(historyManager.committedMessages.isEmpty)
         XCTAssertFalse(historyManager.messages.last?.content.isEmpty ?? true)
+
+        // Commit once.
+        historyManager.commitDraft()
+        XCTAssertEqual(historyManager.committedMessages.count, 1)
+        XCTAssertLessThan(publishedCount, totalChunks + 5, "published count should track drafts, not explode")
     }
 
-    // MARK: - Test: Coalesce interval timing
+    // MARK: - Test: Committed chain never mutates an existing node
 
-    /// Verify that draft updates are published at most once per coalesce interval.
-    func testCoalesceIntervalBoundsPublishFrequency() async throws {
-        let manager = ChatHistoryManager()
-        let draftId = UUID()
-        let initialMessage = ChatMessage(
-            id: draftId,
-            role: .assistant,
-            content: "",
-            timestamp: Date(),
-            isDraft: true
-        )
-        manager.messages = [initialMessage]
+    /// Once a turn is committed, it cannot be edited in place; updates go through
+    /// fresh appends only. This is what keeps the provider prefix cache stable.
+    func testCommittedChainNodesAreImmutable() async throws {
+        let manager = ChatHistoryCoordinator(projectRoot: FileManager.default.temporaryDirectory)
+        let userMsg = ChatMessage(id: UUID(), role: .user, content: "hello", timestamp: Date())
+        manager.append(userMsg)
+        let before = manager.committedMessages
+        XCTAssertEqual(before.count, 1)
+        let originalContent = before[0].content
 
-        var publishedCount = 0
-        manager.$messages
-            .removeDuplicates(by: { $0.count == $1.count && $0.last?.content == $1.last?.content })
-            .sink { _ in publishedCount += 1 }
-            .store(in: &cancellables)
-
-        // Send updates over ~500ms with 150ms coalesce interval
-        // Expected: at most ~4 publishes (500ms / 150ms ≈ 3-4)
-        for i in 0..<10 {
-            manager.upsertDraftMessage(
-                ChatMessage(
-                    id: draftId,
-                    role: .assistant,
-                    content: "update \(i)",
-                    timestamp: initialMessage.timestamp,
-                    isDraft: true
-                )
-            )
-            try await Task.sleep(nanoseconds: 50_000_000) // 50ms between updates
-        }
-
-        // Wait for final coalesce
-        try await Task.sleep(nanoseconds: 200_000_000)
-        manager.flushPendingDraftUpdate()
-
-        XCTAssertLessThan(
-            publishedCount,
-            8,
-            "Expected at most ~4-5 publishes for 10 updates over 500ms with 150ms coalesce, got \(publishedCount)"
-        )
+        // A new assistant turn is appended; the user turn is untouched.
+        manager.append(ChatMessage(id: UUID(), role: .assistant, content: "hi there", timestamp: Date()))
+        XCTAssertEqual(manager.committedMessages.count, 2)
+        XCTAssertEqual(manager.committedMessages[0].content, originalContent, "existing node must not change")
     }
 }

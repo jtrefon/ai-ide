@@ -65,3 +65,41 @@ enum MessageTruncationPolicy {
         return result
     }
 }
+
+// MARK: - Recoverable tool-output archiving (Context Access Layer, L0/L1)
+
+/// Persists the full text of an overflowing tool result so truncation becomes
+/// *recoverable*: the model receives a preview plus a path it can re-read. The
+/// `read` tool is sandboxed to the project, so the path must live under
+/// `<root>/.ide/tool-output` when a project root is available.
+enum ToolOutputArchive {
+    /// Window-aware cap for a single tool result sent to the model.
+    /// Large-window / sliding-window models have ample headroom, so we permit a
+    /// generous character budget (≈ window size in tokens × 4) instead of the old
+    /// flat 12k cap — this is what eliminates the re-read storm. Smaller/compaction
+    /// models fall back to a proportional cap floored at a sane minimum.
+    static func effectiveToolOutputLimit(modelID: String) -> Int {
+        let profile = ModelContextProfile.profile(for: modelID)
+        if profile.defaultStrategy == .slidingWindow, profile.windowSize >= 128_000 {
+            return profile.windowSize * 4
+        }
+        return max(12_000, profile.windowSize / 8)
+    }
+
+    @discardableResult
+    static func offload(toolCallId: String, full: String, projectRoot: URL?) -> String {
+        let dir: URL
+        if let projectRoot {
+            dir = projectRoot
+                .appendingPathComponent(AppConstantsFileSystem.projectDirName)
+                .appendingPathComponent("tool-output")
+        } else {
+            dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("osx-ide-tool-output")
+        }
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("\(toolCallId).txt")
+        try? full.write(to: file, atomically: true, encoding: .utf8)
+        return file.path
+    }
+}

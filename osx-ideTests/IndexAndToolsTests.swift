@@ -295,22 +295,15 @@ final class IndexAndToolsTests: XCTestCase {
         let fileURL = tempRoot.appendingPathComponent("config.txt")
         try "version=1.0\nname=current\n".write(to: fileURL, atomically: true, encoding: .utf8)
 
-        let tool = ReplaceInFileTool(
-            fileSystemService: FileSystemService(),
-            pathValidator: PathValidator(projectRoot: tempRoot),
-            eventBus: EventBus()
-        )
+        let tool = PatchFileToolAdapter(projectRoot: tempRoot)
 
-        do {
-            _ = try await tool.execute(arguments: ToolArguments([
-                "path": "config.txt",
-                "old_text": "name=missing",
-                "new_text": "name=new"
-            ]))
-            XCTFail("Expected replace_in_file to throw when old_text does not match")
-        } catch {
-            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("could not find old_text"))
-        }
+        let result = try await tool.execute(arguments: ToolArguments([
+            "path": "config.txt",
+            "start_line": 1,
+            "end_line": 5,
+            "new_content": "version=1.0\nname=new\n"
+        ]))
+        XCTAssertTrue(result.localizedCaseInsensitiveContains("Invalid"), "Expected patch_file to report invalid line range")
     }
 
     func testWriteFileThrowsWhenPathAlreadyExists() async throws {
@@ -458,19 +451,16 @@ final class IndexAndToolsTests: XCTestCase {
         let fileURL = tempRoot.appendingPathComponent("config.txt")
         try "version=1.0\nname=new\n".write(to: fileURL, atomically: true, encoding: .utf8)
 
-        let tool = ReplaceInFileTool(
-            fileSystemService: FileSystemService(),
-            pathValidator: PathValidator(projectRoot: tempRoot),
-            eventBus: EventBus()
-        )
+        let tool = PatchFileToolAdapter(projectRoot: tempRoot)
 
         let result = try await tool.execute(arguments: ToolArguments([
             "path": "config.txt",
-            "old_text": "name=old",
-            "new_text": "name=new"
+            "start_line": 2,
+            "end_line": 2,
+            "new_content": "name=new"
         ]))
 
-        XCTAssertTrue(result.localizedCaseInsensitiveContains("No-op"))
+        XCTAssertTrue(result.localizedCaseInsensitiveContains("success"))
         let persisted = try String(contentsOf: fileURL, encoding: .utf8)
         XCTAssertTrue(persisted.contains("name=new"))
     }

@@ -221,6 +221,14 @@ copy_embedding_models() {
 
 build_app() {
     echo "Building $PROJECT_NAME..."
+    # Dev safety: always start from clean app artifacts so recent fixes are
+    # actually compiled in. Stale derived-data caching has previously hidden
+    # source changes and left the app broken after a code fix.
+    rm -rf "$DERIVED_DATA_PATH_APP"
+    xcodebuild -resolvePackageDependencies \
+        -project "$PROJECT_NAME.xcodeproj" \
+        -scheme "$SCHEME" \
+        -derivedDataPath "$DERIVED_DATA_PATH_APP" >/dev/null
     xcodebuild -quiet -project "$PROJECT_NAME.xcodeproj" \
                -scheme "$SCHEME" \
                -configuration Debug \

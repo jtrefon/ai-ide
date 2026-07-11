@@ -3,14 +3,14 @@ import XCTest
 
 @MainActor
 final class ReasoningAndToolArgumentRegressionTests: XCTestCase {
-    func testAgentReasoningPromptIsDisabledForInitialResponse() {
+    func testAgentReasoningPromptIsStageIndependent() {
         let promptKey = AIRequestStage.reasoningPromptKeyIfNeeded(
             reasoningMode: .agent,
             mode: .agent,
             stage: .initial_response
         )
 
-        XCTAssertNil(promptKey)
+        XCTAssertEqual(promptKey, "ConversationFlow/Corrections/reasoning_optional_general")
     }
 
     func testWriteFileArgumentsRecoverTruncatedContentFromRawChunk() async {

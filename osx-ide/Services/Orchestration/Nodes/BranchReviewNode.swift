@@ -28,23 +28,15 @@ struct BranchReviewNode: OrchestrationNode {
                 await OrchestrationExecutionSignalBuilder().build(for: state)
             }
 
-            let indicatesUnfinished = signals.indicatesUnfinishedExecution
-            
             var shouldRetry = signals.hasToolCalls
                 || signals.missingClaimedArtifacts
-                || signals.hasIncompletePlan
-            
-            if !shouldRetry && (
-                indicatesUnfinished || 
-                signals.deliveryState == .needsWork ||
-                signals.shouldForceExecutionFollowup ||
-                signals.shouldForceToolFollowup
-            ) {
-                // Stop if no plan exists at all (honoring harness test expectations), 
-                // but trust AI if we have a plan checklist (even if it's marked complete, as it might need verification).
-                if signals.planProgress.hasChecklist {
-                    shouldRetry = true
-                }
+
+            if !shouldRetry, signals.indicatesUnfinishedExecution, state.executionCycleCount < ToolLoopConstants.maxNeedsWorkReentries,
+               signals.planProgress.hasChecklist {
+                // Allow a limited number of re-entries when the model explicitly signals
+                // unfinished work AND there is a plan with a checklist to guide the next
+                // execution cycle. Capped to prevent infinite graph-level cycles.
+                shouldRetry = true
             }
 
             if shouldRetry {

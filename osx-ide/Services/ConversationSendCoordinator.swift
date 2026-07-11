@@ -11,7 +11,6 @@ final class ConversationSendCoordinator {
         }
     }
 
-    private let foldingHandler: ConversationFoldingHandler
     private let initialResponseHandler: InitialResponseHandler
     private let toolLoopHandler: ToolLoopHandler
     private let qaReviewHandler: QAReviewHandler
@@ -28,7 +27,6 @@ final class ConversationSendCoordinator {
         self.toolExecutionCoordinator = toolExecutionCoordinator
         self.clearStreamingBuffer = clearStreamingBuffer
 
-        self.foldingHandler = ConversationFoldingHandler()
         self.initialResponseHandler = InitialResponseHandler(
             aiInteractionCoordinator: aiInteractionCoordinator,
             historyCoordinator: historyCoordinator
@@ -63,23 +61,6 @@ final class ConversationSendCoordinator {
             ])
         )
         
-        let foldStartTime = ContinuousClock.now
-        try await foldingHandler.foldIfNeeded(
-            historyCoordinator: historyCoordinator,
-            projectRoot: request.projectRoot,
-            mode: request.mode,
-            usesLocalModel: request.usesLocalModel
-        )
-        let foldDuration = foldStartTime.duration(to: ContinuousClock.now)
-        await AppLogger.shared.debug(
-            category: .conversation,
-            message: "send.fold_complete",
-            context: AppLogger.LogCallContext(metadata: [
-                "foldDuration": foldDuration.description,
-                "messageCount": historyCoordinator.messages.count
-            ])
-        )
-        
         let flowStartTime = ContinuousClock.now
         let response = try await executeConversationFlow(request)
         let flowDuration = flowStartTime.duration(to: ContinuousClock.now)
@@ -96,6 +77,8 @@ final class ConversationSendCoordinator {
             conversationId: request.conversationId,
             draftAssistantMessageId: request.draftAssistantMessageId?.uuidString
         )
+
+        trimOldMessagesIfNeeded()
         
         let totalDuration = sendStartTime.duration(to: ContinuousClock.now)
         await AppLogger.shared.debug(
@@ -157,7 +140,6 @@ final class ConversationSendCoordinator {
                 AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: messages,
                     mediaAttachments: request.mediaAttachments,
-                    explicitContext: request.explicitContext,
                     tools: localTools,
                     mode: request.mode,
                     projectRoot: request.projectRoot,
@@ -222,7 +204,12 @@ final class ConversationSendCoordinator {
                 availableTools: localTools,
                 conversationId: request.conversationId,
                 onProgressMessage: { progressMsg in
-                    self.historyCoordinator.upsertToolExecutionMessage(progressMsg)
+                    if progressMsg.toolStatus == .executing {
+                        self.historyCoordinator.setLiveToolMessage(progressMsg)
+                    } else {
+                        self.historyCoordinator.clearLiveToolMessage(progressMsg.toolCallId ?? "")
+                        self.historyCoordinator.append(progressMsg)
+                    }
                 }
             )
             for msg in toolResults {
@@ -240,9 +227,8 @@ final class ConversationSendCoordinator {
 
         let result = await aiInteractionCoordinator.sendMessageWithRetry(
             AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: historyCoordinator.messages.filter { !$0.isDraft },
+                messages: historyCoordinator.requestMessages,
                 mediaAttachments: request.mediaAttachments,
-                explicitContext: request.explicitContext,
                 tools: localTools,
                 mode: request.mode,
                 projectRoot: request.projectRoot,
@@ -283,5 +269,21 @@ final class ConversationSendCoordinator {
         static func == (lhs: CallSignature, rhs: CallSignature) -> Bool {
             lhs.name == rhs.name && lhs.arguments == rhs.arguments
         }
+    }
+
+    // MARK: - Context management
+
+    /// If the coordinator's strategy is `.compaction` and assistant messages
+    /// exceed a conservative budget, append a compaction checkpoint. If
+    /// `.slidingWindow`, skip compaction — the model's large context window
+    /// and prefix cache handle the full chain.
+    private func trimOldMessagesIfNeeded() {
+        guard historyCoordinator.strategy == .compaction else { return }
+        let assistantCount = historyCoordinator.committedMessages.filter { $0.role == .assistant }.count
+        let maxAssistantMessages = 12
+        guard assistantCount > maxAssistantMessages else { return }
+        historyCoordinator.compact(
+            summary: "Earlier turns compacted to conserve context. Use context(query:) for details."
+        )
     }
 }

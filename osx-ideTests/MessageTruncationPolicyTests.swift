@@ -102,3 +102,43 @@ final class MessageTruncationPolicyTests: XCTestCase {
         XCTAssertTrue(result.isEmpty)
     }
 }
+
+// MARK: - ToolOutputArchive (Context Access Layer L0/L1)
+
+final class ToolOutputArchiveTests: XCTestCase {
+
+    func testLargeWindowSlidingModelGetsGenerousLimit() {
+        // claude-sonnet-4 is registered as slidingWindow / 200k → limit = 200k * 4.
+        let limit = ToolOutputArchive.effectiveToolOutputLimit(modelID: "anthropic/claude-sonnet-4")
+        XCTAssertEqual(limit, 200_000 * 4)
+    }
+
+    func testSmallWindowCompactionModelFlooredAtMinimum() {
+        // deepseek is compaction / 64k → max(12000, 64000/8) = 12000.
+        let limit = ToolOutputArchive.effectiveToolOutputLimit(modelID: "deepseek/deepseek")
+        XCTAssertEqual(limit, 12_000)
+    }
+
+    func testUnknownModelFlooredAtMinimum() {
+        let limit = ToolOutputArchive.effectiveToolOutputLimit(modelID: "some-unknown-model")
+        XCTAssertEqual(limit, 12_000)
+    }
+
+    func testOffloadWritesFileUnderProjectRoot() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ToolOutputArchiveTests-\(UUID().uuidString)")
+        try? FileManager.default.removeItem(at: root)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let path = ToolOutputArchive.offload(toolCallId: "tc-123", full: "hello world", projectRoot: root)
+        let url = URL(fileURLWithPath: path)
+        XCTAssertTrue(path.contains("tc-123"))
+        let saved = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertEqual(saved, "hello world")
+    }
+
+    func testOffloadFallsBackToTempWithoutProjectRoot() {
+        let path = ToolOutputArchive.offload(toolCallId: "tc-456", full: "x", projectRoot: nil)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+    }
+}

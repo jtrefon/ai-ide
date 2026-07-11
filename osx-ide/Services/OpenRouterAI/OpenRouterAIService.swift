@@ -10,7 +10,6 @@ actor OpenRouterAIService: AIService, RemoteAIAccountStatusRefreshing {
     nonisolated let providerName: String
     nonisolated let supportsStreamingWithTools: Bool
     nonisolated let supportsNativeReasoning: Bool
-    nonisolated static let maxToolOutputCharsForModel = 12_000
 
     var reasoningContentByConversationId: [String: String] {
         get { [:] }

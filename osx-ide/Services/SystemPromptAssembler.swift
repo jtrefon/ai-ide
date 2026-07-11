@@ -39,23 +39,21 @@ struct SystemPromptAssembler {
                     : "System/tool-system-prompt-concise",
                 projectRoot: input.projectRoot
             ))
-            // Load per-tool prompts from the v2 tool prompts directory
+            // Load per-tool prompts from the canonical v3 tool prompts directory.
+            // NOTE: the previous v2 prompt set was removed; v3 is authoritative.
             let toolPromptKeys = [
-                "Tools/v2/read_file",
-                "Tools/v2/write_file",
-                "Tools/v2/patch_file",
-                "Tools/v2/list_files",
-                "Tools/v2/search_project",
-                "Tools/v2/web_search",
-                "Tools/v2/web_browse",
-                "Tools/v2/run_command",
-                "Tools/v2/grep",
-                "Tools/v2/find_file",
-                "Tools/v2/delete_file",
-                "Tools/v2/get_project_structure",
-                "Tools/v2/plan",
-                
-                
+                "Tools/v3/read",
+                "Tools/v3/write",
+                "Tools/v3/edit",
+                "Tools/v3/ls",
+                "Tools/v3/glob",
+                "Tools/v3/search",
+                "Tools/v3/rm",
+                "Tools/v3/context",
+                "Tools/v3/web_search",
+                "Tools/v3/web_fetch",
+                "Tools/v3/bash",
+                "Tools/v3/plan"
             ]
             var toolPrompts: [String] = []
             for key in toolPromptKeys {
@@ -65,6 +63,12 @@ struct SystemPromptAssembler {
             }
             if !toolPrompts.isEmpty {
                 sections.append("## Tool Reference\n\nEach tool below has WHAT (what it does), WHEN (when to use it), HOW (parameters and overloading), and OUTPUT (response format).\n\n" + toolPrompts.joined(separator: "\n\n---\n\n"))
+            }
+            if let envelope = try? PromptRepository.shared.prompt(
+                key: "System/tool-execution-envelope",
+                projectRoot: input.projectRoot
+            ) {
+                sections.append(envelope)
             }
         }
 

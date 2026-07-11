@@ -20,7 +20,6 @@ struct ToolLoopNode: OrchestrationNode {
 
         let toolLoopResult = try await handler.handleToolLoopIfNeeded(
             response: response,
-            explicitContext: state.effectiveExplicitContext,
             mode: request.mode,
             projectRoot: request.projectRoot,
             conversationId: request.conversationId,

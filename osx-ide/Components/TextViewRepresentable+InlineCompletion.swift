@@ -5,7 +5,8 @@ extension TextViewRepresentable.Coordinator {
     @MainActor
     func configureInlineCompletionHandlers() {
         let paneID = parent.paneID
-        parent.inlineCompletionEngine.registerSuggestionHandler(for: paneID) { [weak self] presentation in
+
+        parent.lineCompletionEngine.registerSuggestionHandler(for: paneID) { [weak self] presentation in
             InlineCompletionDebugStore.shared.update(paneID: paneID, presentation: presentation)
             guard let self, let textView = self.attachedTextView as? CodeEditorTextView else { return }
             if let presentation {
@@ -14,16 +15,11 @@ extension TextViewRepresentable.Coordinator {
                 textView.clearInlineSuggestion()
             }
         }
-
-        parent.inlineCompletionEngine.registerManualTriggerHandler(for: parent.paneID) { [weak self] in
-            self?.triggerManualCompletion()
-        }
     }
 
     @MainActor
     func unregisterInlineCompletionHandlers() {
-        parent.inlineCompletionEngine.unregisterSuggestionHandler(for: parent.paneID)
-        parent.inlineCompletionEngine.unregisterManualTriggerHandler(for: parent.paneID)
+        parent.lineCompletionEngine.unregisterSuggestionHandler(for: parent.paneID)
         InlineCompletionDebugStore.shared.update(paneID: parent.paneID, presentation: nil)
     }
 
@@ -32,19 +28,15 @@ extension TextViewRepresentable.Coordinator {
         guard let signalBridge else { return }
         (textView as? CodeEditorTextView)?.clearInlineSuggestion()
         InlineCompletionDebugStore.shared.update(paneID: parent.paneID, presentation: nil)
-        signalBridge.invalidate()
-    }
-
-    @MainActor
-    func triggerManualCompletion() {
-        guard let signalBridge, let textView = attachedTextView else { return }
-        let snapshot = makeSnapshot(from: textView, triggerReason: .manual)
-        signalBridge.triggerManualRequest(snapshot: snapshot)
+        signalBridge.invalidate(textView: textView as? CodeEditorTextView)
     }
 
     @MainActor
     func scheduleAutomaticInlineCompletionIfNeeded(for textView: NSTextView) {
         guard let signalBridge else { return }
+        guard let codeEditor = textView as? CodeEditorTextView else { return }
+        guard !codeEditor.snippetPreviewInProgress else { return }
+
         let snapshot = makeSnapshot(from: textView, triggerReason: .automatic)
         signalBridge.scheduleAutomaticRequest(snapshot: snapshot)
     }
@@ -52,7 +44,7 @@ extension TextViewRepresentable.Coordinator {
     @MainActor
     func invalidateInlineCompletion() {
         InlineCompletionDebugStore.shared.update(paneID: parent.paneID, presentation: nil)
-        signalBridge?.invalidate()
+        signalBridge?.invalidate(textView: attachedTextView as? CodeEditorTextView)
     }
 
     @MainActor

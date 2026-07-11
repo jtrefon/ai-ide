@@ -220,7 +220,6 @@ struct CoreCommandRegistrar<Context: IDEContext & ObservableObject> {
 
     private func registerInlineCompletionCommand() {
         commandRegistry.register(command: .editorTriggerInlineCompletion) { _ in
-            context.inlineCompletionEngine.requestManualTrigger(for: context.fileEditor.focusedPane)
         }
     }
 

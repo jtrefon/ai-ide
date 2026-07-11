@@ -28,9 +28,7 @@ struct DispatcherNode: OrchestrationNode {
 
     func run(state: OrchestrationState) async throws -> OrchestrationState {
         let request = state.request
-        let response = try await handler.sendInitialResponse(
-            explicitContext: request.explicitContext,
-            mode: request.mode,
+        let response = try await handler.sendInitialResponse(            mode: request.mode,
             projectRoot: request.projectRoot,
             conversationId: request.conversationId,
             availableTools: request.availableTools,

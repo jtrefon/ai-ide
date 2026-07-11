@@ -45,14 +45,41 @@ public final class CoreMLTextEmbeddingGenerator: MemoryEmbeddingGenerating {
         Swift.print("[EMB] Total init: \(elapsedMs(initStart))ms")
     }
 
-    private func predict(inputIds: [Int32], attentionMask: [Int32]) throws -> [Float] {
+    public func generateEmbedding(for text: String) async throws -> [Float] {
+        let tokens = tokenizer.tokenize(text)
+        let inputIds = buildInputIds(tokens)
+        let attentionMask = buildAttentionMask(tokenCount: tokens.count)
+        // Move the blocking CoreML prediction to a dedicated utility queue so
+        // it does not stall the caller's executor (actor, MainActor, etc.).
+        let wrapper = self.wrapper
+        let pInputIds = inputIds
+        let pAttentionMask = attentionMask
+        let pMaxTokens = maxTokens
+        return try await Task.detached(priority: .utility) {
+            try CoreMLTextEmbeddingGenerator.predict(
+                wrapper: wrapper,
+                inputIds: pInputIds,
+                attentionMask: pAttentionMask,
+                maxTokens: pMaxTokens
+            )
+        }.value
+    }
+
+    /// Static, Sendable-safe prediction. All inputs are value types.
+    /// Called from a utility Task so the caller's executor is never blocked.
+    private static func predict(
+        wrapper: MLModelWrapper,
+        inputIds: [Int32],
+        attentionMask: [Int32],
+        maxTokens: Int
+    ) throws -> [Float] {
         let inputArray = try MLMultiArray(shape: [1, maxTokens] as [NSNumber], dataType: .int32)
         let maskArray = try MLMultiArray(shape: [1, maxTokens] as [NSNumber], dataType: .int32)
         let typeArray = try MLMultiArray(shape: [1, maxTokens] as [NSNumber], dataType: .int32)
 
         for i in 0..<maxTokens {
-            inputArray[i] = NSNumber(value: inputIds[i])
-            maskArray[i] = NSNumber(value: attentionMask[i])
+            inputArray[i] = NSNumber(value: i < inputIds.count ? inputIds[i] : 0)
+            maskArray[i] = NSNumber(value: i < attentionMask.count ? attentionMask[i] : 0)
             typeArray[i] = NSNumber(value: 0)
         }
 
@@ -73,14 +100,25 @@ public final class CoreMLTextEmbeddingGenerator: MemoryEmbeddingGenerating {
             throw EmbeddingError.inferenceFailed("No output from model")
         }
 
-        return meanPool(outputMultiArray, attentionMask: attentionMask)
-    }
+        let seqLen = outputMultiArray.shape[1].intValue
+        let dim = outputMultiArray.shape[2].intValue
+        var pooled = [Float](repeating: 0, count: dim)
+        var tokenCount: Float = 0
 
-    public func generateEmbedding(for text: String) async throws -> [Float] {
-        let tokens = tokenizer.tokenize(text)
-        let inputIds = buildInputIds(tokens)
-        let attentionMask = buildAttentionMask(tokenCount: tokens.count)
-        return try predict(inputIds: inputIds, attentionMask: attentionMask)
+        for i in 0..<seqLen {
+            guard i < attentionMask.count, attentionMask[i] == 1 else { continue }
+            tokenCount += 1
+            for j in 0..<dim {
+                let idx = i * dim + j
+                pooled[j] += outputMultiArray[idx].floatValue
+            }
+        }
+
+        if tokenCount > 0 {
+            for j in 0..<dim { pooled[j] /= tokenCount }
+        }
+
+        return pooled
     }
 
     private func buildInputIds(_ tokens: [String]) -> [Int32] {

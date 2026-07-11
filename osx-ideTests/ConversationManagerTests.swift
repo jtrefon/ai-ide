@@ -61,12 +61,8 @@ final class ConversationManagerTests: XCTestCase {
     }
 
     func testWelcomeMessage() {
-        XCTAssertTrue(manager.messages.count >= 1)
-        let firstRole = manager.messages.first?.role
-        XCTAssertTrue(
-            firstRole == .assistant || firstRole == .system,
-            "Expected first welcome message role to be assistant or system, got \(String(describing: firstRole))"
-        )
+        // Coordinator starts empty; welcome message is handled by the UI layer
+        XCTAssertEqual(manager.messages.count, 0, "Expected empty conversation on init")
     }
 
     func testSendMessageFlow() async throws {
@@ -223,8 +219,8 @@ final class ConversationManagerTests: XCTestCase {
         XCTAssertFalse(manager.isSending)
         XCTAssertEqual(manager.currentInput, "")
         XCTAssertEqual(
-            manager.messages.last?.content,
-            "Conversation cleared. How can I assist you now?"
+            manager.messages.count, 0,
+            "Expected empty messages after clear"
         )
     }
 

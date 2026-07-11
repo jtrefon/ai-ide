@@ -22,17 +22,18 @@ enum ToolAdapterFactory {
 
     private static func capabilitiesFor(_ name: String) -> ToolCapabilities {
         switch name {
-        case "read_file", "view_file": return [.fileRead]
-        case "write_file", "write_files", "create_file": return [.fileWrite]
-        case "delete_file": return [.fileDelete]
-        case "replace_in_file", "patch_file": return [.fileWrite]
-        case "find_file", "find_by_name": return [.fileSearch]
-        case "list_files", "list_dir", "list_directory", "get_project_structure": return [.directoryList]
-        case "grep", "grep_search", "search_project", "find": return [.fileSearch, .indexSearch]
+        case "read_file", "view_file", "read": return [.fileRead]
+        case "write_file", "write_files", "create_file", "write": return [.fileWrite]
+        case "delete_file", "rm": return [.fileDelete]
+        case "replace_in_file", "patch_file", "edit": return [.fileWrite]
+        case "find_file", "find_by_name", "glob": return [.fileSearch]
+        case "list_files", "list_dir", "list_directory", "get_project_structure", "ls": return [.directoryList]
+        case "grep", "grep_search", "search_project", "find", "search": return [.fileSearch, .indexSearch]
         case "web_search", "google": return [.webSearch]
-        case "web_browse", "browse": return [.webBrowse]
+        case "web_browse", "browse", "web_fetch": return [.webBrowse]
         case "run_command", "run_shell", "bash": return [.commandExecution]
         case "inspect_symbol", "locate_symbol", "where_symbol": return [.indexSearch]
+        case "context": return [.fileRead, .indexSearch]
         default: return [.fileRead]
         }
     }
@@ -40,13 +41,15 @@ enum ToolAdapterFactory {
     private static func sideEffectsFor(_ name: String) -> ToolSideEffect {
         switch name {
         case "read_file", "view_file", "find_file", "list_files", "grep", "search_project",
-             "find", "inspect_symbol", "locate_symbol", "where_symbol", "get_project_structure":
+             "find", "inspect_symbol", "locate_symbol", "where_symbol", "get_project_structure",
+             "read", "ls", "glob", "search", "context":
             return [.readsFile]
-        case "write_file", "write_files", "create_file", "replace_in_file", "delete_file", "patch_file":
+        case "write_file", "write_files", "create_file", "replace_in_file", "delete_file", "patch_file",
+             "write", "edit", "rm":
             return [.writesFile, .readsFile]
         case "run_command", "run_shell", "bash":
             return [.executesCommand]
-        case "web_search", "google", "web_browse", "browse":
+        case "web_search", "google", "web_browse", "browse", "web_fetch":
             return [.makesNetworkRequest]
         default:
             return []
@@ -55,11 +58,12 @@ enum ToolAdapterFactory {
 
     private static func isolationFor(_ name: String) -> ToolIsolation {
         switch name {
-        case "write_file", "write_files", "create_file", "delete_file", "replace_in_file", "patch_file":
+        case "write_file", "write_files", "create_file", "delete_file", "replace_in_file", "patch_file",
+             "write", "edit", "rm":
             return .pathIsolated
         case "run_command", "run_shell", "bash":
             return .sessionIsolated
-        case "web_browse", "browse":
+        case "web_browse", "browse", "web_fetch":
             return .sessionIsolated
         default:
             return .concurrent
@@ -69,8 +73,8 @@ enum ToolAdapterFactory {
     private static func timeoutFor(_ name: String) -> TimeInterval {
         switch name {
         case "run_command", "run_shell", "bash": return 120
-        case "web_search", "google", "web_browse", "browse": return 35
-        case "search_project", "find": return 30
+        case "web_search", "google", "web_browse", "browse", "web_fetch": return 35
+        case "search_project", "find", "search": return 30
         default: return 30
         }
     }

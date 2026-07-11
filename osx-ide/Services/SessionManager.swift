@@ -9,6 +9,7 @@ final class SessionManager: ObservableObject {
         let input: String
         let livePreview: String
         let liveStatusPreview: String
+        let subject: String
     }
 
     @Published private(set) var conversationTabs: [ConversationTabItem] = []
@@ -49,11 +50,12 @@ final class SessionManager: ObservableObject {
         }
         if conversationSessionSnapshots[currentSessionId] == nil {
             conversationSessionSnapshots[currentSessionId] = SessionSnapshot(
-                messages: historyCoordinator.messages,
+                messages: historyCoordinator.committedMessages,
                 mode: .chat,
                 input: "",
                 livePreview: "",
-                liveStatusPreview: ""
+                liveStatusPreview: "",
+                subject: ""
             )
         }
         refreshTabs()
@@ -67,7 +69,9 @@ final class SessionManager: ObservableObject {
 
     private func refreshTabs() {
         conversationTabs = conversationSessionOrder.enumerated().map { index, id in
-            ConversationTabItem(id: id, title: "Chat \(index + 1)")
+            let snapshotSubject = conversationSessionSnapshots[id]?.subject ?? ""
+            let title = snapshotSubject.isEmpty ? "Chat \(index + 1)" : snapshotSubject
+            return ConversationTabItem(id: id, title: title)
         }
     }
 
@@ -75,11 +79,12 @@ final class SessionManager: ObservableObject {
 
     func saveSnapshot(input: String, livePreview: String, liveStatusPreview: String, mode: AIMode) {
         let snapshot = SessionSnapshot(
-            messages: historyCoordinator.messages,
+            messages: historyCoordinator.committedMessages,
             mode: mode,
             input: input,
             livePreview: livePreview,
-            liveStatusPreview: liveStatusPreview
+            liveStatusPreview: liveStatusPreview,
+            subject: historyCoordinator.conversationEnvelope.subject
         )
         conversationSessionSnapshots[currentSessionId] = snapshot
         Self.saveSnapshot(sessionId: currentSessionId, snapshot: snapshot, projectRoot: projectRoot)
@@ -94,11 +99,14 @@ final class SessionManager: ObservableObject {
             mode: .chat,
             input: "",
             livePreview: "",
-            liveStatusPreview: ""
+            liveStatusPreview: "",
+            subject: ""
         )
         currentSessionId = sessionId
         historyCoordinator.switchConversation(to: sessionId, projectRoot: projectRoot)
-        historyCoordinator.replaceAllMessages(with: snapshot.messages)
+        historyCoordinator.restoreCommitted(snapshot.messages)
+        historyCoordinator.updateSubject(snapshot.subject)
+
         mode = snapshot.mode
         input = snapshot.input
         livePreview = snapshot.livePreview
@@ -117,7 +125,8 @@ final class SessionManager: ObservableObject {
             mode: mode,
             input: "",
             livePreview: "",
-            liveStatusPreview: ""
+            liveStatusPreview: "",
+            subject: ""
         )
         conversationSessionSnapshots[newConversationId] = snapshot
         Self.saveSnapshot(sessionId: newConversationId, snapshot: snapshot, projectRoot: projectRoot)
@@ -175,11 +184,12 @@ final class SessionManager: ObservableObject {
         currentSessionId = migratedSessionId
         conversationSessionOrder = [migratedSessionId]
         let snapshot = SessionSnapshot(
-            messages: historyCoordinator.messages,
+            messages: historyCoordinator.committedMessages,
             mode: mode,
             input: input,
             livePreview: livePreview,
-            liveStatusPreview: liveStatusPreview
+            liveStatusPreview: liveStatusPreview,
+            subject: ""
         )
         conversationSessionSnapshots = [migratedSessionId: snapshot]
         Self.saveSnapshot(sessionId: migratedSessionId, snapshot: snapshot, projectRoot: projectRoot)

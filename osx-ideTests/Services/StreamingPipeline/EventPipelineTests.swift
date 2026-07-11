@@ -16,17 +16,15 @@ final class EventPipelineTests: XCTestCase {
     }
 
     func testSingleStageTransforms() {
-        let expectation = expectation(description: "event observed")
         let stage = NullStage()
         let pipeline = EventPipeline(stages: [stage])
         var received: [PipelineEvent] = []
-        let cancellable = pipeline.observe { received.append($0); expectation.fulfill() }
+        let cancellable = pipeline.observe { received.append($0) }
         defer { cancellable.cancel() }
 
         pipeline.ingest(.segment(Segment(kind: .userVisible, text: "hello", source: "test")))
 
-        wait(for: [expectation], timeout: 1)
-        // NullStage swallows events, so the subscriber should have received nothing
+        // NullStage swallows events, so the subscriber should receive nothing
         XCTAssertEqual(received.count, 0)
     }
 

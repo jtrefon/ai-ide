@@ -5,7 +5,6 @@ final class AIInteractionCoordinator {
     struct SendMessageWithRetryRequest {
         let messages: [ChatMessage]
         let mediaAttachments: [ChatMessageMediaAttachment]
-        let explicitContext: String?
         let tools: [AITool]
         let mode: AIMode
         let projectRoot: URL
@@ -13,22 +12,22 @@ final class AIInteractionCoordinator {
         let stage: AIRequestStage?
         let conversationId: String?
         let usesLocalModel: Bool
+        let providerName: String?
 
         init(
             messages: [ChatMessage],
             mediaAttachments: [ChatMessageMediaAttachment] = [],
-            explicitContext: String?,
             tools: [AITool],
             mode: AIMode,
             projectRoot: URL,
             runId: String? = nil,
             stage: AIRequestStage? = nil,
             conversationId: String? = nil,
-            usesLocalModel: Bool = false
+            usesLocalModel: Bool = false,
+            providerName: String? = nil
         ) {
             self.messages = messages
             self.mediaAttachments = mediaAttachments
-            self.explicitContext = explicitContext
             self.tools = tools
             self.mode = mode
             self.projectRoot = projectRoot
@@ -36,6 +35,7 @@ final class AIInteractionCoordinator {
             self.stage = stage
             self.conversationId = conversationId
             self.usesLocalModel = usesLocalModel
+            self.providerName = providerName
         }
     }
 
@@ -96,29 +96,73 @@ final class AIInteractionCoordinator {
             isRunningUnitTests: isUnitTestRun
         )
         var lastError: AppError?
-        let settings = settingsStore.load(includeApiKey: false)
-        let augmentedContext: String?
-        if Task.isCancelled {
-            return .failure(.aiServiceError("Request cancelled"))
-        }
-        let userInput = request.messages.last(where: { $0.role == .user })?.content ?? ""
-        let retriever: (any RAGRetriever)?
-        if let codebaseIndex, shouldUseRAGRetrieval(for: request.stage, settings: settings, usesLocalModel: request.usesLocalModel) {
-            retriever = CodebaseIndexRAGRetriever(index: codebaseIndex, vectorStoreService: vectorStoreService, embedder: embedder)
-        } else {
-            retriever = nil
-        }
-        augmentedContext = await RAGContextBuilder.buildContext(
-            userInput: userInput,
-            explicitContext: request.explicitContext,
-            retriever: retriever,
-            projectRoot: request.projectRoot,
-            stage: request.stage,
-            conversationId: request.conversationId,
-            eventBus: eventBus
-        )
+        // RAG is exposed as a first-class tool (ContextTool) — never force-injected.
+        let augmentedContext: String? = nil
+        let providerLabel = request.providerName ?? "OpenRouter"
+        let retryStart = Date()
+        var networkIssueActive = false
 
-        for attempt in 1...maxAttempts {
+        // App runs allow the long network-escape schedule (self-terminating via its
+        // own time budget); test runs stay bounded for deterministic harnesses.
+        let loopMax = isUnitTestRun ? maxAttempts : max(maxAttempts, 600)
+
+        func handleRetry(_ error: Error, attempt: Int) async -> Bool {
+            let action = await classifyRetry(
+                error,
+                attempt: attempt,
+                maxAttempts: maxAttempts,
+                retryStart: retryStart,
+                stage: request.stage,
+                providerName: providerLabel,
+                isUnitTestRun: isUnitTestRun
+            )
+            switch action {
+            case .cancel:
+                lastError = .aiServiceError("Request cancelled")
+                return false
+            case .insufficientBalance:
+                lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
+                return false
+            case .rateLimit(let wait):
+                lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
+                print(
+                    "[AIInteractionCoordinator] Rate limit hit. Retrying attempt \(attempt+1)/\(maxAttempts) in \(wait / 1_000_000_000)s..."
+                )
+                guard await sleepRespectingCancellation(nanoseconds: wait) else {
+                    lastError = .aiServiceError("Request cancelled")
+                    return false
+                }
+                return true
+            case .network(let wait):
+                lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
+                networkIssueActive = true
+                guard await sleepRespectingCancellation(nanoseconds: wait) else {
+                    lastError = .aiServiceError("Request cancelled")
+                    return false
+                }
+                return true
+            case .networkExhausted:
+                lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
+                if networkIssueActive {
+                    eventBus.publish(ProviderIssueStatusEvent(
+                        providerName: providerLabel, statusKind: .resolved,
+                        statusCode: nil, message: "", cooldownUntil: nil))
+                }
+                return false
+            case .generic(let wait):
+                lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
+                guard await sleepRespectingCancellation(nanoseconds: wait) else {
+                    lastError = .aiServiceError("Request cancelled")
+                    return false
+                }
+                return true
+            case .surrender:
+                lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
+                return false
+            }
+        }
+
+        for attempt in 1...loopMax {
             if Task.isCancelled {
                 return .failure(.aiServiceError("Request cancelled"))
             }
@@ -154,7 +198,6 @@ final class AIInteractionCoordinator {
             let historyRequest = AIServiceHistoryRequest(
                 messages: retryMessages,
                 mediaAttachments: request.mediaAttachments,
-                context: augmentedContext,
                 tools: filteredTools,
                 mode: request.mode,
                 projectRoot: request.projectRoot,
@@ -162,18 +205,6 @@ final class AIInteractionCoordinator {
                 stage: request.stage,
                 conversationId: request.conversationId
             )
-
-            let isRateLimitError: (Error) -> Bool = { error in
-                let errStr = String(describing: error).lowercased()
-                return errStr.contains("429") || errStr.contains("rate-limit")
-                    || errStr.contains("rate_limit")
-            }
-
-            let isInsufficientBalanceError: (Error) -> Bool = { error in
-                let errStr = String(describing: error).lowercased()
-                return errStr.contains("402") || errStr.contains("insufficient balance")
-                    || errStr.contains("more credits")
-            }
 
             let shouldUseStreaming = shouldUseStreamingForRequest(
                 runId: request.runId,
@@ -207,41 +238,18 @@ final class AIInteractionCoordinator {
                         }
                         continue
                     }
+                    if networkIssueActive {
+                        eventBus.publish(ProviderIssueStatusEvent(
+                            providerName: providerLabel, statusKind: .resolved,
+                            statusCode: nil, message: "", cooldownUntil: nil))
+                        networkIssueActive = false
+                    }
                     return .success(response)
                 } catch {
-                    if isCancellationError(error) || Task.isCancelled {
-                        return .failure(.aiServiceError("Request cancelled"))
+                    if await handleRetry(error, attempt: attempt) {
+                        continue
                     }
-                    if isInsufficientBalanceError(error) {
-                        return .failure(Self.mapToAppError(error, operation: "sendMessageStreaming"))
-                    }
-                    lastError = Self.mapToAppError(error, operation: "sendMessageStreaming")
-                    if attempt < maxAttempts {
-                        if isRateLimitError(error) {
-                            let waitSeconds = retryDelayNanoseconds(
-                                forAttempt: attempt,
-                                stage: request.stage,
-                                isRateLimitError: true,
-                                isRunningUnitTests: isUnitTestRun
-                            )
-                            print(
-                                "[AIInteractionCoordinator] Rate limit hit. Retrying attempt \(attempt+1)/\(maxAttempts) in \(waitSeconds / 1_000_000_000)s..."
-                            )
-                            guard await sleepRespectingCancellation(nanoseconds: waitSeconds) else {
-                                return .failure(.aiServiceError("Request cancelled"))
-                            }
-                        } else {
-                            let waitSeconds = retryDelayNanoseconds(
-                                forAttempt: attempt,
-                                stage: request.stage,
-                                isRateLimitError: false,
-                                isRunningUnitTests: isUnitTestRun
-                            )
-                            guard await sleepRespectingCancellation(nanoseconds: waitSeconds) else {
-                                return .failure(.aiServiceError("Request cancelled"))
-                            }
-                        }
-                    }
+                    return .failure(lastError ?? .aiServiceError("sendMessageStreaming failed"))
                 }
             } else {
                 let result = await aiService.sendMessageResult(historyRequest)
@@ -267,41 +275,18 @@ final class AIInteractionCoordinator {
                         }
                         continue
                     }
+                    if networkIssueActive {
+                        eventBus.publish(ProviderIssueStatusEvent(
+                            providerName: providerLabel, statusKind: .resolved,
+                            statusCode: nil, message: "", cooldownUntil: nil))
+                        networkIssueActive = false
+                    }
                     return result
                 case .failure(let error):
-                    if isCancellationError(error) || Task.isCancelled {
-                        return .failure(.aiServiceError("Request cancelled"))
+                    if await handleRetry(error, attempt: attempt) {
+                        continue
                     }
-                    if isInsufficientBalanceError(error) {
-                        return .failure(error)
-                    }
-                    lastError = error
-                    if attempt < maxAttempts {
-                        if isRateLimitError(error) {
-                            let waitSeconds = retryDelayNanoseconds(
-                                forAttempt: attempt,
-                                stage: request.stage,
-                                isRateLimitError: true,
-                                isRunningUnitTests: isUnitTestRun
-                            )
-                            print(
-                                "[AIInteractionCoordinator] Rate limit hit. Retrying attempt \(attempt+1)/\(maxAttempts) in \(waitSeconds / 1_000_000_000)s..."
-                            )
-                            guard await sleepRespectingCancellation(nanoseconds: waitSeconds) else {
-                                return .failure(.aiServiceError("Request cancelled"))
-                            }
-                        } else {
-                            let waitSeconds = retryDelayNanoseconds(
-                                forAttempt: attempt,
-                                stage: request.stage,
-                                isRateLimitError: false,
-                                isRunningUnitTests: isUnitTestRun
-                            )
-                            guard await sleepRespectingCancellation(nanoseconds: waitSeconds) else {
-                                return .failure(.aiServiceError("Request cancelled"))
-                            }
-                        }
-                    }
+                    return .failure(lastError ?? .aiServiceError("sendMessageStreaming failed"))
                 }
             }
         }
@@ -413,13 +398,165 @@ final class AIInteractionCoordinator {
         return min(baseDelay, maxDelay)
     }
 
-    private func shouldUseRAGRetrieval(
-        for stage: AIRequestStage?,
-        settings: OpenRouterSettings,
-        usesLocalModel: Bool = false
-    ) -> Bool {
-        if usesLocalModel { return false }
-        return settings.ragEnabledDuringToolLoop
+    // MARK: - Retry classification (network vs rate-limit vs generic)
+
+    private enum RetryAction {
+        case cancel
+        case insufficientBalance
+        case rateLimit(delay: UInt64)
+        case network(delay: UInt64)
+        case networkExhausted
+        case generic(delay: UInt64)
+        case surrender
+    }
+
+    private func isRateLimitError(_ error: Error) -> Bool {
+        let errStr = String(describing: error).lowercased()
+        return errStr.contains("429") || errStr.contains("rate-limit")
+            || errStr.contains("rate_limit")
+    }
+
+    private func isInsufficientBalanceError(_ error: Error) -> Bool {
+        let errStr = String(describing: error).lowercased()
+        return errStr.contains("402") || errStr.contains("insufficient balance")
+            || errStr.contains("more credits")
+    }
+
+    private func classifyRetry(
+        _ error: Error,
+        attempt: Int,
+        maxAttempts: Int,
+        retryStart: Date,
+        stage: AIRequestStage?,
+        providerName: String,
+        isUnitTestRun: Bool
+    ) async -> RetryAction {
+        if isCancellationError(error) || Task.isCancelled {
+            return .cancel
+        }
+        if isInsufficientBalanceError(error) {
+            return .insufficientBalance
+        }
+        switch await networkRetryResult(
+            error, attempt: attempt, retryStart: retryStart,
+            providerName: providerName, isUnitTestRun: isUnitTestRun
+        ) {
+        case .notNetwork:
+            break
+        case .retry(let delay):
+            return .network(delay: delay)
+        case .exhausted:
+            return .networkExhausted
+        }
+        if isRateLimitError(error) {
+            guard attempt < maxAttempts else { return .surrender }
+            let wait = retryDelayNanoseconds(
+                forAttempt: attempt, stage: stage,
+                isRateLimitError: true, isRunningUnitTests: isUnitTestRun)
+            return .rateLimit(delay: wait)
+        }
+        guard attempt < maxAttempts else { return .surrender }
+        let wait = retryDelayNanoseconds(
+            forAttempt: attempt, stage: stage,
+            isRateLimitError: false, isRunningUnitTests: isUnitTestRun)
+        return .generic(delay: wait)
+    }
+
+    private enum NetworkRetryResult {
+        case notNetwork
+        case retry(UInt64)
+        case exhausted
+    }
+
+    // Network connectivity errors get a long, escalating retry schedule because they
+    // are typically transient: short-wavelength wifi drops, packet loss/jitter,
+    // switching networks, or modem/router power-cycles (often ~5 min). Each retry
+    // publishes a non-modal provider-issue banner with a live countdown instead of
+    // surfacing a hard popup. Schedule: 1s × 10s → 5s × 1min → 15s × 5min, then surrender.
+    private func networkRetryResult(
+        _ error: Error,
+        attempt: Int,
+        retryStart: Date,
+        providerName: String,
+        isUnitTestRun: Bool
+    ) async -> NetworkRetryResult {
+        guard isNetworkConnectivityError(error) else { return .notNetwork }
+        let delay: TimeInterval
+        if isUnitTestRun {
+            // Keep harness runs bounded and fast; no long escalation.
+            guard attempt < 3 else { return .exhausted }
+            delay = 1
+        } else {
+            let elapsed = Date().timeIntervalSince(retryStart)
+            let budget: TimeInterval = 10 + 60 + 300
+            guard elapsed < budget else { return .exhausted }
+            if elapsed < 10 {
+                delay = 1
+            } else if elapsed < 70 {
+                delay = 5
+            } else {
+                delay = 15
+            }
+        }
+        let nextRetry = Date().addingTimeInterval(delay)
+        await AIToolTraceLogger.shared.log(type: "chat.network_retry", data: [
+            "attempt": attempt,
+            "elapsedSeconds": Int(Date().timeIntervalSince(retryStart)),
+            "nextRetryInSeconds": Int(delay),
+            "provider": providerName
+        ])
+        // Surface as a non-modal banner with a live countdown instead of a hard popup.
+        eventBus.publish(ProviderIssueStatusEvent(
+            providerName: providerName,
+            statusKind: .networkOffline,
+            statusCode: nil,
+            message: "We can't reach the AI provider — retrying automatically…",
+            cooldownUntil: nextRetry))
+        return .retry(UInt64(delay * 1_000_000_000))
+    }
+
+    private func isNetworkConnectivityError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            return Self.isTransientNetworkURLError(urlError.errorCode)
+        }
+        if let appErr = error as? AppError {
+            switch appErr {
+            case .networkError:
+                return true
+            case .aiServiceError(let message):
+                return Self.networkPhraseSet.contains { message.localizedCaseInsensitiveContains($0) }
+            default:
+                return false
+            }
+        }
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            return Self.isTransientNetworkURLError(nsError.code)
+        }
+        let description = String(describing: error).lowercased()
+        return Self.networkPhraseSet.contains { description.contains($0) }
+    }
+
+    private static let networkPhraseSet: Set<String> = [
+        "offline", "internet connection appears to be offline", "network connection was lost",
+        "timed out", "could not connect", "cannot connect to", "network is unreachable",
+        "connection reset", "connection dropped", "no network connection", "nsurlerror",
+        "the network connection was lost", "request timed out", "connection failed"
+    ]
+
+    private static func isTransientNetworkURLError(_ code: Int) -> Bool {
+        let urlErrorCode = URLError.Code(rawValue: code)
+        switch urlErrorCode {
+        case .notConnectedToInternet, .networkConnectionLost, .timedOut,
+             .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed,
+             .resourceUnavailable, .dataNotAllowed, .internationalRoamingOff,
+             .callIsActive, .secureConnectionFailed, .clientCertificateRejected,
+             .clientCertificateRequired, .cannotLoadFromNetwork,
+             .backgroundSessionWasDisconnected, .appTransportSecurityRequiresSecureConnection:
+            return true
+        default:
+            return false
+        }
     }
 
     func shouldUseStreamingForRequest(

@@ -129,8 +129,7 @@ struct AISettingsTab: View {
                     subtitle: reasoningCardSubtitle,
                     rowSubtitle: reasoningRowSubtitle,
                     reasoningMode: binding(\.reasoningMode),
-                    toolPromptMode: binding(\.toolPromptMode),
-                    ragDuringToolLoop: binding(\.ragEnabledDuringToolLoop)
+                    toolPromptMode: binding(\.toolPromptMode)
                 )
                 SettingsCard(
                     title: "Local Models",
@@ -333,7 +332,6 @@ private struct ReasoningSection: View {
     let rowSubtitle: String
     @Binding var reasoningMode: ReasoningMode
     @Binding var toolPromptMode: ToolPromptMode
-    @Binding var ragDuringToolLoop: Bool
 
     var body: some View {
         SettingsCard(
@@ -366,15 +364,6 @@ private struct ReasoningSection: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 220)
-            }
-
-            SettingsRow(
-                title: "RAG during tool loop",
-                subtitle: "When disabled, tool-loop turns skip RAG retrieval and use explicit context only.",
-                systemImage: "rectangle.stack.badge.magnifyingglass"
-            ) {
-                Toggle("", isOn: $ragDuringToolLoop)
-                    .toggleStyle(.switch)
             }
         }
     }

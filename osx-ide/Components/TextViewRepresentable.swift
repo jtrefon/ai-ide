@@ -10,8 +10,7 @@ struct TextViewRepresentable: NSViewRepresentable {
     var language: String
     @Binding var selectedRange: NSRange?
     @ObservedObject var selectionContext: CodeSelectionContext
-    let inlineCompletionEngine: InlineCompletionEngine
-    let snippetCompletionService: SnippetCompletionService
+    let lineCompletionEngine: LineCompletionEngine
     var showLineNumbers: Bool
     var wordWrap: Bool
     var fontSize: Double

@@ -2,7 +2,7 @@ import Foundation
 
 /// Delete a file
 struct DeleteFileTool: AITool {
-    let name = "delete_file"
+    let name = "rm"
     let description = "Delete a file at the specified path."
     var parameters: [String: Any] {
         FileToolParameterSchemaBuilder.objectSchema(

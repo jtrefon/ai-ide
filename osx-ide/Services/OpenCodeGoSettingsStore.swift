@@ -10,8 +10,7 @@ final class OpenCodeGoSettingsStore: ProviderOpenRouterSettingsStore, @unchecked
                 baseURL: "OpenCodeGoBaseURL",
                 systemPrompt: "OpenCodeGoSystemPrompt",
                 reasoningMode: "OpenCodeGoReasoningMode",
-                toolPromptMode: "OpenCodeGoToolPromptMode",
-                ragEnabledDuringToolLoop: "OpenCodeGoRAGEnabledDuringToolLoop"
+                toolPromptMode: "OpenCodeGoToolPromptMode"
             ),
             harnessKeys: HarnessKeys(
                 apiKeyTestRunner: "TEST_RUNNER_ENV_HARNESS_OPENCODEGO_API_KEY",
@@ -24,8 +23,7 @@ final class OpenCodeGoSettingsStore: ProviderOpenRouterSettingsStore, @unchecked
             defaultModel: "deepseek-v4-flash",
             defaultBaseURL: "https://opencode.ai/zen/go/v1",
             defaultReasoningMode: .modelAndAgent,
-            defaultToolPromptMode: .fullStatic,
-            defaultRAGEnabledDuringToolLoop: false
+            defaultToolPromptMode: .fullStatic
         )
     }
 }

@@ -68,11 +68,11 @@ struct ArtifactTracker {
 
 struct ToolSetProvider {
     static func mutationRecoveryTools(from available: [AITool]) -> [AITool] {
-        available.filter { MutationTools.isMutationTool($0.name) || $0.name == "read_file" }
+        available.filter { MutationTools.isMutationTool($0.name) || $0.name == "read" }
     }
 
     static func failedDirectReadRecoveryTools(from available: [AITool]) -> [AITool] {
-        let names: Set<String> = ["list_files", "read_file", "write_file", "write_files", "create_file", "delete_file", "replace_in_file", "patch_file"]
+        let names: Set<String> = ["ls", "read", "write", "rm", "edit"]
         return available.filter { names.contains($0.name) }
     }
 
@@ -85,6 +85,6 @@ struct ToolSetProvider {
     }
 
     static func strictMutationExecutionTools(from available: [AITool]) -> [AITool] {
-        available.filter { $0.name == "read_file" || MutationTools.isMutationTool($0.name) }
+        available.filter { $0.name == "read" || MutationTools.isMutationTool($0.name) }
     }
 }

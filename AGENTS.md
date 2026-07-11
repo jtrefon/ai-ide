@@ -111,6 +111,17 @@ Button(onActivate)                          ← single button, fills entire pill
 
 - **LSP false positives**: sourcekit-lsp frequently reports "Cannot find type 'X' in scope" for cross-module types. The actual build (`./run.sh build`) is the source of truth.
 - **FAISS**: linked as a static library (`libfaiss_full.a`). The C bridge (`CFAISSWrapper.c`) wraps `faiss_c.h`. No Swift Package Manager dependency.
+
+### Design Standards (UI consistency)
+
+**All UI spacing, corner radii, colors, control heights, and shared sizes MUST come from `AppConstants` (`osx-ide/Services/AppConstants*.swift`). Never hardcode these as magic numbers in component code** — if a needed value is missing, add it to the appropriate `AppConstants*` file. Full rules, token tables, and DO/DON'T examples are in [`DESIGN_STANDARDS.md`](./DESIGN_STANDARDS.md).
+
+Hard rules (see `DESIGN_STANDARDS.md` for detail):
+1. Adjacent controls of the same role (e.g. mode selector + model selector) **must share one component/idiom** — do not mix a native `Picker(.menu)` with a custom `Button`+`popover` bubble. This previously produced mismatched heights/fonts.
+2. Headers use `AppConstants.Layout.headerHeight`; dividers use `AppConstants.Color.separatorDefault`.
+3. Corner radii use `AppConstants.Layout.corner*` tokens (the scale tops out at `cornerXL = 16`; `cornerRadius: 18` is a violation).
+4. Glass surfaces use `nativeGlassBackground(_:)` / `NativeGlassSurface`, not hand-rolled materials.
+5. SwiftLint's `hardcoded_corner_radius` guardrail warns on literal `cornerRadius:` values — treat as must-fix for UI code.
 - **xcodebuild package resolution** sometimes fails on first attempt for `SwiftJinja/OrderedCollections`. Running `xcodebuild -resolvePackageDependencies` fixes it.
 - **Indexer uses SQLite raw** (no GRDB/CoreData). Schema in `DatabaseManager.swift`. FTS5 for full-text search.
 - **Syntax highlighting**: tree-sitter via `Packages/SyntaxHighlighting`. No more token-based highlighting.

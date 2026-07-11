@@ -7,35 +7,26 @@ enum LocalModelToolProvider {
     /// and shell access.
     private static let safeToolNames: Set<String> = [
         // Core filesystem
-        "read_file",
-        "list_dir",
-        "list_files",
-        "write_file",
-        "write_files",
-        "create_file",
-        "replace_in_file",
-        "delete_file",
-        // Index-backed search & read
-        "index_search_text",
-        "index_search_symbols",
-        "index_find_files",
-        "index_list_files",
-        "index_read_file",
-        "index_list_memories",
-        "index_add_memory",
-        // Search & structure
-        "search_project",
-        "find",
-        "find_file",
-        "find_by_name",
-        "grep",
-        "grep_search",
-        "get_project_structure",
+        "read",
+        "ls",
+        "write",
+        "edit",
+        "rm",
+        // Search & index
+        "search",
+        "glob",
+        "context",
         // Web
         "web_search",
-        "web_browse",
+        "web_fetch",
         // Terminal
-        "run_command",
+        "bash",
+        // Planning
+        "plan",
+        // Pinned rules
+        "pinned_rule_add",
+        "pinned_rule_remove",
+        "pinned_rule_list",
     ]
 
     static func safeTools(from allTools: [AITool]) -> [AITool] {

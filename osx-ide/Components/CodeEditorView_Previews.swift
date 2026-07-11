@@ -2,14 +2,9 @@ import SwiftUI
 
 struct CodeEditorView_Previews: PreviewProvider {
     @MainActor
-    private static var previewInlineCompletionEngine: InlineCompletionEngine {
-        InlineCompletionEngine(
-            settingsStore: InlineCompletionSettingsStore(),
-            triggerPolicy: CompletionTriggerPolicy(),
-            contextAssembler: CompletionContextAssembler(),
-            retrievalLayer: CompletionRetrievalLayer(projectRootProvider: { nil }, codebaseIndexProvider: { nil }),
-            inferenceService: CompletionInferenceService(provider: AIServiceInlineCompletionProvider(aiServiceProvider: { nil })),
-            ranker: SuggestionRanker()
+    private static var previewLineCompletionEngine: LineCompletionEngine {
+        LineCompletionEngine(
+            inferenceService: CompletionInferenceService(provider: AIServiceInlineCompletionProvider(aiServiceProvider: { nil }))
         )
     }
 
@@ -22,16 +17,7 @@ struct CodeEditorView_Previews: PreviewProvider {
             language: "swift",
             selectedRange: .constant(nil),
             selectionContext: CodeSelectionContext(),
-            inlineCompletionEngine: previewInlineCompletionEngine,
-            snippetCompletionService: SnippetCompletionService(
-                inferenceService: CompletionInferenceService(
-                    provider: AIServiceInlineCompletionProvider(aiServiceProvider: { nil })
-                ),
-                retrievalLayer: CompletionRetrievalLayer(
-                    projectRootProvider: { nil },
-                    codebaseIndexProvider: { nil }
-                )
-            ),
+            lineCompletionEngine: previewLineCompletionEngine,
             inlineCompletionDebugOverlayEnabled: true,
             showLineNumbers: true,
             wordWrap: false,

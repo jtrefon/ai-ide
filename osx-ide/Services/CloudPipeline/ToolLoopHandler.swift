@@ -23,7 +23,6 @@ final class ToolLoopHandler {
 
     func handleToolLoopIfNeeded(
         response: AIServiceResponse,
-        explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
         conversationId: String,
@@ -79,6 +78,10 @@ final class ToolLoopHandler {
         var lastContinuationRecoveryIteration = -10  // cooldown: 3 iterations between recoveries
         var lastNudgedPlanTask: String? = nil        // tracks plan task nudge to avoid spam
         var hasNudgedResearchPhase = false           // tracks research-phase nudge to avoid spam
+        /// Convergence tracking (Context Access Layer, RC6)
+        let loopStartTime = Date()
+        var consecutiveReadsSinceLastSuccessfulMutation = 0
+
         let maxIterations = if usesLocalModel {
             ToolLoopConstants.maxMLXIterations
         } else if mode == .agent {
@@ -105,7 +108,7 @@ final class ToolLoopHandler {
                 userInput: userInput,
                 conversationId: conversationId,
                 projectRoot: projectRoot,
-                historyMessages: historyCoordinator.messages
+                historyMessages: historyCoordinator.requestMessages
             )
 
             currentTurnTools = availableTools
@@ -113,7 +116,6 @@ final class ToolLoopHandler {
             currentResponse = try await aiInteractionCoordinator
                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: focusedMessages,
-                    explicitContext: explicitContext,
                     tools: currentTurnTools,
                     mode: mode,
                     projectRoot: projectRoot,
@@ -141,7 +143,7 @@ final class ToolLoopHandler {
                     userInput: userInput,
                     conversationId: conversationId,
                     projectRoot: projectRoot,
-                    historyMessages: historyCoordinator.messages
+                    historyMessages: historyCoordinator.requestMessages
                 )
                 let correctionPrompt: String
                 do {
@@ -157,7 +159,6 @@ final class ToolLoopHandler {
                 currentResponse = try await aiInteractionCoordinator
                     .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                         messages: focusedMessages + [ChatMessage(role: .system, content: correctionPrompt)],
-                        explicitContext: explicitContext,
                         tools: currentTurnTools,
                         mode: mode,
                         projectRoot: projectRoot,
@@ -199,14 +200,13 @@ final class ToolLoopHandler {
                     userInput: userInput,
                     conversationId: conversationId,
                     projectRoot: projectRoot,
-                    historyMessages: historyCoordinator.messages
+                    historyMessages: historyCoordinator.requestMessages
                 )
                 currentTurnTools = availableTools
                 clearStreamingBuffer?()
                 currentResponse = try await aiInteractionCoordinator
                     .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                         messages: focusedMessages,
-                        explicitContext: explicitContext,
                         tools: currentTurnTools,
                         mode: mode,
                         projectRoot: projectRoot,
@@ -238,7 +238,6 @@ final class ToolLoopHandler {
                     "toolNames": uniqueToolCalls.map(\.name)
                 ])
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -265,7 +264,6 @@ final class ToolLoopHandler {
                    unavailableToolNames.allSatisfy(isReadOnlyToolName),
                    !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }) {
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -292,7 +290,6 @@ final class ToolLoopHandler {
                 }
                 currentTurnTools = recoveryTools
                 currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -331,7 +328,6 @@ final class ToolLoopHandler {
                             : mutationRecoveryTools(from: availableTools)
                         currentTurnTools = diversifiedTools
                         currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
-                            explicitContext: explicitContext,
                             projectRoot: projectRoot,
                             mode: mode,
                             userInput: userInput,
@@ -347,7 +343,6 @@ final class ToolLoopHandler {
                     let finalizationTools: [AITool]? =
                         hasObservedSuccessfulMutation ? nil : currentTurnTools
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -365,7 +360,6 @@ final class ToolLoopHandler {
                 }
 
                 currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -386,7 +380,6 @@ final class ToolLoopHandler {
                     "signatureCount": repeatedFailedSignatures.count
                 ])
                 currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -421,7 +414,6 @@ final class ToolLoopHandler {
                 }
                 currentTurnTools = diversifiedTools
                 currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -469,7 +461,6 @@ final class ToolLoopHandler {
                    ),
                    !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }) {
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -483,7 +474,6 @@ final class ToolLoopHandler {
                 }
 
                 currentResponse = try await requestDiversifiedExecutionForRepeatedWriteTargets(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -512,7 +502,6 @@ final class ToolLoopHandler {
                    hasObservedMutationVerificationRead,
                    !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }) {
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -532,7 +521,6 @@ final class ToolLoopHandler {
                     "toolCalls": uniqueToolCalls.count
                 ])
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -558,7 +546,6 @@ final class ToolLoopHandler {
                 ToolExecutionTelemetry.shared.recordRepeatedBatch()
                 // For repeated batch stall, skip execution transition and go directly to final response
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -568,7 +555,47 @@ final class ToolLoopHandler {
                 )
                 break
             }
-
+            
+            // Convergence stall (RC6): wall-clock budget
+            if Date().timeIntervalSince(loopStartTime) > ToolLoopConstants.maxToolLoopDuration {
+                await AIToolTraceLogger.shared.log(type: "chat.tool_loop_convergence_stall_time", data: [
+                    "runId": runId,
+                    "iteration": toolIteration,
+                    "duration": Date().timeIntervalSince(loopStartTime)
+                ])
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    projectRoot: projectRoot,
+                    mode: mode,
+                    userInput: userInput,
+                    toolResults: lastToolResults,
+                    runId: runId,
+                    availableTools: nil,
+                    conversationId: conversationId,
+                    hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
+                )
+                break
+            }
+            
+            // Convergence stall (RC6): reads without any successful mutation
+            if consecutiveReadsSinceLastSuccessfulMutation > ToolLoopConstants.maxReadsWithoutMutation {
+                await AIToolTraceLogger.shared.log(type: "chat.tool_loop_convergence_stall_reads", data: [
+                    "runId": runId,
+                    "iteration": toolIteration,
+                    "consecutiveReadsSinceLastSuccessfulMutation": consecutiveReadsSinceLastSuccessfulMutation
+                ])
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    projectRoot: projectRoot,
+                    mode: mode,
+                    userInput: userInput,
+                    toolResults: lastToolResults,
+                    runId: runId,
+                    availableTools: nil,
+                    conversationId: conversationId,
+                    hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
+                )
+                break
+            }
+            
             await AIToolTraceLogger.shared.log(type: "chat.tool_loop_iteration", data: [
                 "mode": mode.rawValue,
                 "iteration": toolIteration,
@@ -653,7 +680,12 @@ final class ToolLoopHandler {
             ) { [weak self] progressMsg in
                 guard let self else { return }
                 if progressMsg.isToolExecution {
-                    self.historyCoordinator.upsertToolExecutionMessage(progressMsg)
+                    if progressMsg.toolStatus == .executing {
+                        self.historyCoordinator.setLiveToolMessage(progressMsg)
+                    } else {
+                        self.historyCoordinator.clearLiveToolMessage(progressMsg.toolCallId ?? "")
+                        self.historyCoordinator.commitToolResult(progressMsg)
+                    }
                 } else {
                     self.historyCoordinator.append(progressMsg)
                 }
@@ -671,9 +703,14 @@ final class ToolLoopHandler {
 
             for msg in toolResults {
                 if msg.isToolExecution {
-                    historyCoordinator.upsertToolExecutionMessage(msg)
-                    if msg.toolStatus == ToolExecutionStatus.completed {
-                        ToolExecutionTelemetry.shared.recordSuccessfulExecution()
+                    if msg.toolStatus == .executing {
+                        historyCoordinator.setLiveToolMessage(msg)
+                    } else {
+                        historyCoordinator.clearLiveToolMessage(msg.toolCallId ?? "")
+                        historyCoordinator.commitToolResult(msg)
+                        if msg.toolStatus == ToolExecutionStatus.completed {
+                            ToolExecutionTelemetry.shared.recordSuccessfulExecution()
+                        }
                     }
                 } else {
                     historyCoordinator.append(msg)
@@ -701,7 +738,6 @@ final class ToolLoopHandler {
                             : mutationRecoveryTools(from: availableTools)
                     }
                     currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -719,7 +755,6 @@ final class ToolLoopHandler {
                    hasFailedDirectRead(in: toolResults) {
                     currentTurnTools = failedDirectReadRecoveryTools(from: availableTools)
                     currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -735,7 +770,6 @@ final class ToolLoopHandler {
                    hasCreateFileAlreadyExistsFailure(in: toolResults) {
                     currentTurnTools = contentWriteRecoveryTools(from: availableTools)
                     currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -766,6 +800,12 @@ final class ToolLoopHandler {
 
             let successfulMutationThisIteration = uniqueToolCalls.contains { toolCall in
                 completedToolCallIds.contains(toolCall.id) && isMutationToolName(toolCall.name)
+            }
+            // Convergence tracking (RC6): reset on successful mutation, increment when all-read-only
+            if successfulMutationThisIteration {
+                consecutiveReadsSinceLastSuccessfulMutation = 0
+            } else if uniqueToolCalls.allSatisfy({ MutationTools.readOnlyNames.contains($0.name) }) {
+                consecutiveReadsSinceLastSuccessfulMutation += 1
             }
             let completedCreateFileReservationThisIteration = uniqueToolCalls.contains { toolCall in
                 completedToolCallIds.contains(toolCall.id) && toolCall.name == "create_file"
@@ -805,7 +845,6 @@ final class ToolLoopHandler {
                     "count": consecutiveNonRecoverableMutationFailureIterations
                 ])
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -828,7 +867,6 @@ final class ToolLoopHandler {
                 ) {
                     currentTurnTools = contentWriteRecoveryTools(from: availableTools)
                     currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -841,7 +879,6 @@ final class ToolLoopHandler {
                     continue
                 }
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -866,7 +903,6 @@ final class ToolLoopHandler {
                     "iteration": toolIteration
                 ])
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -900,38 +936,17 @@ final class ToolLoopHandler {
                 toolCalls: uniqueToolCalls,
                 toolResults: toolResults
             )
-            let completionFeedbackMessage = toolCompletionFeedbackMessage(
-                toolCalls: uniqueToolCalls,
-                toolResults: toolResults
-            )
             let toolLoopContext = toolLoopContextMessage(toolResults: toolResults)
-            var followupMessages = historyCoordinator.messages.filter { !$0.isDraft }
+            var followupMessages = historyCoordinator.requestMessages
             
             if let toolLoopContext {
                 followupMessages.append(toolLoopContext)
             }
-            if let completionFeedbackMessage {
-                followupMessages.append(completionFeedbackMessage)
-            }
+            // Single follow-up message per turn (priority chain):
+            // failure > step-update(read-only stall) > completion > plan > research
             if let failureRecoveryMessage {
                 followupMessages.append(failureRecoveryMessage)
-            }
-            if let planNudge = await planExecutionNudgeMessage(
-                conversationId: conversationId,
-                successfulMutationThisIteration: successfulMutationThisIteration,
-                toolCalls: uniqueToolCalls,
-                lastNudgedPlanTask: &lastNudgedPlanTask
-            ) {
-                followupMessages.append(planNudge)
-            }
-            if let researchNudge = await planResearchNudgeMessage(
-                conversationId: conversationId,
-                toolCalls: uniqueToolCalls,
-                hasNudged: &hasNudgedResearchPhase
-            ) {
-                followupMessages.append(researchNudge)
-            }
-            if shouldInjectStepUpdateInstruction(
+            } else if shouldInjectStepUpdateInstruction(
                 iteration: toolIteration,
                 consecutiveReadOnlyIterations: consecutiveReadOnlyToolIterations,
                 hasFailureRecovery: failureRecoveryMessage != nil
@@ -940,6 +955,24 @@ final class ToolLoopHandler {
                     projectRoot: projectRoot,
                     consecutiveReadOnlyIterations: consecutiveReadOnlyToolIterations
                 ))
+            } else if let completionFeedbackMessage = toolCompletionFeedbackMessage(
+                toolCalls: uniqueToolCalls,
+                toolResults: toolResults
+            ) {
+                followupMessages.append(completionFeedbackMessage)
+            } else if let planNudge = await planExecutionNudgeMessage(
+                conversationId: conversationId,
+                successfulMutationThisIteration: successfulMutationThisIteration,
+                toolCalls: uniqueToolCalls,
+                lastNudgedPlanTask: &lastNudgedPlanTask
+            ) {
+                followupMessages.append(planNudge)
+            } else if let researchNudge = await planResearchNudgeMessage(
+                conversationId: conversationId,
+                toolCalls: uniqueToolCalls,
+                hasNudged: &hasNudgedResearchPhase
+            ) {
+                followupMessages.append(researchNudge)
             }
             
             followupMessages = MessageTruncationPolicy.truncateForModel(followupMessages)
@@ -979,7 +1012,6 @@ final class ToolLoopHandler {
             currentResponse = try await aiInteractionCoordinator
                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: followupMessages,
-                    explicitContext: explicitContext,
                     tools: currentTurnTools,
                     mode: mode,
                     projectRoot: projectRoot,
@@ -1010,7 +1042,7 @@ final class ToolLoopHandler {
                             userInput: userInput,
                             conversationId: conversationId,
                             projectRoot: projectRoot,
-                            historyMessages: historyCoordinator.messages
+                            historyMessages: historyCoordinator.requestMessages
                         )
                         
                         currentTurnTools = availableTools
@@ -1018,7 +1050,6 @@ final class ToolLoopHandler {
                         currentResponse = try await aiInteractionCoordinator
                             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                                 messages: focusedMessages,
-                                explicitContext: explicitContext,
                                 tools: availableTools,
                                 mode: mode,
                                 projectRoot: projectRoot,
@@ -1027,9 +1058,9 @@ final class ToolLoopHandler {
                                 conversationId: conversationId
                             ))
                             .get()
-                    }
-                }
-            }
+        }
+    }
+}
 
             if !(currentResponse.toolCalls?.isEmpty ?? true) {
                 consecutiveEmptyToolCallResponses = 0
@@ -1056,7 +1087,6 @@ final class ToolLoopHandler {
                         : mutationRecoveryTools(from: availableTools)
                     currentTurnTools = recoveryTools
                     currentResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -1069,7 +1099,6 @@ final class ToolLoopHandler {
                     continue
                 }
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -1197,7 +1226,6 @@ final class ToolLoopHandler {
                     projectRoot: projectRoot
                  ) {
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -1216,7 +1244,6 @@ final class ToolLoopHandler {
                  if isContentWriteRecoverySubset(currentTurnTools, availableTools: availableTools),
                     hasReservedFilePathHint(in: lastToolResults) {
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -1242,12 +1269,11 @@ final class ToolLoopHandler {
                      userInput: userInput,
                      conversationId: conversationId,
                      projectRoot: projectRoot,
-                     historyMessages: historyCoordinator.messages
+                     historyMessages: historyCoordinator.requestMessages
                  )
                  currentResponse = try await aiInteractionCoordinator
                      .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                          messages: focusedMessages,
-                         explicitContext: explicitContext,
                          tools: currentTurnTools,
                          mode: mode,
                          projectRoot: projectRoot,
@@ -1269,7 +1295,6 @@ final class ToolLoopHandler {
                         "contentLength": currentResponse.content?.count ?? 0
                     ])
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -1299,12 +1324,11 @@ final class ToolLoopHandler {
                      userInput: userInput,
                      conversationId: conversationId,
                      projectRoot: projectRoot,
-                     historyMessages: historyCoordinator.messages
+                     historyMessages: historyCoordinator.requestMessages
                  )
                  currentResponse = try await aiInteractionCoordinator
                      .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                          messages: focusedMessages,
-                         explicitContext: explicitContext,
                          tools: currentTurnTools,
                          mode: mode,
                          projectRoot: projectRoot,
@@ -1326,7 +1350,6 @@ final class ToolLoopHandler {
                         "contentLength": currentResponse.content?.count ?? 0
                     ])
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -1354,13 +1377,12 @@ final class ToolLoopHandler {
                      projectRoot: projectRoot,
                      existingAssistantContent: content,
                      toolsAvailable: false,
-                     historyMessages: historyCoordinator.messages
+                     historyMessages: historyCoordinator.requestMessages
                  )
                  currentTurnTools = availableTools
                  currentResponse = try await aiInteractionCoordinator
                      .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                          messages: autonomousMessages,
-                         explicitContext: explicitContext,
                          tools: currentTurnTools,
                          mode: mode,
                          projectRoot: projectRoot,
@@ -1382,7 +1404,6 @@ final class ToolLoopHandler {
                         "contentLength": currentResponse.content?.count ?? 0
                     ])
                     currentResponse = try await requestFinalResponseForStalledToolLoop(
-                        explicitContext: explicitContext,
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -1405,7 +1426,6 @@ final class ToolLoopHandler {
             if consecutiveEmptyToolCallResponses >= ToolLoopConstants.emptyResponseStallThreshold {
                 // For empty response stall, skip execution transition
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
-                    explicitContext: explicitContext,
                     projectRoot: projectRoot,
                     mode: mode,
                     userInput: userInput,
@@ -1419,7 +1439,6 @@ final class ToolLoopHandler {
 
         currentResponse = try await requestContinuationIfPlanIncompleteOrNeedsWork(
             currentResponse: currentResponse,
-            explicitContext: explicitContext,
             mode: mode,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1433,7 +1452,6 @@ final class ToolLoopHandler {
             lastContinuationRecoveryIteration = toolIteration
             currentResponse = try await requestExecutionRecoveryIfPlanStillIncomplete(
             currentResponse: currentResponse,
-            explicitContext: explicitContext,
             mode: mode,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1446,7 +1464,6 @@ final class ToolLoopHandler {
         }
         if let escalatedContinuationResponse = try await requestEscalatedExecutionRecoveryForRecoveredReadOnlyToolCalls(
             currentResponse: currentResponse,
-            explicitContext: explicitContext,
             mode: mode,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1465,7 +1482,6 @@ final class ToolLoopHandler {
            )) {
             let recoveredToolLoopResult = try await handleToolLoopIfNeeded(
                 response: currentResponse,
-                explicitContext: explicitContext,
                 mode: mode,
                 projectRoot: projectRoot,
                 conversationId: conversationId,
@@ -1537,9 +1553,8 @@ final class ToolLoopHandler {
 
     private func markCancelledToolCalls(toolCalls: [AIToolCall], cancelledToolCallIds: Set<String>) {
         for call in toolCalls where cancelledToolCallIds.contains(call.id) {
-            historyCoordinator.updateMessageStatus(
+            historyCoordinator.cancelLiveTool(
                 toolCallId: call.id,
-                status: .failed,
                 content: "Cancelled by user"
             )
         }
@@ -1743,13 +1758,7 @@ final class ToolLoopHandler {
         if hasFailureRecovery {
             return true
         }
-        if consecutiveReadOnlyIterations >= ToolLoopConstants.readOnlyIterationNudgeThreshold {
-            return true
-        }
-        if iteration == 1 {
-            return true
-        }
-        return iteration % 4 == 0
+        return consecutiveReadOnlyIterations >= ToolLoopConstants.readOnlyIterationNudgeThreshold
     }
 
     private func updateRepeatedNoToolCallContentState(
@@ -1830,7 +1839,7 @@ final class ToolLoopHandler {
     }
 
     private var readOnlyLoopToolNames: Set<String> {
-        [
+        MutationTools.readOnlyNames.union([
             "list_files",
             "read_file",
             "index_read_file",
@@ -1840,7 +1849,7 @@ final class ToolLoopHandler {
             "index_search_text",
             "index_search_symbols",
             "index_list_memories"
-        ]
+        ])
     }
 
     private var mutationRecoveryToolNames: Set<String> {
@@ -2217,7 +2226,6 @@ final class ToolLoopHandler {
     }
 
     private func requestFinalResponseForStalledToolLoop(
-        explicitContext: String?,
         projectRoot: URL,
         mode: AIMode,
         userInput: String,
@@ -2253,7 +2261,7 @@ final class ToolLoopHandler {
                     conversationId: conversationId,
                     projectRoot: projectRoot,
                     toolSummary: toolSummary,
-                    historyMessages: historyCoordinator.messages
+                    historyMessages: historyCoordinator.requestMessages
                 )
 
                 // An empty/error execution-transition response must not abort the
@@ -2264,7 +2272,6 @@ final class ToolLoopHandler {
                     executionResponse = try await aiInteractionCoordinator
                         .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                             messages: executionMessages,
-                            explicitContext: explicitContext,
                             tools: executionTools,
                             mode: mode,
                             projectRoot: projectRoot,
@@ -2294,7 +2301,6 @@ final class ToolLoopHandler {
 
                 if let focusedRecoveryResponse = try await requestFocusedExecutionRecoveryIfPlanIncomplete(
                     currentResponse: executionResponse,
-                    explicitContext: explicitContext,
                     mode: mode,
                     projectRoot: projectRoot,
                     conversationId: conversationId,
@@ -2313,7 +2319,7 @@ final class ToolLoopHandler {
             userInput: userInput,
             toolSummary: toolSummary,
             projectRoot: projectRoot,
-            historyMessages: historyCoordinator.messages
+            historyMessages: historyCoordinator.requestMessages
         )
 
         let followupMode: AIMode = (mode == .agent) ? .agent : .chat
@@ -2326,7 +2332,6 @@ final class ToolLoopHandler {
             followup = try await aiInteractionCoordinator
                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: finalResponseMessages,
-                    explicitContext: explicitContext,
                     tools: [],
                     mode: followupMode,
                     projectRoot: projectRoot,
@@ -2440,7 +2445,6 @@ final class ToolLoopHandler {
 
     private func requestFocusedExecutionRecoveryIfPlanIncomplete(
         currentResponse: AIServiceResponse,
-        explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
         conversationId: String,
@@ -2451,7 +2455,6 @@ final class ToolLoopHandler {
     ) async throws -> AIServiceResponse? {
         let recoveredResponse = try await requestExecutionRecoveryIfPlanStillIncomplete(
             currentResponse: currentResponse,
-            explicitContext: explicitContext,
             mode: mode,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -2474,7 +2477,6 @@ final class ToolLoopHandler {
         if shouldEscalateRecoveredReadOnlyToolCalls(recoveredResponse) {
             return try await requestEscalatedExecutionRecoveryForRecoveredReadOnlyToolCalls(
                 currentResponse: recoveredResponse,
-                explicitContext: explicitContext,
                 mode: mode,
                 projectRoot: projectRoot,
                 conversationId: conversationId,
@@ -2489,7 +2491,6 @@ final class ToolLoopHandler {
 
     private func requestEscalatedExecutionRecoveryForRecoveredReadOnlyToolCalls(
         currentResponse: AIServiceResponse,
-        explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
         conversationId: String,
@@ -2508,7 +2509,6 @@ final class ToolLoopHandler {
 
         let recoveredToolCalls = deduplicateToolCalls(currentResponse.toolCalls ?? [])
         let escalatedRecoveryResponse = try await requestDiversifiedExecutionForRepeatedSignatures(
-            explicitContext: explicitContext,
             projectRoot: projectRoot,
             mode: mode,
             userInput: userInput,
@@ -2604,7 +2604,6 @@ final class ToolLoopHandler {
     }
 
     private func requestDiversifiedExecutionForRepeatedWriteTargets(
-        explicitContext: String?,
         projectRoot: URL,
         mode: AIMode,
         userInput: String,
@@ -2618,13 +2617,12 @@ final class ToolLoopHandler {
             conversationId: conversationId,
             projectRoot: projectRoot,
             writeTargetSignature: writeTargetSignature,
-            historyMessages: historyCoordinator.messages
+            historyMessages: historyCoordinator.requestMessages
         )
 
         return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: correctionMessages,
-                explicitContext: explicitContext,
                 tools: availableTools,
                 mode: mode,
                 projectRoot: projectRoot,
@@ -2636,7 +2634,6 @@ final class ToolLoopHandler {
     }
 
     private func requestDiversifiedExecutionForRepeatedSignatures(
-        explicitContext: String?,
         projectRoot: URL,
         mode: AIMode,
         userInput: String,
@@ -2650,14 +2647,13 @@ final class ToolLoopHandler {
             conversationId: conversationId,
             projectRoot: projectRoot,
             repeatedSignatures: repeatedSignatures,
-            historyMessages: historyCoordinator.messages,
+            historyMessages: historyCoordinator.requestMessages,
             availableTools: availableTools
         )
 
         return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: correctionMessages,
-                explicitContext: explicitContext,
                 tools: availableTools,
                 mode: mode,
                 projectRoot: projectRoot,
@@ -2670,7 +2666,6 @@ final class ToolLoopHandler {
 
     private func requestContinuationIfPlanIncompleteOrNeedsWork(
         currentResponse: AIServiceResponse,
-        explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
         conversationId: String,
@@ -2709,7 +2704,7 @@ final class ToolLoopHandler {
             userInput: userInput,
             conversationId: conversationId,
             projectRoot: projectRoot,
-            historyMessages: historyCoordinator.messages,
+            historyMessages: historyCoordinator.requestMessages,
             currentAssistantContent: currentContent,
             planMarkdown: planMarkdown,
             completedCount: planProgress.completed,
@@ -2732,7 +2727,6 @@ final class ToolLoopHandler {
         return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: followupMessages,
-                explicitContext: explicitContext,
                 tools: continuationTools,
                 mode: mode,
                 projectRoot: projectRoot,
@@ -2745,7 +2739,6 @@ final class ToolLoopHandler {
 
     private func requestExecutionRecoveryIfPlanStillIncomplete(
         currentResponse: AIServiceResponse,
-        explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
         conversationId: String,
@@ -2800,7 +2793,7 @@ final class ToolLoopHandler {
             userInput: userInput,
             conversationId: conversationId,
             projectRoot: projectRoot,
-            historyMessages: historyCoordinator.messages
+            historyMessages: historyCoordinator.requestMessages
         )
 
         let recoveryTools: [AITool]
@@ -2813,7 +2806,6 @@ final class ToolLoopHandler {
         return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: focusedMessages,
-                explicitContext: explicitContext,
                 tools: recoveryTools,
                 mode: mode,
                 projectRoot: projectRoot,
@@ -2935,5 +2927,323 @@ final class ToolLoopHandler {
         default:
             return false
         }
+    }
+}
+
+// MARK: - Context Access Layer: Loop Break Controller & Follow-Up Assembler
+
+/// Encapsulates the per-turn decision of whether the tool loop should continue,
+/// stop (model signaled done), or force-stop (convergence stall / time budget).
+/// Testable in isolation with canned TurnState values.
+@MainActor
+struct LoopBreakController {
+    struct TurnState {
+        let iteration: Int
+        let hasSuccessfulMutation: Bool
+        let toolCalls: [AIToolCall]
+        let toolResults: [ChatMessage]
+        let modelContent: String?
+        let planStatus: PlanStatus
+        let elapsed: TimeInterval
+        let consecutiveReadsSinceLastMutation: Int
+        let maxIterations: Int
+    }
+
+    struct PlanStatus {
+        let hasPlan: Bool
+        let hasChecklist: Bool
+        let totalTasks: Int
+        let completedTasks: Int
+        let isComplete: Bool
+    }
+
+    enum Decision: Equatable, Sendable {
+        case `continue`
+        case stop
+        case forceStop(reason: String)
+    }
+
+    static func decide(_ state: TurnState) -> Decision {
+        // 1. Wall-clock budget (RC6)
+        if state.elapsed > ToolLoopConstants.maxToolLoopDuration {
+            return .forceStop(reason: "Time budget exceeded")
+        }
+        // 2. Reads without mutation (RC6)
+        if state.consecutiveReadsSinceLastMutation > ToolLoopConstants.maxReadsWithoutMutation {
+            return .forceStop(reason: "\(state.consecutiveReadsSinceLastMutation) consecutive read-only iterations without mutation")
+        }
+        // 3. Iteration cap
+        if state.iteration >= state.maxIterations {
+            return .forceStop(reason: "Iteration budget (\(state.maxIterations)) exhausted")
+        }
+
+        guard let content = state.modelContent, !content.isEmpty else {
+            // Empty content with no tool calls → stop; with tool calls → continue
+            return state.toolCalls.isEmpty ? .stop : .continue
+        }
+
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 4. Model signaled done
+        if state.toolCalls.isEmpty {
+            // If work was performed, trust the model's completion
+            if ChatPromptBuilder.indicatesWorkWasPerformed(content: trimmed) {
+                return .stop
+            }
+            // Completion signals → done
+            let completionSignals = ["done", "completed", "finished", "all set", "resolved"]
+            let lower = trimmed.lowercased()
+            if completionSignals.contains(where: { lower.contains($0) }) {
+                return .stop
+            }
+            // Pending execution signals with no tool calls → still force a continuation
+            let pendingSignals = ["i will", "i'll", "i am going to", "i'm going to",
+                                  "next i will", "now i will", "let me", "i can",
+                                  "next:", "next →", "→ next:", "path:"]
+            if pendingSignals.contains(where: { lower.contains($0) }) {
+                return .continue
+            }
+            return .stop
+        }
+
+        return .continue
+    }
+}
+
+/// Assembles the single follow-up message based on the LoopBreakController's decision.
+/// Guarantees exactly one instruction per turn — never contradictory.
+enum FollowUpMessageAssembler {
+    static func assemble(
+        decision: LoopBreakController.Decision,
+        state: LoopBreakController.TurnState,
+        projectRoot: URL,
+        toolResults: [ChatMessage]
+    ) -> ChatMessage? {
+        switch decision {
+        case .continue:
+            let completedSignatures = toolResults
+                .filter { $0.isToolExecution && $0.toolStatus == .completed }
+                .compactMap { result -> String? in
+                    guard let toolCallId = result.toolCallId else { return nil }
+                    return StallDetector.toolCallSignature(
+                        AIToolCall(id: toolCallId, name: result.toolName ?? "", arguments: ["": ""])
+                    )
+                }
+            if completedSignatures.isEmpty {
+                return ChatMessage(
+                    role: .system,
+                    content: "Continue with the next step."
+                )
+            }
+            return ChatMessage(
+                role: .system,
+                content: [
+                    "Tool calls completed successfully this iteration.",
+                    "If these completed calls satisfy the user request, provide the final response now without additional tool calls.",
+                    "Completed call signatures:",
+                    completedSignatures.map { "- \($0)" }.joined(separator: "\n")
+                ].joined(separator: "\n")
+            )
+
+        case .stop:
+            return nil
+
+        case .forceStop(let reason):
+            return ChatMessage(
+                role: .system,
+                content: "Task halted: \(reason). Summarize what was accomplished so the user has a clear picture."
+            )
+        }
+    }
+}
+
+// MARK: - Research Subagent (Context Access Layer L6)
+
+/// A read-only subagent with its own isolated context window. The parent model
+/// delegates exploration to it via the `research` tool. The subagent runs a
+/// mini tool loop (read-only tools only) and returns a bounded summary.
+@MainActor
+final class ResearchSubagent {
+    struct Result: Sendable {
+        let summary: String
+        let filesRead: [String]
+        let turnsUsed: Int
+    }
+
+    static let maxTurns = 5
+
+    static func run(
+        goal: String,
+        specificFiles: [String] = [],
+        projectRoot: URL,
+        aiService: AIService,
+        fileSystemService: FileSystemService,
+        pathValidator: PathValidator,
+        vectorStoreService: VectorStoreService? = nil,
+        embedder: (any MemoryEmbeddingGenerating)? = nil,
+        codebaseIndex: CodebaseIndexProtocol? = nil
+    ) async throws -> Result {
+        let coordinator = ChatHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = coordinator.currentConversationId
+
+        var brief = goal
+        if !specificFiles.isEmpty {
+            brief += "\n\nFocus on these files:\n" + specificFiles.map { "- \($0)" }.joined(separator: "\n")
+        }
+        brief += "\n\nUse read, ls, glob, search, and context tools to explore. When you have a clear picture, provide a concise summary of findings."
+
+        coordinator.append(ChatMessage(role: .user, content: brief))
+
+        let tools: [AITool] = [
+            ReadFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator),
+            ListFilesTool(pathValidator: pathValidator),
+            FindFileTool(pathValidator: pathValidator),
+            SearchProjectTool(index: codebaseIndex, projectRoot: projectRoot),
+            ContextTool(vectorStoreService: vectorStoreService, embedder: embedder)
+        ]
+
+        var allFilesRead: Set<String> = []
+        var turnCount = 0
+        var currentMessages = coordinator.requestMessages
+        var lastResponse: AIServiceResponse?
+
+        while turnCount < Self.maxTurns {
+            let request = AIServiceHistoryRequest(
+                messages: currentMessages,
+                tools: tools,
+                mode: .agent,
+                projectRoot: projectRoot,
+                runId: nil,
+                stage: AIRequestStage.tool_loop
+            )
+
+            let response = try await aiService.sendMessage(request)
+            lastResponse = response
+
+            guard let toolCalls = response.toolCalls, !toolCalls.isEmpty else {
+                return Result(
+                    summary: response.content ?? "(no summary)",
+                    filesRead: Array(allFilesRead),
+                    turnsUsed: turnCount + 1
+                )
+            }
+
+            var toolResults: [ChatMessage] = []
+            for call in toolCalls {
+                if call.name == "read", let path = call.arguments["path"] as? String {
+                    allFilesRead.insert(path)
+                }
+                let result = try await executeToolCall(call, tools: tools, projectRoot: projectRoot)
+                toolResults.append(result)
+            }
+
+            coordinator.append(ChatMessage(role: .assistant, content: response.content ?? "", tool: ChatMessageToolContext(toolCalls: toolCalls)))
+            for result in toolResults {
+                coordinator.append(result)
+            }
+
+            currentMessages = coordinator.requestMessages
+            turnCount += 1
+        }
+
+        return Result(
+            summary: lastResponse?.content ?? "Reached maximum research turns (\(Self.maxTurns)). Partial findings above.",
+            filesRead: Array(allFilesRead),
+            turnsUsed: Self.maxTurns
+        )
+    }
+
+    private static func executeToolCall(
+        _ call: AIToolCall,
+        tools: [AITool],
+        projectRoot: URL
+    ) async throws -> ChatMessage {
+        guard let tool = tools.first(where: { $0.name == call.name }) else {
+            return ChatMessage(
+                role: .tool,
+                content: "Unknown tool: \(call.name)",
+                tool: ChatMessageToolContext(toolName: call.name, toolStatus: .failed, target: ToolInvocationTarget(targetFile: nil, toolCallId: call.id))
+            )
+        }
+        do {
+            let result = try await tool.execute(arguments: ToolArguments(call.arguments))
+            return ChatMessage(
+                role: .tool,
+                content: result,
+                tool: ChatMessageToolContext(toolName: call.name, toolStatus: .completed, target: ToolInvocationTarget(targetFile: nil, toolCallId: call.id))
+            )
+        } catch {
+            return ChatMessage(
+                role: .tool,
+                content: "Error: \(error.localizedDescription)",
+                tool: ChatMessageToolContext(toolName: call.name, toolStatus: .failed, target: ToolInvocationTarget(targetFile: nil, toolCallId: call.id))
+            )
+        }
+    }
+}
+
+/// Tool that delegates to the ResearchSubagent. Available in agent mode.
+struct ResearchTool: AITool, @unchecked Sendable {
+    let name = "research"
+    let description = "Delegate a research/exploration task to a subagent with its own isolated context. Use this when you need to explore the codebase (read files, search, list directories) without cluttering your main context. Provide a specific goal and optionally a list of files to focus on."
+
+    let aiServiceProvider: () -> AIService?
+    let projectRootProvider: () -> URL?
+    let fileSystemService: FileSystemService
+    let pathValidator: PathValidator
+    let vectorStoreService: VectorStoreService?
+    let embedder: (any MemoryEmbeddingGenerating)?
+    let codebaseIndexProvider: () -> CodebaseIndexProtocol?
+
+    var parameters: [String: Any] {
+        [
+            "type": "object",
+            "properties": [
+                "goal": [
+                    "type": "string",
+                    "description": "What to research. Be specific about what information you need."
+                ],
+                "files": [
+                    "type": "array",
+                    "items": ["type": "string"],
+                    "description": "Optional list of file paths to focus on."
+                ]
+            ],
+            "required": ["goal"]
+        ]
+    }
+
+    func execute(arguments: ToolArguments) async throws -> String {
+        let raw = arguments.raw
+        guard let goal = raw["goal"] as? String else {
+            return "Missing 'goal' argument."
+        }
+        let files = (raw["files"] as? [String]) ?? []
+        guard let projectRoot = projectRootProvider() else {
+            return "No project root available."
+        }
+        guard let aiService = aiServiceProvider() else {
+            return "No AI service available for research subagent."
+        }
+
+        let codebaseIndex = codebaseIndexProvider()
+
+        let result = try await ResearchSubagent.run(
+            goal: goal,
+            specificFiles: files,
+            projectRoot: projectRoot,
+            aiService: aiService,
+            fileSystemService: fileSystemService,
+            pathValidator: pathValidator,
+            vectorStoreService: vectorStoreService,
+            embedder: embedder,
+            codebaseIndex: codebaseIndex
+        )
+
+        return """
+        research complete (used \(result.turnsUsed) turn(s)):
+        summary: \(result.summary)
+        files read: \(result.filesRead.isEmpty ? "none" : result.filesRead.joined(separator: ", "))
+        """
     }
 }

@@ -20,8 +20,7 @@ final class OpenRouterChatPreparationTests: XCTestCase {
             baseURL: OpenRouterSettings.empty.baseURL,
             systemPrompt: "",
             reasoningMode: .modelAndAgent,
-            toolPromptMode: .concise,
-            ragEnabledDuringToolLoop: true
+            toolPromptMode: .concise
         ))
     }
 
@@ -74,7 +73,6 @@ final class OpenRouterChatPreparationTests: XCTestCase {
 
         let preparation = try await service.buildChatPreparation(request: .init(
             messages: historyMessages,
-            context: "Repo context block",
             tools: [tool],
             mode: .agent,
             projectRoot: projectRoot,
@@ -118,7 +116,6 @@ final class OpenRouterChatPreparationTests: XCTestCase {
 
         let preparation = try await service.buildChatPreparation(request: .init(
             messages: [OpenRouterChatMessage(role: "user", content: "Implement feature")],
-            context: nil,
             tools: [NoopTool(name: "write_file", description: "Write file content to disk", parameters: ["type": "object"])],
             mode: .agent,
             projectRoot: projectRoot,

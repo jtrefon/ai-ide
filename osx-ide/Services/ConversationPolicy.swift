@@ -9,33 +9,11 @@ protocol ConversationPolicyProtocol {
 }
 
 final class ConversationPolicy: ConversationPolicyProtocol {
-    private let readOnlyToolNames: Set<String> = [
-        "index_find_files",
-        "index_list_files",
-        "index_search_text",
-        "index_read_file",
-        "index_search_symbols",
-        "read_file",
-        "list_dir"
-    ]
-private let toolLoopExecutionToolNames: Set<String> = [
-        "index_find_files",
-        "index_list_files",
-        "index_search_text",
-        "index_read_file",
-        "index_search_symbols",
-        "read_file",
-        "list_dir",
-        "write_file",
-        "write_files",
-        "create_file",
-        "delete_file",
-        "replace_in_file",
-        "run_command",
-        "web_search",
-        "web_browse",
-        "patch_file"
-    ]
+    private let readOnlyToolNames: Set<String> = ToolTaxonomy.readOnly
+
+    private let toolLoopExecutionToolNames: Set<String> = ToolTaxonomy.readOnly
+        .union(ToolTaxonomy.mutation)
+        .union(["bash", "web_search", "web_fetch"])
 
     func allowedTools(
         for stage: AIRequestStage?,

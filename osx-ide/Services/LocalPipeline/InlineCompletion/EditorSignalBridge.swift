@@ -3,7 +3,7 @@ import Foundation
 @MainActor
 final class EditorSignalBridge {
     private let paneID: FileEditorStateManager.PaneID
-    private let engine: InlineCompletionEngine
+    private let lineEngine: LineCompletionEngine
     private let settingsStore: InlineCompletionSettingsStore
     private var debounceTask: Task<Void, Never>?
     private var lastTypedAt: Date?
@@ -15,11 +15,11 @@ final class EditorSignalBridge {
 
     init(
         paneID: FileEditorStateManager.PaneID,
-        engine: InlineCompletionEngine,
+        lineEngine: LineCompletionEngine,
         settingsStore: InlineCompletionSettingsStore = InlineCompletionSettingsStore()
     ) {
         self.paneID = paneID
-        self.engine = engine
+        self.lineEngine = lineEngine
         self.settingsStore = settingsStore
     }
 
@@ -46,21 +46,15 @@ final class EditorSignalBridge {
                 try? await Task.sleep(nanoseconds: UInt64(debounceMs) * 1_000_000)
             }
             guard !Task.isCancelled else { return }
-            self.engine.requestCompletion(for: snapshot)
+            self.lineEngine.requestCompletion(for: snapshot, gapMs: gapMs, typedChar: typedChar)
         }
     }
 
-    func triggerManualRequest(snapshot: InlineCompletionEditorSnapshot) {
-        debounceTask?.cancel()
-        lastBuffer = snapshot.buffer
-        engine.requestCompletion(for: snapshot)
-    }
-
-    func invalidate() {
+    func invalidate(textView: CodeEditorTextView? = nil) {
         debounceTask?.cancel()
         lastBuffer = nil
         lastTypedAt = nil
-        engine.invalidate(paneID)
+        lineEngine.invalidate(paneID)
     }
 
     private func detectTypedCharacter(previous: String?, current: String, cursor: Int) -> Character? {

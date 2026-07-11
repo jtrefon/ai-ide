@@ -54,8 +54,7 @@ final class FinalResponseHandlerTests: XCTestCase {
     }
 
     private func makeHistoryCoordinator(projectRoot: URL) -> ChatHistoryCoordinator {
-        let manager = ChatHistoryManager()
-        let coordinator = ChatHistoryCoordinator(historyManager: manager, projectRoot: projectRoot)
+        let coordinator = ChatHistoryCoordinator(projectRoot: projectRoot)
         coordinator.clearConversation()
         return coordinator
     }
@@ -103,7 +102,6 @@ final class FinalResponseHandlerTests: XCTestCase {
 
         let result = try await handler.requestFinalResponseIfNeeded(
             response: AIServiceResponse(content: "", toolCalls: nil),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             toolResults: [
@@ -140,7 +138,6 @@ final class FinalResponseHandlerTests: XCTestCase {
 
         let result = try await handler.requestFinalResponseIfNeeded(
             response: AIServiceResponse(content: "", toolCalls: nil),
-            explicitContext: nil,
             mode: .chat,
             projectRoot: projectRoot,
             toolResults: [

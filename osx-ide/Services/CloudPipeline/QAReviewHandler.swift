@@ -14,8 +14,7 @@ final class QAReviewHandler {
     }
 
     func performToolOutputReviewIfNeeded(
-        response: AIServiceResponse,
-        explicitContext: String?,
+        response: AIServiceResponse?,
         mode: AIMode,
         projectRoot: URL,
         qaReviewEnabled: Bool,
@@ -24,13 +23,13 @@ final class QAReviewHandler {
         runId: String,
         userInput: String
     ) async throws -> AIServiceResponse {
-        guard qaReviewEnabled, mode == .agent else { return response }
-        guard !toolResults.isEmpty else { return response }
-        guard hasProjectMutations(in: toolResults) else { return response }
+        guard qaReviewEnabled, mode == .agent else { return response! }
+        guard !toolResults.isEmpty else { return response! }
+        guard hasProjectMutations(in: toolResults) else { return response! }
 
         let toolSummary = ToolLoopUtilities.toolResultsSummaryText(toolResults)
-        let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !draft.isEmpty else { return response }
+        let draft = response!.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !draft.isEmpty else { return response! }
 
         let toolOutputReviewSystemPrompt = try PromptRepository.shared.prompt(
             key: "ConversationFlow/QA/tool_output_review_system",
@@ -55,7 +54,6 @@ final class QAReviewHandler {
             qaResponse = try await aiInteractionCoordinator
                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: [qaSystem, qaUser],
-                    explicitContext: explicitContext,
                     tools: readOnlyTools(from: availableTools),
                     mode: mode,
                     projectRoot: projectRoot,
@@ -69,7 +67,7 @@ final class QAReviewHandler {
                 message: "qa.tool_output_review_failed",
                 context: AppLogger.LogCallContext(metadata: ["error": error.localizedDescription])
             )
-            return response
+            return response!
         }
         _ = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
@@ -103,12 +101,11 @@ final class QAReviewHandler {
             toolResults: toolResults
         )
 
-        return response
+        return response!
     }
 
     func performQualityReviewIfNeeded(
-        response: AIServiceResponse,
-        explicitContext: String?,
+        response: AIServiceResponse?,
         mode: AIMode,
         projectRoot: URL,
         qaReviewEnabled: Bool,
@@ -117,10 +114,10 @@ final class QAReviewHandler {
         runId: String,
         userInput: String
     ) async throws -> AIServiceResponse {
-        guard qaReviewEnabled, mode == .agent else { return response }
-        guard hasProjectMutations(in: toolResults) else { return response }
-        let draft = response.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !draft.isEmpty else { return response }
+        guard qaReviewEnabled, mode == .agent else { return response! }
+        guard hasProjectMutations(in: toolResults) else { return response! }
+        let draft = response!.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !draft.isEmpty else { return response! }
 
         let qualityReviewSystemPrompt = try PromptRepository.shared.prompt(
             key: "ConversationFlow/QA/quality_review_system",
@@ -145,7 +142,6 @@ final class QAReviewHandler {
             qaResponse = try await aiInteractionCoordinator
                 .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                     messages: [qaSystem, qaUser],
-                    explicitContext: explicitContext,
                     tools: readOnlyTools(from: availableTools),
                     mode: mode,
                     projectRoot: projectRoot,
@@ -159,7 +155,7 @@ final class QAReviewHandler {
                 message: "qa.quality_review_failed",
                 context: AppLogger.LogCallContext(metadata: ["error": error.localizedDescription])
             )
-            return response
+            return response!
         }
 
         let qaReport = qaResponse.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -202,7 +198,7 @@ final class QAReviewHandler {
             toolResults: []
         )
 
-        return response
+        return response!
     }
 
     private func readOnlyTools(from tools: [AITool]) -> [AITool] {

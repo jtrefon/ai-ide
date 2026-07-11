@@ -14,7 +14,6 @@ final class InitialResponseHandler {
     }
 
     func sendInitialResponse(
-        explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
         conversationId: String,
@@ -24,8 +23,7 @@ final class InitialResponseHandler {
     ) async throws -> AIServiceResponse {
         var response = try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
-                messages: historyCoordinator.messages.filter { !$0.isDraft },
-                explicitContext: explicitContext,
+                messages: historyCoordinator.requestMessages,
                 tools: availableTools,
                 mode: mode,
                 projectRoot: projectRoot,
@@ -51,7 +49,6 @@ final class InitialResponseHandler {
                 "contentLength": originalContent.count
             ])
             response = try await sendFocusedExecutionFollowup(
-                explicitContext: explicitContext,
                 mode: mode,
                 projectRoot: projectRoot,
                 conversationId: conversationId,
@@ -64,7 +61,6 @@ final class InitialResponseHandler {
                response.toolCalls?.isEmpty ?? true,
                !availableTools.isEmpty {
                 response = try await sendAutonomousToolFollowup(
-                    explicitContext: explicitContext,
                     mode: mode,
                     projectRoot: projectRoot,
                     conversationId: conversationId,
@@ -85,12 +81,11 @@ final class InitialResponseHandler {
                  userInput: userInput,
                  conversationId: conversationId,
                  projectRoot: projectRoot,
-                 historyMessages: historyCoordinator.messages
+                 historyMessages: historyCoordinator.requestMessages
              )
              response = try await aiInteractionCoordinator
                  .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                      messages: focusedMessages,
-                     explicitContext: explicitContext,
                      tools: availableTools,
                      mode: mode,
                      projectRoot: projectRoot,
@@ -112,12 +107,11 @@ final class InitialResponseHandler {
                  projectRoot: projectRoot,
                  existingAssistantContent: content,
                  toolsAvailable: false,
-                 historyMessages: historyCoordinator.messages
+                 historyMessages: historyCoordinator.requestMessages
              )
              response = try await aiInteractionCoordinator
                  .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                      messages: autonomousMessages,
-                     explicitContext: explicitContext,
                      tools: availableTools,
                      mode: mode,
                      projectRoot: projectRoot,
@@ -186,7 +180,6 @@ final class InitialResponseHandler {
     }
 
     private func sendFocusedExecutionFollowup(
-        explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
         conversationId: String,
@@ -198,12 +191,11 @@ final class InitialResponseHandler {
             userInput: userInput,
             conversationId: conversationId,
             projectRoot: projectRoot,
-            historyMessages: historyCoordinator.messages
+            historyMessages: historyCoordinator.requestMessages
         )
         return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: focusedMessages,
-                explicitContext: explicitContext,
                 tools: availableTools,
                 mode: mode,
                 projectRoot: projectRoot,
@@ -215,7 +207,6 @@ final class InitialResponseHandler {
     }
 
     private func sendAutonomousToolFollowup(
-        explicitContext: String?,
         mode: AIMode,
         projectRoot: URL,
         conversationId: String,
@@ -230,12 +221,11 @@ final class InitialResponseHandler {
             projectRoot: projectRoot,
             existingAssistantContent: existingAssistantContent,
             toolsAvailable: true,
-            historyMessages: historyCoordinator.messages
+            historyMessages: historyCoordinator.requestMessages
         )
         return try await aiInteractionCoordinator
             .sendMessageWithRetry(AIInteractionCoordinator.SendMessageWithRetryRequest(
                 messages: autonomousMessages,
-                explicitContext: explicitContext,
                 tools: availableTools,
                 mode: mode,
                 projectRoot: projectRoot,

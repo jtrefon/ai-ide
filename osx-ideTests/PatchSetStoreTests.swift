@@ -43,20 +43,12 @@ final class PatchSetStoreTests: XCTestCase {
         let patchSetId = UUID().uuidString
         let toolCallId = UUID().uuidString
 
-        let tool = ReplaceInFileTool(
-            fileSystemService: FileSystemService(),
-            pathValidator: PathValidator(projectRoot: tempRoot),
-            eventBus: EventBus()
+        try await PatchSetStore.shared.stageWrite(
+            patchSetId: patchSetId,
+            toolCallId: toolCallId,
+            relativePath: "src/Test.txt",
+            content: "hello there"
         )
-
-        _ = try await tool.execute(arguments: ToolArguments([
-            "path": targetURL.path,
-            "old_text": "world",
-            "new_text": "there",
-            "mode": "propose",
-            "patch_set_id": patchSetId,
-            "_tool_call_id": toolCallId
-        ]))
 
         let unchanged = try String(contentsOf: targetURL, encoding: .utf8)
         XCTAssertEqual(unchanged, "hello world")

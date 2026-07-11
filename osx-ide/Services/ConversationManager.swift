@@ -62,7 +62,6 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
 
     // MARK: - Dependencies
 
-    private let historyManager: ChatHistoryManager
     private let historyCoordinator: ChatHistoryCoordinator
     private let toolExecutor: AIToolExecutor
     private let toolExecutionCoordinator: ToolExecutionCoordinator
@@ -87,6 +86,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     private lazy var toolProvider = ConversationToolProvider(
         fileSystemService: fileSystemService,
         eventBus: eventBus,
+        vectorStoreService: nil,
+        embedder: nil,
         aiServiceProvider: { [weak self] in self?.aiService },
         codebaseIndexProvider: { [weak self] in self?.codebaseIndex },
         projectRootProvider: { [weak self] in self?.projectRoot }
@@ -148,11 +149,9 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             eventBus: dependencies.environment.eventBus
         )
 
-        self.historyManager = ChatHistoryManager()
-        self.historyCoordinator = ChatHistoryCoordinator(
-            historyManager: historyManager,
-            projectRoot: root
-        )
+        self.historyCoordinator = ChatHistoryCoordinator()
+        let currentModel = OpenRouterSettingsStore().load().model
+        self.historyCoordinator.updateStrategy(forModel: currentModel)
         self.sessionManager = SessionManager(
             historyCoordinator: historyCoordinator,
             projectRoot: root
@@ -210,7 +209,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     }
 
     private func observeHistoryMessages() {
-        historyManager.$messages
+        historyCoordinator.$messages
             .sink { [weak self] msgs in
                 self?.messages = msgs
             }
@@ -300,6 +299,8 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             return "Authentication"
         case .transport:
             return "Connection"
+        case .networkOffline:
+            return "Network offline"
         case .insufficientBalance:
             return "Insufficient balance"
         case .unknown:
@@ -333,7 +334,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         guard renderContent != lastRenderedDraftContent else { return }
         lastRenderedDraftContent = renderContent
         let renderReasoning: String? = outputBuffer.hasReasoning ? outputBuffer.reasoning : nil
-        historyCoordinator.upsertDraftMessageImmediately(
+        historyCoordinator.setDraft(
             ChatMessage(
                 id: draftId,
                 role: .assistant,
@@ -352,7 +353,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         guard renderReasoning != lastRenderedDraftReasoning else { return }
         lastRenderedDraftReasoning = renderReasoning ?? ""
         let renderContent = outputBuffer.hasContent ? outputBuffer.content : ""
-        historyCoordinator.upsertDraftMessageImmediately(
+        historyCoordinator.setDraft(
             ChatMessage(
                 id: draftId,
                 role: .assistant,
@@ -374,7 +375,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         guard let draftId = draftAssistantMessageId else { return }
         guard let draftMessage = historyCoordinator.getDraftMessage(id: draftId) else { return }
 
-        historyCoordinator.upsertDraftMessage(
+        historyCoordinator.setDraft(
             ChatMessage(
                 id: draftMessage.id,
                 role: draftMessage.role,
@@ -408,7 +409,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     // MARK: - Observation
 
     private func setupObservation() {
-        historyManager.objectWillChange
+        historyCoordinator.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
     }
@@ -533,6 +534,14 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
         let userContext = buildUserMessageContext(context: context)
         logUserMessage(userContext)
         historyCoordinator.append(userContext.message)
+        if historyCoordinator.conversationEnvelope.subject.isEmpty {
+            let preview = String(userContext.message.content.prefix(60))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !preview.isEmpty {
+                historyCoordinator.updateSubject(preview)
+                sessionManager.saveSnapshot(input: currentInput, livePreview: liveModelOutputPreview, liveStatusPreview: liveModelOutputStatusPreview, mode: currentMode)
+            }
+        }
         publishContextEvent()
         resetInputState()
         startSendTask(userContext: userContext, explicitContext: context)
@@ -735,7 +744,6 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                         SendRequest(
                             userInput: userContext.text,
                             mediaAttachments: userContext.mediaAttachments,
-                            explicitContext: explicitContext,
                             mode: self.currentMode,
                             projectRoot: self.projectRoot,
                             conversationId: self.conversationId,
@@ -753,7 +761,6 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                         SendRequest(
                             userInput: userContext.text,
                             mediaAttachments: userContext.mediaAttachments,
-                            explicitContext: explicitContext,
                             mode: self.currentMode,
                             projectRoot: self.projectRoot,
                             conversationId: self.conversationId,
@@ -767,8 +774,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                     )
                 }
 
-                self.historyCoordinator.flushPendingDraftUpdate()
-                self.flushPendingPreview()
+                                self.flushPendingPreview()
                 if let finalAssistantMessage = self.messages.last(where: { $0.role == .assistant && !$0.isDraft }) {
                     self.setLiveModelPreview(finalAssistantMessage.content)
                 }
@@ -780,7 +786,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
             } catch {
                 // Clean up draft message on error
                 if let draftId = self.draftAssistantMessageId {
-                    self.historyCoordinator.removeDraftMessage(id: draftId)
+                    self.historyCoordinator.clearDraft()
                 }
                 self.resetStreamingDraftState()
                 if error is CancellationError || Task.isCancelled || self.isLikelyCancellation(error) {
@@ -899,7 +905,7 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
     func cancelToolCall(id: String) {
         cancelledToolCallIds.insert(id)
         // Find the specific tool execution message and mark it as failed/cancelled
-        historyCoordinator.updateMessageStatus(toolCallId: id, status: .failed, content: "Cancelled by user")
+        historyCoordinator.cancelLiveTool(toolCallId: id, content: "Cancelled by user")
     }
 
     // MARK: - Quick Actions
@@ -914,14 +920,14 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 let response = try await aiService.explainCode(code)
                 self.setLiveModelPreview(response)
                 self.appendToLiveModelStatusPreview("Explain code completed.")
-                self.historyManager.append(
+                self.historyCoordinator.append(
                     ChatMessage(
                         role: .user,
                         content: "Explain this code",
                         context: ChatMessageContentContext(codeContext: code)
                     )
                 )
-                self.historyManager.append(ChatMessage(role: .assistant, content: response))
+                self.historyCoordinator.append(ChatMessage(role: .assistant, content: response))
                 self.isSending = false
             } catch {
                 self.error = "Failed to explain code: \(error.localizedDescription)"
@@ -942,14 +948,14 @@ final class ConversationManager: ObservableObject, ConversationManagerProtocol {
                 let response = try await aiService.refactorCode(code, instructions: instructions)
                 self.setLiveModelPreview(response)
                 self.appendToLiveModelStatusPreview("Refactor code completed.")
-                self.historyManager.append(
+                self.historyCoordinator.append(
                     ChatMessage(
                         role: .user,
                         content: "Refactor this code: \(instructions)",
                         context: ChatMessageContentContext(codeContext: code)
                     )
                 )
-                self.historyManager.append(
+                self.historyCoordinator.append(
                     ChatMessage(
                         role: .assistant,
                         content: "Here's the refactored code:",

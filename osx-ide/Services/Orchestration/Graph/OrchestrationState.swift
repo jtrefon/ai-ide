@@ -125,9 +125,7 @@ struct OrchestrationState: Sendable {
 
     var transition: Transition
 
-    var effectiveExplicitContext: String? {
-        branchExecution?.makeContext(baseExplicitContext: request.explicitContext) ?? request.explicitContext
-    }
+    var effectiveExplicitContext: String? { nil }
 
     func updating(
         response: AIServiceResponse? = nil,

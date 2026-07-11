@@ -195,7 +195,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         let firstPass = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "Starting execution.", toolCalls: [firstToolCall]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -210,7 +209,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         let secondPass = try await handler.handleToolLoopIfNeeded(
             response: firstPass.response,
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -267,7 +265,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         try await sendCoordinator.send(SendRequest(
             userInput: "Implement role support end-to-end",
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -361,7 +358,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                 content: "<ide_reasoning>Reflection: Start execution.\nPlanning: Complete step one.\nContinuity: Work remains.\nDelivery: NEEDS_WORK</ide_reasoning>Starting execution now.",
                 toolCalls: [firstToolCall]
             ),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -443,7 +439,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         try await sendCoordinator.send(SendRequest(
             userInput: "Implement login page end-to-end",
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -474,6 +469,85 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             "Final assistant output should contain the concise final summary"
         )
         XCTAssertFalse(finalAssistantOutput.contains("### Final Delivery Summary"), "Final assistant output should no longer require the old oversized scaffold")
+    }
+
+    /// Tool result messages must carry the logfmt execution envelope as their first
+    /// line, identifying the resolved tool and its normalized arguments, so the model
+    /// can confirm what ran and avoid re-issuing an identical call.
+    func testToolResultCarriesExecutionEnvelopeFirstLine() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        historyCoordinator.append(ChatMessage(role: .user, content: "Read the stylesheet"))
+
+        let firstToolCall = AIToolCall(
+            id: "envelope-1",
+            name: "fake_tool",
+            arguments: ["path": "src/app/global.css"]
+        )
+
+        let scriptedService = ScriptedAIService(responses: [
+            AIServiceResponse(
+                content: "Reading the stylesheet now.",
+                toolCalls: [firstToolCall]
+            ),
+            AIServiceResponse(
+                content: "Read the stylesheet.",
+                toolCalls: nil
+            )
+        ])
+
+        let aiInteractionCoordinator = AIInteractionCoordinator(
+            aiService: scriptedService,
+            codebaseIndex: nil,
+            eventBus: MockEventBus()
+        )
+        let toolExecutor = AIToolExecutor(
+            fileSystemService: FileSystemService(),
+            errorManager: HarnessErrorManager(),
+            projectRoot: projectRoot
+        )
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let sendCoordinator = ConversationSendCoordinator(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        try await sendCoordinator.send(SendRequest(
+            userInput: "Read the stylesheet",
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            runId: UUID().uuidString,
+            availableTools: [FakeTool(name: "fake_tool")],
+            cancelledToolCallIds: { [] },
+            qaReviewEnabled: false,
+            draftAssistantMessageId: nil
+        ))
+
+        let toolMessage = historyCoordinator.messages.first { $0.role == .tool }
+        let content = try XCTUnwrap(toolMessage?.content, "Expected a tool result message")
+
+        XCTAssertTrue(
+            content.hasPrefix("[tool=fake_tool"),
+            "Tool result must begin with the logfmt envelope: \(content)"
+        )
+        XCTAssertTrue(
+            content.contains("status=completed"),
+            "Envelope must report completed status: \(content)"
+        )
+        XCTAssertTrue(
+            content.contains("param.path=src/app/global.css"),
+            "Envelope must echo normalized arguments: \(content)"
+        )
+
+        let envelope = ToolExecutionEnvelope.decode(from: content)
+        XCTAssertNotNil(envelope, "Envelope body must still decode as JSON after the first line")
+        XCTAssertEqual(envelope?.params?["path"], "src/app/global.css")
+        XCTAssertEqual(envelope?.toolName, "fake_tool")
     }
 
     func testHarnessRetriesWhenModelRequestsUserInputInsteadOfProceeding() async throws {
@@ -520,7 +594,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         try await sendCoordinator.send(SendRequest(
             userInput: "Implement login page end-to-end",
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -609,7 +682,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         let result = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "Starting execution.", toolCalls: [readCall]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -671,7 +743,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         try await sendCoordinator.send(SendRequest(
             userInput: "Implement login page end-to-end",
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -744,7 +815,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         try await sendCoordinator.send(SendRequest(
             userInput: "Implement login page end-to-end",
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -811,7 +881,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         try await sendCoordinator.send(SendRequest(
             userInput: "Implement login page end-to-end",
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -892,7 +961,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         try await sendCoordinator.send(SendRequest(
             userInput: "could you add dashboard with demo charts ?",
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -960,7 +1028,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         try await sendCoordinator.send(SendRequest(
             userInput: "what about typescript migration, is that finished, complete?",
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1060,7 +1127,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         try await sendCoordinator.send(SendRequest(
             userInput: "could you add dashboard with demo charts ?",
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1071,11 +1137,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                     pathValidator: PathValidator(projectRoot: projectRoot),
                     eventBus: MockEventBus()
                 ),
-                ReplaceInFileTool(
-                    fileSystemService: FileSystemService(),
-                    pathValidator: PathValidator(projectRoot: projectRoot),
-                    eventBus: MockEventBus()
-                )
+                PatchFileToolAdapter(projectRoot: projectRoot)
             ],
             cancelledToolCallIds: { [] },
             qaReviewEnabled: false,
@@ -1128,7 +1190,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         let result = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "Exploring project.", toolCalls: [duplicateA, duplicateB, duplicateC]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1175,7 +1236,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         let result = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "Start scan.", toolCalls: [firstLoopCall]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1236,7 +1296,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         let result = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "Start writing.", toolCalls: [initialWriteCall]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1305,7 +1364,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
         let counter = ToolExecutionCounter()
         let result = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "Start execution.", toolCalls: [loopCall]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1363,7 +1421,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         _ = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: repeatedAssistantContent, toolCalls: [firstCall]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1425,7 +1482,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         _ = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "Starting repeated signature repro.", toolCalls: [firstCall]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1487,7 +1543,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         _ = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "", toolCalls: [firstCall]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1555,7 +1610,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         let result = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "Start checkpoint scan.", toolCalls: [firstCall]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1623,7 +1677,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
 
         let result = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "Start checkpoint scan.", toolCalls: [firstLoopCall]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1719,7 +1772,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                     "content": "<html></html>"
                 ])
             ]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1807,7 +1859,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
             response: AIServiceResponse(content: "Start by locating the target.", toolCalls: [
                 AIToolCall(id: "initial-discovery-1", name: "index_search_symbols", arguments: ["query": "source.txt"])
             ]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1903,7 +1954,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                     "path": ".eslintrc.json"
                 ])
             ]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -1913,11 +1963,7 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                     pathValidator: PathValidator(projectRoot: projectRoot)
                 ),
                 WriteFileTool(fileSystemService: FileSystemService(), pathValidator: PathValidator(projectRoot: projectRoot), eventBus: MockEventBus()),
-                ReplaceInFileTool(
-                    fileSystemService: FileSystemService(),
-                    pathValidator: PathValidator(projectRoot: projectRoot),
-                    eventBus: MockEventBus()
-                ),
+                PatchFileToolAdapter(projectRoot: projectRoot),
                 WriteFileTool(
                     fileSystemService: FileSystemService(),
                     pathValidator: PathValidator(projectRoot: projectRoot),
@@ -2046,7 +2092,6 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
                     AIToolCall(id: "coverage-initial-read-1", name: "read_file", arguments: ["path": "src/utils.js"])
                 ]
             ),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -2117,8 +2162,8 @@ final class ToolLoopDropoutHarnessTests: XCTestCase {
     }
 
     private func makeHistoryCoordinator(projectRoot: URL) -> ChatHistoryCoordinator {
-        let historyManager = ChatHistoryManager()
-        return ChatHistoryCoordinator(historyManager: historyManager, projectRoot: projectRoot)
+        
+        return ChatHistoryCoordinator(projectRoot: projectRoot)
     }
 
     private func makeTempDir() -> URL {

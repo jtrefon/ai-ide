@@ -30,6 +30,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
     public let billing: ChatMessageBillingContext?
     public let timestamp: Date
     public let isDraft: Bool // Marks temporary messages during streaming
+    public let isCheckpoint: Bool // If true, this node is a compaction checkpoint; messages before it can be dropped from request projections.
 
     // Tool execution properties
     public let toolName: String?
@@ -45,7 +46,8 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         context: ChatMessageContentContext = ChatMessageContentContext(),
         billing: ChatMessageBillingContext? = nil,
         tool: ChatMessageToolContext = ChatMessageToolContext(),
-        isDraft: Bool = false
+        isDraft: Bool = false,
+        isCheckpoint: Bool = false
     ) {
         self.id = UUID()
         self.role = role
@@ -56,6 +58,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         self.billing = billing
         self.timestamp = Date()
         self.isDraft = isDraft
+        self.isCheckpoint = isCheckpoint
         self.toolName = tool.toolName
         self.toolStatus = tool.toolStatus
         self.targetFile = tool.targetFile
@@ -72,7 +75,8 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         context: ChatMessageContentContext = ChatMessageContentContext(),
         billing: ChatMessageBillingContext? = nil,
         tool: ChatMessageToolContext = ChatMessageToolContext(),
-        isDraft: Bool = false
+        isDraft: Bool = false,
+        isCheckpoint: Bool = false
     ) {
         self.id = id
         self.role = role
@@ -83,6 +87,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
         self.billing = billing
         self.timestamp = timestamp
         self.isDraft = isDraft
+        self.isCheckpoint = isCheckpoint
         self.toolName = tool.toolName
         self.toolStatus = tool.toolStatus
         self.targetFile = tool.targetFile
@@ -93,5 +98,32 @@ public struct ChatMessage: Identifiable, Codable, Sendable {
     // Helper to check if this is a tool execution message
     public var isToolExecution: Bool {
         return role == .tool && toolName != nil
+    }
+
+    // MARK: Codable (backward-compat for isCheckpoint)
+
+    enum CodingKeys: String, CodingKey {
+        case id, role, content, mediaAttachments, reasoning, codeContext, billing
+        case timestamp, isDraft, isCheckpoint, toolName, toolStatus, targetFile
+        case toolCallId, toolCalls
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.role = try c.decode(MessageRole.self, forKey: .role)
+        self.content = try c.decode(String.self, forKey: .content)
+        self.mediaAttachments = try c.decode([ChatMessageMediaAttachment].self, forKey: .mediaAttachments)
+        self.reasoning = try c.decodeIfPresent(String.self, forKey: .reasoning)
+        self.codeContext = try c.decodeIfPresent(String.self, forKey: .codeContext)
+        self.billing = try c.decodeIfPresent(ChatMessageBillingContext.self, forKey: .billing)
+        self.timestamp = try c.decode(Date.self, forKey: .timestamp)
+        self.isDraft = try c.decodeIfPresent(Bool.self, forKey: .isDraft) ?? false
+        self.isCheckpoint = try c.decodeIfPresent(Bool.self, forKey: .isCheckpoint) ?? false
+        self.toolName = try c.decodeIfPresent(String.self, forKey: .toolName)
+        self.toolStatus = try c.decodeIfPresent(ToolExecutionStatus.self, forKey: .toolStatus)
+        self.targetFile = try c.decodeIfPresent(String.self, forKey: .targetFile)
+        self.toolCallId = try c.decodeIfPresent(String.self, forKey: .toolCallId)
+        self.toolCalls = try c.decodeIfPresent([AIToolCall].self, forKey: .toolCalls)
     }
 }

@@ -68,8 +68,7 @@ final class InitialResponseHandlerTests: XCTestCase {
     }
 
     private func makeHistoryCoordinator(projectRoot: URL) -> ChatHistoryCoordinator {
-        let manager = ChatHistoryManager()
-        let coordinator = ChatHistoryCoordinator(historyManager: manager, projectRoot: projectRoot)
+        let coordinator = ChatHistoryCoordinator(projectRoot: projectRoot)
         coordinator.clearConversation()
         return coordinator
     }
@@ -99,7 +98,6 @@ final class InitialResponseHandlerTests: XCTestCase {
         )
 
         let response = try await handler.sendInitialResponse(
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: historyCoordinator.currentConversationId,
@@ -139,7 +137,6 @@ final class InitialResponseHandlerTests: XCTestCase {
         )
 
         let response = try await handler.sendInitialResponse(
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: historyCoordinator.currentConversationId,

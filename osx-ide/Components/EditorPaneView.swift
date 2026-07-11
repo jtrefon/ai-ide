@@ -7,8 +7,7 @@ struct EditorPaneView: View {
     let isFocused: Bool
     let onFocus: () -> Void
     let selectionContext: CodeSelectionContext
-    let inlineCompletionEngine: InlineCompletionEngine
-    let snippetCompletionService: SnippetCompletionService
+    let lineCompletionEngine: LineCompletionEngine
     let inlineCompletionDebugOverlayEnabled: Bool
     let showLineNumbers: Bool
     let wordWrap: Bool
@@ -80,8 +79,7 @@ struct EditorPaneView: View {
                 language: pane.editorLanguage,
                 selectedRange: $pane.selectedRange,
                 selectionContext: selectionContext,
-                inlineCompletionEngine: inlineCompletionEngine,
-                snippetCompletionService: snippetCompletionService,
+                lineCompletionEngine: lineCompletionEngine,
                 inlineCompletionDebugOverlayEnabled: inlineCompletionDebugOverlayEnabled,
                 showLineNumbers: showLineNumbers,
                 wordWrap: wordWrap,

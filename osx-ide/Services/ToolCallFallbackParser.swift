@@ -1,5 +1,8 @@
 import Foundation
 
+// PHASE 2+ — Replaced by `ParserRegistry` + individual `ToolCallFormatParser` classes
+// in `Services/StreamingPipeline/Parsers/`. Keep until pipeline is wired as primary path.
+
 struct ToolCallFallbackParser: Sendable {
     private let decoders: [ToolCallDecoder]
 
@@ -246,7 +249,7 @@ struct ToolCallBlockDecoder: ToolCallDecoder {
             guard !fileContent.isEmpty else { continue }
             toolCalls.append(AIToolCall(
                 id: UUID().uuidString,
-                name: "write_file",
+                name: "write",
                 arguments: ["path": path, "content": fileContent]
             ))
         }
@@ -352,7 +355,8 @@ struct GemmaFormatDecoder: ToolCallDecoder {
                 }
                 arguments = fallbackArgs
             }
-            results.append(AIToolCall(id: UUID().uuidString, name: name, arguments: arguments))
+            let normalizedName = ToolAliasRegistry.shared.canonicalName(for: name)
+            results.append(AIToolCall(id: UUID().uuidString, name: normalizedName, arguments: arguments))
             searchStart = content.index(after: pos)
         }
         return results
@@ -383,7 +387,8 @@ struct JSONToolCallDecoder: ToolCallDecoder {
     private func decodeSingle(from raw: String) -> AIToolCall? {
         guard let data = raw.data(using: .utf8),
               let decoded = try? JSONDecoder().decode(AIToolCall.self, from: data) else { return nil }
-        return decoded
+        let normalizedName = ToolAliasRegistry.shared.canonicalName(for: decoded.name)
+        return AIToolCall(id: decoded.id, name: normalizedName, arguments: decoded.arguments)
     }
 
     private func decodeEnvelope(from raw: String) -> [AIToolCall]? {
@@ -394,7 +399,8 @@ struct JSONToolCallDecoder: ToolCallDecoder {
             guard JSONSerialization.isValidJSONObject(rawCall),
                   let callData = try? JSONSerialization.data(withJSONObject: rawCall),
                   let call = try? JSONDecoder().decode(AIToolCall.self, from: callData) else { return nil }
-            return call
+            let normalizedName = ToolAliasRegistry.shared.canonicalName(for: call.name)
+            return AIToolCall(id: call.id, name: normalizedName, arguments: call.arguments)
         }
         return decoded.isEmpty ? nil : decoded
     }

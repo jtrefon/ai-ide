@@ -26,4 +26,10 @@ enum AppConstantsLayout {
     static let cornerMd: CGFloat = 8
     static let cornerLg: CGFloat = 12
     static let cornerXL: CGFloat = 16
+
+    // MARK: - Controls (toolbar selectors)
+    static let controlHeight: CGFloat = 28
+    static let controlHPadding: CGFloat = 8
+    static let controlChevronSize: CGFloat = 9
+    static let rowVerticalPadding: CGFloat = 6
 }

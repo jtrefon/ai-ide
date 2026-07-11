@@ -77,6 +77,7 @@ public enum PipelineReducer {
                 message: segment.text,
                 sourceStage: segment.source
             )
+            state.isComplete = true
         }
     }
 }

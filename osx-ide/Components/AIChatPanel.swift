@@ -28,6 +28,7 @@ struct AIChatPanel: View {
     @StateObject private var modelSearch = ModelSearchViewModel()
     @State private var selectedModelId: String = ""
     @State private var isModelPopover: Bool = false
+    @State private var hoveredModelId: String?
     @State private var currentSearchModels: [OpenRouterModel] = []
     @State private var hoveredTabId: String?
 
@@ -51,7 +52,7 @@ struct AIChatPanel: View {
 
     @ViewBuilder
     private func modelRowLabel(_ model: OpenRouterModel) -> some View {
-        HStack {
+        HStack(spacing: AppConstants.Layout.spacingSm) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.name ?? model.id)
                     .font(.body)
@@ -59,15 +60,15 @@ struct AIChatPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
+            Spacer(minLength: AppConstants.Layout.spacingSm)
             if !isOfflineMode && selectedModelId == model.id {
                 Image(systemName: "checkmark")
                     .foregroundStyle(.tint)
             }
         }
         .contentShape(Rectangle())
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, AppConstants.Layout.spacingMd)
+        .padding(.vertical, AppConstants.Layout.rowVerticalPadding)
     }
 
     private func localized(_ key: String) -> String {
@@ -75,7 +76,6 @@ struct AIChatPanel: View {
     }
 
     var body: some View {
-        let searchModels = currentSearchModels
         let displayedTabs = conversationManager.conversationTabs.isEmpty
             ? [ConversationTabItem(id: conversationManager.currentConversationId, title: "Chat 1")]
             : conversationManager.conversationTabs
@@ -151,8 +151,8 @@ struct AIChatPanel: View {
                         .accessibilityIdentifier("ConversationTab_\(tab.id)")
                     }
                 }
-                .padding(.leading, 4)
-                .padding(.vertical, 2)
+                .padding(.leading, AppConstants.Layout.spacingXS)
+                .padding(.vertical, AppConstants.Layout.spacingXXS)
 
                 Button(action: {
                     conversationManager.startNewConversation()
@@ -164,14 +164,14 @@ struct AIChatPanel: View {
                 .buttonStyle(.plain)
                 .help(localized("ai_chat.new_conversation_help"))
                 .accessibilityIdentifier(AccessibilityID.aiChatNewConversationButton)
-                .padding(.trailing, 6)
+                .padding(.trailing, AppConstants.Layout.spacingSm)
             }
-            .frame(height: 32)
-            .padding(.horizontal, 4)
+            .frame(height: AppConstants.Layout.headerHeight)
+            .padding(.horizontal, AppConstants.Layout.spacingXS)
             .overlay(
                 Rectangle()
                     .frame(height: 1)
-                    .foregroundStyle(.separator),
+                    .foregroundStyle(AppConstants.Color.separatorDefault),
                 alignment: .bottom
             )
 
@@ -216,101 +216,36 @@ struct AIChatPanel: View {
         .nativeGlassBackground(.panel, cornerRadius: 0)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Picker(localized("ai_chat.mode"), selection: modeBinding) {
+                Menu {
                     ForEach(AIMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
+                        Button(mode.rawValue) {
+                            modeBinding.wrappedValue = mode
+                        }
+                    }
+                } label: {
+                    CapsuleDropdownLabel {
+                        Text(modeBinding.wrappedValue.rawValue)
                     }
                 }
-                .pickerStyle(.menu)
-                .frame(width: 100)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
 
+                // Model selector — functional dropdown via popover so the search field and
+                // model list stay interactive. Internal margins keep content off the pill border.
                 Button {
                     isModelPopover.toggle()
                 } label: {
-                    HStack(spacing: 4) {
+                    CapsuleDropdownLabel {
                         Image(systemName: isOfflineMode ? "network.slash" : "cloud.fill")
                         Text("\(modelDisplayName) [\(intensityShortLabel(reasoningIntensity))]")
                             .lineLimit(1)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.secondary)
                     }
-                    .font(.caption2)
-                    .padding(.horizontal, 6)
                 }
                 .buttonStyle(.borderless)
-                .help(modelDisplayName)
                 .popover(isPresented: $isModelPopover, arrowEdge: .bottom) {
-                    VStack(spacing: 0) {
-                        HStack {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundStyle(.secondary)
-                            TextField("Search models...", text: $modelSearch.searchQuery)
-                                .textFieldStyle(.plain)
-                                .font(.body)
-                            if !modelSearch.searchQuery.isEmpty {
-                                Button { modelSearch.searchQuery = "" } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(10)
-
-                        Divider()
-
-                        ScrollView {
-                            ScrollViewReader { _ in
-                                LazyVStack(spacing: 0) {
-                                    ForEach(0..<searchModels.count, id: \.self) { index in
-                                        let model = searchModels[index]
-                                        Button(action: selectModel(model), label: { modelRowLabel(model) })
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-
-                        Divider()
-
-                        HStack {
-                            Button("Local Model") {
-                                Task {
-                                    let store = LocalModelSelectionStore()
-                                    await store.setSelectedModelId(quickSelectModel.id)
-                                    await store.setOfflineModeEnabled(true)
-                                }
-                                isModelPopover = false
-                                modelSearch.searchQuery = ""
-                            }
-                            .buttonStyle(.link)
-
-                            Spacer()
-
-                            Menu("Reasoning: \(intensityShortLabel(reasoningIntensity))") {
-                                ForEach(ReasoningIntensity.allCases, id: \.self) { intensity in
-                                    Button {
-                                        UserDefaults.standard.set(intensity.rawValue, forKey: "AI.ReasoningIntensity")
-                                        reasoningIntensity = intensity
-                                    } label: {
-                                        HStack {
-                                            Text(intensityLabel(intensity))
-                                            if reasoningIntensity == intensity {
-                                                Image(systemName: "checkmark")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            .menuStyle(.borderlessButton)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                    }
-                    .frame(width: 320, height: 400)
+                    modelPickerPopover
                 }
             }
-        }
         }
         .onAppear {
             refreshModelState()
@@ -376,6 +311,108 @@ struct AIChatPanel: View {
         }
     }
 
+    @ViewBuilder
+    private var modelPickerPopover: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: AppConstants.Layout.spacingXS) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Search models...", text: $modelSearch.searchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.body)
+                if !modelSearch.searchQuery.isEmpty {
+                    Button {
+                        modelSearch.searchQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, AppConstants.Layout.spacingMd)
+            .padding(.vertical, AppConstants.Layout.spacingSm)
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(currentSearchModels, id: \.id) { model in
+                        Button(action: selectModel(model)) {
+                            modelRowLabel(model)
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { isOver in
+                            hoveredModelId = isOver
+                                ? model.id
+                                : (hoveredModelId == model.id ? nil : hoveredModelId)
+                        }
+                        .background(
+                            hoveredModelId == model.id
+                                ? RoundedRectangle(cornerRadius: AppConstants.Layout.cornerSm, style: .continuous)
+                                    .fill(AppConstants.Color.accentSubtle)
+                                : RoundedRectangle(cornerRadius: AppConstants.Layout.cornerSm, style: .continuous)
+                                    .fill(Color.clear)
+                        )
+                    }
+                }
+                .padding(.vertical, AppConstants.Layout.spacingXS)
+            }
+
+            Divider()
+
+            HStack(spacing: AppConstants.Layout.spacingSm) {
+                Button {
+                    Task {
+                        let store = LocalModelSelectionStore()
+                        await store.setSelectedModelId(quickSelectModel.id)
+                        await store.setOfflineModeEnabled(true)
+                    }
+                    isModelPopover = false
+                    modelSearch.searchQuery = ""
+                } label: {
+                    HStack(spacing: AppConstants.Layout.spacingXS) {
+                        Image(systemName: "cpu")
+                        Text("Local Model")
+                    }
+                }
+                .buttonStyle(.bordered)
+
+                Spacer()
+
+                Menu {
+                    ForEach(ReasoningIntensity.allCases, id: \.self) { intensity in
+                        Button {
+                            UserDefaults.standard.set(intensity.rawValue, forKey: "AI.ReasoningIntensity")
+                            reasoningIntensity = intensity
+                        } label: {
+                            HStack {
+                                Text(intensityLabel(intensity))
+                                if reasoningIntensity == intensity {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: AppConstants.Layout.spacingXS) {
+                        Text("Reasoning: \(intensityShortLabel(reasoningIntensity))")
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: AppConstants.Layout.controlChevronSize))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .menuStyle(.borderedButton)
+            }
+            .padding(.horizontal, AppConstants.Layout.spacingMd)
+            .padding(.vertical, AppConstants.Layout.spacingSm)
+        }
+        .frame(
+            width: AppConstants.Overlay.modelPopoverWidth,
+            height: AppConstants.Overlay.modelPopoverHeight
+        )
+    }
+
     private var quickSelectModel: LocalModelDefinition {
         LocalModelCatalog.defaultModel
     }
@@ -405,9 +442,13 @@ struct AIChatPanel: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let countdownText = providerIssueCountdownText(issue, now: context.date)
             let isInsufficientBalance = issue.statusCode == 402
-            let accentColor: Color = isInsufficientBalance ? .red : .orange
-            let iconName = isInsufficientBalance ? "exclamationmark.octagon.fill" :
-                (issue.cooldownUntil == nil ? "exclamationmark.triangle.fill" : "clock.badge.exclamationmark")
+            let isNetworkOffline = issue.issueType == "Network offline"
+            // 429/rate-limit uses orange; network connectivity uses a distinct blue
+            // so the two transient issues are visually separable.
+            let accentColor: Color = isInsufficientBalance ? AppConstants.Color.alertError : (isNetworkOffline ? AppConstants.Color.alertInfo : AppConstants.Color.alertWarning)
+            let iconName: String = isInsufficientBalance ? "exclamationmark.octagon.fill" :
+                (isNetworkOffline ? "wifi.slash" :
+                    (issue.cooldownUntil == nil ? "exclamationmark.triangle.fill" : "clock.badge.exclamationmark"))
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -439,23 +480,32 @@ struct AIChatPanel: View {
                     .foregroundStyle(.blue)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, AppConstants.Layout.spacingMd)
+            .padding(.vertical, AppConstants.Layout.spacingSm)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(accentColor.opacity(0.12))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: AppConstants.Layout.cornerMd)
                     .stroke(accentColor.opacity(0.25), lineWidth: 1)
             )
-            .padding(.horizontal, 10)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.horizontal, AppConstants.Layout.spacingSm)
+            .padding(.top, AppConstants.Layout.spacingSm)
+            .padding(.bottom, AppConstants.Layout.spacingXS)
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier(AccessibilityID.aiChatProviderIssueBanner)
         }
     }
 
     private func providerIssueHeadline(_ issue: ConversationProviderIssueState) -> String {
+        // Network connectivity is provider-agnostic — never quote a specific
+        // provider (e.g. "OpenRouter") for an offline/timeout condition.
+        if issue.issueType == "Network offline" {
+            if let statusCode = issue.statusCode {
+                return "Network offline (HTTP \(statusCode))"
+            }
+            return "Network offline"
+        }
+
         if let statusCode = issue.statusCode {
             return "\(issue.providerName) \(issue.issueType) (HTTP \(statusCode))"
         }
@@ -490,5 +540,4 @@ struct AIChatPanel: View {
         conversationManager.currentInput = trimmedInput
         conversationManager.sendMessage(context: context)
     }
-
 }

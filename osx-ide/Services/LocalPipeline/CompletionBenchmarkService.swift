@@ -17,10 +17,10 @@ final class CompletionBenchmarkService {
         let mean: Double
     }
 
-    private let engine: InlineCompletionEngine
+    private let engine: LineCompletionEngine
     private let settings: InlineCompletionSettings
 
-    init(engine: InlineCompletionEngine, settings: InlineCompletionSettings) {
+    init(engine: LineCompletionEngine, settings: InlineCompletionSettings) {
         self.engine = engine
         self.settings = settings
     }

@@ -117,19 +117,10 @@ enum AIServicesFactory {
     }
 
     @MainActor
-    static func makeInlineCompletionEngine(
-        aiServices: AIServiceBundle,
-        projectRootProvider: @escaping () -> URL?,
-        codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?
-    ) -> InlineCompletionEngine {
-        return InlineCompletionEngine(
-            settingsStore: InlineCompletionSettingsStore(),
-            triggerPolicy: CompletionTriggerPolicy(),
-            contextAssembler: CompletionContextAssembler(),
-            retrievalLayer: CompletionRetrievalLayer(
-                projectRootProvider: projectRootProvider,
-                codebaseIndexProvider: codebaseIndexProvider
-            ),
+    static func makeLineCompletionEngine(
+        aiServices: AIServiceBundle
+    ) -> LineCompletionEngine {
+        return LineCompletionEngine(
             inferenceService: CompletionInferenceService(
                 provider: AIServiceInlineCompletionProvider(
                     remoteServiceProvider: {
@@ -151,18 +142,17 @@ enum AIServicesFactory {
                     localServiceProvider: { aiServices.localModelService },
                     localModelSelectionStore: aiServices.selectionStore
                 )
-            ),
-            ranker: SuggestionRanker()
+            )
         )
     }
 
     @MainActor
-    static func makeSnippetCompletionService(
+    static func makeGhostCodeEngine(
         aiServices: AIServiceBundle,
         projectRootProvider: @escaping () -> URL?,
         codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?
-    ) -> SnippetCompletionService {
-        return SnippetCompletionService(
+    ) -> GhostCodeEngine {
+        return GhostCodeEngine(
             inferenceService: CompletionInferenceService(
                 provider: AIServiceInlineCompletionProvider(
                     remoteServiceProvider: {
@@ -188,8 +178,7 @@ enum AIServicesFactory {
             retrievalLayer: CompletionRetrievalLayer(
                 projectRootProvider: projectRootProvider,
                 codebaseIndexProvider: codebaseIndexProvider
-            ),
-            ranker: SuggestionRanker()
+            )
         )
     }
 }

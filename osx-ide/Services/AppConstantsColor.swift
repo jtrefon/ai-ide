@@ -18,4 +18,9 @@ enum AppConstantsColor {
 
     static let separatorSubtle = Color(nsColor: .separatorColor).opacity(0.25)
     static let separatorDefault = Color(nsColor: .separatorColor)
+
+    // MARK: - Alerts
+    static let alertError = Color(nsColor: .systemRed)
+    static let alertWarning = Color(nsColor: .systemOrange)
+    static let alertInfo = Color(nsColor: .systemBlue)
 }

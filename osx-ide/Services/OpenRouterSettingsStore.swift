@@ -16,7 +16,6 @@ class ProviderOpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sen
         let systemPrompt: String
         let reasoningMode: String
         let toolPromptMode: String
-        let ragEnabledDuringToolLoop: String
     }
 
     struct HarnessKeys {
@@ -36,7 +35,6 @@ class ProviderOpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sen
     private let defaultBaseURL: String
     private let defaultReasoningMode: ReasoningMode
     private let defaultToolPromptMode: ToolPromptMode
-    private let defaultRAGEnabledDuringToolLoop: Bool
 
     init(settingsStore: SettingsStore = SettingsStore(userDefaults: AppRuntimeEnvironment.userDefaults)) {
         self.settingsStore = settingsStore
@@ -47,8 +45,7 @@ class ProviderOpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sen
             baseURL: "",
             systemPrompt: "",
             reasoningMode: "",
-            toolPromptMode: "",
-            ragEnabledDuringToolLoop: ""
+            toolPromptMode: ""
         )
         self.harnessKeys = HarnessKeys(
             apiKeyTestRunner: "",
@@ -62,7 +59,6 @@ class ProviderOpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sen
         self.defaultBaseURL = OpenRouterSettings.empty.baseURL
         self.defaultReasoningMode = .modelAndAgent
         self.defaultToolPromptMode = .fullStatic
-        self.defaultRAGEnabledDuringToolLoop = OpenRouterSettings.empty.ragEnabledDuringToolLoop
     }
 
     init(
@@ -72,8 +68,7 @@ class ProviderOpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sen
         defaultModel: String,
         defaultBaseURL: String,
         defaultReasoningMode: ReasoningMode = .modelAndAgent,
-        defaultToolPromptMode: ToolPromptMode = .fullStatic,
-        defaultRAGEnabledDuringToolLoop: Bool = false
+        defaultToolPromptMode: ToolPromptMode = .fullStatic
     ) {
         self.settingsStore = settingsStore
         self.environment = ProcessInfo.processInfo.environment
@@ -83,7 +78,6 @@ class ProviderOpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sen
         self.defaultBaseURL = defaultBaseURL
         self.defaultReasoningMode = defaultReasoningMode
         self.defaultToolPromptMode = defaultToolPromptMode
-        self.defaultRAGEnabledDuringToolLoop = defaultRAGEnabledDuringToolLoop
     }
 
     func load(includeApiKey: Bool = true) -> OpenRouterSettings {
@@ -115,11 +109,7 @@ class ProviderOpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sen
             baseURL: baseURL,
             systemPrompt: settingsStore.string(forKey: keys.systemPrompt) ?? "",
             reasoningMode: loadReasoningMode(),
-            toolPromptMode: loadToolPromptMode(),
-            ragEnabledDuringToolLoop: settingsStore.bool(
-                forKey: keys.ragEnabledDuringToolLoop,
-                default: defaultRAGEnabledDuringToolLoop
-            )
+            toolPromptMode: loadToolPromptMode()
         )
     }
 
@@ -130,7 +120,6 @@ class ProviderOpenRouterSettingsStore: OpenRouterSettingsStoring, @unchecked Sen
         settingsStore.set(settings.systemPrompt, forKey: keys.systemPrompt)
         settingsStore.set(settings.reasoningMode.rawValue, forKey: keys.reasoningMode)
         settingsStore.set(settings.toolPromptMode.rawValue, forKey: keys.toolPromptMode)
-        settingsStore.set(settings.ragEnabledDuringToolLoop, forKey: keys.ragEnabledDuringToolLoop)
     }
 
     func loadReasoningMode() -> ReasoningMode {
@@ -174,8 +163,7 @@ final class OpenRouterSettingsStore: ProviderOpenRouterSettingsStore, @unchecked
                 baseURL: "OpenRouterBaseURL",
                 systemPrompt: "OpenRouterSystemPrompt",
                 reasoningMode: "OpenRouterReasoningMode",
-                toolPromptMode: "OpenRouterToolPromptMode",
-                ragEnabledDuringToolLoop: "OpenRouterRAGEnabledDuringToolLoop"
+                toolPromptMode: "OpenRouterToolPromptMode"
             ),
             harnessKeys: HarnessKeys(
                 apiKeyTestRunner: "TEST_RUNNER_ENV_HARNESS_OPENROUTER_API_KEY",
@@ -188,8 +176,7 @@ final class OpenRouterSettingsStore: ProviderOpenRouterSettingsStore, @unchecked
             defaultModel: "",
             defaultBaseURL: OpenRouterSettings.empty.baseURL,
             defaultReasoningMode: .modelAndAgent,
-            defaultToolPromptMode: .fullStatic,
-            defaultRAGEnabledDuringToolLoop: OpenRouterSettings.empty.ragEnabledDuringToolLoop
+            defaultToolPromptMode: .fullStatic
         )
     }
 

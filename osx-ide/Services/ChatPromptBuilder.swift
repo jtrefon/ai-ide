@@ -142,6 +142,7 @@ class ChatPromptBuilder {
 
     /// Sanitizes model text for user-visible rendering:
     /// strips reasoning from rendered content while preserving paragraph breaks.
+    /// PHASE 2+ — Tool-call stripping replaced by `TextualToolCallStage` + parsers.
     static func contentForDisplay(from text: String) -> String {
         let split = splitReasoning(from: text)
         let withoutToolMarkup = stripTextualToolCallMarkup(from: split.content)
@@ -587,6 +588,10 @@ class ChatPromptBuilder {
 
         let lower = trimmed.lowercased()
 
+        if indicatesWorkWasPerformed(content: trimmed) {
+            return false
+        }
+
         let pendingExecutionSignals = [
             "i will",
             "i'll",
@@ -606,10 +611,6 @@ class ChatPromptBuilder {
 
         if hasPendingExecutionSignal {
             return true
-        }
-
-        if indicatesWorkWasPerformed(content: trimmed) {
-            return false
         }
 
         let completionSignals = [

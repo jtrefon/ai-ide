@@ -4,7 +4,7 @@ import Foundation
 /// Supports multi-step navigation: open, read, click, go_back, go_forward, close.
 /// Each session maintains its own browser state (cookies, history, JS context).
 struct WebBrowseTool: AITool {
-    let name = "web_browse"
+    let name = "web_fetch"
 let description = "Browse a webpage and extract its main readable content."
 
     var parameters: [String: Any] {

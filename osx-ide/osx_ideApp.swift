@@ -490,7 +490,7 @@ private struct LoadingOverlayView: View {
         }
         .padding(32)
         .background(Color(NSColor.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: AppConstants.Layout.cornerLg))
         .shadow(radius: 10)
     }
 }

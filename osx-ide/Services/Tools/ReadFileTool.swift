@@ -9,8 +9,8 @@ import Foundation
 
 /// Read content of a file
 struct ReadFileTool: AITool {
-    let name = "read_file"
-    let description = "Read a file at path with optional start_line/end_line line range. Lines are returned with numbers when using ranges."
+    let name = "read"
+    let description = "Read a file at path. For large files prefer a RANGED read via start_line/end_line (lines are returned numbered); a continuation footer tells you how to read the next chunk. For minified or single-line files use char_offset/char_limit (0-based character range). Reading an entire large file is discouraged — page through it."
     var parameters: [String: Any] {
         [
             "type": "object",
@@ -21,11 +21,19 @@ struct ReadFileTool: AITool {
                 ],
                 "start_line": [
                     "type": "integer",
-                    "description": "Optional 1-based start line to read from."
+                    "description": "Optional 1-based start line to read from (use for ranged reads of large files)."
                 ],
                 "end_line": [
                     "type": "integer",
                     "description": "Optional 1-based end line to read through (inclusive)."
+                ],
+                "char_offset": [
+                    "type": "integer",
+                    "description": "Optional 0-based character offset for minified/single-line files (use with char_limit)."
+                ],
+                "char_limit": [
+                    "type": "integer",
+                    "description": "Optional number of characters to return when using char_offset."
                 ]
             ],
             "required": ["path"]
@@ -52,15 +60,23 @@ struct ReadFileTool: AITool {
 
         let startLine = parseLineNumber(arguments["start_line"])
         let endLine = parseLineNumber(arguments["end_line"])
+        let charOffset = parseLineNumber(arguments["char_offset"])
+        let charLimit = parseLineNumber(arguments["char_limit"])
+
+        if charOffset != nil || charLimit != nil {
+            return extractCharRange(from: content, offset: charOffset, limit: charLimit)
+        }
 
         guard startLine != nil || endLine != nil else {
             return content
         }
 
+        let totalLines = content.components(separatedBy: .newlines).count
         return extractLineRange(
             from: content,
             startLine: startLine ?? 1,
-            endLine: endLine
+            endLine: endLine,
+            totalLines: totalLines
         )
     }
 
@@ -83,16 +99,29 @@ struct ReadFileTool: AITool {
         }
     }
 
-    private func extractLineRange(from content: String, startLine: Int, endLine: Int?) -> String {
+    private func extractLineRange(from content: String, startLine: Int, endLine: Int?, totalLines: Int) -> String {
         let allLines = content.components(separatedBy: .newlines)
         guard !allLines.isEmpty else { return "" }
 
-        let safeStart = max(1, startLine)
+        let safeStart = min(max(1, startLine), allLines.count)
         let safeEnd = min(max(safeStart, endLine ?? allLines.count), allLines.count)
 
+        guard safeStart <= safeEnd else { return "" }
         let indexedSlice = (safeStart...safeEnd).map { lineNumber in
             "\(lineNumber): \(allLines[lineNumber - 1])"
         }
-        return indexedSlice.joined(separator: "\n")
+        let body = indexedSlice.joined(separator: "\n")
+        let footer = "\n\n(Showing lines \(safeStart)–\(safeEnd) of \(totalLines). Use start_line=\(safeEnd + 1) to continue.)"
+        return body + footer
+    }
+
+    private func extractCharRange(from content: String, offset: Int?, limit: Int?) -> String {
+        let start = max(0, offset ?? 0)
+        guard start < content.count else { return "" }
+        let end = limit.map { min(content.count, start + max(0, $0)) } ?? content.count
+        guard start < end else { return "" }
+        let slice = String(content[content.index(content.startIndex, offsetBy: start)..<content.index(content.startIndex, offsetBy: end)])
+        let footer = "\n\n(Showing chars \(start)–\(end) of \(content.count). Use char_offset=\(end) to continue.)"
+        return slice + footer
     }
 }

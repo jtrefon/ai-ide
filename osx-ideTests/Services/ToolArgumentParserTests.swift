@@ -87,8 +87,8 @@ final class ToolClassificationCatalogTests: XCTestCase {
     }
 
     func testToolAliasRegistryResolvesCommonAliases() {
-        XCTAssertEqual(ToolAliasRegistry.shared.canonicalName(for: "bash"), "run_command")
-        XCTAssertEqual(ToolAliasRegistry.shared.canonicalName(for: "find"), "find_file")
-        XCTAssertEqual(ToolAliasRegistry.shared.canonicalName(for: "list_dir"), "list_files")
+        XCTAssertEqual(ToolAliasRegistry.shared.canonicalName(for: "bash"), "bash")
+        XCTAssertEqual(ToolAliasRegistry.shared.canonicalName(for: "find"), "glob")
+        XCTAssertEqual(ToolAliasRegistry.shared.canonicalName(for: "list_dir"), "ls")
     }
 }

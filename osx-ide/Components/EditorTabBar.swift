@@ -23,7 +23,7 @@ struct EditorTabBar: View {
                         .padding(.vertical, 6)
                     Spacer(minLength: 0)
                 }
-                .frame(height: 34)
+                .frame(height: AppConstants.Layout.headerHeight)
                 .background(.thinMaterial)
             } else {
                 HStack(spacing: spacing) {
@@ -44,7 +44,7 @@ struct EditorTabBar: View {
                 }
                 .padding(.horizontal, 4)
                 .padding(.vertical, 3)
-                .frame(height: 34)
+                .frame(height: AppConstants.Layout.headerHeight)
                 .background(.thinMaterial)
             }
 

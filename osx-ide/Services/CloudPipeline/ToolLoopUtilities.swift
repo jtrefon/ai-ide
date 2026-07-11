@@ -59,6 +59,7 @@ enum ToolLoopUtilities {
     /// Builds a summary text from tool results.
     /// - Parameter toolResults: Array of tool result messages
     /// - Returns: Formatted summary string
+    @available(*, deprecated, message: "Use ConversationStreamStore + PromptProjector instead. This free-text aggregation caused tool output to leak as the user-facing answer.")
     static func toolResultsSummaryText(_ toolResults: [ChatMessage]) -> String {
         let lines = toolResults.compactMap { message -> String? in
             guard let toolCallId = message.toolCallId else { return nil }
@@ -389,9 +390,14 @@ enum ToolLoopUtilities {
             ]
         )
 
-        var messages = historyMessages.filter { $0.role == .system && !$0.content.contains("focused execution mode") }
-        messages.append(ChatMessage(role: .system, content: systemContent))
-        messages.append(ChatMessage(role: .user, content: userContent))
+        // Don't include the full history — the tool_summary already condenses
+        // all tool results. Including raw history (full file contents) wastes
+        // context window and can push the model past its limit, causing empty
+        // responses. The fresh instruction + tool summary is sufficient.
+        let messages: [ChatMessage] = [
+            ChatMessage(role: .system, content: systemContent),
+            ChatMessage(role: .user, content: userContent),
+        ]
         return messages
     }
     

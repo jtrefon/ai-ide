@@ -4,13 +4,12 @@ import Foundation
 /// Combines index symbol search, full-text search, grep, and filename matching
 /// into a single call. Returns ALL occurrences of a query with type, location, and context.
 struct SearchProjectTool: AITool {
-    let name = "search_project"
+    let name = "search"
     let description = "THE PRIMARY search tool for ANY code search task. " +
         "Finds classes, functions, variables, files, and text patterns. " +
         "Uses semantic search (vector similarity), symbol lookup, full-text index, " +
         "and filesystem grep — automatically picks the best method. " +
-        "Returns results grouped by file with match type and line numbers. " +
-        "ALWAYS use this first for code search instead of find_file or grep."
+        "Returns results grouped by file with match type and line numbers."
 
     var parameters: [String: Any] {
         [

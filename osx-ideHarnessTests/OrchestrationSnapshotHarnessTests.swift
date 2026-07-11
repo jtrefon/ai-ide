@@ -229,7 +229,6 @@ final class OrchestrationSnapshotHarnessTests: XCTestCase {
     ) -> SendRequest {
         SendRequest(
             userInput: userInput,
-            explicitContext: nil,
             mode: .chat,
             projectRoot: projectRoot,
             conversationId: conversationId,

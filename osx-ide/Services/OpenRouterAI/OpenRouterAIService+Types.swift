@@ -20,7 +20,6 @@ extension OpenRouterAIService {
 
     struct OpenRouterChatInput {
         let prompt: String
-        let context: String?
         let tools: [AITool]?
         let mode: AIMode?
         let projectRoot: URL?
@@ -28,7 +27,6 @@ extension OpenRouterAIService {
 
     struct OpenRouterChatHistoryInput {
         let messages: [OpenRouterChatMessage]
-        let context: String?
         let tools: [AITool]?
         let mode: AIMode?
         let projectRoot: URL?

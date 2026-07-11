@@ -10,8 +10,7 @@ final class DeepSeekSettingsStore: ProviderOpenRouterSettingsStore, @unchecked S
                 baseURL: "DeepSeekBaseURL",
                 systemPrompt: "DeepSeekSystemPrompt",
                 reasoningMode: "DeepSeekReasoningMode",
-                toolPromptMode: "DeepSeekToolPromptMode",
-                ragEnabledDuringToolLoop: "DeepSeekRAGEnabledDuringToolLoop"
+                toolPromptMode: "DeepSeekToolPromptMode"
             ),
             harnessKeys: HarnessKeys(
                 apiKeyTestRunner: "TEST_RUNNER_ENV_HARNESS_DEEPSEEK_API_KEY",
@@ -24,8 +23,7 @@ final class DeepSeekSettingsStore: ProviderOpenRouterSettingsStore, @unchecked S
             defaultModel: "deepseek-chat",
             defaultBaseURL: "https://api.deepseek.com/v1",
             defaultReasoningMode: .modelAndAgent,
-            defaultToolPromptMode: .fullStatic,
-            defaultRAGEnabledDuringToolLoop: false
+            defaultToolPromptMode: .fullStatic
         )
     }
 }

@@ -31,7 +31,7 @@ private struct TypingDotsBubbleView: View {
             .padding(.vertical, 9)
                 .background(AppConstants.Color.surfaceCard.opacity(0.5))
             .clipShape(Capsule())
-            .frame(height: 34)
+            .frame(height: AppConstants.Layout.headerHeight)
             .opacity(isActive ? 1 : 0)
             .scaleEffect(isActive ? 1 : 0.95, anchor: .leading)
             .animation(.spring(response: 0.28, dampingFraction: 0.88), value: isActive)
@@ -115,8 +115,8 @@ struct MessageListView: View {
                             .frame(height: 1)
                             .id("__bottom__")
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, AppConstants.Layout.spacingMd)
+                    .padding(.vertical, AppConstants.Layout.spacingMd)
                 }
                 .scrollIndicators(.automatic)
                 .onAppear {
@@ -159,7 +159,7 @@ struct MessageListView: View {
                 .frame(maxWidth: maxBubbleWidth, alignment: .leading)
             Spacer()
         }
-        .frame(height: 34)
+        .frame(height: AppConstants.Layout.headerHeight)
         .accessibilityHidden(!isSending)
     }
 }

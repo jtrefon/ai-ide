@@ -567,7 +567,6 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
 
         return SendRequest(
             userInput: userInput,
-            explicitContext: nil,
             mode: mode,
             projectRoot: projectRoot,
             conversationId: UUID().uuidString,
@@ -581,7 +580,6 @@ final class OrchestrationGraphRunnerTests: XCTestCase {
 
     private func makeHistoryCoordinator() -> ChatHistoryCoordinator {
         ChatHistoryCoordinator(
-            historyManager: ChatHistoryManager(),
             projectRoot: FileManager.default.temporaryDirectory
         )
     }

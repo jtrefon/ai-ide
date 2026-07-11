@@ -4,6 +4,8 @@ import Foundation
 final class ConversationToolProvider {
     private let fileSystemService: FileSystemService
     private let eventBus: EventBusProtocol
+    private let vectorStoreService: VectorStoreService?
+    private let embedder: (any MemoryEmbeddingGenerating)?
 
     private let aiServiceProvider: () -> AIService?
     private let codebaseIndexProvider: () -> CodebaseIndexProtocol?
@@ -12,12 +14,16 @@ final class ConversationToolProvider {
     init(
         fileSystemService: FileSystemService,
         eventBus: EventBusProtocol,
+        vectorStoreService: VectorStoreService?,
+        embedder: (any MemoryEmbeddingGenerating)?,
         aiServiceProvider: @escaping () -> AIService?,
         codebaseIndexProvider: @escaping () -> CodebaseIndexProtocol?,
         projectRootProvider: @escaping () -> URL?
     ) {
         self.fileSystemService = fileSystemService
         self.eventBus = eventBus
+        self.vectorStoreService = vectorStoreService
+        self.embedder = embedder
         self.aiServiceProvider = aiServiceProvider
         self.codebaseIndexProvider = codebaseIndexProvider
         self.projectRootProvider = projectRootProvider
@@ -36,7 +42,6 @@ final class ConversationToolProvider {
         tools.append(ReadFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator))
         tools.append(ListFilesTool(pathValidator: pathValidator))
         tools.append(WriteFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus))
-        tools.append(ReplaceInFileTool(fileSystemService: fileSystemService, pathValidator: pathValidator, eventBus: eventBus))
         tools.append(PatchFileToolAdapter(projectRoot: projectRoot))
         tools.append(DeleteFileTool(pathValidator: pathValidator, eventBus: eventBus))
         
@@ -45,29 +50,31 @@ final class ConversationToolProvider {
         tools.append(PinnedRuleRemoveTool(projectRoot: projectRoot))
         tools.append(PinnedRuleListTool(projectRoot: projectRoot))
 
-        // Symbol Lookup Tools
-        let databaseStore = codebaseIndexProvider()?.database
-        if let db = databaseStore {
-            tools.append(LocateSymbolTool(databaseProvider: { db }))
-            tools.append(InspectSymbolTool(databaseProvider: { db }))
-            tools.append(WhereSymbolTool(databaseProvider: { db }))
-        }
+        // Context / Memory Tools
+        tools.append(ContextTool(vectorStoreService: vectorStoreService, embedder: embedder))
 
         // Search & Structure Tools
         tools.append(SearchProjectTool(index: codebaseIndexProvider(), projectRoot: projectRoot))
-        tools.append(LocalFindTool(index: codebaseIndexProvider(), projectRoot: projectRoot))
         tools.append(GoogleWebSearchTool())
         tools.append(WebBrowseTool())
-        tools.append(GrepTool(pathValidator: pathValidator))
         tools.append(FindFileTool(pathValidator: pathValidator))
-        tools.append(GetProjectStructureTool(projectRoot: projectRoot))
 
         // Terminal & Execution
         tools.append(RunCommandTool(projectRoot: projectRoot, pathValidator: pathValidator))
 
         // Planning & Task Management
         tools.append(PlanTool())
-        
+
+        // Research Subagent (Context Access Layer L6)
+        tools.append(ResearchTool(
+            aiServiceProvider: aiServiceProvider,
+            projectRootProvider: projectRootProvider,
+            fileSystemService: fileSystemService,
+            pathValidator: pathValidator,
+            vectorStoreService: vectorStoreService,
+            embedder: embedder,
+            codebaseIndexProvider: codebaseIndexProvider
+        ))
 
         return tools
     }

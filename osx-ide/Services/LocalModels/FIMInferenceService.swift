@@ -121,16 +121,16 @@ actor FIMInferenceService {
                         prompt = effectivePrefix
                     }
 
-                    let parameters = GenerateParameters(
-                        maxTokens: min(maxTokens, 512),
-                        maxKVSize: contextLength,
-                        kvBits: 4,
-                        temperature: 0.1,
-                        topP: 0.9,
-                        repetitionPenalty: nil,
-                        repetitionContextSize: 20,
-                        prefillStepSize: 512
-                    )
+                     let parameters = GenerateParameters(
+                         maxTokens: min(maxTokens, 512),
+                         maxKVSize: contextLength,
+                         kvBits: 4,
+                         temperature: 0.1,
+                         topP: 0.9,
+                         repetitionPenalty: 1.1,
+                         repetitionContextSize: 20,
+                         prefillStepSize: 512
+                     )
 
                     let tokenizer = await container.tokenizer
                     let tokenIds = tokenizer.encode(text: prompt, addSpecialTokens: true)

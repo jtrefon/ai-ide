@@ -1,7 +1,7 @@
 import Foundation
 
 struct FindFileTool: AITool {
-    let name = "find_file"
+    let name = "glob"
 let description = "Find files by name."
     var parameters: [String: Any] {
         [

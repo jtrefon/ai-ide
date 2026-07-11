@@ -75,7 +75,8 @@ final class ToolArgumentResolver {
     /// Checks if a tool requires file path injection
     private static func isFilePathLikeTool(_ toolName: String) -> Bool {
         switch toolName {
-        case "read_file", "write_file", "write_files", "create_file",
+        case "read", "write", "rm", "edit",
+             "read_file", "write_file", "write_files", "create_file",
              "delete_file", "replace_in_file", "index_read_file":
             return true
         default:
@@ -123,9 +124,10 @@ final class ToolArgumentResolver {
     /// Checks if a tool performs write operations
     func isWriteLikeTool(_ toolName: String) -> Bool {
         switch toolName {
-        case "write_file", "write_files", "create_file", "delete_file", "replace_in_file":
+        case "write", "rm", "edit",
+             "write_file", "write_files", "create_file", "delete_file", "replace_in_file":
             return true
-        case "run_command":
+        case "bash", "run_command":
             return true
         default:
             return false
@@ -152,7 +154,7 @@ final class ToolArgumentResolver {
         normalizeCommonPathAliases(in: &normalized)
 
         switch toolName {
-        case "write_file", "create_file":
+        case "write", "write_file", "create_file":
             if let rawChunk {
                 fillMissingFieldsFromRawChunk(rawChunk, toolName: toolName, into: &normalized)
             }
@@ -182,7 +184,7 @@ final class ToolArgumentResolver {
                     normalized["content"] = content
                 }
             }
-        case "replace_in_file":
+        case "edit", "replace_in_file":
             if let rawChunk {
                 fillMissingFieldsFromRawChunk(rawChunk, toolName: toolName, into: &normalized)
             }
@@ -213,7 +215,7 @@ final class ToolArgumentResolver {
 
     private static func isWriteMutationTool(_ toolName: String) -> Bool {
         switch toolName {
-        case "write_file", "write_files", "create_file", "replace_in_file":
+        case "write", "write_file", "write_files", "edit":
             return true
         default:
             return false
@@ -320,7 +322,7 @@ final class ToolArgumentResolver {
         into arguments: inout [String: Any]
     ) {
         switch toolName {
-        case "write_file", "create_file":
+        case "write", "write_file", "create_file":
             if (arguments["path"] as? String)?.isEmpty != false,
                let path = extractStringValue(from: rawChunk, keys: ["path", "file", "target", "target_path", "file_path"]) {
                 arguments["path"] = path
@@ -329,7 +331,7 @@ final class ToolArgumentResolver {
                let content = extractStringValue(from: rawChunk, keys: ["content", "new_text", "text", "body", "data", "contents", "code"]) {
                 arguments["content"] = content
             }
-        case "replace_in_file":
+        case "edit", "replace_in_file":
             if (arguments["old_text"] as? String)?.isEmpty != false,
                let old = extractStringValue(from: rawChunk, keys: ["old_text", "oldText", "find", "search", "old"]) {
                 arguments["old_text"] = old

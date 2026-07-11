@@ -46,9 +46,6 @@ final class OpenRouterSettingsViewModel: ObservableObject {
     @Published var toolPromptMode: ToolPromptMode {
         didSet { persist() }
     }
-    @Published var ragEnabledDuringToolLoop: Bool {
-        didSet { persist() }
-    }
 
     @Published private(set) var models: [OpenRouterModel] = []
     @Published private(set) var filteredModels: [OpenRouterModel] = []
@@ -88,7 +85,6 @@ final class OpenRouterSettingsViewModel: ObservableObject {
         self.systemPrompt = settings.systemPrompt
         self.reasoningMode = settings.reasoningMode
         self.toolPromptMode = settings.toolPromptMode
-        self.ragEnabledDuringToolLoop = settings.ragEnabledDuringToolLoop
     }
 
     func loadApiKeyIfAvailable() {
@@ -211,8 +207,7 @@ final class OpenRouterSettingsViewModel: ObservableObject {
             baseURL: baseURL,
             systemPrompt: systemPrompt,
             reasoningMode: reasoningMode,
-            toolPromptMode: toolPromptMode,
-            ragEnabledDuringToolLoop: ragEnabledDuringToolLoop
+            toolPromptMode: toolPromptMode
         )
         store.save(settings)
     }

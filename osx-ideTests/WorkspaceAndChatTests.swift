@@ -78,29 +78,24 @@ final class WorkspaceAndChatTests: XCTestCase {
         }
     }
 
-    func testChatHistoryManagerSeedsDefaultGreetingOnInit() async throws {
-        let expected = "Hello! I'm your AI coding assistant. How can I help you today?"
-
-        let messages = await MainActor.run {
-            let manager = ChatHistoryManager()
-            return manager.messages
+    func testChatHistoryCoordinatorStartsEmpty() async throws {
+        let coordinator = await MainActor.run {
+            ChatHistoryCoordinator(projectRoot: FileManager.default.temporaryDirectory)
         }
-
-        XCTAssertEqual(messages.count, 1, "Expected a single greeting message")
-        XCTAssertEqual(messages.first?.content, expected, "Expected default greeting content")
+        let messages = await coordinator.messages
+        XCTAssertEqual(messages.count, 0, "Expected empty coordinator")
     }
 
-    func testChatHistoryManagerRestoresDefaultGreetingAfterRemovingAllMessages() async throws {
-        let expected = "Hello! I'm your AI coding assistant. How can I help you today?"
-
-        let messages = await MainActor.run {
-            let manager = ChatHistoryManager()
-            manager.removeOldestMessages(count: manager.messages.count)
-            return manager.messages
+    func testChatHistoryCoordinatorAppendsMessages() async throws {
+        let coordinator = await MainActor.run {
+            ChatHistoryCoordinator(projectRoot: FileManager.default.temporaryDirectory)
         }
-
-        XCTAssertEqual(messages.count, 1, "Expected a single greeting message after removal")
-        XCTAssertEqual(messages.first?.content, expected, "Expected default greeting content after removal")
+        await MainActor.run {
+            coordinator.append(ChatMessage(role: .user, content: "test"))
+        }
+        let messages = await coordinator.messages
+        XCTAssertEqual(messages.count, 1, "Expected one message after append")
+        XCTAssertEqual(messages.first?.content, "test")
     }
 
     func testWorkspaceServiceRenamePublishesEventAndMovesFile() async throws {

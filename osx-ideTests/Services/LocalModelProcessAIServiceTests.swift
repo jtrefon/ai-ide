@@ -151,8 +151,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             baseURL: OpenRouterSettings.empty.baseURL,
             systemPrompt: "",
             reasoningMode: .modelAndAgent,
-            toolPromptMode: .concise,
-            ragEnabledDuringToolLoop: true
+            toolPromptMode: .concise
         ))
 
         let service = LocalModelProcessAIService(
@@ -218,8 +217,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             baseURL: OpenRouterSettings.empty.baseURL,
             systemPrompt: "CUSTOM_SYSTEM_PROMPT",
             reasoningMode: .modelAndAgent,
-            toolPromptMode: .fullStatic,
-            ragEnabledDuringToolLoop: true
+            toolPromptMode: .fullStatic
         ))
 
         let service = LocalModelProcessAIService(
@@ -372,8 +370,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             baseURL: OpenRouterSettings.empty.baseURL,
             systemPrompt: "",
             reasoningMode: .agent,
-            toolPromptMode: .fullStatic,
-            ragEnabledDuringToolLoop: true
+            toolPromptMode: .fullStatic
         ))
 
         let service = LocalModelProcessAIService(
@@ -411,8 +408,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             baseURL: OpenRouterSettings.empty.baseURL,
             systemPrompt: "",
             reasoningMode: .modelAndAgent,
-            toolPromptMode: .fullStatic,
-            ragEnabledDuringToolLoop: true
+            toolPromptMode: .fullStatic
         ))
 
         let service = LocalModelProcessAIService(
@@ -451,8 +447,7 @@ final class LocalModelProcessAIServiceTests: XCTestCase {
             baseURL: OpenRouterSettings.empty.baseURL,
             systemPrompt: "",
             reasoningMode: .model,
-            toolPromptMode: .fullStatic,
-            ragEnabledDuringToolLoop: true
+            toolPromptMode: .fullStatic
         ))
 
         let service = LocalModelProcessAIService(

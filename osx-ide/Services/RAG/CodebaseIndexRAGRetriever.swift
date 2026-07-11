@@ -139,7 +139,29 @@ public final class CodebaseIndexRAGRetriever: RAGRetriever, @unchecked Sendable 
     }
 
     private func retrieveMemoryCandidates(userInput: String) async -> [RAGEvidenceCandidate] {
-        []
+        guard let vectorStore = vectorStoreService, let embedder else { return [] }
+        guard let results = try? await vectorStore.searchByText(
+            query: userInput,
+            embeddingGenerator: { try await embedder.generateEmbedding(for: $0) },
+            limit: 10
+        ), !results.isEmpty else { return [] }
+
+        return results.map { result in
+            let text = result.metadata?.text ?? ""
+            let source = result.metadata?.source ?? "unknown"
+            let preview = "- [memory] \(source): \(text.prefix(200))"
+            return RAGEvidenceCandidate(
+                id: "memory|\(result.id)",
+                type: .memory,
+                filePath: source,
+                lineStart: nil,
+                lineEnd: nil,
+                preview: preview,
+                searchableText: text,
+                qualityScore: Double(result.score),
+                freshness: 0.9
+            )
+        }
     }
 
     private func retrieveSegmentCandidates(userInput: String) async -> [RAGEvidenceCandidate] {

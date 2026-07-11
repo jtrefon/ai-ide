@@ -21,9 +21,9 @@ final class ToolCallFallbackParserTests: XCTestCase {
         """
         let toolCalls = parser.decodeAll(from: content)
         XCTAssertEqual(toolCalls?.count, 2)
-        XCTAssertEqual(toolCalls?.first?.name, "write_file")
+        XCTAssertEqual(toolCalls?.first?.name, "write")
         XCTAssertEqual(toolCalls?.first?.arguments["path"] as? String, "/tmp/project/package.json")
-        XCTAssertEqual(toolCalls?.last?.name, "write_file")
+        XCTAssertEqual(toolCalls?.last?.name, "write")
         XCTAssertEqual(toolCalls?.last?.arguments["path"] as? String, "/tmp/project/src/utils.test.js")
     }
 
@@ -37,7 +37,7 @@ final class ToolCallFallbackParserTests: XCTestCase {
         """
         let toolCalls = parser.decodeAll(from: content)
         XCTAssertEqual(toolCalls?.count, 1)
-        XCTAssertEqual(toolCalls?.first?.name, "list_files")
+        XCTAssertEqual(toolCalls?.first?.name, "ls")
         XCTAssertEqual(toolCalls?.first?.arguments["path"] as? String, "/tmp/project/src")
     }
 
@@ -52,7 +52,7 @@ final class ToolCallFallbackParserTests: XCTestCase {
         """
         let toolCalls = parser.decodeAll(from: content)
         XCTAssertEqual(toolCalls?.count, 1)
-        XCTAssertEqual(toolCalls?.first?.name, "list_files")
+        XCTAssertEqual(toolCalls?.first?.name, "ls")
         XCTAssertEqual(toolCalls?.first?.arguments["path"] as? String, "src/services")
     }
 
@@ -67,7 +67,7 @@ final class ToolCallFallbackParserTests: XCTestCase {
         """#
         let toolCalls = parser.decodeAll(from: content)
         XCTAssertEqual(toolCalls?.count, 1)
-        XCTAssertEqual(toolCalls?.first?.name, "write_file")
+        XCTAssertEqual(toolCalls?.first?.name, "write")
         XCTAssertEqual(toolCalls?.first?.arguments["path"] as? String, "package.json")
         XCTAssertEqual(toolCalls?.first?.arguments["content"] as? String, #"{"name":"utils-project"}"#)
     }
@@ -87,8 +87,8 @@ final class ToolCallFallbackParserTests: XCTestCase {
         """
         let toolCalls = parser.decodeAll(from: content)
         XCTAssertEqual(toolCalls?.count, 2)
-        XCTAssertEqual(toolCalls?.first?.name, "list_files")
-        XCTAssertEqual(toolCalls?.last?.name, "run_command")
+        XCTAssertEqual(toolCalls?.first?.name, "ls")
+        XCTAssertEqual(toolCalls?.last?.name, "bash")
         XCTAssertEqual(toolCalls?.last?.arguments["command"] as? String, "ls -la")
     }
 
@@ -104,9 +104,9 @@ final class ToolCallFallbackParserTests: XCTestCase {
         """#
         let toolCalls = parser.decodeAll(from: content)
         XCTAssertEqual(toolCalls?.count, 2)
-        XCTAssertEqual(toolCalls?.first?.name, "write_file")
+        XCTAssertEqual(toolCalls?.first?.name, "write")
         XCTAssertEqual(toolCalls?.first?.arguments["path"] as? String, "test.txt")
-        XCTAssertEqual(toolCalls?.last?.name, "read_file")
+        XCTAssertEqual(toolCalls?.last?.name, "read")
     }
 
     // MARK: - JSON Tool Calls
@@ -117,7 +117,7 @@ final class ToolCallFallbackParserTests: XCTestCase {
         """
         let toolCalls = parser.decodeAll(from: json)
         XCTAssertEqual(toolCalls?.count, 1)
-        XCTAssertEqual(toolCalls?.first?.name, "read_file")
+        XCTAssertEqual(toolCalls?.first?.name, "read")
         guard let args = toolCalls?.first?.arguments as? [String: String] else {
             XCTFail("Expected [String: String] arguments"); return
         }
@@ -130,8 +130,8 @@ final class ToolCallFallbackParserTests: XCTestCase {
         """
         let toolCalls = parser.decodeAll(from: json)
         XCTAssertEqual(toolCalls?.count, 2)
-        XCTAssertEqual(toolCalls?.first?.name, "read_file")
-        XCTAssertEqual(toolCalls?.last?.name, "write_file")
+        XCTAssertEqual(toolCalls?.first?.name, "read")
+        XCTAssertEqual(toolCalls?.last?.name, "write")
     }
 
     func testDecodesFencedJSONBlock() {
@@ -143,23 +143,23 @@ final class ToolCallFallbackParserTests: XCTestCase {
         """
         let toolCalls = parser.decodeAll(from: content)
         XCTAssertEqual(toolCalls?.count, 1)
-        XCTAssertEqual(toolCalls?.first?.name, "read_file")
+        XCTAssertEqual(toolCalls?.first?.name, "read")
     }
 
     // MARK: - Name Normalization
 
     func testNormalizesToolNames() {
-        XCTAssertEqual(ParserHelper.normalizeName("list_directory"), "list_files")
-        XCTAssertEqual(ParserHelper.normalizeName("list_dir"), "list_files")
-        XCTAssertEqual(ParserHelper.normalizeName("cli-mcp-server_run_command"), "run_command")
-        XCTAssertEqual(ParserHelper.normalizeName("create_file"), "write_file")
-        XCTAssertEqual(ParserHelper.normalizeName("edit_file"), "replace_in_file")
-        XCTAssertEqual(ParserHelper.normalizeName("view_file"), "read_file")
-        XCTAssertEqual(ParserHelper.normalizeName("grep_search"), "search_project")
-        XCTAssertEqual(ParserHelper.normalizeName("web_fetch"), "web_browse")
+        XCTAssertEqual(ParserHelper.normalizeName("list_directory"), "ls")
+        XCTAssertEqual(ParserHelper.normalizeName("list_dir"), "ls")
+        XCTAssertEqual(ParserHelper.normalizeName("cli-mcp-server_run_command"), "bash")
+        XCTAssertEqual(ParserHelper.normalizeName("create_file"), "write")
+        XCTAssertEqual(ParserHelper.normalizeName("edit_file"), "edit")
+        XCTAssertEqual(ParserHelper.normalizeName("view_file"), "read")
+        XCTAssertEqual(ParserHelper.normalizeName("grep_search"), "search")
+        XCTAssertEqual(ParserHelper.normalizeName("web_fetch"), "web_fetch")
         XCTAssertEqual(ParserHelper.normalizeName("internet_search"), "web_search")
-        XCTAssertEqual(ParserHelper.normalizeName("apply_diff"), "patch_file")
-        XCTAssertEqual(ParserHelper.normalizeName("run_shell"), "run_command")
+        XCTAssertEqual(ParserHelper.normalizeName("apply_diff"), "edit")
+        XCTAssertEqual(ParserHelper.normalizeName("run_shell"), "bash")
         XCTAssertEqual(ParserHelper.normalizeName("unknown_tool"), "unknown_tool")
     }
 
@@ -215,7 +215,7 @@ final class ToolCallFallbackParserTests: XCTestCase {
         """
         let toolCalls = parser.decodeAll(from: content)
         XCTAssertEqual(toolCalls?.count, 1)
-        XCTAssertEqual(toolCalls?.first?.name, "write_file")
+        XCTAssertEqual(toolCalls?.first?.name, "write")
         XCTAssertEqual(toolCalls?.first?.arguments["path"] as? String, "/tmp/project/newfile.txt")
     }
 }

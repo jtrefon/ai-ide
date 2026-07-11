@@ -376,7 +376,7 @@ struct RunCommandTool: AIToolProgressReporting {
         let workingDirectoryURL: URL?
     }
 
-    let name = "run_command"
+    let name = "bash"
     let description = "Execute and control terminal commands through resumable sessions."
 
     var parameters: [String: Any] {

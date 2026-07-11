@@ -240,8 +240,7 @@ final class LocalModelResponseDiagnosticsHarnessTests: XCTestCase {
             baseURL: currentSettings.baseURL,
             systemPrompt: currentSettings.systemPrompt,
             reasoningMode: currentSettings.reasoningMode,
-            toolPromptMode: currentSettings.toolPromptMode,
-            ragEnabledDuringToolLoop: false
+            toolPromptMode: currentSettings.toolPromptMode
         ))
 
         let selectionStore = LocalModelSelectionStore(settingsStore: container.settingsStore)

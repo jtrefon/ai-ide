@@ -16,8 +16,7 @@ struct CodeEditorView: View {
     var language: String
     @Binding var selectedRange: NSRange?
     @ObservedObject var selectionContext: CodeSelectionContext
-    let inlineCompletionEngine: InlineCompletionEngine
-    let snippetCompletionService: SnippetCompletionService
+    let lineCompletionEngine: LineCompletionEngine
     var inlineCompletionDebugOverlayEnabled: Bool = false
     var showLineNumbers: Bool = true
     var wordWrap: Bool = false
@@ -36,8 +35,7 @@ struct CodeEditorView: View {
                 language: language,
                 selectedRange: $selectedRange,
                 selectionContext: selectionContext,
-                inlineCompletionEngine: inlineCompletionEngine,
-                snippetCompletionService: snippetCompletionService,
+                lineCompletionEngine: lineCompletionEngine,
                 showLineNumbers: showLineNumbers,
                 wordWrap: wordWrap,
                 fontSize: fontSize,
@@ -89,14 +87,10 @@ struct CodeEditorView: View {
             }
             .font(.caption2.weight(.medium).monospaced())
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(.separator.opacity(0.3), lineWidth: 0.8)
-            )
-            .padding(12)
+            .padding(.horizontal, AppConstants.Layout.spacingMd)
+            .padding(.vertical, AppConstants.Layout.spacingSm)
+            .nativeGlassBackground(.popover, cornerRadius: AppConstants.Layout.cornerLg, showBorder: true)
+            .padding(AppConstants.Layout.spacingMd)
             .allowsHitTesting(false)
         }
     }

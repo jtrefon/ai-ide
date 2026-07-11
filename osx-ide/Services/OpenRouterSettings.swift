@@ -76,7 +76,6 @@ struct OpenRouterSettings: Equatable {
     var systemPrompt: String
     var reasoningMode: ReasoningMode
     var toolPromptMode: ToolPromptMode
-    var ragEnabledDuringToolLoop: Bool
 
     static let empty = OpenRouterSettings(
         apiKey: "",
@@ -84,7 +83,6 @@ struct OpenRouterSettings: Equatable {
         baseURL: "https://openrouter.ai/api/v1",
         systemPrompt: "",
         reasoningMode: .modelAndAgent,
-        toolPromptMode: .fullStatic,
-        ragEnabledDuringToolLoop: false
+        toolPromptMode: .fullStatic
     )
 }

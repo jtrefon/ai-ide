@@ -77,11 +77,11 @@ struct ToolExecutionMessageView: View {
     }
 
     private var isFileMutationTool: Bool {
-        ["write_file", "create_file", "replace_in_file", "delete_file"].contains(displayToolName)
+        ["write", "edit", "rm"].contains(displayToolName)
     }
 
     private var isReadFileTool: Bool {
-        displayToolName == "read_file"
+        displayToolName == "read"
     }
 
     private var readFileRangeLabel: String? {
@@ -104,9 +104,9 @@ struct ToolExecutionMessageView: View {
                 toolExecutionContent
             }
         }
-        .glassEffect(.regular, in: .rect(cornerRadius: 12))
+        .glassEffect(.regular, in: .rect(cornerRadius: AppConstants.Layout.cornerLg))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: AppConstants.Layout.cornerLg)
                 .stroke(.separator.opacity(0.5), lineWidth: 1)
         )
     }
@@ -352,13 +352,11 @@ struct ToolExecutionMessageView: View {
 
     private var fileOperationLabel: String {
         switch displayToolName {
-        case "write_file":
+        case "write", "write_file", "create_file":
             return "Write"
-        case "create_file":
-            return "Create"
-        case "replace_in_file":
+        case "edit", "replace_in_file":
             return "Edit"
-        case "delete_file":
+        case "rm", "delete_file":
             return "Delete"
         default:
             return "File"

@@ -133,7 +133,6 @@ final class ToolLoopEngineRecoveryHarnessTests: XCTestCase {
 
         let result = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "Starting.", toolCalls: [readFoo]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -187,7 +186,6 @@ final class ToolLoopEngineRecoveryHarnessTests: XCTestCase {
                 toolCalls: [validCall],
                 malformedToolCalls: [malformed]
             ),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -242,7 +240,6 @@ final class ToolLoopEngineRecoveryHarnessTests: XCTestCase {
 
         let result = try await handler.handleToolLoopIfNeeded(
             response: AIServiceResponse(content: "Starting.", toolCalls: [readFoo]),
-            explicitContext: nil,
             mode: .agent,
             projectRoot: projectRoot,
             conversationId: conversationId,
@@ -276,8 +273,8 @@ final class ToolLoopEngineRecoveryHarnessTests: XCTestCase {
     }
 
     private func makeHistoryCoordinator(projectRoot: URL) -> ChatHistoryCoordinator {
-        let historyManager = ChatHistoryManager()
-        return ChatHistoryCoordinator(historyManager: historyManager, projectRoot: projectRoot)
+        
+        return ChatHistoryCoordinator(projectRoot: projectRoot)
     }
 
     private func makeTempDir() -> URL {
@@ -287,5 +284,69 @@ final class ToolLoopEngineRecoveryHarnessTests: XCTestCase {
 
     private func cleanup(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
+    }
+
+    // MARK: - Convergence Detection (Phase C / RC6)
+
+    private struct ConvergenceTestReadTool: AITool {
+        let name = "read"
+        let description = "Convergence test read tool"
+        let counter: ExecutionCounter
+        var parameters: [String: Any] { ["type": "object", "properties": [:]] }
+
+        func execute(arguments _: ToolArguments) async throws -> String {
+            await counter.increment()
+            return "file content"
+        }
+    }
+
+    func testConvergenceDetectorFiresAfterExcessiveReadsWithoutMutation() async throws {
+        let projectRoot = makeTempDir()
+        defer { cleanup(projectRoot) }
+
+        let counter = ExecutionCounter()
+        let tool = ConvergenceTestReadTool(counter: counter)
+        let historyCoordinator = makeHistoryCoordinator(projectRoot: projectRoot)
+        let conversationId = historyCoordinator.currentConversationId
+        let runId = UUID().uuidString
+
+        // Generate threshold read-only tool-call responses (just enough to trigger the stall)
+        let threshold = ToolLoopConstants.maxReadsWithoutMutation
+        var responses: [AIServiceResponse] = []
+        for i in 0..<threshold {
+            let readCall = AIToolCall(id: "read-\(i)", name: "read", arguments: ["path": "/file-\(i)"])
+            responses.append(AIServiceResponse(content: "Reading file \(i).", toolCalls: [readCall]))
+        }
+        responses.append(AIServiceResponse(content: "Done.", toolCalls: nil))
+
+        let scriptedService = ScriptedAIService(responses: responses)
+        let aiInteractionCoordinator = AIInteractionCoordinator(aiService: scriptedService, codebaseIndex: nil, eventBus: MockEventBus())
+        let toolExecutor = AIToolExecutor(fileSystemService: FileSystemService(), errorManager: HarnessErrorManager(), projectRoot: projectRoot)
+        let toolExecutionCoordinator = ToolExecutionCoordinator(toolExecutor: toolExecutor)
+        let handler = ToolLoopHandler(
+            historyCoordinator: historyCoordinator,
+            aiInteractionCoordinator: aiInteractionCoordinator,
+            toolExecutionCoordinator: toolExecutionCoordinator
+        )
+
+        let initialRead = AIToolCall(id: "read-init", name: "read", arguments: ["path": "/init"])
+        let result = try await handler.handleToolLoopIfNeeded(
+            response: AIServiceResponse(content: "Starting.", toolCalls: [initialRead]),
+            mode: .agent,
+            projectRoot: projectRoot,
+            conversationId: conversationId,
+            availableTools: [tool],
+            cancelledToolCallIds: { [] },
+            runId: runId,
+            userInput: "Read all files"
+        )
+
+        let execCount = await counter.count
+        // Without convergence detector, the loop would execute all 50 agent iterations.
+        // With the detector it should break after ~threshold reads.
+        harnessTrue(execCount >= threshold, "Should execute at least \(threshold) reads (got \(execCount)")
+        harnessTrue(execCount <= threshold + 3, "Convergence detector should fire after ~\(threshold) reads, not \(execCount)")
+        harnessTrue(result.response.toolCalls?.isEmpty ?? true, "Should finish without dangling tool calls")
+        harnessFalse(result.response.content?.isEmpty ?? true, "Final response should have content")
     }
 }
