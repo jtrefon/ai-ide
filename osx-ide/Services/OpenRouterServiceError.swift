@@ -6,6 +6,7 @@ enum OpenRouterServiceError: LocalizedError {
     case serverError(Int, body: String?)
     case missingAPIKey
     case emptyModel
+    case streamTimeout(StreamLivenessError)
 
     var errorDescription: String? {
         switch self {
@@ -22,6 +23,13 @@ enum OpenRouterServiceError: LocalizedError {
             return "An API key is required."
         case .emptyModel:
             return "Select a model before testing."
+        case .streamTimeout(let kind):
+            switch kind {
+            case .idle:
+                return "OpenRouter stream timed out (idle): no data was received within the idle deadline."
+            case .absolute:
+                return "OpenRouter stream timed out (absolute): the stream exceeded the maximum allowed duration."
+            }
         }
     }
 }

@@ -31,9 +31,10 @@ final class ToolLoopHandler {
         runId: String,
         userInput: String,
         usesLocalModel: Bool = false,
+        alreadyStalled: Bool = false,
         recursionDepth: Int = 0
     ) async throws -> ToolLoopResult {
-        guard mode == .agent || mode == .coder else {
+        guard mode.isAgentic else {
             return ToolLoopResult(response: response, lastToolCalls: [], lastToolResults: [])
         }
 
@@ -69,6 +70,7 @@ final class ToolLoopHandler {
         var previouslyFailedToolCallSignatures: Set<String> = []
         var previouslyCompletedToolCallSignatures: Set<String> = []
         var repeatedCompletedSignatureCount = 0
+        var reachedStall = alreadyStalled
         var hasObservedSuccessfulMutation = false
         var hasObservedSuccessfulDirectRead = false
         var mutatedArtifactPaths: Set<String> = []
@@ -84,13 +86,13 @@ final class ToolLoopHandler {
 
         let maxIterations = if usesLocalModel {
             ToolLoopConstants.maxMLXIterations
-        } else if mode == .agent {
+        } else if mode.isAgentic {
             ToolLoopConstants.maxAgentIterations
         } else {
             ToolLoopConstants.maxNonAgentIterations
         }
 
-        if (mode == .agent || mode == .coder),
+        if (mode.isAgentic),
            currentResponse.toolCalls?.isEmpty ?? true,
            !availableTools.isEmpty,
            shouldForceInitialExecutionFollowup(
@@ -125,7 +127,7 @@ final class ToolLoopHandler {
                 .get()
         }
 
-        if (mode == .agent || mode == .coder),
+        if (mode.isAgentic),
            currentResponse.toolCalls?.isEmpty ?? true,
            !availableTools.isEmpty,
            let content = currentResponse.content {
@@ -221,6 +223,10 @@ final class ToolLoopHandler {
         while let toolCalls = currentResponse.toolCalls,
               !toolCalls.isEmpty,
               toolIteration < maxIterations {
+            // Honor a user-initiated stop (ConversationManager.stopGeneration
+            // cancels the enclosing Task). Throws CancellationError, which the
+            // send coordinator's catch handles as a clean "Generation cancelled".
+            try Task.checkCancellation()
             toolIteration += 1
             clearStreamingBuffer?()
             let uniqueToolCalls = deduplicateToolCalls(toolCalls)
@@ -237,6 +243,7 @@ final class ToolLoopHandler {
                     "iteration": toolIteration,
                     "toolNames": uniqueToolCalls.map(\.name)
                 ])
+                reachedStall = true
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     projectRoot: projectRoot,
                     mode: mode,
@@ -263,7 +270,8 @@ final class ToolLoopHandler {
                    allMutatedArtifactsExist(mutatedArtifactPaths),
                    unavailableToolNames.allSatisfy(isReadOnlyToolName),
                    !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }) {
-                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    reachedStall = true
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -342,7 +350,8 @@ final class ToolLoopHandler {
 
                     let finalizationTools: [AITool]? =
                         hasObservedSuccessfulMutation ? nil : currentTurnTools
-                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    reachedStall = true
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -460,7 +469,8 @@ final class ToolLoopHandler {
                         projectRoot: projectRoot
                    ),
                    !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }) {
-                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    reachedStall = true
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -501,7 +511,8 @@ final class ToolLoopHandler {
                    ),
                    hasObservedMutationVerificationRead,
                    !lastToolResults.contains(where: { $0.isToolExecution && $0.toolStatus == .failed }) {
-                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    reachedStall = true
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -520,6 +531,7 @@ final class ToolLoopHandler {
                     "repeatedReadOnlyBatchCount": repeatedReadOnlyToolBatchCount + 1,
                     "toolCalls": uniqueToolCalls.count
                 ])
+                reachedStall = true
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     projectRoot: projectRoot,
                     mode: mode,
@@ -545,6 +557,7 @@ final class ToolLoopHandler {
                 ])
                 ToolExecutionTelemetry.shared.recordRepeatedBatch()
                 // For repeated batch stall, skip execution transition and go directly to final response
+                reachedStall = true
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     projectRoot: projectRoot,
                     mode: mode,
@@ -563,6 +576,7 @@ final class ToolLoopHandler {
                     "iteration": toolIteration,
                     "duration": Date().timeIntervalSince(loopStartTime)
                 ])
+                reachedStall = true
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     projectRoot: projectRoot,
                     mode: mode,
@@ -583,6 +597,7 @@ final class ToolLoopHandler {
                     "iteration": toolIteration,
                     "consecutiveReadsSinceLastSuccessfulMutation": consecutiveReadsSinceLastSuccessfulMutation
                 ])
+                reachedStall = true
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     projectRoot: projectRoot,
                     mode: mode,
@@ -844,6 +859,7 @@ final class ToolLoopHandler {
                     "iteration": toolIteration,
                     "count": consecutiveNonRecoverableMutationFailureIterations
                 ])
+                reachedStall = true
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     projectRoot: projectRoot,
                     mode: mode,
@@ -878,6 +894,7 @@ final class ToolLoopHandler {
                     consecutivePostMutationNonMutationIterations = 0
                     continue
                 }
+                reachedStall = true
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     projectRoot: projectRoot,
                     mode: mode,
@@ -902,6 +919,7 @@ final class ToolLoopHandler {
                     "runId": runId,
                     "iteration": toolIteration
                 ])
+                reachedStall = true
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     projectRoot: projectRoot,
                     mode: mode,
@@ -1098,6 +1116,7 @@ final class ToolLoopHandler {
                     repeatedNoToolCallContentCount = 0
                     continue
                 }
+                reachedStall = true
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     projectRoot: projectRoot,
                     mode: mode,
@@ -1109,7 +1128,7 @@ final class ToolLoopHandler {
                 break
             }
 
-            if mode == .agent,
+            if mode.isAgentic,
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
                await shouldPreserveNoToolHandoffWithoutIncompletePlan(
@@ -1125,7 +1144,7 @@ final class ToolLoopHandler {
                 break
             }
 
-            if mode == .agent,
+            if mode.isAgentic,
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
                hasObservedSuccessfulMutation,
@@ -1143,7 +1162,7 @@ final class ToolLoopHandler {
                 break
             }
 
-            if mode == .agent,
+            if mode.isAgentic,
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
                hasObservedSuccessfulMutation,
@@ -1159,7 +1178,7 @@ final class ToolLoopHandler {
                 break
             }
 
-            if mode == .agent,
+            if mode.isAgentic,
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
                hasObservedSuccessfulMutation,
@@ -1184,7 +1203,7 @@ final class ToolLoopHandler {
                 break
             }
 
-            if mode == .agent,
+            if mode.isAgentic,
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
                hasObservedSuccessfulMutation,
@@ -1200,7 +1219,7 @@ final class ToolLoopHandler {
                 break
             }
 
-            if mode == .agent,
+            if mode.isAgentic,
                currentResponse.toolCalls?.isEmpty ?? true,
                let content = currentResponse.content,
                !(await shouldPreserveNoToolHandoffWithoutIncompletePlan(
@@ -1225,7 +1244,8 @@ final class ToolLoopHandler {
                     content: content,
                     projectRoot: projectRoot
                  ) {
-                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    reachedStall = true
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -1243,7 +1263,8 @@ final class ToolLoopHandler {
 
                  if isContentWriteRecoverySubset(currentTurnTools, availableTools: availableTools),
                     hasReservedFilePathHint(in: lastToolResults) {
-                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    reachedStall = true
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -1294,7 +1315,8 @@ final class ToolLoopHandler {
                         "repeatedCount": repeatedNoToolCallContentCount + 1,
                         "contentLength": currentResponse.content?.count ?? 0
                     ])
-                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    reachedStall = true
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -1311,7 +1333,7 @@ final class ToolLoopHandler {
                 }
             }
 
-             if mode == .agent || mode == .coder,
+             if mode.isAgentic,
                 currentResponse.toolCalls?.isEmpty ?? true,
                 let content = currentResponse.content,
                 !(await shouldPreserveNoToolHandoffWithoutIncompletePlan(
@@ -1349,7 +1371,8 @@ final class ToolLoopHandler {
                         "repeatedCount": repeatedNoToolCallContentCount + 1,
                         "contentLength": currentResponse.content?.count ?? 0
                     ])
-                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    reachedStall = true
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -1362,7 +1385,7 @@ final class ToolLoopHandler {
                 }
             }
 
-             if mode == .agent || mode == .coder,
+             if mode.isAgentic,
                 currentResponse.toolCalls?.isEmpty ?? true,
                 let content = currentResponse.content,
                 !(await shouldPreserveNoToolHandoffWithoutIncompletePlan(
@@ -1403,7 +1426,8 @@ final class ToolLoopHandler {
                         "repeatedCount": repeatedNoToolCallContentCount + 1,
                         "contentLength": currentResponse.content?.count ?? 0
                     ])
-                    currentResponse = try await requestFinalResponseForStalledToolLoop(
+                    reachedStall = true
+                currentResponse = try await requestFinalResponseForStalledToolLoop(
                         projectRoot: projectRoot,
                         mode: mode,
                         userInput: userInput,
@@ -1425,6 +1449,7 @@ final class ToolLoopHandler {
 
             if consecutiveEmptyToolCallResponses >= ToolLoopConstants.emptyResponseStallThreshold {
                 // For empty response stall, skip execution transition
+                reachedStall = true
                 currentResponse = try await requestFinalResponseForStalledToolLoop(
                     projectRoot: projectRoot,
                     mode: mode,
@@ -1451,16 +1476,15 @@ final class ToolLoopHandler {
         if toolIteration - lastContinuationRecoveryIteration >= 3 {
             lastContinuationRecoveryIteration = toolIteration
             currentResponse = try await requestExecutionRecoveryIfPlanStillIncomplete(
-            currentResponse: currentResponse,
-            mode: mode,
-            projectRoot: projectRoot,
-            conversationId: conversationId,
-            availableTools: currentTurnTools,
-            runId: runId,
-            userInput: userInput,
-            hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
-        )
-
+                currentResponse: currentResponse,
+                mode: mode,
+                projectRoot: projectRoot,
+                conversationId: conversationId,
+                availableTools: currentTurnTools,
+                runId: runId,
+                userInput: userInput,
+                hasObservedSuccessfulMutation: hasObservedSuccessfulMutation
+            )
         }
         if let escalatedContinuationResponse = try await requestEscalatedExecutionRecoveryForRecoveredReadOnlyToolCalls(
             currentResponse: currentResponse,
@@ -1476,6 +1500,7 @@ final class ToolLoopHandler {
 
         if shouldResumeRecoveredExecution(from: currentResponse),
            recursionDepth < Self.maxRecursionDepth,
+           !reachedStall,
            !(hasObservedSuccessfulMutation && !hasOutstandingRequestedArtifacts(
                 userInput: userInput,
                 projectRoot: projectRoot
@@ -1490,6 +1515,7 @@ final class ToolLoopHandler {
                 runId: runId,
                 userInput: userInput,
                 usesLocalModel: usesLocalModel,
+                alreadyStalled: reachedStall,
                 recursionDepth: recursionDepth + 1
             )
 
@@ -1740,7 +1766,7 @@ final class ToolLoopHandler {
         // Add nudge after consecutive read-only tool iterations
         if consecutiveReadOnlyIterations >= ToolLoopConstants.readOnlyIterationNudgeThreshold {
             content += "\n\nIMPORTANT: You have made \(consecutiveReadOnlyIterations) consecutive read-only tool calls. " +
-                "If the task requires changes to files, transition to execution now using write_file, replace_in_file, or run_command. " +
+                "If the task requires changes to files, transition to execution now using write, edit, or bash. " +
                 "Do not continue gathering context if you have enough information to proceed."
         }
         
@@ -1839,62 +1865,23 @@ final class ToolLoopHandler {
     }
 
     private var readOnlyLoopToolNames: Set<String> {
-        MutationTools.readOnlyNames.union([
-            "list_files",
-            "read_file",
-            "index_read_file",
-            "index_find_files",
-            "index_list_files",
-            "index_list_symbols",
-            "index_search_text",
-            "index_search_symbols",
-            "index_list_memories"
-        ])
+        MutationTools.readOnlyNames
     }
 
     private var mutationRecoveryToolNames: Set<String> {
-        [
-            "read_file",
-            "write_file",
-            "write_files",
-            "create_file",
-            "delete_file",
-            "replace_in_file"
-        ]
+        Set(["read"]).union(MutationTools.mutationNames)
     }
 
     private var contentWriteRecoveryToolNames: Set<String> {
-        [
-            "read_file",
-            "index_read_file",
-            "create_file",
-            "write_file",
-            "write_files",
-            "replace_in_file",
-            "delete_file"
-        ]
+        MutationTools.contentWriteNames
     }
 
     private var failedDirectReadRecoveryToolNames: Set<String> {
-        [
-            "list_files",
-            "read_file",
-            "write_file",
-            "write_files",
-            "create_file",
-            "delete_file",
-            "replace_in_file"
-        ]
+        MutationTools.readOnlyNames.union(MutationTools.mutationNames)
     }
 
     private var mutationOnlyToolNames: Set<String> {
-        [
-            "write_file",
-            "write_files",
-            "create_file",
-            "delete_file",
-            "replace_in_file"
-        ]
+        MutationTools.mutationNames
     }
 
     private func mutationRecoveryTools(from availableTools: [AITool]) -> [AITool] {
@@ -1915,7 +1902,7 @@ final class ToolLoopHandler {
     private func strictMutationExecutionTools(from availableTools: [AITool]) -> [AITool] {
         let preferredTools = mutationOnlyTools(from: availableTools)
         if preferredTools.isEmpty {
-        return availableTools.filter { !readOnlyLoopToolNames.contains($0.name) || $0.name.hasPrefix("index_") }
+            return availableTools.filter { !MutationTools.isReadOnly($0.name) }
         }
         return preferredTools
     }
@@ -2238,7 +2225,7 @@ final class ToolLoopHandler {
         let toolSummary = ToolLoopUtilities.toolResultsSummaryText(toolResults)
 
         // If we have execution tools available, try to force execution transition first
-        if let availableTools, mode == .agent, let conversationId {
+        if let availableTools, mode.isAgentic, let conversationId {
             let executionTools: [AITool]
             let availableToolNames = Set(availableTools.map(\.name))
             if !availableToolNames.isEmpty,
@@ -2322,7 +2309,7 @@ final class ToolLoopHandler {
             historyMessages: historyCoordinator.requestMessages
         )
 
-        let followupMode: AIMode = (mode == .agent) ? .agent : .chat
+        let followupMode: AIMode = mode
         // Guard against the finalization request throwing (e.g. the model
         // returns an empty response and retries are exhausted). Without this,
         // the whole run fails with no answer. Degrade to the deterministic
@@ -2674,7 +2661,7 @@ final class ToolLoopHandler {
         userInput: String,
         hasObservedSuccessfulMutation: Bool
     ) async throws -> AIServiceResponse {
-        guard mode == .agent else { return currentResponse }
+        guard mode.isAgentic else { return currentResponse }
         guard currentResponse.toolCalls?.isEmpty ?? true else { return currentResponse }
         guard !availableTools.isEmpty else { return currentResponse }
 
@@ -2747,7 +2734,7 @@ final class ToolLoopHandler {
         userInput: String,
         hasObservedSuccessfulMutation: Bool
     ) async throws -> AIServiceResponse {
-        guard mode == .agent else { return currentResponse }
+        guard mode.isAgentic else { return currentResponse }
         guard currentResponse.toolCalls?.isEmpty ?? true else { return currentResponse }
         guard !availableTools.isEmpty else { return currentResponse }
 

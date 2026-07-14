@@ -6,10 +6,18 @@
 - query (required, string): What you need to recall. Be specific about the topic, file, or decision.
 - max_results (optional, integer): Max results to return (1-10, default 5).
 
-**Expected output:** Ranked snippets from prior work with source references and timestamps.
+**Expected output:** Plain text. Optionally a `session context:` block (plan progress, files read this session), then `status:`, `message:`, and a `content:` block listing `items:` as indented `- result N:` entries, each with `source:` and `text:` (truncated to ~500 chars). When nothing matches, `content: items: []`.
+Example:
+```
 status: success
-content.items: [{text, source, timestamp, relevance}, ...]
-message: "Found N relevant results"
+message: Found 2 relevant result(s).
+content:
+  items:
+    - result 1:
+      source: src/App.tsx
+      text: The App component renders the todo list and...
+```
+Read the text directly. The actual fields are `source` and `text` (there is no `timestamp` or `relevance` field, and no nested JSON `content.items` array).
 
 **Recovery:**
 - No results: Try a different query — use more specific terms or keywords from the prior work.

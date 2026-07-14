@@ -24,7 +24,7 @@ struct EditorTabBar: View {
                     Spacer(minLength: 0)
                 }
                 .frame(height: AppConstants.Layout.headerHeight)
-                .background(.thinMaterial)
+                .nativeGlassBackground(.header, cornerRadius: 0)
             } else {
                 HStack(spacing: spacing) {
                     ForEach(tabs) { tab in
@@ -45,7 +45,7 @@ struct EditorTabBar: View {
                 .padding(.horizontal, 4)
                 .padding(.vertical, 3)
                 .frame(height: AppConstants.Layout.headerHeight)
-                .background(.thinMaterial)
+                .nativeGlassBackground(.header, cornerRadius: 0)
             }
 
             Rectangle()

@@ -30,7 +30,7 @@ struct EmptyResponseRecoveryNode: OrchestrationNode {
         var nextState = state.transitioning(
             to: nextNodeId,
             response: AIServiceResponse(
-                content: "I wasn't able to generate a final response. Please retry or clarify the next step.",
+                content: "Your previous turn produced no response. Per your operating contract, end the turn with either a tool call or a short Reflection (what you produced, what remains against the request, next action) and a `Delivery: done|needs_work` state — then continue. What is the next concrete action toward the requested deliverables?",
                 toolCalls: nil
             )
         )

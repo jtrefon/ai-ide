@@ -6,6 +6,11 @@
 - path (optional, string): Directory to list. Defaults to current directory.
 - filter (optional, string): Case-insensitive name substring filter.
 
-**Expected output:** Entries with name, full path, and type (file/directory).
-status: success
-content.items: [{name, path, type}, ...]
+**Expected output:** Plain text, one entry per line — the name of each file or directory (with ` (excluded)` appended when filtered out). For full paths use `glob`.
+Example:
+```
+src
+index.html
+package.json (excluded)
+```
+Read the list directly from the text. There is no nested JSON `content.items` field.

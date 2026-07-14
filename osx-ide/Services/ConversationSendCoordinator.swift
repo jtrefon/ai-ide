@@ -60,7 +60,10 @@ final class ConversationSendCoordinator {
                 "messageCount": historyCoordinator.messages.count
             ])
         )
-        
+
+        // §7: Inject recovery context if previous turn was interrupted (e.g. network error)
+        await injectRecoveryContextIfNeeded(request: request)
+
         let flowStartTime = ContinuousClock.now
         let response = try await executeConversationFlow(request)
         let flowDuration = flowStartTime.duration(to: ContinuousClock.now)
@@ -285,5 +288,53 @@ final class ConversationSendCoordinator {
         historyCoordinator.compact(
             summary: "Earlier turns compacted to conserve context. Use context(query:) for details."
         )
+    }
+
+    // MARK: - Recovery Context (Context Access Layer §7)
+
+    /// Detects whether the previous turn was interrupted (e.g. network error or crash)
+    /// and injects a recovery system message so the model can resume with context.
+    private func injectRecoveryContextIfNeeded(request: SendRequest) async {
+        let messages = historyCoordinator.messages
+        guard messages.count >= 2 else { return }
+
+        let lastUser = messages.last(where: { $0.role == .user })
+        let lastAssistant = messages.last(where: { $0.role == .assistant })
+
+        guard let lastUser, let lastAssistant else { return }
+
+        // Detect interruption: last assistant has no completion content AND
+        // the user message is a brief continuation ("continue", "go on", etc.)
+        let isBriefContinuation = lastUser.content.trimmingCharacters(in: .whitespacesAndNewlines).count < 30
+            && !lastUser.content.contains("implement")
+            && !lastUser.content.contains("write")
+            && !lastUser.content.contains("create")
+            && !lastUser.content.contains("fix")
+            && !lastUser.content.contains("refactor")
+
+        let assistantSeemsIncomplete = lastAssistant.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || (!lastAssistant.content.contains("done")
+                && !lastAssistant.content.contains("completed")
+                && !lastAssistant.content.contains("finished")
+                && !lastAssistant.content.contains("implemented")
+                && !lastAssistant.content.contains("summary"))
+
+        guard isBriefContinuation || assistantSeemsIncomplete else { return }
+
+        // Build recovery context
+        var context = "[Recovery: The previous response was interrupted. You are in \(request.mode.rawValue) mode."
+
+        if let plan = await ConversationPlanStore.shared.get(conversationId: request.conversationId) {
+            let progress = PlanChecklistTracker.progress(in: plan)
+            if progress.total > 0 {
+                context += " Plan progress: \(progress.completed)/\(progress.total) tasks complete."
+            }
+        }
+
+        context += " Continue working on the original request. Do not restart from scratch — pick up where you left off.]"
+
+        // Inject recovery context as a system message (appended before tool loop starts)
+        let recoveryMsg = ChatMessage(role: .system, content: context)
+        historyCoordinator.append(recoveryMsg)
     }
 }

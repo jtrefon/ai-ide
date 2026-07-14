@@ -103,3 +103,119 @@ enum ToolOutputArchive {
         return file.path
     }
 }
+
+// MARK: - Log Summarizer (Context Access Layer L4)
+
+/// Parses compile/test log output into a concise structured summary without
+/// requiring a local MLX model. Handles TypeScript, Swift, Jest, and general
+/// compiler/formatter output.
+enum LogSummarizer {
+    struct Summary: Equatable, Sendable {
+        let brief: String
+        let errorCount: Int
+        let warningCount: Int
+        let isLogOutput: Bool
+    }
+
+    private static let errorPatterns: [(pattern: String, isError: Bool)] = [
+        // Any line containing "error" or "Error" (common in compile/test output)
+        (pattern: #"^(.*\berror\b|.*\bError\b)"#, isError: true),
+        // Jest FAIL
+        (pattern: #"^(FAIL)\s"#, isError: true),
+        // Any line containing "warning" or "Warning"
+        (pattern: #"^(.*\bwarning\b|.*\bWarning\b)"#, isError: false),
+        // Error indicator symbols
+        (pattern: #"^\s+\^[~]+\^"#, isError: false),
+    ]
+
+    static func summarize(_ text: String) -> Summary {
+        let lines = text.components(separatedBy: .newlines)
+        var errors: [String] = []
+        var warnings: [String] = []
+        var captureNext = false
+        var pendingError: String?
+
+        // First pass: detect if this looks like a build/test log
+        let likelyLog = text.contains("error")
+            || text.contains("Error")
+            || text.contains("FAIL ")
+            || text.contains("warning")
+            || text.contains("Warning")
+            || text.contains("✓")   // Jest pass marker
+            || text.contains("✕")   // Jest fail marker
+            || text.contains("PASS ")
+            || text.contains("Tests:")
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if captureNext, let pending = pendingError {
+                errors.append(pending + " → " + trimmed.prefix(120))
+                captureNext = false
+                pendingError = nil
+                continue
+            }
+
+            var matched = false
+            for (pattern, isError) in errorPatterns {
+                guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]),
+                      regex.firstMatch(in: trimmed, options: [], range: NSRange(trimmed.startIndex..<trimmed.endIndex, in: trimmed)) != nil else {
+                    continue
+                }
+                matched = true
+                let entry = String(trimmed.prefix(200))
+                if isError {
+                    errors.append(entry)
+                } else {
+                    warnings.append(entry)
+                }
+                // If it ends with ":" or is a file:line reference, the next line may be the message
+                if trimmed.hasSuffix(":") || trimmed.contains("error ") {
+                    pendingError = entry
+                    captureNext = true
+                }
+                break
+            }
+
+            if !matched && captureNext {
+                captureNext = false
+                pendingError = nil
+            }
+        }
+
+        // Deduplicate
+        errors = Array(Set(errors)).sorted()
+        warnings = Array(Set(warnings)).sorted()
+
+        // Build brief
+        var briefParts: [String] = []
+        if errors.count > 0 {
+            let maxShow = 5
+            let shown = Array(errors.prefix(maxShow))
+            briefParts.append("errors (\(errors.count) total):")
+            for e in shown {
+                briefParts.append("  " + e.prefix(160))
+            }
+            if errors.count > maxShow {
+                briefParts.append("  ... and \(errors.count - maxShow) more errors")
+            }
+        }
+        if warnings.count > 0 {
+            briefParts.append("warnings: \(warnings.count)")
+        }
+
+        if briefParts.isEmpty {
+            if likelyLog {
+                return Summary(brief: "(log output, no errors detected)", errorCount: 0, warningCount: 0, isLogOutput: true)
+            }
+            return Summary(brief: "", errorCount: 0, warningCount: 0, isLogOutput: false)
+        }
+
+        return Summary(
+            brief: briefParts.joined(separator: "\n"),
+            errorCount: errors.count,
+            warningCount: warnings.count,
+            isLogOutput: true
+        )
+    }
+}

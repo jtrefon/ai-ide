@@ -134,7 +134,7 @@ final class InitialResponseHandler {
         runId: String,
         conversationId: String
     ) async throws -> Bool {
-        guard mode == .agent,
+        guard mode.isAgentic,
               response.toolCalls?.isEmpty ?? true,
               !availableTools.isEmpty else {
             return false

@@ -53,8 +53,7 @@ struct NavigationLocationsOverlayView: View {
             .frame(minWidth: AppConstants.Overlay.wideListMinWidth, minHeight: AppConstants.Overlay.wideListMinHeight)
         }
         .padding(AppConstants.Overlay.containerPadding)
-        .background(.regularMaterial)
-        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
+        .nativeGlassBackground(.popover, cornerRadius: AppConstants.Overlay.containerCornerRadius)
         .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onExitCommand {
             close()

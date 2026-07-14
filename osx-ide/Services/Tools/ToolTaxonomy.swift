@@ -6,7 +6,9 @@ enum ToolTaxonomy {
         "ls",
         "glob",
         "search",
-        "context"
+        "context",
+        "web_search",
+        "web_fetch"
     ]
 
     static let mutation: Set<String> = [

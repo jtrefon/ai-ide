@@ -120,6 +120,29 @@ final class FullToolChainHarnessTest: XCTestCase {
         print("[HARNESS] Tools used: \(tools)")
     }
 
+    /// Regression test for the immutable-context bug: in `.chat` mode the agent
+    /// investigates (read-only) and proposes an architecture. Finalization must
+    /// never wipe the streamed answer and replace it with the deterministic
+    /// "I could not complete this task" fallback.
+    func testChatModeFinalAnswerNotWiped() async throws {
+        manager.currentMode = .chat
+        print("[HARNESS] Test: chat mode final answer preservation")
+        let timedOut = try await send("Explore this project and propose a proper architecture for adding user-assignable todo tasks. Present your full proposal.")
+        XCTAssertFalse(timedOut, "Should complete without timeout")
+
+        let final = manager.messages.last(where: { $0.role == .assistant && !$0.isDraft })
+        let content = final?.content ?? ""
+        print("[HARNESS] Final answer length: \(content.count)")
+        print("[HARNESS] Final answer: \(content.prefix(600))")
+
+        XCTAssertFalse(content.isEmpty, "Final answer must not be empty (streamed draft wiped)")
+        XCTAssertFalse(
+            content.contains("I could not complete this task"),
+            "Final answer must not be the deterministic fallback that wiped the real proposal"
+        )
+        XCTAssertGreaterThan(content.count, 80, "Final answer should be a substantive proposal, got: \(content.prefix(200))")
+    }
+
     // MARK: - Helpers
 
     @discardableResult

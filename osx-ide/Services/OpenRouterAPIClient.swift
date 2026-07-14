@@ -1,5 +1,88 @@
 import Foundation
 
+/// Why this exists: `URLSession.bytes(for:)` + `bytes.lines` has **no** stream-level
+/// deadline. If a server sends SSE keep-alive comments (`: ping`) but never delivers
+/// `[DONE]`, the consumption loop hangs forever (the keep-alives keep the connection
+/// "active" so `timeoutIntervalForRequest` never fires). This wrapper enforces two
+/// independent, cancellable deadlines and fails the stream with `StreamLivenessError`
+/// so the caller's retry/backoff path can recover instead of stalling indefinitely.
+enum StreamLivenessError: Error {
+    /// No *meaningful* (non-comment) SSE line received for longer than `idle`.
+    case idle
+    /// The whole stream exceeded `absolute` regardless of activity.
+    case absolute
+}
+
+/// Tracks the last *meaningful* (non-comment) SSE line time so the concurrent
+/// reader/watcher tasks can share it safely.
+private actor LivenessClock {
+    var last: ContinuousClock.Instant
+    init(_ start: ContinuousClock.Instant) { self.last = start }
+    func mark() { last = .now }
+    func idleElapsed(now: ContinuousClock.Instant) -> Duration { last.duration(to: now) }
+}
+
+struct SSEStreamDeadline: Sendable {
+    let idle: Duration
+    let absolute: Duration
+    let granularity: Duration
+
+    /// Defaults are env-overridable (seconds) and fall back to safe production values.
+    static func `default`() -> SSEStreamDeadline {
+        let env = ProcessInfo.processInfo.environment
+        let idleSec = env["OSXIDE_STREAM_IDLE_TIMEOUT_SEC"].flatMap(TimeInterval.init) ?? 120
+        let absSec = env["OSXIDE_STREAM_ABSOLUTE_TIMEOUT_SEC"].flatMap(TimeInterval.init) ?? 600
+        return SSEStreamDeadline(
+            idle: .nanoseconds(Int((idleSec * 1_000_000_000).rounded())),
+            absolute: .nanoseconds(Int((absSec * 1_000_000_000).rounded())),
+            granularity: .nanoseconds(1_000_000_000)
+        )
+    }
+
+    /// Returns an async throwing stream of the raw SSE lines from `bytes`. The stream
+    /// fails with `StreamLivenessError` if either deadline is breached. SSE keep-alive
+    /// comments (`:`) are treated as connection activity but do **not** reset the idle
+    /// timer — only real `data:` lines count as meaningful progress.
+    func lines(from bytes: URLSession.AsyncBytes) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let start = ContinuousClock.now
+            let clock = LivenessClock(start)
+            let reader = Task {
+                do {
+                    for try await line in bytes.lines {
+                        continuation.yield(line)
+                        if !line.trimmingCharacters(in: .newlines).hasPrefix(":") {
+                            await clock.mark()
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            let watcher = Task {
+                while true {
+                    try? await Task.sleep(for: granularity)
+                    if Task.isCancelled { return }
+                    let now = ContinuousClock.now
+                    if start.duration(to: now) >= absolute {
+                        continuation.finish(throwing: StreamLivenessError.absolute)
+                        return
+                    }
+                    if await clock.idleElapsed(now: now) >= idle {
+                        continuation.finish(throwing: StreamLivenessError.idle)
+                        return
+                    }
+                }
+            }
+            continuation.onTermination = { _ in
+                reader.cancel()
+                watcher.cancel()
+            }
+        }
+    }
+}
+
 actor OpenRouterAPIClient {
     struct RequestContext: Sendable {
         let baseURL: String
@@ -113,6 +196,13 @@ actor OpenRouterAPIClient {
         return Date().timeIntervalSince(startTime)
     }
 
+    /// Non-streaming chat completion with transparent transport-level retry.
+    ///
+    /// Connection failures (TCP/TLS drops, offline, timeouts) and HTTP 200
+    /// responses with an empty/truncated body are retried on a fresh connection
+    /// before this method returns. HTTP error statuses (auth, rate-limit, 5xx)
+    /// are semantic and surfaced immediately. The caller — and therefore the
+    /// agent — only ever observes a valid payload or a definitive failure.
     func chatCompletion(
         apiKey: String,
         context: RequestContext,
@@ -126,22 +216,100 @@ actor OpenRouterAPIClient {
             body: body
         ))
 
-        let (data, response) = try await urlSession.data(for: request)
-        let status = try httpStatus(from: response)
-        guard status == 200 else {
-            let body = String(data: data, encoding: .utf8)
-            throw OpenRouterServiceError.serverError(status, body: body)
+        let maxAttempts = TransportRetryConfig.maxAttempts
+        var lastConnectionError: Error?
+
+        for attempt in 0..<maxAttempts {
+            do {
+                let (data, response) = try await urlSession.data(for: request)
+                let status = try httpStatus(from: response)
+                guard status == 200 else {
+                    let body = String(data: data, encoding: .utf8)
+                    throw OpenRouterServiceError.serverError(status, body: body)
+                }
+                if !data.isEmpty {
+                    return data
+                }
+                // HTTP 200 but no body: a dropped/truncated response at the
+                // transport layer. Retry transparently.
+                lastConnectionError = nil
+            } catch {
+                if !Self.isTransportRetryable(error) {
+                    throw error
+                }
+                lastConnectionError = error
+            }
+
+            if attempt < maxAttempts - 1 {
+                try await TransportRetryConfig.backoff(attempt: attempt)
+            }
         }
-        return data
+
+        if let error = lastConnectionError {
+            throw error
+        }
+        throw OpenRouterServiceError.invalidResponse
     }
 
-    /// Streaming chat completion using SSE (Server-Sent Events)
+    /// Streaming chat completion with transparent transport-level retry.
+    ///
+    /// A connection drop, stream stall, or an HTTP 200 stream that closes having
+    /// delivered zero content is retried on a fresh connection — entirely below
+    /// the agent. Once any real content has been delivered to `onChunk`, retries
+    /// stop and the stream is left to the coordinator for resumption. If every
+    /// attempt delivers zero content (a genuinely empty model response), this
+    /// returns normally so the coordinator can apply its empty-response correction;
+    /// if every attempt is a connection failure, the last error is thrown so the
+    /// coordinator can show its network-offline banner.
     func chatCompletionStreaming(
         apiKey: String,
         context: RequestContext,
         body: Data,
         onChunk: @escaping @Sendable (String) -> Void
     ) async throws {
+        let maxAttempts = TransportRetryConfig.maxAttempts
+        var lastConnectionError: Error?
+
+        for attempt in 0..<maxAttempts {
+            do {
+                let delivered = try await performStreamingAttempt(
+                    apiKey: apiKey,
+                    context: context,
+                    body: body,
+                    onChunk: onChunk
+                )
+                if delivered {
+                    return
+                }
+                // Stream connected and closed but delivered no content: a
+                // truncated/dropped response. Retry transparently.
+                lastConnectionError = nil
+            } catch let StreamAttemptError.retryable(underlying) {
+                lastConnectionError = underlying
+            } catch let StreamAttemptError.definitive(underlying) {
+                throw underlying
+            }
+
+            if attempt < maxAttempts - 1 {
+                try await TransportRetryConfig.backoff(attempt: attempt)
+            }
+        }
+
+        if let error = lastConnectionError {
+            throw error
+        }
+    }
+
+    /// A single streaming attempt. Returns `true` if any content was delivered to
+    /// `onChunk`. Connection/stall failures before content are surfaced as
+    /// `StreamAttemptError.retryable`; semantic HTTP errors and stalls after
+    /// content are `StreamAttemptError.definitive` (not retried here).
+    private func performStreamingAttempt(
+        apiKey: String,
+        context: RequestContext,
+        body: Data,
+        onChunk: @escaping @Sendable (String) -> Void
+    ) async throws -> Bool {
         var request = try makeStreamingRequest(Request(
             path: "chat/completions",
             method: "POST",
@@ -149,54 +317,133 @@ actor OpenRouterAPIClient {
             context: context,
             body: body
         ))
-
-        // Set Accept header for SSE
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 
-        let (bytes, response) = try await urlSession.bytes(for: request)
-        let status = try httpStatus(from: response)
-        guard status == 200 else {
-            // Read error body
-            var errorData = Data()
-            for try await byte in bytes {
-                errorData.append(byte)
-            }
-            let errorBody = String(data: errorData, encoding: .utf8)
-            throw OpenRouterServiceError.serverError(status, body: errorBody)
-        }
+        let deadline = SSEStreamDeadline.default()
 
-        // Parse SSE stream, allowing one event payload to span multiple `data:` lines.
-        var eventDataLines: [String] = []
-
-        func flushEvent() {
-            guard !eventDataLines.isEmpty else { return }
-            onChunk(eventDataLines.joined(separator: "\n"))
-            eventDataLines.removeAll(keepingCapacity: true)
-        }
-
-        for try await line in bytes.lines {
-            let rawLine = line.trimmingCharacters(in: .newlines)
-            if rawLine.isEmpty {
-                flushEvent()
-                continue
-            }
-            if rawLine.hasPrefix(":") {
-                continue
-            }
-            if rawLine.hasPrefix("data:") {
-                var dataPart = String(rawLine.dropFirst(5))
-                if dataPart.hasPrefix(" ") {
-                    dataPart.removeFirst()
+        do {
+            let (bytes, response) = try await urlSession.bytes(for: request)
+            let status = try httpStatus(from: response)
+            guard status == 200 else {
+                var errorData = Data()
+                for try await byte in bytes {
+                    errorData.append(byte)
                 }
-                if dataPart == "[DONE]" {
-                    flushEvent()
-                    break
-                }
-                eventDataLines.append(dataPart)
+                let errorBody = String(data: errorData, encoding: .utf8)
+                throw StreamAttemptError.definitive(
+                    OpenRouterServiceError.serverError(status, body: errorBody))
             }
+
+            var eventDataLines: [String] = []
+            var deliveredContent = false
+
+            func flushEvent() {
+                guard !eventDataLines.isEmpty else { return }
+                onChunk(eventDataLines.joined(separator: "\n"))
+                deliveredContent = true
+                eventDataLines.removeAll(keepingCapacity: true)
+            }
+
+            do {
+                for try await line in deadline.lines(from: bytes) {
+                    let rawLine = line.trimmingCharacters(in: .newlines)
+                    if rawLine.isEmpty {
+                        flushEvent()
+                        continue
+                    }
+                    if rawLine.hasPrefix(":") {
+                        continue
+                    }
+                    if rawLine.hasPrefix("data:") {
+                        var dataPart = String(rawLine.dropFirst(5))
+                        if dataPart.hasPrefix(" ") {
+                            dataPart.removeFirst()
+                        }
+                        if dataPart == "[DONE]" {
+                            flushEvent()
+                            break
+                        }
+                        eventDataLines.append(dataPart)
+                    }
+                }
+            } catch let error as StreamLivenessError {
+                // A stall is a server/protocol-side issue: the connection is still
+                // alive and ACKing SSE keep-alives, so it is not a transport drop.
+                // Surface it definitively so the coordinator can resume — never
+                // transparently retry, which would open a redundant connection to a
+                // stuck server (and defeat the stall-detection harness test).
+                throw StreamAttemptError.definitive(
+                    OpenRouterServiceError.streamTimeout(error))
+            } catch {
+                throw deliveredContent
+                    ? StreamAttemptError.definitive(error)
+                    : StreamAttemptError.retryable(error)
+            }
+
+            flushEvent()
+            return deliveredContent
+        } catch let sae as StreamAttemptError {
+            throw sae
+        } catch {
+            // urlSession.bytes(for:) threw before any content: a transport drop.
+            throw StreamAttemptError.retryable(error)
+        }
+    }
+
+    /// Distinguishes a transport failure we may transparently retry (`retryable`,
+    /// no content delivered yet) from a definitive failure that must propagate to
+    /// the coordinator (`definitive`).
+    private enum StreamAttemptError: Error {
+        case retryable(Error)
+        case definitive(Error)
+    }
+
+    /// Transparent transport-retry policy. Connection drops, stalls, and
+    /// empty/truncated bodies are retried on a fresh connection with escalating
+    /// backoff. Configurable via environment for debugging/tests.
+    private enum TransportRetryConfig {
+        static var maxAttempts: Int {
+            Int(ProcessInfo.processInfo.environment["OSXIDE_TRANSPORT_RETRY_ATTEMPTS"] ?? "") ?? 4
         }
 
-        flushEvent()
+        static var baseDelay: TimeInterval {
+            TimeInterval(ProcessInfo.processInfo.environment["OSXIDE_TRANSPORT_RETRY_BASE_SEC"] ?? "") ?? 0.5
+        }
+
+        static var maxDelay: TimeInterval {
+            TimeInterval(ProcessInfo.processInfo.environment["OSXIDE_TRANSPORT_RETRY_MAX_SEC"] ?? "") ?? 8.0
+        }
+
+        static func backoff(attempt: Int) async throws {
+            let delay = min(baseDelay * pow(2.0, Double(attempt)), maxDelay)
+            if delay > 0 {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+        }
+    }
+
+    private static func isTransportRetryable(_ error: Error) -> Bool {
+        if let server = error as? OpenRouterServiceError {
+            switch server {
+            case .serverError, .invalidResponse, .invalidURL, .missingAPIKey, .emptyModel:
+                return false
+            case .streamTimeout:
+                return true
+            }
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost, .timedOut,
+                 .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed,
+                 .resourceUnavailable, .dataNotAllowed, .internationalRoamingOff,
+                 .callIsActive, .secureConnectionFailed,
+                 .backgroundSessionWasDisconnected:
+                return true
+            default:
+                return false
+            }
+        }
+        return false
     }
 
     func fetchKiloBalance(

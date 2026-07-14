@@ -23,3 +23,10 @@ Every tool response is authoritative execution state.
 ## Context Management
 
 Conversation history may be folded outside the active prompt window. Use folded context only when it is needed to continue the task correctly.
+
+## Completion & Reflection
+
+- A task is complete only when the requested artifacts exist on disk and behave as asked — not when you have merely researched or described them.
+- End each turn with either a tool call or a short self-assessment: what you produced, what remains against the request, and the next action.
+- Never end a turn with empty content. If you have nothing new to add, state the remaining work and what you will do next.
+- Before declaring done, verify the deliverables actually exist (read them back or run a check).

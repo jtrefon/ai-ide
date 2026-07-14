@@ -118,6 +118,7 @@ public final class CoreMLTextEmbeddingGenerator: MemoryEmbeddingGenerating {
             for j in 0..<dim { pooled[j] /= tokenCount }
         }
 
+        normalizeInPlace(&pooled)
         return pooled
     }
 
@@ -144,31 +145,7 @@ public final class CoreMLTextEmbeddingGenerator: MemoryEmbeddingGenerating {
         return mask
     }
 
-    private func meanPool(_ output: MLMultiArray, attentionMask: [Int32]) -> [Float] {
-        let seqLen = output.shape[1].intValue
-        let dim = output.shape[2].intValue
-        var pooled = [Float](repeating: 0, count: dim)
-        var tokenCount: Float = 0
-
-        for t in 0..<seqLen {
-            guard t < attentionMask.count, attentionMask[t] != 0 else { continue }
-            tokenCount += 1
-            for d in 0..<dim {
-                let offset = [0, t, d] as [NSNumber]
-                pooled[d] += output[offset].floatValue
-            }
-        }
-
-        guard tokenCount > 0 else { return pooled }
-        for d in 0..<dim {
-            pooled[d] /= tokenCount
-        }
-
-        normalizeInPlace(&pooled)
-        return pooled
-    }
-
-    private func normalizeInPlace(_ vector: inout [Float]) {
+    private static func normalizeInPlace(_ vector: inout [Float]) {
         let sumSquares = vector.reduce(Float(0)) { $0 + $1 * $1 }
         guard sumSquares > 0 else { return }
         let norm = sqrt(sumSquares)

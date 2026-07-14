@@ -51,10 +51,8 @@ struct RenameSymbolOverlayView: View {
                 }
                 .keyboardShortcut(.defaultAction)
             }
-        }
         .padding(AppConstants.Overlay.containerPadding)
-        .background(.regularMaterial)
-        .cornerRadius(AppConstants.Overlay.containerCornerRadius)
+        .nativeGlassBackground(.popover, cornerRadius: AppConstants.Overlay.containerCornerRadius)
         .shadow(radius: AppConstants.Overlay.containerShadowRadius)
         .onAppear {
             newName = appState.renameSymbolIdentifier
@@ -65,6 +63,7 @@ struct RenameSymbolOverlayView: View {
         }
         .onExitCommand {
             close()
+        }
         }
     }
 

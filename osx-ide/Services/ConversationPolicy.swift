@@ -23,8 +23,8 @@ final class ConversationPolicy: ConversationPolicyProtocol {
         // First filter by mode
         let modeAllowedTools = mode.allowedTools(from: availableTools)
         
-        // Then filter by stage if in agent mode
-        guard mode == .agent, let stage = stage else {
+        // Then filter by stage if the mode runs the agent loop
+        guard mode.isAgentic, let stage = stage else {
             return modeAllowedTools
         }
         

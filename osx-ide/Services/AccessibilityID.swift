@@ -9,6 +9,7 @@ enum AccessibilityID {
     static let aiChatPanel = "AIChatPanel"
     static let aiChatInputTextView = "AIChatInputTextView"
     static let aiChatSendButton = "AIChatSendButton"
+    static let aiChatStopButton = "AIChatStopButton"
     static let aiChatNewConversationButton = "AIChatNewConversationButton"
     static let aiChatProviderIssueBanner = "AIChatProviderIssueBanner"
 

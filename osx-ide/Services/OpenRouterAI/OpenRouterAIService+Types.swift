@@ -10,6 +10,7 @@ extension OpenRouterAIService {
         let reasoningMode: ReasoningMode
         let stage: AIRequestStage?
         let useNativeReasoning: Bool
+        let repoMap: String?
     }
 
     struct NativeReasoningConfiguration: Equatable, Sendable {

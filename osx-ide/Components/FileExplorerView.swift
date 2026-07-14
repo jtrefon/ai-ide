@@ -38,7 +38,7 @@ struct FileExplorerView<Context: IDEContext & ObservableObject>: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
-                .background(.regularMaterial)
+                .nativeGlassBackground(.header)
             }
 
             // File tree

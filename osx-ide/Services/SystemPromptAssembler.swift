@@ -11,10 +11,16 @@ struct SystemPromptAssembler {
         let stage: AIRequestStage?
         let includeModelReasoning: Bool
         let pinnedRules: [String]
+        let repoMap: String?  // Context Access Layer L5a — condensed symbol map
     }
 
     func assemble(input: Input) throws -> String {
         var sections: [String] = []
+
+        // L5a: Repo-map — condensed project symbol overview for agent mode
+        if let repoMap = input.repoMap, !repoMap.isEmpty, input.mode == .agent || input.mode == .coder {
+            sections.append(repoMap)
+        }
 
         if !input.pinnedRules.isEmpty {
             sections.append("PINNED RULES (always follow, non-negotiable):\n" + input.pinnedRules.enumerated().map { i, rule in

@@ -11,9 +11,26 @@ final class GoogleWebSearchEngine {
     private var session: WebKitSession?
     private var lastUsed: Date = .distantPast
 
+    /// Serializes navigations against the single shared `WebKitSession`.
+    /// Concurrent `web_search` calls would otherwise overwrite the session's
+    /// `pendingResult` and re-issue `webView.load`, causing WKWebView to cancel
+    /// the in-flight navigation (NSURLErrorCancelled / -999) across all of them.
+    private var navigationChain: Task<String, Error>?
+
     private init() {}
 
     func search(query: String, maxResults: Int = 10) async throws -> String {
+        // Chain onto any in-flight search so only one navigation runs at a time.
+        let previous = navigationChain
+        let task = Task { @MainActor in
+            if let previous { _ = try? await previous.value }
+            return try await self.performSearch(query: query, maxResults: maxResults)
+        }
+        navigationChain = task
+        return try await task.value
+    }
+
+    private func performSearch(query: String, maxResults: Int = 10) async throws -> String {
         let searchStart = ContinuousClock.now
         print("[WEB-SEARCH] start query=\(query) maxResults=\(maxResults)")
 
@@ -25,8 +42,23 @@ final class GoogleWebSearchEngine {
             throw AppError.networkError("Failed to build search URL for: \(query)")
         }
 
-        // Navigate — returns the page's body text after JS rendering completes
-        let pageText = try await engine.navigate(to: url, timeout: 25)
+        // Navigate — returns the page's body text after JS rendering completes.
+        // Retry once on cancellation: a stale/corrupted session navigation can
+        // surface as NSURLErrorCancelled (-999); a fresh session recovers it.
+        let pageText: String
+        do {
+            pageText = try await engine.navigate(to: url, timeout: 25)
+        } catch {
+            let ns = error as NSError
+            if ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled {
+                print("[WEB-SEARCH] navigation cancelled (-999); resetting session and retrying once")
+                reset()
+                let fresh = try await getSession()
+                pageText = try await fresh.navigate(to: url, timeout: 25)
+            } else {
+                throw error
+            }
+        }
         let navMs = Int(searchStart.duration(to: ContinuousClock.now).components.seconds * 1000)
         print("[WEB-SEARCH] navigate done in \(navMs)ms pageTextLen=\(pageText.count)")
 

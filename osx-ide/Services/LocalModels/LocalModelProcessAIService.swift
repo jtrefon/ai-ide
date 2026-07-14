@@ -1294,7 +1294,9 @@ actor LocalModelProcessAIService: AIService {
         let chatMessages = buildChatMessages(
             messages: budgetedMessages,
             explicitContext: request.context,
-            systemContent: systemContent
+            systemContent: systemContent,
+            modelID: modelId,
+            projectRoot: request.projectRoot
         )
         
         // Convert AITool to ToolSpec for MLXLLM
@@ -1334,7 +1336,9 @@ actor LocalModelProcessAIService: AIService {
         let rawMessages = buildRawMessages(
             messages: budgetedMessages,
             explicitContext: request.context,
-            systemContent: systemContent
+            systemContent: systemContent,
+            modelID: modelId,
+            projectRoot: request.projectRoot
         )
         let allImages = budgetedMessages.flatMap { message in
             imageInputs(from: message.mediaAttachments)
@@ -1455,7 +1459,7 @@ actor LocalModelProcessAIService: AIService {
         return response.content ?? ""
     }
 
-    nonisolated private func buildChatMessages(messages: [ChatMessage], explicitContext: String?, systemContent: String) -> [Chat.Message] {
+    nonisolated private func buildChatMessages(messages: [ChatMessage], explicitContext: String?, systemContent: String, modelID: String, projectRoot: URL?) -> [Chat.Message] {
         var chatMessages: [Chat.Message] = []
         let mergedSystemContent = mergedSystemContent(
             messages: messages,
@@ -1478,7 +1482,7 @@ actor LocalModelProcessAIService: AIService {
             case .system:
                 continue
             case .tool:
-                chatMessages.append(.tool(replayToolMessageContent(from: message)))
+                chatMessages.append(.tool(replayToolMessageContent(from: message, modelID: modelID, projectRoot: projectRoot)))
             }
         }
 
@@ -1499,7 +1503,7 @@ actor LocalModelProcessAIService: AIService {
         }
     }
 
-    nonisolated private func buildRawMessages(messages: [ChatMessage], explicitContext: String?, systemContent: String) -> [Message] {
+    nonisolated private func buildRawMessages(messages: [ChatMessage], explicitContext: String?, systemContent: String, modelID: String, projectRoot: URL?) -> [Message] {
         let mergedSystemContent = mergedSystemContent(
             messages: messages,
             explicitContext: explicitContext,
@@ -1519,7 +1523,7 @@ actor LocalModelProcessAIService: AIService {
 
             if message.role == .tool {
                 let toolName = message.toolName ?? "unknown_tool"
-                let toolContent = replayToolMessageContent(from: message)
+                let toolContent = replayToolMessageContent(from: message, modelID: modelID, projectRoot: projectRoot)
                 rawMessages.append([
                     "role": "tool",
                     "content": toolContent,
@@ -1574,7 +1578,7 @@ actor LocalModelProcessAIService: AIService {
 
     nonisolated private func rawContent(for message: ChatMessage) -> String {
         if message.role == .tool {
-            return replayToolMessageContent(from: message)
+            return replayToolMessageContent(from: message, modelID: "", projectRoot: nil)
         }
         return message.content
     }
@@ -1624,16 +1628,26 @@ actor LocalModelProcessAIService: AIService {
     }
 
     nonisolated private func replayToolMessageContent(from message: ChatMessage) -> String {
+        replayToolMessageContent(from: message, modelID: "", projectRoot: nil)
+    }
+
+    /// Decodes the tool-execution envelope and returns the model-facing payload,
+    /// applying the shared `ToolResultProcessor` so large outputs are truncated,
+    /// offloaded, and (for logs) summarized — identical to the cloud pipeline.
+    nonisolated private func replayToolMessageContent(from message: ChatMessage, modelID: String, projectRoot: URL?) -> String {
+        let toolCallId = message.toolCallId ?? UUID().uuidString
+
         guard let envelope = ToolExecutionEnvelope.decode(from: message.content) else {
-            return message.content
+            return ToolResultProcessor.process(payload: message.content, toolCallId: toolCallId, modelID: modelID, projectRoot: projectRoot)
         }
 
         if let payload = envelope.payload?.trimmingCharacters(in: .whitespacesAndNewlines), !payload.isEmpty {
-            return payload
+            return ToolResultProcessor.process(payload: payload, toolCallId: toolCallId, modelID: modelID, projectRoot: projectRoot)
         }
 
         let fallback = envelope.message.trimmingCharacters(in: .whitespacesAndNewlines)
-        return fallback.isEmpty ? message.content : fallback
+        let text = fallback.isEmpty ? message.content : fallback
+        return ToolResultProcessor.process(payload: text, toolCallId: toolCallId, modelID: modelID, projectRoot: projectRoot)
     }
 
     private func buildSystemContent(
@@ -1659,7 +1673,8 @@ actor LocalModelProcessAIService: AIService {
                 reasoningMode: settings.reasoningMode,
                 stage: stage,
                 includeModelReasoning: settings.reasoningMode.includesModelReasoning && stage != .tool_loop,
-                pinnedRules: pinnedRules
+                pinnedRules: pinnedRules,
+                repoMap: nil
             )
         )
         var prompt = systemPrompt

@@ -99,6 +99,15 @@ final class ChatHistoryCoordinator: ObservableObject {
         recompose()
     }
 
+    /// Insert a message at a specific index in the committed chain.
+    /// Used for recovery-context injection (§7).
+    func insert(_ message: ChatMessage, at index: Int) {
+        let safeIndex = min(max(0, index), committed.endIndex)
+        committed.insert(message, at: safeIndex)
+        envelope.updatedAt = Date()
+        recompose()
+    }
+
     /// Commits a final tool result to the chain. If a committed message for the
     /// same `toolCallId` already exists it is replaced; otherwise it is appended.
     /// This collapses the case where a tool result is delivered both via the
@@ -292,6 +301,8 @@ final class ChatHistoryCoordinator: ObservableObject {
 
     private func recompose() {
         var out = committed
+        // L5b: Deduplicate repeated read tool results (projection-only, committed chain is untouched)
+        out = ReadDedupEngine.deduplicate(out)
         if !liveToolMessages.isEmpty {
             out.append(contentsOf: liveToolMessages.values)
         }
@@ -307,5 +318,65 @@ final class ChatHistoryCoordinator: ObservableObject {
             out.append(draft)
         }
         messages = out
+    }
+}
+
+/// Context Access Layer L5b: Deduplicates repeated read tool results by replacing
+/// subsequent copies with compact pointers. Operates at the projection level —
+/// the committed chain is never modified, so full content is always recoverable.
+enum ReadDedupEngine {
+    private static let minContentLength = 500
+
+    /// A cheap content fingerprint: first N characters of the content.
+    /// Collisions across different files with the same prefix are practically
+    /// impossible for real source code / tool output.
+    private static func fingerprint(_ content: String) -> String {
+        String(content.prefix(200))
+    }
+
+    /// Scans tool messages and replaces duplicate read results with pointers.
+    /// - Parameter messages: The message array to deduplicate (typically committed).
+    /// - Returns: A new array with duplicates replaced by pointer messages.
+    static func deduplicate(_ messages: [ChatMessage]) -> [ChatMessage] {
+        var seenFingerprints: [String: (index: Int, filePath: String)] = [:]
+        var result: [ChatMessage] = []
+        result.reserveCapacity(messages.count)
+
+        for (index, msg) in messages.enumerated() {
+            guard msg.role == .tool,
+                  msg.toolName == "read",
+                  msg.content.count >= minContentLength else {
+                result.append(msg)
+                continue
+            }
+
+            let fp = fingerprint(msg.content)
+            if let firstOccurrence = seenFingerprints[fp] {
+                // Duplicate — replace content with a pointer
+                let relativePath = firstOccurrence.filePath
+                let pointerMsg = ChatMessage(
+                    id: msg.id,
+                    role: msg.role,
+                    content: "[read result for \(relativePath) — shown at message \(firstOccurrence.index + 1) above. Use read with start_line=N to see specific lines.]",
+                    timestamp: msg.timestamp,
+                    context: ChatMessageContentContext(reasoning: msg.reasoning, codeContext: msg.codeContext),
+                    tool: ChatMessageToolContext(
+                        toolName: msg.toolName,
+                        toolStatus: msg.toolStatus,
+                        target: ToolInvocationTarget(targetFile: msg.targetFile, toolCallId: msg.toolCallId),
+                        toolCalls: msg.toolCalls ?? []
+                    ),
+                    isDraft: msg.isDraft
+                )
+                result.append(pointerMsg)
+            } else {
+                // First occurrence — record its fingerprint and file path
+                let filePath = msg.targetFile ?? msg.toolName ?? "unknown"
+                seenFingerprints[fp] = (index, filePath)
+                result.append(msg)
+            }
+        }
+
+        return result
     }
 }

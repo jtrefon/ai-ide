@@ -15,8 +15,7 @@ struct SettingsStatusPill: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
+        .glassEffect(.regular, in: Capsule())
         .overlay(
             Capsule()
                 .stroke(AppConstants.Color.separatorSubtle, lineWidth: 0.6)

@@ -255,12 +255,31 @@ final class BackgroundWorkGovernor: @unchecked Sendable {
         )
     }
 
+    private var lastGovernorLogAt: ContinuousClock.Instant?
+
+    /// Logs at most once per 10s so a long deferral can't flood stdout (a previous
+    /// bug spun this print millions of times and produced multi-GB logs).
+    private func logGovernor(_ message: String) {
+        let now = ContinuousClock.now
+        if let last = lastGovernorLogAt, last.duration(to: now) < .seconds(10) { return }
+        lastGovernorLogAt = now
+        print(message)
+    }
+
     func waitUntilReady(for kind: BackgroundWorkKind, reason: String) async {
         let quietPeriod = Duration.milliseconds(Int64(quietPeriodNanoseconds / 1_000_000))
         while true {
+            // Honour cancellation in the outer loop. The previous `try? await
+            // Task.sleep` swallowed CancellationError, so a cancelled wait re-looped
+            // immediately and spun forever.
+            if Task.isCancelled { return }
             if let stressReason = currentStressReason(ignoring: kind) {
-                print("[BackgroundWorkGovernor] delaying \(kind.rawValue) reason=\(reason) stress=\(stressReason)")
-                try? await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+                logGovernor("[BackgroundWorkGovernor] delaying \(kind.rawValue) reason=\(reason) stress=\(stressReason)")
+                do {
+                    try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+                } catch {
+                    return
+                }
                 continue
             }
 
@@ -268,7 +287,7 @@ final class BackgroundWorkGovernor: @unchecked Sendable {
             while quietStart.duration(to: ContinuousClock.now) < quietPeriod {
                 if Task.isCancelled { return }
                 if let stressReason = currentStressReason(ignoring: kind) {
-                    print("[BackgroundWorkGovernor] paused \(kind.rawValue) reason=\(reason) stress=\(stressReason)")
+                    logGovernor("[BackgroundWorkGovernor] paused \(kind.rawValue) reason=\(reason) stress=\(stressReason)")
                     break
                 }
                 try? await Task.sleep(nanoseconds: pollIntervalNanoseconds)

@@ -262,3 +262,250 @@ private func extractPHPScope(from line: String) -> String {
     guard let groups = match(line, key: "php_scope"), groups.count > 1 else { return "" }
     return groups[1]
 }
+
+// MARK: - Repo-map (Context Access Layer L5a)
+
+/// A directed reference graph of project symbols. Each node is a symbol
+/// (class, function, type) with its file path. Edges point from the
+/// referencing file to the referenced symbol.
+struct ReferenceGraph: Sendable {
+    struct Node: Hashable, Sendable {
+        let symbolName: String
+        let filePath: String
+        let kind: String
+    }
+
+    private(set) var nodes: Set<Node> = []
+    private(set) var outgoingEdges: [Node: Set<Node>] = [:]
+    private(set) var incomingEdges: [Node: Set<Node>] = [:]
+
+    mutating func addNode(_ node: Node) {
+        nodes.insert(node)
+    }
+
+    mutating func addEdge(from source: Node, to target: Node) {
+        addNode(source)
+        addNode(target)
+        outgoingEdges[source, default: []].insert(target)
+        incomingEdges[target, default: []].insert(source)
+    }
+
+    /// Standard PageRank with optional personalization toward chat context.
+    /// Returns each node's rank normalized to sum = 1.0.
+    func pageRank(iterations: Int = 20, dampingFactor: Double = 0.85, personalization: [Node: Double] = [:]) -> [Node: Double] {
+        let count = nodes.count
+        guard count > 0 else { return [:] }
+
+        let initialRank = 1.0 / Double(count)
+        var ranks: [Node: Double] = [:]
+        for node in nodes {
+            ranks[node] = initialRank
+        }
+
+        // Build personalization vector (uniform if empty)
+        let personalizeSum = personalization.values.reduce(0, +)
+        let personalizeVector: [Node: Double]
+        if personalizeSum > 0 {
+            personalizeVector = personalization.mapValues { $0 / personalizeSum }
+        } else {
+            personalizeVector = Dictionary(uniqueKeysWithValues: nodes.map { ($0, initialRank) })
+        }
+
+        for _ in 0..<iterations {
+            var newRanks: [Node: Double] = [:]
+            let danglingSum = nodes.filter { outgoingEdges[$0]?.isEmpty ?? true }.reduce(0.0) { $0 + ranks[$1, default: 0] }
+
+            for node in nodes {
+                let incomingSum = (incomingEdges[node] ?? []).reduce(0.0) { sum, source in
+                    let outCount = Double(outgoingEdges[source]?.count ?? 1)
+                    return sum + (ranks[source, default: 0] / outCount)
+                }
+                // Personalized PageRank: teleport according to personalization vector,
+                // distribute dangling rank according to same vector.
+                let teleportProb = personalizeVector[node, default: initialRank]
+                let rank = (1.0 - dampingFactor) * teleportProb
+                    + dampingFactor * (incomingSum + danglingSum * teleportProb)
+                newRanks[node] = rank
+            }
+
+            ranks = newRanks
+        }
+
+        return ranks
+    }
+}
+
+/// Builds a condensed repo-map (~1000 tokens) from the project's symbol graph.
+/// The map is personalized toward files mentioned in the current chat context.
+/// Results are cached per project root to avoid repeated full-project scans.
+private actor MapCache {
+    var cache: [String: String] = [:]
+    var cacheAge: [String: Date] = [:]
+    let maxAge: TimeInterval = 300
+
+    func get(_ key: String) -> String? {
+        guard let cached = cache[key], let age = cacheAge[key],
+              Date().timeIntervalSince(age) < maxAge else { return nil }
+        return cached
+    }
+
+    func set(_ key: String, value: String) {
+        cache[key] = value
+        cacheAge[key] = Date()
+    }
+
+    func invalidate(projectRoot: URL) {
+        let prefix = projectRoot.standardizedFileURL.path
+        cache = cache.filter { !$0.key.hasPrefix(prefix) }
+        cacheAge = cacheAge.filter { !$0.key.hasPrefix(prefix) }
+    }
+}
+
+enum RepoMapBuilder {
+    private static let mapCache = MapCache()
+
+    /// Retrieve the cached map for a project root, or build + cache it.
+    static func cachedMap(projectRoot: URL, personalizeFilePaths: Set<String> = []) async throws -> String {
+        let key = projectRoot.standardizedFileURL.path + "|" + personalizeFilePaths.sorted().joined(separator: ",")
+        if let cached = await mapCache.get(key) {
+            return cached
+        }
+        let map = try await buildMap(projectRoot: projectRoot, personalizeFilePaths: personalizeFilePaths)
+        await mapCache.set(key, value: map)
+        return map
+    }
+
+    /// Invalidate the cached map (e.g. after file changes).
+    static func invalidateCache(projectRoot: URL) async {
+        await mapCache.invalidate(projectRoot: projectRoot)
+    }
+    static let maxMapTokens = 1000
+    /// Approximate token ratio for source text
+    private static let charsPerToken = 4
+
+    /// Build a repo-map for the given project. Scans source files, extracts
+    /// symbols, builds a reference graph, ranks via PageRank, and formats
+    /// a condensed text map.
+    static func buildMap(
+        projectRoot: URL,
+        personalizeFilePaths: Set<String> = [],
+        fileManager: FileManager = .default
+    ) async throws -> String {
+        let sourceFiles = collectSourceFiles(at: projectRoot, fileManager: fileManager)
+        guard !sourceFiles.isEmpty else { return "(no source files found)" }
+
+        // Phase 1: extract symbols from all files
+        var symbolsByFile: [String: [ExtractedSymbol]] = [:]
+        var allSymbolNames: [String: ReferenceGraph.Node] = [:] // name → canonical node
+        var fileContentCache: [String: String] = [:]
+
+        for url in sourceFiles {
+            guard let content = try? String(contentsOf: url) else { continue }
+            let path = url.path
+            fileContentCache[path] = content
+            let symbols = SymbolExtractor.extract(from: url, content: content)
+            guard !symbols.isEmpty else { continue }
+            symbolsByFile[path] = symbols
+            for sym in symbols {
+                let node = ReferenceGraph.Node(symbolName: sym.name, filePath: path, kind: sym.kind)
+                let key = "\(sym.kind)::\(sym.name)"
+                // Prefer the first occurrence (most canonical file)
+                if allSymbolNames[key] == nil {
+                    allSymbolNames[key] = node
+                }
+            }
+        }
+
+        guard !allSymbolNames.isEmpty else { return "(no symbols found)" }
+
+        // Phase 2: build reference graph by scanning each file for symbols from OTHER files
+        var graph = ReferenceGraph()
+        // Register all symbol nodes
+        for node in allSymbolNames.values {
+            graph.addNode(node)
+        }
+
+        // For each file, check which external symbols it references
+        let allExternalSymbols = Array(allSymbolNames.values)
+        for (filePath, content) in fileContentCache {
+            let fileSymbols = Set(symbolsByFile[filePath]?.map { $0.name } ?? [])
+            for extSym in allExternalSymbols {
+                guard extSym.filePath != filePath else { continue }
+                guard !fileSymbols.contains(extSym.symbolName) else { continue }
+                // Check if this file mentions the external symbol
+                if content.contains(extSym.symbolName) {
+                    // This file references the external symbol
+                    let sourceNode = ReferenceGraph.Node(
+                        symbolName: extSym.symbolName,
+                        filePath: extSym.filePath,
+                        kind: extSym.kind
+                    )
+                    graph.addEdge(from: sourceNode, to: sourceNode)
+                }
+            }
+        }
+
+        // Phase 3: PageRank with personalization
+        let personalization: [ReferenceGraph.Node: Double]
+        if !personalizeFilePaths.isEmpty {
+            personalization = Dictionary(uniqueKeysWithValues: graph.nodes.compactMap { node in
+                personalizeFilePaths.contains(node.filePath) ? (node, 1.0) : nil
+            })
+        } else {
+            personalization = [:]
+        }
+
+        let ranks = graph.pageRank(personalization: personalization)
+
+        // Phase 4: format condensed map
+        let rankedNodes = ranks.sorted { $0.value > $1.value }
+        let maxChars = maxMapTokens * charsPerToken
+
+        var output = "project symbol map (PageRank-ranked):\n"
+        var usedChars = output.count
+
+        for (node, rank) in rankedNodes {
+            let fileShort = shortenPath(node.filePath, projectRoot: projectRoot)
+            let line = "  \(node.kind) \(node.symbolName) — \(fileShort) [rank: \(String(format: "%.2f", rank))]\n"
+            if usedChars + line.count > maxChars { break }
+            output += line
+            usedChars += line.count
+        }
+
+        return output
+    }
+
+    /// Walk the project directory collecting source files (excluding common non-source dirs).
+    private static func collectSourceFiles(at root: URL, fileManager: FileManager) -> [URL] {
+        let excludedDirs: Set<String> = [".ide", ".git", "node_modules", ".build", "DerivedData",
+                                          ".build-tests", "Pods", "build", "dist", ".next"]
+        let extensions: Set<String> = ["swift", "ts", "tsx", "js", "jsx", "py", "php",
+                                        "kt", "java", "go", "rs", "rb", "c", "cpp", "h", "hpp"]
+
+        guard let enumerator = fileManager.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey],
+                                                        options: [.skipsHiddenFiles, .skipsPackageDescendants]) else {
+            return []
+        }
+
+        var files: [URL] = []
+        for case let url as URL in enumerator {
+            if url.hasDirectoryPath {
+                if excludedDirs.contains(url.lastPathComponent) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+            if extensions.contains(url.pathExtension) {
+                files.append(url)
+            }
+        }
+        return files
+    }
+
+    private static func shortenPath(_ fullPath: String, projectRoot: URL) -> String {
+        let rootPath = projectRoot.standardizedFileURL.path
+        guard fullPath.hasPrefix(rootPath) else { return fullPath }
+        let relative = String(fullPath.dropFirst(rootPath.count + 1))
+        return relative
+    }
+}

@@ -306,8 +306,7 @@ private struct SystemPromptSection: View {
                     .frame(minHeight: 140)
                     .scrollContentBackground(.hidden)
                     .padding(8)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .nativeGlassBackground(.popover, cornerRadius: 10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(.separator.opacity(0.2), lineWidth: 0.6)

@@ -215,7 +215,7 @@ final class AgenticHarnessTests: XCTestCase {
 
         let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
         let manager = runtime.manager
-        manager.currentMode = .agent
+        manager.currentMode = .coder
 
         print("\n=== Test: Create React App ===")
         print("Project root: \(projectRoot.path)")
@@ -284,7 +284,7 @@ final class AgenticHarnessTests: XCTestCase {
 
         let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
         let manager = runtime.manager
-        manager.currentMode = .agent
+        manager.currentMode = .coder
 
         print("\n=== Test: Refactor Scenario ===")
         print("Project root: \(projectRoot.path)")
@@ -422,7 +422,7 @@ final class AgenticHarnessTests: XCTestCase {
 
         let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
         let manager = runtime.manager
-        manager.currentMode = .agent
+        manager.currentMode = .coder
 
         print("\n=== Test: React Todo -> SSR Refactor ===")
         print("Project root: \(projectRoot.path)")
@@ -491,7 +491,7 @@ final class AgenticHarnessTests: XCTestCase {
 
         let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
         let manager = runtime.manager
-        manager.currentMode = .agent
+        manager.currentMode = .coder
 
         print("\n=== Test: JavaScript -> TypeScript Migration ===")
         print("Project root: \(projectRoot.path)")
@@ -555,7 +555,7 @@ final class AgenticHarnessTests: XCTestCase {
 
         let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
         let manager = runtime.manager
-        manager.currentMode = .agent
+        manager.currentMode = .coder
 
         print("\n=== Test: Add Test Coverage ===")
         print("Project root: \(projectRoot.path)")
@@ -656,7 +656,7 @@ final class AgenticHarnessTests: XCTestCase {
 
         let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
         let manager = runtime.manager
-        manager.currentMode = .agent
+        manager.currentMode = .coder
 
         print("\n=== Test: Complex Architecture Refactor ===")
         print("Project root: \(projectRoot.path)")
@@ -703,6 +703,213 @@ final class AgenticHarnessTests: XCTestCase {
                 || serverCode.contains("require("),
             label: "server.js wires modular routes")
         assertNoRawToolMarkupInFinalAssistantMessage(manager)
+    }
+
+    // MARK: - Test: Multi-Turn React -> TypeScript -> Unit Tests (focus / dropout / repeat telemetry)
+
+    /// Multi-turn scenario exercising the full agentic tool surface:
+    ///   Phase 1: build a React (vite) todo app with multiple components
+    ///   Phase 2: refactor the whole app to TypeScript (uses search_project + web_search
+    ///            for current best-practice tsconfig / strict config)
+    ///   Phase 3: add unit tests (uses web_search for current vitest + RTL best practices)
+    /// The assertions are advisory; the real output is the behavior telemetry
+    /// (focus, dropout, consecutive tool repeats, inconsistencies) printed below.
+    func testHarnessReactToTypeScriptToTestsMultiTurn() async throws {
+        try requireOnlineHarnessExecution()
+        let projectRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
+
+        let runtime = try await makeProductionRuntime(projectRoot: projectRoot)
+        let manager = runtime.manager
+        manager.currentMode = .coder
+
+        print("\n=== Test: React -> TypeScript -> Unit Tests (multi-turn) ===")
+        print("Project root: \(projectRoot.path)")
+
+        var committedSnapshot: [String] = []
+
+        // ---- Phase 1: build a React app (goal only — never name a tool) ----
+        print("\n--- Phase 1: Build a React app ---")
+        try await sendProductionMessage(
+            """
+            In the current project directory, create a small todo web application that lets a user \
+            add, complete, and remove items. Split the code into a few separate modules so the \
+            project is easy to navigate, and keep the entry point and the main view in distinct files. \
+            Do not install dependencies — only produce the source files that describe the app.
+            """,
+            manager: manager, timeoutSeconds: 360)
+
+        var files = listAllFiles(under: projectRoot)
+        print("\nFiles after Phase 1: \(files.count)")
+        for file in files { print("  - \(file)") }
+        logHarnessCheck(
+            files.contains(where: {
+                $0.hasSuffix(".js") || $0.hasSuffix(".ts") ||
+                $0.hasSuffix(".jsx") || $0.hasSuffix(".tsx") || $0.hasSuffix(".html")
+            }),
+            label: "phase1 source files created")
+        logHarnessCheck(
+            files.contains { $0.hasPrefix("src/") || $0.contains("/src/") },
+            label: "phase1 code organized into modules")
+        committedSnapshot = committedAssistantContents(manager)
+
+        // Push for indexing so the next phase's indexed/semantic search has data to work with.
+        try await pushProjectIndex(runtime.container)
+
+        // ---- Phase 2: migrate to TypeScript (goal only — agent must discover search + web) ----
+        print("\n--- Phase 2: Migrate to TypeScript ---")
+        try await sendProductionMessage(
+            """
+            The application you just built is plain JavaScript. Convert the entire project to \
+            TypeScript with strict type checking while preserving exactly the same behavior. Before \
+            changing anything, make sure you understand the complete current structure, and consult \
+            current recommended configuration practices for this kind of project so the setup matches \
+            what is advised today. Replace obsolete JavaScript as you go.
+            """,
+            manager: manager, timeoutSeconds: 480)
+
+        files = listAllFiles(under: projectRoot)
+        print("\nFiles after Phase 2: \(files.count)")
+        for file in files { print("  - \(file)") }
+        logHarnessCheck(files.contains("tsconfig.json"), label: "phase2 tsconfig created")
+        logHarnessCheck(
+            files.contains { $0.hasSuffix("App.tsx") || $0.hasSuffix("App.ts") },
+            label: "phase2 App migrated to TS")
+        let leftoverJsx = files.filter { $0.hasSuffix(".jsx") }
+        if !leftoverJsx.isEmpty {
+            print("[HARNESS][INFO] leftover .jsx after TS migration (possible inconsistency): \(leftoverJsx)")
+        }
+        // Comprehension: agent should have searched its own codebase and the web WITHOUT being told.
+        logHarnessCheck(agentUsedTool("search", manager.messages),
+            label: "phase2 agent used indexed/codebase search unaided")
+        logHarnessCheck(agentUsedTool("web_search", manager.messages),
+            label: "phase2 agent used web search unaided")
+        assertContextImmutable(manager, against: committedSnapshot, phase: "phase2")
+        committedSnapshot = committedAssistantContents(manager)
+
+        try await pushProjectIndex(runtime.container)
+
+        // ---- Phase 3: add unit tests (goal only) ----
+        print("\n--- Phase 3: Add unit tests ---")
+        try await sendProductionMessage(
+            """
+            Add automated tests for the todo application's core behaviors — adding, completing, and \
+            removing items. Apply what you know about current recommended testing setups for this kind \
+            of project, and make the test descriptions cover both typical usage and edge cases. \
+            Do not run the install step.
+            """,
+            manager: manager, timeoutSeconds: 420)
+
+        files = listAllFiles(under: projectRoot)
+        print("\nFiles after Phase 3: \(files.count)")
+        for file in files { print("  - \(file)") }
+        let testFiles = files.filter { $0.contains("test") || $0.contains("spec") }
+        logHarnessCheck(!testFiles.isEmpty, label: "phase3 test file created")
+        logHarnessCheck(
+            files.contains("package.json"), label: "phase3 package.json present")
+        logHarnessCheck(agentUsedTool("web_search", manager.messages),
+            label: "phase3 agent used web search unaided")
+        assertContextImmutable(manager, against: committedSnapshot, phase: "phase3")
+        assertChatModeAnswerNotWiped(manager)
+
+        // ---- Behavior telemetry ----
+        analyzeAgentBehavior(manager.messages)
+        assertNoRawToolMarkupInFinalAssistantMessage(manager)
+    }
+
+    /// Observability pass: focus (reached destination?), dropout (silent stalls),
+    /// consecutive tool repeats, and inconsistencies. Prints to harness log.
+    private func analyzeAgentBehavior(_ messages: [ChatMessage]) {
+        let toolMessages = messages.filter { $0.isToolExecution }
+        var trail: [(name: String, target: String?, status: String?)] = []
+        for m in toolMessages {
+            if let env = ToolExecutionEnvelope.decode(from: m.content) {
+                trail.append((env.toolName, env.targetFile, env.status.rawValue))
+            } else {
+                trail.append((m.toolName ?? "unknown", nil, nil))
+            }
+        }
+
+        print("\n=== AGENT BEHAVIOR ANALYSIS ===")
+        print("Total tool executions: \(trail.count)")
+        let names = trail.map { $0.name }
+        let freq = Dictionary(grouping: names, by: { $0 }).mapValues { $0.count }.sorted { $0.value > $1.value }
+        print("Tool frequency: \(freq.map { "\($0.key)×\($0.value)" }.joined(separator: ", "))")
+
+        // Consecutive repeats (same tool + same target back-to-back)
+        var repeats: [(String, String?)] = []
+        for i in 1..<trail.count {
+            if trail[i].name == trail[i - 1].name && trail[i].target == trail[i - 1].target {
+                repeats.append((trail[i].name, trail[i].target))
+            }
+        }
+        print("Consecutive repeated tool calls (same tool+target): \(repeats.count)")
+        for r in repeats.prefix(25) {
+            print("  REPEAT: \(r.0) -> \(r.1 ?? "(none)")")
+        }
+
+        // Dropout: longest run of assistant messages with no tool calls
+        let assistantMsgs = messages.filter { $0.role == .assistant }
+        var streak = 0
+        var maxStall = 0
+        for m in assistantMsgs {
+            if m.toolCalls?.isEmpty ?? true {
+                streak += 1
+                maxStall = max(maxStall, streak)
+            } else {
+                streak = 0
+            }
+        }
+        print("Max consecutive assistant messages without tool calls (dropout): \(maxStall)")
+        print("Total assistant messages: \(assistantMsgs.count)")
+        print("=== END AGENT BEHAVIOR ANALYSIS ===\n")
+    }
+
+    // MARK: - Deterministic invariants
+
+    /// Snapshot of all committed assistant message contents. Because the agent
+    /// context is append-only, earlier entries must never change once committed.
+    private func committedAssistantContents(_ manager: ConversationManager) -> [String] {
+        manager.messages.filter { $0.role == .assistant }.map { $0.content }
+    }
+
+    /// Verifies no previously-committed assistant message was mutated (replaced/edited).
+    private func assertContextImmutable(
+        _ manager: ConversationManager, against previous: [String], phase: String
+    ) {
+        let current = committedAssistantContents(manager)
+        let count = min(previous.count, current.count)
+        var mutated = 0
+        for i in 0..<count where previous[i] != current[i] { mutated += 1 }
+        print("[HARNESS][INFO] context immutability @\(phase): \(previous.count) prior msgs, \(mutated) mutated")
+        XCTAssertEqual(mutated, 0,
+            "Committed assistant context must be immutable (append-only); \(mutated) changed at \(phase)")
+    }
+
+    /// The agent's final answer must survive finalization — it must not be replaced
+    /// by the "I could not complete this task" fallback (the original production bug).
+    private func assertChatModeAnswerNotWiped(_ manager: ConversationManager) {
+        guard let last = manager.messages.last(where: { $0.role == .assistant }) else {
+            XCTFail("no final assistant message present"); return
+        }
+        let wiped = last.content.contains("I could not complete this task")
+        print("[HARNESS][INFO] final assistant msg length=\(last.content.count) wiped=\(wiped)")
+        XCTAssertFalse(wiped, "Final answer was wiped by the fallback string")
+        XCTAssertGreaterThan(last.content.count, 200, "Final answer is suspiciously empty")
+    }
+
+    /// Did the agent reach for a given tool on its own (from self-advertising), not via instruction?
+    private func agentUsedTool(_ name: String, _ messages: [ChatMessage]) -> Bool {
+        messages.contains { $0.isToolExecution && ($0.toolName ?? "") == name }
+    }
+
+    /// Push the project index so RAG / indexed search has fresh data between turns.
+    private func pushProjectIndex(_ container: DependencyContainer) async throws {
+        print("[HARNESS] pushing project index (reindex)...")
+        container.projectCoordinator.reindexProject()
+        try await Task.sleep(nanoseconds: 5_000_000_000)
+        print("[HARNESS] index push complete")
     }
 
     private func logHarnessCheck(_ condition: Bool, label: String, detail: String? = nil) {

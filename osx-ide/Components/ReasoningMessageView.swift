@@ -29,8 +29,7 @@ struct ReasoningMessageView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-        .cornerRadius(12)
+        .nativeGlassBackground(.panel, cornerRadius: AppConstants.Layout.cornerLg)
     }
 
     // MARK: - Private Components

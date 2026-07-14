@@ -33,8 +33,7 @@ struct ToolCallsSummaryView: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(.ultraThinMaterial)
-                .cornerRadius(8)
+                .nativeGlassBackground(.panel)
             }
         }
     }

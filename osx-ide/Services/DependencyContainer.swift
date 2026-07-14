@@ -627,6 +627,9 @@ class DependencyContainer: ObservableObject {
 
         guard let embedder else {
             Swift.print("[DIAG] VectorStore: no embedder available — skipping conversation ingestion")
+            let count = await service.entryCount
+            eventBus.publish(VectorStoreStatusChangedEvent(entryCount: count, isLoaded: true))
+            eventBus.publish(VectorStoreIngestionProgressEvent(ingestedCount: toIngest.count, totalCount: toIngest.count))
             return
         }
         var ingested: Int = 0

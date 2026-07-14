@@ -13,6 +13,7 @@ struct ChatInputView: View {
     var fontSize: Double
     var fontFamily: String
     let onSend: () -> Void
+    var onStop: (() -> Void)? = nil
 
     @FocusState private var isInputFocused: Bool
 
@@ -62,27 +63,40 @@ struct ChatInputView: View {
 
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
-                Button(action: sendIfPossible) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 26))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(
-                            canSend ? Color.white : AppConstants.Color.textTertiary.opacity(0.5),
-                            canSend ? Color.accentColor : Color.clear
-                        )
-                        .background {
-                            if canSend {
+                Button(action: isSending ? { onStop?() } : sendIfPossible) {
+                    if isSending {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.system(size: 26))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(Color.white, AppConstants.Color.alertError)
+                            .background {
                                 Circle()
-                                    .fill(Color.accentColor)
+                                    .fill(AppConstants.Color.alertError)
                                     .glassEffect(.regular, in: Circle())
                             }
-                        }
-                        .clipShape(Circle())
+                            .clipShape(Circle())
+                    } else {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 26))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(
+                                canSend ? Color.white : AppConstants.Color.textTertiary.opacity(0.5),
+                                canSend ? Color.accentColor : Color.clear
+                            )
+                            .background {
+                                if canSend {
+                                    Circle()
+                                        .fill(Color.accentColor)
+                                        .glassEffect(.regular, in: Circle())
+                                }
+                            }
+                            .clipShape(Circle())
+                    }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(localized("chat_input.send"))
-                .accessibilityIdentifier(AccessibilityID.aiChatSendButton)
-                .disabled(!canSend)
+                .accessibilityLabel(isSending ? localized("chat_input.stop") : localized("chat_input.send"))
+                .accessibilityIdentifier(isSending ? AccessibilityID.aiChatStopButton : AccessibilityID.aiChatSendButton)
+                .disabled(!isSending && !canSend)
                 .animation(.easeInOut(duration: 0.15), value: canSend)
             }
         }

@@ -5,6 +5,11 @@
 **Parameters:**
 - pattern (required, string): Glob pattern (e.g., "src/**/*.swift", "**/*.test.ts").
 
-**Expected output:** Matching file paths sorted by modification time.
-status: success
-content.items: [{path: "..."}, ...]
+**Expected output:** Plain text. A header `Found N file(s):` followed by one matching file path per line, sorted by modification time.
+Example:
+```
+Found 2 file(s):
+src/App.tsx
+src/main.ts
+```
+Read the paths directly from the text. There is no nested JSON `content.items` field.

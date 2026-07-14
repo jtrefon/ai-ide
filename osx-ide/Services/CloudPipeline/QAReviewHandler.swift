@@ -23,7 +23,7 @@ final class QAReviewHandler {
         runId: String,
         userInput: String
     ) async throws -> AIServiceResponse {
-        guard qaReviewEnabled, mode == .agent else { return response! }
+        guard qaReviewEnabled, mode.isAgentic else { return response! }
         guard !toolResults.isEmpty else { return response! }
         guard hasProjectMutations(in: toolResults) else { return response! }
 
@@ -114,7 +114,7 @@ final class QAReviewHandler {
         runId: String,
         userInput: String
     ) async throws -> AIServiceResponse {
-        guard qaReviewEnabled, mode == .agent else { return response! }
+        guard qaReviewEnabled, mode.isAgentic else { return response! }
         guard hasProjectMutations(in: toolResults) else { return response! }
         let draft = response!.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !draft.isEmpty else { return response! }
@@ -202,33 +202,18 @@ final class QAReviewHandler {
     }
 
     private func readOnlyTools(from tools: [AITool]) -> [AITool] {
-        let allowed = Set([
-            "index_find_files",
-            "index_list_files",
-            "index_search_text",
-            "index_read_file",
-            "index_search_symbols"
-        ])
+        let allowed = Set(ToolTaxonomy.readOnly)
         return tools.filter { allowed.contains($0.name) }
     }
 
     private func hasProjectMutations(in toolResults: [ChatMessage]) -> Bool {
-        let mutatingTools = Set([
-            "write_file",
-            "write_files",
-            "create_file",
-            "delete_file",
-            "replace_in_file",
-            "patchset_apply"
-        ])
-
         return toolResults.contains { message in
             guard message.isToolExecution, message.toolStatus == .completed,
                   let toolName = message.toolName
             else {
                 return false
             }
-            return mutatingTools.contains(toolName)
+            return MutationTools.isMutationTool(toolName)
         }
     }
 }

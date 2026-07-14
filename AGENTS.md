@@ -24,6 +24,22 @@ Package resolution: `xcodebuild -resolvePackageDependencies -project osx-ide.xco
 - **Vector store**: FAISS via C bridge (`Services/VectorStore/CFAISSWrapper/` + `libfaiss_full.a`). Metadata in JSON sidecar.
 - **Project state dir**: `.ide/` by default, overridable via `IDE_DIR_NAME` env var. Houses logs, index, vector store, chat history, plans, checkpoints.
 
+## Modes
+
+Three modes, three distinct purposes. Modes are **prompt/toolset selectors only** — the agent runs the *same* tool loop, finalization, continuation, recovery, and QA review under every mode (`AIMode.isAgentic` is `true` for all; never gate agent machinery on a raw `mode == .agent` comparison). See `AIMode.swift`.
+
+| Mode | Enum (`AIMode`) | Status | Tools | Prompt | Purpose |
+|---|---|---|---|---|---|
+| **Chat** | `.chat` | Shipping | All **except** mutation (`write`, `edit`, `rm`, `bash`, `write_file`, `run_command`, etc.) — read/search/browse/RAG only | `mode-chat` | Read-only co-pilot. Full search, web, and project/RAG access, but **cannot modify files or run a terminal**. For users who want the assistant to reason *with* them while they do the work themselves. |
+| **Coder** | `.coder` | **Primary / main mode** | Full access (all tools) | `mode-coder` | The **agentic coding harness**. User gives instructions; Coder executes them end-to-end (read → write/edit → run → verify). `usesNewArchitecture = true`. This is what the online agentic harness tests exercise. Competitive posture: Cursor / Windsurf / Codex-style agentic coding. |
+| **Agent** | `.agent` | **Planned — NOT built (stub is correct)** | Full access (same toolset as Coder) | `mode-agent` (stub: "under development and not yet operational") | Future fully-autonomous **deep-research engine** ("vibe coder"). For large/legacy efforts: architecture improvement, technical-debt reduction, legacy migration, issue hunting. Intended as a **never-ending loop** (until the user stops it or the goal is reached) that drills a subject to exhaustion — "not a single stone left unturned." Heavy, long-running (weeks/months of work). **No capacity to build this yet.** |
+
+### Mode naming caveat (important)
+The enum name `Agent` is confusing. In the user-facing architecture, "Agent" = the *planned* deep-research mode above, while everyday "agentic coding" work is **Coder**. Historically the agentic harness tests set `manager.currentMode = .agent`; they should target **`.coder`** (the primary mode) so they run with the rich `mode-coder` prompt and the non-agent iteration budget (`ToolLoopConstants.maxIterations`). Treat `.agent` as reserved/future — do not use it to exercise the main coding harness.
+
+### Reliability focus
+Current stability work targets **Coder** (the main agentic mode): zero dropouts, 100% reliability for multi-turn tasks. **Agent mode is out of scope** until capacity exists.
+
 ### Key patterns
 
 | Pattern | Where |

@@ -142,3 +142,157 @@ final class ToolOutputArchiveTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: path))
     }
 }
+
+// MARK: - LogSummarizer Tests (Context Access Layer L4)
+
+final class LogSummarizerTests: XCTestCase {
+
+    func testDetectsTypeScriptErrors() {
+        let log = """
+        src/services/UserService.ts:42:5 - error TS2322: Type 'string' is not assignable to type 'number'.
+        src/hooks/useUsers.ts:18:12 - error TS18046: 'user' is of type 'unknown'.
+        """
+        let result = LogSummarizer.summarize(log)
+        XCTAssertTrue(result.isLogOutput)
+        XCTAssertEqual(result.errorCount, 2)
+        XCTAssertTrue(result.brief.contains("errors (2 total)"))
+    }
+
+    func testDetectsSwiftErrors() {
+        let log = """
+        src/models/User.swift:15:8: error: cannot find 'Codable' in scope
+        src/views/DetailView.swift:42:12: warning: 'init()' is deprecated
+        """
+        let result = LogSummarizer.summarize(log)
+        XCTAssertTrue(result.isLogOutput)
+        XCTAssertEqual(result.errorCount, 1)
+        XCTAssertEqual(result.warningCount, 1)
+    }
+
+    func testDetectsJestFailures() {
+        let log = """
+        FAIL src/components/UserManagement.test.ts
+          ● UserManagement › renders user list
+            expect(received).toBe(expected)
+            Expected: 3
+            Received: 0
+        """
+        let result = LogSummarizer.summarize(log)
+        XCTAssertTrue(result.isLogOutput)
+        XCTAssertEqual(result.errorCount, 1)
+    }
+
+    func testPlainTextNotDetectedAsLog() {
+        let text = "The quick brown fox jumps over the lazy dog."
+        let result = LogSummarizer.summarize(text)
+        XCTAssertFalse(result.isLogOutput)
+        XCTAssertEqual(result.errorCount, 0)
+    }
+
+    func testEmptyText() {
+        let result = LogSummarizer.summarize("")
+        XCTAssertFalse(result.isLogOutput)
+        XCTAssertEqual(result.errorCount, 0)
+    }
+}
+
+// MARK: - ReferenceGraph / PageRank Tests (Context Access Layer L5a)
+
+final class PageRankTests: XCTestCase {
+
+    func testSingleNodeRank() {
+        var graph = ReferenceGraph()
+        let a = ReferenceGraph.Node(symbolName: "A", filePath: "/a.swift", kind: "class")
+        graph.addNode(a)
+        let ranks = graph.pageRank(iterations: 10)
+        XCTAssertEqual(ranks.count, 1)
+        XCTAssertEqual(ranks[a], 1.0)
+    }
+
+    func testTwoNodesReferenceEachOther() {
+        var graph = ReferenceGraph()
+        let a = ReferenceGraph.Node(symbolName: "A", filePath: "/a.swift", kind: "class")
+        let b = ReferenceGraph.Node(symbolName: "B", filePath: "/b.swift", kind: "struct")
+        graph.addEdge(from: a, to: b)
+        graph.addEdge(from: b, to: a)
+        let ranks = graph.pageRank(iterations: 20)
+        XCTAssertEqual(ranks.count, 2)
+        // Both should have roughly equal rank
+        XCTAssertGreaterThan(ranks[a]!, 0.3)
+        XCTAssertGreaterThan(ranks[b]!, 0.3)
+        // Ranks should sum to ~1.0
+        let sum = ranks.values.reduce(0, +)
+        XCTAssertEqual(sum, 1.0, accuracy: 0.01)
+    }
+
+    func testHubNodeGetsHigherRank() {
+        var graph = ReferenceGraph()
+        let hub = ReferenceGraph.Node(symbolName: "Hub", filePath: "/hub.swift", kind: "class")
+        let leaf1 = ReferenceGraph.Node(symbolName: "Leaf1", filePath: "/l1.swift", kind: "struct")
+        let leaf2 = ReferenceGraph.Node(symbolName: "Leaf2", filePath: "/l2.swift", kind: "enum")
+        // leaf1 and leaf2 reference hub, but hub doesn't reference them back
+        graph.addEdge(from: leaf1, to: hub)
+        graph.addEdge(from: leaf2, to: hub)
+        let ranks = graph.pageRank(iterations: 20)
+        // Hub should rank higher because it has more incoming edges
+        XCTAssertGreaterThan(ranks[hub]!, ranks[leaf1]!)
+        XCTAssertGreaterThan(ranks[hub]!, ranks[leaf2]!)
+    }
+}
+
+// MARK: - Read Dedup Tests (Context Access Layer L5b)
+
+final class ReadDedupTests: XCTestCase {
+
+    func testNonReadMessageNotDeduplicated() {
+        let msg = ChatMessage(role: .tool, content: "some content", tool: ChatMessageToolContext(toolName: "write"))
+        let result = ReadDedupEngine.deduplicate([msg])
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result[0].content, "some content")
+    }
+
+    func testShortReadMessageNotDeduplicated() {
+        let content = String(repeating: "x", count: 100)
+        let msg = ChatMessage(role: .tool, content: content, tool: ChatMessageToolContext(toolName: "read"))
+        let result = ReadDedupEngine.deduplicate([msg, msg])
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(result[0].content, content)
+        XCTAssertEqual(result[1].content, content)
+    }
+
+    func testDuplicateReadIsReplacedWithPointer() {
+        let content = String(repeating: "abcdefghij", count: 100)
+        let original = ChatMessage(
+            id: UUID(),
+            role: .tool,
+            content: content,
+            timestamp: Date(),
+            tool: ChatMessageToolContext(toolName: "read", toolStatus: .completed,
+                                          target: ToolInvocationTarget(targetFile: "src/service.ts", toolCallId: "call-1"))
+        )
+        let duplicate = ChatMessage(
+            id: UUID(),
+            role: .tool,
+            content: content,
+            timestamp: Date(),
+            tool: ChatMessageToolContext(toolName: "read", toolStatus: .completed,
+                                          target: ToolInvocationTarget(targetFile: "src/service.ts", toolCallId: "call-2"))
+        )
+        let result = ReadDedupEngine.deduplicate([original, duplicate])
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(result[0].content, content, "First read should be kept as-is")
+        XCTAssertTrue(result[1].content.hasPrefix("[read result for"), "Duplicate should be replaced with pointer")
+        XCTAssertTrue(result[1].content.contains("message 1"), "Pointer should reference first occurrence index")
+    }
+
+    func testDifferentReadsNotDeduplicated() {
+        let content1 = String(repeating: "AAAA", count: 200)
+        let content2 = String(repeating: "BBBB", count: 200)
+        let msg1 = ChatMessage(role: .tool, content: content1, tool: ChatMessageToolContext(toolName: "read"))
+        let msg2 = ChatMessage(role: .tool, content: content2, tool: ChatMessageToolContext(toolName: "read"))
+        let result = ReadDedupEngine.deduplicate([msg1, msg2])
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(result[0].content, content1)
+        XCTAssertEqual(result[1].content, content2)
+    }
+}

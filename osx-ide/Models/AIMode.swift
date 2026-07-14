@@ -34,6 +34,23 @@ public enum AIMode: String, Codable, CaseIterable, Identifiable, Sendable {
         self == .coder
     }
 
+    /// Capability gate — NOT a prompt/toolset selector.
+    ///
+    /// Architectural invariant: modes are only prompts that advertise different
+    /// toolsets (`allowedTools(from:)`) and system prompts (`SystemPromptAssembler`).
+    /// The agent is mode-agnostic — it runs the same tool loop, finalization,
+    /// continuation, recovery, and QA review under every mode. Gating any of
+    /// that machinery on `mode == .agent` was a crack: the agent's actual
+    /// runtime mode (`.chat`, which carries the read toolset) was excluded,
+    /// discarding tool results and disabling QA for the one mode in use.
+    ///
+    /// Capability checks MUST go through `isAgentic`, never through a raw
+    /// `mode == .agent` comparison.
+    public var isAgentic: Bool {
+        // Every mode is the same agent with a different toolset.
+        true
+    }
+
     /// Three distinct modes for three distinct purposes.
     /// - chat:  Read-only conversation. No file alterations, no terminal execution.
     /// - coder: Full tool access + structured planning. The primary mode. Competing with Cursor, Windsurf, Code Pilot.

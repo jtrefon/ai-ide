@@ -85,7 +85,15 @@ final class AIInteractionCoordinator {
         _ request: SendMessageWithRetryRequest
     ) async -> Result<AIServiceResponse, AppError> {
         let isUnitTestRun = isRunningUnitTests()
-        let sanitizedMessages = sanitizeMessagesForModel(request.messages)
+        let preTruncationMessages = sanitizeMessagesForModel(request.messages)
+        let preTruncationChars = preTruncationMessages.reduce(0) { $0 + $1.content.count }
+        await AIToolTraceLogger.shared.log(type: "chat.request_context_size", data: [
+            "runId": request.runId ?? "none",
+            "stage": request.stage?.rawValue ?? "unknown",
+            "messageCount": preTruncationMessages.count,
+            "totalChars": preTruncationChars
+        ])
+        let sanitizedMessages = MessageTruncationPolicy.truncateForModel(preTruncationMessages)
         let filteredTools = conversationPolicy.allowedTools(
             for: request.stage,
             mode: request.mode,
@@ -533,7 +541,7 @@ final class AIInteractionCoordinator {
         if nsError.domain == NSURLErrorDomain {
             return Self.isTransientNetworkURLError(nsError.code)
         }
-        let description = String(describing: error).lowercased()
+        let description = error.localizedDescription.lowercased()
         return Self.networkPhraseSet.contains { description.contains($0) }
     }
 

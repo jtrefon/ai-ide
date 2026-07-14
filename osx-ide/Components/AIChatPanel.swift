@@ -207,6 +207,9 @@ struct AIChatPanel: View {
                 fontFamily: ui.fontFamily,
                 onSend: {
                     sendMessage()
+                },
+                onStop: {
+                    conversationManager.stopGeneration()
                 }
             )
         }

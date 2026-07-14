@@ -24,6 +24,18 @@ final class FinalResponseHandler {
         let split = ChatPromptBuilder.splitReasoning(from: response.content ?? "")
         let draft = split.content.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // §ConsistencyGate: if finalization handed back an empty response but the
+        // model already streamed a substantive answer into the live draft, surface
+        // the real work instead of fabricating a failure message. Never erase what
+        // the agent actually produced.
+        if draft.isEmpty,
+           let streamedDraft = historyCoordinator.messages.last(where: { $0.role == .assistant && $0.isDraft }) {
+            let streamed = (streamedDraft.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !streamed.isEmpty {
+                return AIServiceResponse(content: streamed, toolCalls: nil, reasoning: response.reasoning)
+            }
+        }
+
         if isDeterministicFallbackResponse(draft) {
             return response
         }
@@ -32,11 +44,11 @@ final class FinalResponseHandler {
             return response
         }
 
-        if mode == .chat && !draft.isEmpty && toolResults.isEmpty {
+        if mode.isAgentic && !draft.isEmpty && toolResults.isEmpty {
             return response
         }
 
-        if mode == .agent && !draft.isEmpty {
+        if mode.isAgentic && !draft.isEmpty {
             let hasUnresolvedToolCalls = response.toolCalls?.isEmpty == false
             let isGenericContent = isGenericStatusMessage(draft)
             if hasUnresolvedToolCalls || isGenericContent {
@@ -316,29 +328,11 @@ final class FinalResponseHandler {
     }
 
     private func isReadOnlyInspectionToolName(_ toolName: String) -> Bool {
-        [
-            "read_file",
-            "index_read_file",
-            "list_files",
-            "list_dir",
-            "index_list_files",
-            "search_files",
-            "index_search_text",
-            "index_search_symbols",
-            "index_list_symbols"
-        ].contains(toolName)
+        MutationTools.isReadOnly(toolName)
     }
 
     private func isMutationToolName(_ toolName: String) -> Bool {
-        [
-            "write_file",
-            "write_files",
-            "create_file",
-            "replace_in_file",
-            "delete_file",
-            "multi_replace_file_content",
-            "write_to_file"
-        ].contains(toolName)
+        MutationTools.isMutationTool(toolName)
     }
 
     private func summarizeTouchedFiles(from toolResults: [ChatMessage]) -> [String] {
@@ -423,7 +417,7 @@ final class FinalResponseHandler {
         } else {
             completionStatus = parsedCompletionStatus
         }
-        let completionStatusText: String
+        var completionStatusText: String
         switch completionStatus {
         case .done:
             completionStatusText = "done"
@@ -436,9 +430,23 @@ final class FinalResponseHandler {
             completionStatusText = "missing"
         }
 
+        // §ImmutableContext — the streamed draft is the user-visible truth.
+        // Finalization can hand back an empty string or the deterministic
+        // "I could not complete this task" fallback when it lost tool/context
+        // state. We must NOT erase the answer the model already streamed into
+        // the draft; when finalization produced a fallback we preserve the
+        // draft's substantive content instead.
+        let finalizationFallbackText = "I could not complete this task. Please try again with more specific instructions."
+        let finalizedContentIsFallback: (String) -> Bool = { text in
+            let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty || t == finalizationFallbackText
+        }
+
         // Finalize the draft message if it exists, otherwise append a new one
         let shouldAlwaysAppendPreservedHandoff =
             completionStatus == .needsWork || isIntermediateExecutionHandoffResponse(responseContent)
+
+        var committedContent = displayContent
 
         if let draftIdString = draftAssistantMessageId,
             let draftId = UUID(uuidString: draftIdString)
@@ -447,11 +455,17 @@ final class FinalResponseHandler {
             let lastMessage = historyCoordinator.messages.last
             let isDraftAtEnd = (lastMessage?.id == draftId && lastMessage?.role == MessageRole.assistant)
 
+            let streamedDraftContent = (draftMessage?.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let finalizedIsFallback = finalizedContentIsFallback(displayContent)
+            if finalizedIsFallback, !streamedDraftContent.isEmpty {
+                committedContent = draftMessage?.content ?? displayContent
+            }
+
             if isDraftAtEnd {
                 let finalDraft = ChatMessage(
                     id: draftId,
                     role: MessageRole.assistant,
-                    content: displayContent,
+                    content: committedContent,
                     timestamp: draftMessage?.timestamp ?? Date(),
                     context: ChatMessageContentContext(reasoning: effectiveReasoning),
                     billing: draftMessage?.billing
@@ -463,11 +477,17 @@ final class FinalResponseHandler {
                 historyCoordinator.append(
                     ChatMessage(
                         role: MessageRole.assistant,
-                        content: displayContent,
+                        content: committedContent,
                         context: ChatMessageContentContext(reasoning: effectiveReasoning),
                         billing: draftMessage?.billing
                     )
                 )
+            }
+
+            // A preserved streamed answer was delivered successfully — do not
+            // report it as a missing/failed finalization.
+            if finalizedIsFallback, !streamedDraftContent.isEmpty {
+                completionStatusText = "done"
             }
         } else if shouldAlwaysAppendPreservedHandoff || !isDuplicateOfLastAssistantMessage(content: displayContent) {
             historyCoordinator.append(
@@ -483,7 +503,7 @@ final class FinalResponseHandler {
         }
 
         let hasReasoning = (effectiveReasoning?.isEmpty == false)
-        let contentLength = displayContent.count
+        let contentLength = committedContent.count
         let reasoningText = effectiveReasoning
 
         Task.detached(priority: .utility) {
@@ -501,7 +521,7 @@ final class FinalResponseHandler {
                 conversationId: conversationId,
                 type: "chat.assistant_message",
                 data: [
-                    "content": displayContent,
+                    "content": committedContent,
                     "reasoning": reasoningText as Any,
                     "deliveryStatus": completionStatusText,
                 ]

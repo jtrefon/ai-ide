@@ -92,7 +92,7 @@ actor OpenAICompatibleChatService: AIService {
     // MARK: - Non-streaming Chat
 
     private func performChat(_ request: OpenRouterAIService.OpenRouterChatHistoryInput) async throws -> AIServiceResponse {
-        let preparation = try buildChatPreparation(request: request)
+        let preparation = try await buildChatPreparation(request: request)
         let settings = preparation.settings
         let toolDefs = preparation.toolDefinitions
         let toolChoice = preparation.toolChoice
@@ -141,7 +141,7 @@ actor OpenAICompatibleChatService: AIService {
     // MARK: - Streaming Chat
 
     private func performStreamingChat(_ request: OpenRouterAIService.OpenRouterChatHistoryInput, runId: String) async throws -> AIServiceResponse {
-        let preparation = try buildChatPreparation(request: request)
+        let preparation = try await buildChatPreparation(request: request)
         let requestBody = OpenRouterChatRequest(
             model: preparation.settings.model,
             messages: preparation.finalMessages,
@@ -231,10 +231,17 @@ actor OpenAICompatibleChatService: AIService {
 
     // MARK: - Chat Preparation (delegates to shared logic via OpenRouterAIService+ChatPreparation)
 
-    func buildChatPreparation(request: OpenRouterAIService.OpenRouterChatHistoryInput) throws -> OpenRouterAIService.ChatPreparation {
+    func buildChatPreparation(request: OpenRouterAIService.OpenRouterChatHistoryInput) async throws -> OpenRouterAIService.ChatPreparation {
         let requestId = UUID().uuidString
         let settings = loadSettingsSnapshot()
         try validateSettings(apiKey: settings.apiKey, model: settings.model)
+
+        // L5a: Build repo-map for agent/coder mode (cached, async)
+        let repoMap = if request.mode?.isAgentic == true,
+                        let projectRoot = request.projectRoot {
+            try? await RepoMapBuilder.cachedMap(projectRoot: projectRoot)
+        } else { nil as String? }
+
         let systemContent = try buildSystemContent(input: .init(
             systemPrompt: settings.systemPrompt,
             hasTools: request.tools?.isEmpty == false,
@@ -243,7 +250,8 @@ actor OpenAICompatibleChatService: AIService {
             projectRoot: request.projectRoot,
             reasoningMode: settings.reasoningMode,
             stage: request.stage,
-            useNativeReasoning: supportsNativeReasoning
+            useNativeReasoning: supportsNativeReasoning,
+            repoMap: repoMap
         ))
         let finalMessages = buildFinalMessages(
             systemContent: systemContent,
@@ -300,7 +308,8 @@ actor OpenAICompatibleChatService: AIService {
             reasoningMode: input.reasoningMode,
             stage: input.stage,
             includeModelReasoning: !input.useNativeReasoning,
-            pinnedRules: pinnedRules
+            pinnedRules: pinnedRules,
+            repoMap: input.repoMap
         ))
     }
 
@@ -404,19 +413,11 @@ actor OpenAICompatibleChatService: AIService {
         return OpenRouterChatMessage(role: "user", content: "Tool Output: \(content)")
     }
 
-    /// Recoverable tool-output truncation (Context Access Layer L0/L1).
-    /// For large-window / sliding-window models the effective limit is generous, so
-    /// normal files are sent in full. When truncation is genuinely required, the
-    /// full text is offloaded to disk and the model gets a preview + an actionable
-    /// hint (path it can re-read, or delegate to the research subagent) instead of a
-    /// silent `[TRUNCATED]` that causes re-read storms.
+    /// Recoverable tool-output truncation (Context Access Layer L0/L1 + L4).
+    /// Delegates to the shared `ToolResultProcessor` so cloud and local
+    /// pipelines apply identical, model-aware truncation/offload/summarize.
     private func truncateToolOutput(_ text: String, model: String, projectRoot: URL?, toolCallId: String) -> String {
-        let limit = ToolOutputArchive.effectiveToolOutputLimit(modelID: model)
-        guard text.count > limit else { return text }
-        let preview = String(text.prefix(limit))
-        let path = ToolOutputArchive.offload(toolCallId: toolCallId, full: text, projectRoot: projectRoot)
-        let hint = "[tool output truncated at \(limit) chars; full saved at \(path)]. Next: read with start_line/end_line, or delegate to the research subagent."
-        return preview + "\n\n" + hint
+        ToolResultProcessor.process(payload: text, toolCallId: toolCallId, modelID: model, projectRoot: projectRoot)
     }
 
     // MARK: - Execution & Rate Limiting
